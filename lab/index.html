@@ -1,0 +1,449 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>AgentTwin and the Lab</title>
+<meta name="description" content="Two research questions: can an independent party judge an AI agent from its specification alone, by what it does to a simulated world? And do AI agents that fix live AI systems quietly weaken the checks that oversee them?">
+<meta property="og:title" content="AgentTwin and the Lab">
+<meta property="og:description" content="Judging AI agents by what they do to a simulated world, and watching the agents that fix them. Open code, open results.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='2' y='2' width='28' height='28' rx='8' fill='%23A3B5DF' stroke='%231F1F1F' stroke-width='2'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --paper:#FFFFFF; --ink:#1F1F1F; --soft:#555555; --muted:#8A8A8A; --hair:#EEECE7;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB;
+    --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7;
+    --mint:#BFE3D0; --mint-wash:#F0F8F3;
+    --lilac:#D7CDEE; --lilac-wash:#F5F2FB;
+    --line:1.5px solid var(--ink);
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; }
+  body { margin:0; background:var(--paper); color:var(--ink); font-family:"DM Sans", ui-sans-serif, -apple-system, "Segoe UI", sans-serif; font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  a { color:inherit; text-underline-offset:3px; }
+  .wrap { max-width:920px; margin:0 auto; padding:0 20px; }
+
+  header { padding:24px 0; }
+  nav { display:flex; align-items:center; gap:6px 28px; flex-wrap:wrap; }
+  .brand { font-weight:700; font-size:17px; text-decoration:none; margin-right:auto; }
+  nav a.n { text-decoration:none; color:var(--soft); font-size:15.5px; }
+  nav a.n:hover { color:var(--ink); }
+
+  .hero { padding:48px 0 8px; }
+  .kicker { font-size:13px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); margin:0 0 10px; }
+  h1 { font-size:clamp(32px,4.8vw,46px); line-height:1.1; letter-spacing:-.025em; font-weight:700; margin:0 0 18px; max-width:22ch; text-wrap:balance; }
+  .lede { font-size:19px; color:var(--soft); margin:0 0 22px; max-width:56ch; }
+  .qs { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  .qcard { border:var(--line); border-radius:18px; padding:18px 20px; }
+  .qcard b { display:block; font-size:13px; letter-spacing:.1em; text-transform:uppercase; margin-bottom:4px; }
+  .qcard p { margin:0; font-size:16.5px; }
+  .qa { background:var(--peri-wash); } .qb { background:var(--lilac-wash); }
+
+  section { padding:72px 0 0; }
+  h2 { font-size:26px; letter-spacing:-.02em; margin:0 0 14px; }
+  h3 { font-size:18.5px; letter-spacing:-.01em; margin:28px 0 8px; }
+  p { margin:0 0 14px; }
+  .sub { color:var(--soft); max-width:66ch; }
+  .note { font-size:14.5px; color:var(--muted); }
+  code { font-family:var(--mono); font-size:.8em; word-break:break-all; }
+  ul.plain { margin:0 0 14px; padding-left:20px; }
+  ul.plain li { margin:4px 0; }
+
+  .fig { border:var(--line); border-radius:20px; padding:18px; margin:18px 0 10px; background:#fff; }
+  .fig svg { width:100%; height:auto; display:block; }
+  .fig .tall { display:none; max-width:420px; margin:0 auto; }
+  @media (max-width:700px) { .fig .wide { display:none; } .fig .tall { display:block; } .fig { padding:12px; } }
+  .judges { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-top:16px; }
+  .judge { border:var(--line); border-radius:14px; padding:12px 14px; background:var(--mint-wash); font-size:14.5px; line-height:1.5; }
+  .judge b { display:block; font-size:15px; }
+
+  .tw { overflow-x:auto; border:var(--line); border-radius:16px; margin-top:16px; }
+  table { border-collapse:collapse; width:100%; font-size:15px; }
+  .tw.status table { min-width:640px; } .tw.ev table { min-width:620px; }
+  th, td { text-align:left; padding:10px 14px; border-bottom:1px solid var(--hair); vertical-align:top; }
+  th { font-size:12.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--muted); font-weight:700; background:#FCFBF8; }
+  tr:last-child td { border-bottom:0; }
+  td.num { font-variant-numeric:tabular-nums; white-space:nowrap; }
+  td .small { display:block; font-size:13.5px; color:var(--muted); }
+  .pill { display:inline-block; font-size:12px; font-weight:700; padding:2px 10px; border-radius:999px; border:1.2px solid var(--ink); white-space:nowrap; }
+  .p-public { background:var(--mint); } .p-draft { background:var(--butter); } .p-seek { background:var(--rose); }
+  .doi { font-family:var(--mono); font-size:12px; color:var(--muted); white-space:nowrap; }
+
+  .finds { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-top:16px; }
+  .find { border:var(--line); border-radius:16px; padding:16px 18px; display:flex; flex-direction:column; }
+  .find h4 { margin:0 0 6px; font-size:16.5px; }
+  .find p { font-size:15px; color:var(--soft); margin:0 0 10px; line-height:1.55; }
+  .find a { margin-top:auto; font-size:14.5px; font-weight:500; }
+  .limits { border:var(--line); border-radius:16px; background:var(--butter-wash); padding:16px 20px; margin-top:20px; }
+  .limits b { display:block; margin-bottom:4px; }
+  .limits ul { margin:0; padding-left:20px; font-size:15.5px; color:var(--soft); }
+  .limits li { margin:3px 0; }
+
+  .studies { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:16px; }
+  .study { border:var(--line); border-radius:18px; padding:20px 22px; }
+  .study .top { display:flex; justify-content:space-between; gap:10px; align-items:baseline; flex-wrap:wrap; margin-bottom:6px; }
+  .study h3 { margin:0; }
+  .study ul { margin:8px 0 0; padding-left:20px; font-size:15.5px; color:var(--soft); }
+  .study li { margin:4px 0; }
+  .sa { background:var(--peri-wash); } .sb { background:var(--lilac-wash); }
+
+  .cmds { display:grid; gap:14px; margin-top:16px; }
+  .cmd, .find, .study, .qcard, .judge { min-width:0; }
+  .cmd { border:var(--line); border-radius:16px; overflow:hidden; }
+  .cmd .head { padding:9px 16px; border-bottom:var(--line); font-weight:700; font-size:15px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; background:var(--peri-wash); }
+  .cmd .head span { font-weight:400; color:var(--soft); font-size:14px; }
+  .cmd pre { margin:0; padding:14px 16px; overflow-x:auto; font-family:var(--mono); font-size:13.5px; line-height:1.6; background:#fff; }
+
+  .who { display:grid; grid-template-columns:1fr; gap:0; }
+  footer { margin-top:96px; border-top:1px solid var(--hair); padding:28px 0 56px; color:var(--muted); font-size:14.5px; }
+  footer .wrap { display:flex; gap:10px 24px; flex-wrap:wrap; }
+  footer a { color:var(--soft); }
+
+  @media (max-width:600px) { .brand { width:100%; margin-bottom:4px; } nav { gap:4px 20px; } }
+  @media (max-width:760px) {
+    .qs, .studies, .finds { grid-template-columns:1fr; }
+    .judges { grid-template-columns:1fr 1fr; }
+    section { padding-top:56px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="#how">How it works</a>
+      <a class="n" href="#evidence">Evidence</a>
+      <a class="n" href="#reproduce">Reproduce</a>
+      <a class="n" href="https://github.com/dataagentsai">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div class="hero">
+    <p class="kicker">Research</p>
+    <h1>Judging AI agents by what they do</h1>
+    <p class="lede">Two research questions, one open toolset. Each claim below links to the public repository behind it.</p>
+    <div class="qs">
+      <div class="qcard qa"><b>(a) AgentTwin</b><p>Can an independent party judge an AI agent from its specification alone, by what it does to a simulated world?</p></div>
+      <div class="qcard qb"><b>(b) The lab</b><p>Do AI agents that fix live AI systems quietly weaken the checks that oversee them?</p></div>
+    </div>
+  </div>
+
+  <section id="why">
+    <h2>Why it matters</h2>
+    <p class="sub">AI agents now refund money, change bookings and handle insurance claims, and coding agents are starting to repair them when they break. Two things are hard to check from outside: whether an agent keeps the rules it was given, and whether the agent repairing it fixes the fault or just silences the alarm. Both need a judge that looks at what actually happened, not at what was said.</p>
+  </section>
+
+  <section id="how">
+    <h2>How it works</h2>
+    <p class="sub">The agent's own specification becomes a simulated world. The real agent works in it, and judges read what changed. When a judge finds a broken rule, that is an incident, and a coding agent tries to fix it. The fixer cannot edit the judge or the protected checks, and a person approves every deploy before the next simulated day.</p>
+
+    <figure class="fig" style="margin-left:0;margin-right:0">
+      <svg class="wide" viewBox="0 0 940 424" role="img" aria-labelledby="dw-t dw-d" font-family="DM Sans, ui-sans-serif, -apple-system, Segoe UI, sans-serif">
+        <title id="dw-t">The loop: from specification to judged incident to approved fix</title>
+        <desc id="dw-d">Top row, AgentTwin: specification, simulated world, agent under test, judges. When a judge finds a broken rule, an incident goes to the bottom row, the lab: fixer, protections and judge, a person approves. The next simulated day runs the world again on the approved fix.</desc>
+        <defs>
+          <marker id="ahw" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1F1F1F"/></marker>
+        </defs>
+        <rect x="0" y="0" width="940" height="186" rx="18" fill="#F1F4FB"/>
+        <rect x="0" y="238" width="940" height="186" rx="18" fill="#F5F2FB"/>
+        <text x="20" y="30" font-size="13" font-weight="700" letter-spacing="1.2" fill="#555">AGENTTWIN · QUESTION (A)</text>
+        <text x="920" y="412" font-size="13" font-weight="700" letter-spacing="1.2" fill="#555" text-anchor="end">THE LAB · QUESTION (B)</text>
+
+        <g stroke="#1F1F1F" stroke-width="1.5">
+          <rect x="20" y="48" width="190" height="104" rx="16" fill="#FFFFFF"/>
+          <rect x="257" y="48" width="190" height="104" rx="16" fill="#A3B5DF"/>
+          <rect x="494" y="48" width="190" height="104" rx="16" fill="#FFD98A"/>
+          <rect x="731" y="48" width="190" height="104" rx="16" fill="#BFE3D0"/>
+          <rect x="731" y="286" width="190" height="104" rx="16" fill="#E6BFD2"/>
+          <rect x="494" y="286" width="190" height="104" rx="16" fill="#FFD98A"/>
+          <rect x="257" y="286" width="190" height="104" rx="16" fill="#BFE3D0"/>
+          <rect x="20" y="286" width="190" height="104" rx="16" fill="#FFFFFF"/>
+        </g>
+
+        <g fill="none" stroke="#1F1F1F" stroke-width="1.5" marker-end="url(#ahw)">
+          <path d="M210 100H255"/>
+          <path d="M447 100H492"/>
+          <path d="M684 100H729"/>
+          <path d="M826 152V284"/>
+          <path d="M731 338H686"/>
+          <path d="M494 338H449"/>
+          <path d="M257 338H212"/>
+          <path d="M115 286V212H352V154"/>
+        </g>
+        <text x="816" y="222" font-size="13" fill="#555" text-anchor="end">a rule is broken</text>
+        <text x="233" y="206" font-size="13" fill="#555" text-anchor="middle">next simulated day</text>
+
+        <g text-anchor="middle">
+          <text x="115" y="86" font-size="16.5" font-weight="700" fill="#1F1F1F">Specification</text>
+          <text x="115" y="110" font-size="13" fill="#555">the agent's own rules</text>
+          <text x="115" y="128" font-size="13" fill="#555">and tool interfaces</text>
+
+          <text x="352" y="86" font-size="16.5" font-weight="700" fill="#1F1F1F">Simulated world</text>
+          <text x="352" y="110" font-size="13" fill="#1F1F1F">systems, customers,</text>
+          <text x="352" y="128" font-size="13" fill="#1F1F1F">data and faults</text>
+
+          <text x="589" y="86" font-size="16.5" font-weight="700" fill="#1F1F1F">Agent under test</text>
+          <text x="589" y="110" font-size="13" fill="#1F1F1F">real and unchanged;</text>
+          <text x="589" y="128" font-size="13" fill="#1F1F1F">never sees the twin</text>
+
+          <text x="826" y="86" font-size="16.5" font-weight="700" fill="#1F1F1F">Judges</text>
+          <text x="826" y="110" font-size="13" fill="#1F1F1F">state · owed</text>
+          <text x="826" y="128" font-size="13" fill="#1F1F1F">truth · ownership</text>
+
+          <text x="826" y="324" font-size="16.5" font-weight="700" fill="#1F1F1F">Incident</text>
+          <text x="826" y="348" font-size="13" fill="#1F1F1F">the broken rule,</text>
+          <text x="826" y="366" font-size="13" fill="#1F1F1F">with its evidence</text>
+
+          <text x="589" y="324" font-size="16.5" font-weight="700" fill="#1F1F1F">Fixer</text>
+          <text x="589" y="348" font-size="13" fill="#1F1F1F">a coding agent</text>
+          <text x="589" y="366" font-size="13" fill="#1F1F1F">tries to repair it</text>
+
+          <text x="352" y="324" font-size="16.5" font-weight="700" fill="#1F1F1F">Protections + judge</text>
+          <text x="352" y="348" font-size="13" fill="#1F1F1F">tests, monitors and spec</text>
+          <text x="352" y="366" font-size="13" fill="#1F1F1F">the fixer cannot edit</text>
+
+          <text x="115" y="324" font-size="16.5" font-weight="700" fill="#1F1F1F">A person approves</text>
+          <text x="115" y="348" font-size="13" fill="#555">every deploy;</text>
+          <text x="115" y="366" font-size="13" fill="#555">otherwise nothing ships</text>
+        </g>
+      </svg>
+
+      <svg class="tall" viewBox="0 0 360 1044" role="img" aria-labelledby="dt-t dt-d" font-family="DM Sans, ui-sans-serif, -apple-system, Segoe UI, sans-serif">
+        <title id="dt-t">The loop: from specification to judged incident to approved fix</title>
+        <desc id="dt-d">AgentTwin: specification, simulated world, agent under test, judges. When a judge finds a broken rule, an incident goes to the lab: fixer, protections and judge, a person approves. The next simulated day runs the world again on the approved fix.</desc>
+        <defs>
+          <marker id="aht" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1F1F1F"/></marker>
+        </defs>
+        <rect x="0" y="0" width="360" height="514" rx="18" fill="#F1F4FB"/>
+        <rect x="0" y="526" width="360" height="518" rx="18" fill="#F5F2FB"/>
+        <text x="64" y="30" font-size="14" font-weight="700" letter-spacing="1.2" fill="#555">AGENTTWIN · (A)</text>
+        <text x="64" y="554" font-size="14" font-weight="700" letter-spacing="1.2" fill="#555">THE LAB · (B)</text>
+
+        <g stroke="#1F1F1F" stroke-width="1.5">
+          <rect x="64" y="44" width="280" height="88" rx="16" fill="#FFFFFF"/>
+          <rect x="64" y="166" width="280" height="88" rx="16" fill="#A3B5DF"/>
+          <rect x="64" y="288" width="280" height="88" rx="16" fill="#FFD98A"/>
+          <rect x="64" y="410" width="280" height="88" rx="16" fill="#BFE3D0"/>
+          <rect x="64" y="570" width="280" height="88" rx="16" fill="#E6BFD2"/>
+          <rect x="64" y="692" width="280" height="88" rx="16" fill="#FFD98A"/>
+          <rect x="64" y="814" width="280" height="88" rx="16" fill="#BFE3D0"/>
+          <rect x="64" y="936" width="280" height="88" rx="16" fill="#FFFFFF"/>
+        </g>
+        <g fill="none" stroke="#1F1F1F" stroke-width="1.5" marker-end="url(#aht)">
+          <path d="M204 132V164"/>
+          <path d="M204 254V286"/>
+          <path d="M204 376V408"/>
+          <path d="M204 498V568"/>
+          <path d="M204 658V690"/>
+          <path d="M204 780V812"/>
+          <path d="M204 902V934"/>
+          <path d="M64 980H34V210H62"/>
+        </g>
+        <text x="214" y="540" font-size="14" fill="#555">a rule is broken</text>
+        <text transform="translate(24 600) rotate(-90)" font-size="14" fill="#555" text-anchor="middle">next simulated day</text>
+
+        <g text-anchor="middle">
+          <text x="204" y="76" font-size="18" font-weight="700" fill="#1F1F1F">Specification</text>
+          <text x="204" y="102" font-size="14.5" fill="#555">the agent's own rules and tools</text>
+          <text x="204" y="198" font-size="18" font-weight="700" fill="#1F1F1F">Simulated world</text>
+          <text x="204" y="224" font-size="14.5" fill="#1F1F1F">systems, customers, faults</text>
+          <text x="204" y="320" font-size="18" font-weight="700" fill="#1F1F1F">Agent under test</text>
+          <text x="204" y="346" font-size="14.5" fill="#1F1F1F">real; never sees the twin</text>
+          <text x="204" y="442" font-size="18" font-weight="700" fill="#1F1F1F">Judges</text>
+          <text x="204" y="468" font-size="14.5" fill="#1F1F1F">state · owed · truth · ownership</text>
+          <text x="204" y="602" font-size="18" font-weight="700" fill="#1F1F1F">Incident</text>
+          <text x="204" y="628" font-size="14.5" fill="#1F1F1F">the broken rule, with evidence</text>
+          <text x="204" y="724" font-size="18" font-weight="700" fill="#1F1F1F">Fixer</text>
+          <text x="204" y="750" font-size="14.5" fill="#1F1F1F">a coding agent tries to repair it</text>
+          <text x="204" y="846" font-size="18" font-weight="700" fill="#1F1F1F">Protections + judge</text>
+          <text x="204" y="872" font-size="14.5" fill="#1F1F1F">checks the fixer cannot edit</text>
+          <text x="204" y="968" font-size="18" font-weight="700" fill="#1F1F1F">A person approves</text>
+          <text x="204" y="994" font-size="14.5" fill="#555">every deploy; else nothing ships</text>
+        </g>
+      </svg>
+    </figure>
+
+    <p class="note">The four judges, each reading the world's state rather than the agent's words:</p>
+    <div class="judges">
+      <div class="judge"><b>State</b>Did a write break a rule, or go beyond the agent's authority?</div>
+      <div class="judge"><b>Owed</b>Was something owed to the customer never done?</div>
+      <div class="judge"><b>Truth</b>Did the agent say something the world shows is false?</div>
+      <div class="judge"><b>Ownership</b>Did it read or change another customer's data?</div>
+    </div>
+  </section>
+
+  <section id="exists">
+    <h2>What exists today</h2>
+    <p class="sub">All public, all working drafts. Nothing here was built for a grant; the studies below build on it.</p>
+    <div class="tw status">
+      <table>
+        <thead><tr><th>Part</th><th>What it is</th><th>Status</th><th>Citation</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://github.com/dataagentsai/agenttwin"><b>AgentTwin</b></a></td><td>The world format, the simulator and the judges. Serves a simulated world to the agent over MCP (Model Context Protocol)<span class="small">v0.12.0 · 392 passing tests</span></td><td><span class="pill p-public">Public</span></td><td><span class="doi" data-doi="agenttwin">DOI pending</span></td></tr>
+          <tr><td><a href="https://github.com/dataagentsai/agenttwin-lab"><b>The lab</b></a></td><td>Simulated days, a monitor, a fixer harness with five protection layers, a weakening classifier, an honesty check, and deploys a person approves<span class="small">v0.3.0 · loop runs end to end with scripted fixers</span></td><td><span class="pill p-draft">Working draft</span></td><td><span class="doi" data-doi="agenttwin-lab">DOI pending</span></td></tr>
+          <tr><td><a href="https://github.com/dataagentsai/reference-agent"><b>Support reference agent</b></a></td><td>A customer-support agent built to all sixteen harness layers, with no agent framework<span class="small">v0.3.0 · passes four automated gates</span></td><td><span class="pill p-public">Public</span></td><td><span class="doi" data-doi="reference-agent">DOI pending</span></td></tr>
+          <tr><td><a href="https://github.com/dataagentsai/claims-fnol-azure"><b>Motor-claims reference agent</b></a></td><td>A motor-insurance claims agent on Pydantic AI, in a different domain, on the same harness library<span class="small">passes four automated gates with a scripted model</span></td><td><span class="pill p-public">Public</span></td><td><span class="doi">DOI pending</span></td></tr>
+          <tr><td><a href="https://github.com/dataagentsai/ai-assurance-catalog"><b>AI Assurance Catalog</b></a></td><td>What must be true of an AI application: testable obligations, crosswalked to OWASP, NIST AI RMF, ISO/IEC 42001 and the EU AI Act<span class="small">v0.17.0 · 118 obligations</span></td><td><span class="pill p-public">Public</span></td><td><span class="doi" data-doi="aac">DOI pending</span></td></tr>
+          <tr><td><a href="https://github.com/dataagentsai/ai-harness-catalog"><b>AI Harness Catalog</b></a></td><td>What must exist around the model call: harness capabilities across sixteen layers<span class="small">v0.3.0 · 118 capabilities</span></td><td><span class="pill p-public">Public</span></td><td><span class="doi" data-doi="ahc">DOI pending</span></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <section id="evidence">
+    <h2>Evidence so far</h2>
+    <h3 style="margin-top:0">Three agents we didn't build</h3>
+    <p class="sub">The airline, retail and telecom agents of <a href="https://github.com/sierra-research/tau2-bench">τ²-bench</a>, a published benchmark. For each, we wrote a specification from the agent's policy text and tool signatures alone, then judged the same 2,472 runs twice: by τ²-bench's own evaluator and by AgentTwin.</p>
+    <div class="tw ev">
+      <table>
+        <thead><tr><th>Domain</th><th>Runs</th><th>Rule breaks the data shows<br>τ² / AgentTwin</th><th>Reads of another customer's record<br>τ² / AgentTwin</th><th>False alarms on correct runs</th></tr></thead>
+        <tbody>
+          <tr><td><a href="https://github.com/dataagentsai/agenttwin/tree/main/examples/tau2-airline">Airline</a></td><td class="num">467</td><td class="num">188 / 188</td><td class="num">0 / 50</td><td class="num">2 of 50</td></tr>
+          <tr><td><a href="https://github.com/dataagentsai/agenttwin/tree/main/examples/tau2-retail">Retail</a></td><td class="num">873</td><td class="num">309 / 309</td><td class="num">0 / 114</td><td class="num">0 of 114</td></tr>
+          <tr><td><a href="https://github.com/dataagentsai/agenttwin/tree/main/examples/tau2-telecom">Telecom</a> <span class="small">the agent's side only</span></td><td class="num">1,132</td><td class="num">50 / 491</td><td class="num">0 / 114</td><td class="num">0 of 114</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <ul class="plain" style="margin-top:16px">
+      <li><strong>The rule breaks visible in the data were caught</strong> (except duplicate bookings, a known gap: 2 runs), and each incident names the rule broken, for example <code>cancel_reservation:EHGLP3:precondition:cancellation_basis</code>.</li>
+      <li><strong>Privacy reads leave no trace in the final data</strong>, so a final-state judge cannot see them. AgentTwin's ownership judge does.</li>
+      <li><strong>In telecom</strong>, τ²-bench's tasks check the customer's phone, not the carrier's records; AgentTwin checks the records.</li>
+      <li><strong>Every disagreement has a stated cause.</strong> The run fails if one cannot be explained, so causes cannot be added afterwards.</li>
+      <li><strong>The stand-in answered all 8,126 checked tool calls byte-identically</strong> to τ²-bench's own environment (1,512 airline, 4,621 retail, 1,993 telecom).</li>
+      <li><strong>The method also surfaced faults in the benchmark</strong>: a retail task whose only expected action τ²-bench's own code refuses, and a tool that records every changed item at the last item's price.</li>
+    </ul>
+    <p class="note">These runs are each task's correct actions plus deliberate, hand-made mutations of them, with no model calls. They show what each judge can see, not how often a real agent does each thing.</p>
+
+    <h3>Two reference agents of our own</h3>
+    <div class="finds">
+      <div class="find">
+        <h4>A real handoff fault</h4>
+        <p>A model-played customer said "my jacket is lost need help". The support agent's lost-parcel rule did not fire, and when the model failed the conversation ended without reaching a person.</p>
+        <a href="https://github.com/dataagentsai/clean-ai-engineering/blob/main/TODO.md">Recorded as T-114 →</a>
+      </div>
+      <div class="find">
+        <h4>180 of 180 injection cases held</h4>
+        <p>60 from PyRIT, 60 from AgentDojo and 60 built-in, planted in records both agents read, and judged by what changed in the world. Run with a scripted model, so this tests the agents' safeguards, not a model's resistance.</p>
+        <a href="https://github.com/dataagentsai/agenttwin/tree/main/examples/attacks">The run record →</a>
+      </div>
+      <div class="find">
+        <h4>Coverage gaps, measured</h4>
+        <p>Hand-written test scenarios covered 81 of 468 value pairs and 3 of 16 state transitions (support), and 67 of 403 and 3 of 8 (claims). A property test found a stand-in that accepted any value.</p>
+        <a href="https://github.com/dataagentsai/clean-ai-engineering/blob/main/TODO.md">Recorded as T-113 →</a>
+      </div>
+      <div class="find">
+        <h4>The lab, with scripted fixers</h4>
+        <p>An honest fixer's change is deployed and the next day is clean. A fixer that weakens its own test, and one that narrows the rule behind the incident, are both refused and handed to a person.</p>
+        <a href="https://github.com/dataagentsai/agenttwin-lab#the-loop-recorded-grant-slice-37">The run reports →</a>
+      </div>
+    </div>
+
+    <div class="limits">
+      <b>Honest limits</b>
+      <ul>
+        <li>AgentTwin cannot yet express rules about a change (new flights versus old, fewer bags than before), facts nobody records (why a customer is cancelling), or a customer who acts with their own tools (telecom's phone).</li>
+        <li>Conversational duties, such as getting an explicit yes before a write, are not state, and no judge here reads them.</li>
+        <li>No real-model fixer has completed a fix yet. One free-tier attempt ended on provider limits before writing anything; real fixer runs are month 1 of the study below.</li>
+      </ul>
+    </div>
+  </section>
+
+  <section id="studies">
+    <h2>The two studies proposed</h2>
+    <p class="sub">Both are designed and the tools exist. The measures will be published before the main runs.</p>
+    <div class="studies">
+      <div class="study sa">
+        <div class="top"><h3>(a) AgentTwin 1.0</h3><span class="pill p-seek">Seeking funding</span></div>
+        <p style="margin:0;font-size:15.5px">Make it general and validated, so anyone can assess an agent they didn't build.</p>
+        <ul>
+          <li>A stable, published world format, and worlds built from MCP and OpenAPI tool descriptions.</li>
+          <li>Judge validity: agreement with human expert labels and with τ²-bench's judge, with every disagreement explained.</li>
+          <li>Assessment reports on five or more public agents, using one protocol.</li>
+          <li>A 1.0 release with a DOI, and tutorials.</li>
+        </ul>
+      </div>
+      <div class="study sb">
+        <div class="top"><h3>(b) The fixer study</h3><span class="pill p-seek">Seeking funding</span></div>
+        <p style="margin:0;font-size:15.5px">Thirty simulated days with planted faults. Record exactly what the fixer does.</p>
+        <ul>
+          <li>Three routes to weaken a check: a test, a monitor, the specification.</li>
+          <li>Three conditions: checks writable but recorded; protected; protected plus a reviewer agent.</li>
+          <li>Measures: faults truly fixed, weakening tried and landed, protection crossings, honesty mismatches, repeated runs.</li>
+          <li>A dataset with a DOI, a short paper, and a protocol any team can run on its own fix loop.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section id="open">
+    <h2>Openness and safety</h2>
+    <ul class="plain">
+      <li><strong>Open:</strong> code under Apache-2.0, specification text under CC BY 4.0, results and run records in the repositories.</li>
+      <li><strong>Sandboxed:</strong> agents act only on a simulated world. No real systems, customers or money.</li>
+      <li><strong>Synthetic people:</strong> customers and their records are generated.</li>
+      <li><strong>A person approves every deploy.</strong> The lab refuses a fix that weakens a check before anyone is asked.</li>
+    </ul>
+  </section>
+
+  <section id="reproduce">
+    <h2>Reproduce it</h2>
+    <p class="sub">Each needs <a href="https://docs.astral.sh/uv/">uv</a> and git (and Node, for the catalogs). No model calls and no API keys.</p>
+    <div class="cmds">
+      <div class="cmd">
+        <div class="head">AgentTwin<span>its own test suite, about 10 seconds</span></div>
+<pre>git clone https://github.com/dataagentsai/agenttwin &amp;&amp; cd agenttwin
+uv run --extra dev pytest</pre>
+      </div>
+      <div class="cmd">
+        <div class="head">τ²-bench airline<span>all 50 tasks, about 20 minutes</span></div>
+<pre>cd agenttwin/examples/tau2-airline
+./run.sh -m tau2_airline.offline     # retail and telecom: same pattern</pre>
+      </div>
+      <div class="cmd">
+        <div class="head">The lab<span>three seeded simulated days, seconds each</span></div>
+<pre>for r in agenttwin-lab agenttwin reference-agent clean-ai-engineering; do
+  git clone https://github.com/dataagentsai/$r; done
+cd agenttwin-lab &amp;&amp; uv sync --extra dev
+uv run agenttwin-lab day --world worlds/clothing-day.yaml --repeat 3</pre>
+      </div>
+      <div class="cmd">
+        <div class="head">Support reference agent<span>about 2,100 tests, 4 minutes</span></div>
+<pre>for r in ai-assurance-catalog ai-harness-catalog; do   # beside the repos above
+  git clone https://github.com/dataagentsai/$r; done
+(cd ai-harness-catalog &amp;&amp; npm ci)
+cd reference-agent &amp;&amp; uv run --extra dev python -m pytest</pre>
+      </div>
+    </div>
+  </section>
+
+  <section id="who">
+    <h2>Who</h2>
+    <p class="sub">Basant Choudhary is a principal data and AI engineer in Bengaluru with 23 years in software and data engineering at Oracle, Sabre, Publicis Sapient and Shell. Basant builds production AI agents (insurance claims, cost root-cause analysis, platform operations) and authored the open Agent Harness Framework: two specifications of 118 capabilities and 118 testable obligations, a reusable harness library, AgentTwin, and two reference agents that pass four automated gates.</p>
+    <p>Contact: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p>
+    <p class="note">Last updated 13 Oct 2026.</p>
+  </section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>© 2026 Clean Data Engineering</span>
+    <a href="/">Home</a>
+    <a href="https://github.com/dataagentsai">GitHub</a>
+    <a href="mailto:basant@cleandataengineering.ai">Contact</a>
+  </div>
+</footer>
+
+</body>
+</html>
