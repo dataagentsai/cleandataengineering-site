@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>From chat messages · Eval Harness Tutorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="style.css"></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg>
+<header class="top"><div class="row"><button class="menu" aria-label="Show the page list">☰ Pages</button>
+<a class="home" href="https://cleandataengineering.ai/">cleandataengineering.ai</a><a class="brand" href="index.html">Eval Harness, drawn simply</a><nav class="tabs" aria-label="Sections"><a class="" href="index.html">Start</a><a class="on" href="session.html">Sessions</a><a class="" href="patterns.html">Five patterns</a><a class="" href="yaml.html">Writing rules</a><a class="" href="traces.html">From traces</a><a class="" href="review.html">Your review</a></nav></div>
+<div class="crumbs">You are here: <a href="session.html">Sessions</a> › <b>From chat messages</b></div></header>
+<aside class="side" aria-label="All pages"><h4>Start here</h4><ul><li><a class="" href="index.html">Overview</a></li></ul><ul><li><a class="" href="why.html">Why check?</a></li><li><a class="" href="picture.html">The whole picture</a></li></ul><h4>Sessions</h4><ul><li><a class="" href="session.html">Overview</a></li></ul><ul><li><a class="" href="session-shape.html">In code</a></li><li><a class="on" href="from-messages.html">From chat messages</a></li></ul><h4>Five patterns</h4><ul><li><a class="" href="patterns.html">Overview</a></li></ul><ul><li><a class="" href="p-requires-before.html">requires_before</a></li><li><a class="" href="p-argument-limit.html">argument_limit</a></li><li><a class="" href="p-claim-needs-action.html">claim_needs_action</a></li><li><a class="" href="p-decision-vs-should.html">decision_vs_should</a></li><li><a class="" href="p-consistency.html">consistency</a></li></ul><h4>Writing rules</h4><ul><li><a class="" href="yaml.html">Overview</a></li></ul><ul><li><a class="" href="presets.html">Presets</a></li></ul><h4>From traces</h4><ul><li><a class="" href="traces.html">Overview</a></li></ul><ul><li><a class="" href="trace-rebuild.html">Three traps</a></li><li><a class="" href="trace-gaps.html">Gaps in the standard</a></li></ul><h4>Your review</h4><ul><li><a class="" href="review.html">Your review</a></li></ul></aside>
+<main><div class="wrap"><article class="page">
+<header><p class="kicker">Eval Harness Tutorial · Sessions</p><h1>Building a session from chat messages</h1></header>
+
+<div class="text"><p>Almost every agent framework can hand you the conversation as
+a list of messages in OpenAI's format. <code>Session.from_messages</code> turns
+that list into steps, one message at a time.</p></div>
+<div class="flow3"><div><span>Goes in</span>A list of chat messages (user, assistant, tool)</div><div><span>What happens</span>Each user message starts a new turn. An assistant message becomes a reply step, plus one tool_call step per tool it asked for. A tool message becomes a tool_result.</div><div><span>Comes out</span>A Session with its steps in order</div></div>
+<div class="snip"><div class="snip-h"><span>Goes in: four messages</span></div><pre>[
+  {&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: &quot;Please pay claim CLM-104233.&quot;},
+  {&quot;role&quot;: &quot;assistant&quot;, &quot;tool_calls&quot;: [{&quot;id&quot;: &quot;c1&quot;, &quot;function&quot;:
+      {&quot;name&quot;: &quot;get_claim&quot;, &quot;arguments&quot;: &quot;{\&quot;id\&quot;: \&quot;CLM-104233\&quot;}&quot;}}]},
+  {&quot;role&quot;: &quot;tool&quot;, &quot;name&quot;: &quot;get_claim&quot;, &quot;tool_call_id&quot;: &quot;c1&quot;,
+   &quot;content&quot;: &quot;{\&quot;approved_amount\&quot;: 12400}&quot;},
+  {&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: &quot;Claim CLM-104233 is approved for ₹12,400.&quot;}
+]</pre></div>
+<div class="text"><p>Comes out: <code>user</code>, <code>tool_call get_claim</code>,
+<code>tool_result get_claim</code>, <code>assistant</code>, all in turn 1.</p></div>
+<div class="snip"><div class="snip-h"><span>The code</span><a href="https://github.com/dataagentsai/eval-harness-framework/blob/main/src/evalharness/core.py#L189"><code>src/evalharness/core.py:189</code></a></div><pre>    def from_messages(
+        cls, id: str, messages: tuple[Mapping[str, Any], ...] | list[Mapping[str, Any]]
+    ) -&gt; Session:
+        &quot;&quot;&quot;From OpenAI-format chat messages, which most frameworks can export.&quot;&quot;&quot;
+        import json
+
+        steps: list[Step] = []
+        turn = 0
+        for m in messages:
+            role = m.get(&quot;role&quot;)
+            if role == &quot;user&quot;:
+                turn += 1
+                steps.append(Step(&quot;user&quot;, text=str(m.get(&quot;content&quot;) or &quot;&quot;), turn=turn))
+            elif role == &quot;assistant&quot;:
+                if m.get(&quot;content&quot;):
+                    steps.append(Step(&quot;assistant&quot;, text=str(m[&quot;content&quot;]), turn=turn))
+                for call in m.get(&quot;tool_calls&quot;) or ():
+                    fn = call.get(&quot;function&quot;, {})
+                    raw = fn.get(&quot;arguments&quot;) or &quot;{}&quot;
+                    arguments = json.loads(raw) if isinstance(raw, str) else dict(raw)
+                    steps.append(
+                        Step(
+                            &quot;tool_call&quot;,
+                            name=str(fn.get(&quot;name&quot;, &quot;&quot;)),
+                            arguments=arguments,
+                            call_id=str(call.get(&quot;id&quot;, &quot;&quot;)),
+                            turn=turn,
+                        )
+                    )
+            elif role == &quot;tool&quot;:
+                content = m.get(&quot;content&quot;)
+                try:
+                    result: object = json.loads(content) if isinstance(content, str) else content
+                except ValueError:
+                    result = content
+                steps.append(
+                    Step(
+                        &quot;tool_result&quot;,
+                        name=str(m.get(&quot;name&quot;, &quot;&quot;)),
+                        text=content if isinstance(content, str) else &quot;&quot;,
+                        result=result,
+                        call_id=str(m.get(&quot;tool_call_id&quot;, &quot;&quot;)),
+                        is_error=bool(m.get(&quot;is_error&quot;, False)),
+                        turn=turn,
+                    )
+                )
+        return cls(id=id, steps=tuple(steps))</pre></div>
+<div class="text"><p><b>What chat messages can't tell us:</b> decisions (a hand-over
+is usually not a message) and whether a tool failed (most formats have no error
+flag). Traces carry more; see <a href="traces.html">From traces</a>.</p></div>
+
+
+</article><nav class="pn"><a class="pv" href="session-shape.html"><small>← Back</small>In code</a><a class="nx" href="patterns.html"><small>Next →</small>Five patterns</a></nav></div></main>
+<script src="nav.js"></script></body></html>
