@@ -174,5 +174,97 @@ def main():
     print(f"{len(SCENES)} illustrations -> {OUT}")
 
 
+
+# ------------------------------------------------------------------ the dragon story and the surfer
+
+def house(x, y, s=1.0, wall=None, roof=None):
+    wall = wall or PAL["butter"]
+    roof = roof or PAL["coral"]
+    return (f'<rect x="{x}" y="{y - 34 * s}" width="{40 * s}" height="{34 * s}" fill="{wall}" class="o"/>'
+            f'<path d="M{x - 6 * s},{y - 32 * s} L{x + 20 * s},{y - 56 * s} L{x + 46 * s},{y - 32 * s} Z" fill="{roof}" class="o"/>'
+            f'<rect x="{x + 15 * s}" y="{y - 18 * s}" width="{10 * s}" height="{18 * s}" fill="{PAL["navy"]}" class="o" style="stroke-width:1.6"/>')
+
+
+def flames(x, y, s=1.0, d=1):
+    """A puff of fire, blowing in direction d (1 = right, -1 = left)."""
+    return (f'<path d="M{x},{y} C{x + 30 * s * d},{y - 18 * s} {x + 60 * s * d},{y - 6 * s} {x + 92 * s * d},{y - 20 * s} '
+            f'C{x + 80 * s * d},{y + 2 * s} {x + 96 * s * d},{y + 14 * s} {x + 110 * s * d},{y + 20 * s} '
+            f'C{x + 70 * s * d},{y + 28 * s} {x + 40 * s * d},{y + 18 * s} {x},{y + 8 * s} Z" fill="{PAL["orange"]}" class="o"/>'
+            f'<path d="M{x + 10 * s * d},{y + 2 * s} C{x + 34 * s * d},{y - 6 * s} {x + 54 * s * d},{y + 2 * s} {x + 74 * s * d},{y - 4 * s} '
+            f'C{x + 64 * s * d},{y + 10 * s} {x + 40 * s * d},{y + 14 * s} {x + 10 * s * d},{y + 8 * s} Z" fill="{PAL["yellow"]}"/>')
+
+
+def dragon(x, y, s=1.0, body=None, wing=None, d=1, rider=False):
+    """A round, friendly cartoon dragon facing direction d. (x, y) = middle of the body."""
+    body = body or PAL["green"]
+    wing = wing or "#7FD1B4"
+    k = lambda v: v * s  # noqa: E731
+    X = lambda v: x + v * s * d  # noqa: E731
+    g = []
+    # tail with a spade tip
+    g.append(f'<path d="M{X(-60)},{y + k(6)} C{X(-110)},{y + k(10)} {X(-130)},{y - k(30)} {X(-160)},{y - k(20)}" fill="none" stroke="{body}" stroke-width="{k(16)}" stroke-linecap="round"/>')
+    g.append(f'<path d="M{X(-160)},{y - k(34)} L{X(-182)},{y - k(18)} L{X(-158)},{y - k(4)} Z" fill="{PAL["coral"]}" class="o"/>')
+    # back wing
+    g.append(f'<path d="M{X(-10)},{y - k(30)} L{X(-40)},{y - k(118)} L{X(-58)},{y - k(70)} L{X(-82)},{y - k(92)} L{X(-80)},{y - k(40)} Z" fill="{wing}" class="o"/>')
+    # body and belly
+    g.append(f'<ellipse cx="{x}" cy="{y}" rx="{k(72)}" ry="{k(42)}" fill="{body}" class="o"/>')
+    g.append(f'<ellipse cx="{X(10)}" cy="{y + k(14)}" rx="{k(46)}" ry="{k(22)}" fill="{PAL["butter"]}" class="o" style="stroke-width:1.6"/>')
+    # legs
+    for lx in (-34, 30):
+        g.append(f'<path d="M{X(lx)},{y + k(30)} L{X(lx + 4)},{y + k(56)} L{X(lx + 18)},{y + k(56)}" fill="none" stroke="{body}" stroke-width="{k(14)}" stroke-linecap="round" stroke-linejoin="round"/>')
+    # neck and head
+    g.append(f'<path d="M{X(50)},{y - k(16)} C{X(74)},{y - k(46)} {X(84)},{y - k(66)} {X(100)},{y - k(78)}" fill="none" stroke="{body}" stroke-width="{k(30)}" stroke-linecap="round"/>')
+    g.append(f'<ellipse cx="{X(118)}" cy="{y - k(86)}" rx="{k(38)}" ry="{k(26)}" fill="{body}" class="o"/>')
+    g.append(f'<ellipse cx="{X(146)}" cy="{y - k(80)}" rx="{k(16)}" ry="{k(12)}" fill="#86D9BC" class="o"/>')
+    g.append(f'<circle cx="{X(150)}" cy="{y - k(84)}" r="{k(2.4)}" fill="{INK}"/>')
+    g.append(f'<path d="M{X(102)},{y - k(108)} L{X(96)},{y - k(128)} L{X(112)},{y - k(110)} Z M{X(122)},{y - k(110)} L{X(122)},{y - k(130)} L{X(132)},{y - k(108)} Z" fill="{PAL["yellow"]}" class="o"/>')
+    g.append(f'<circle cx="{X(118)}" cy="{y - k(92)}" r="{k(7)}" fill="#fff" class="o"/><circle cx="{X(120)}" cy="{y - k(92)}" r="{k(3.4)}" fill="{INK}"/>')
+    g.append(f'<path d="M{X(126)},{y - k(72)} C{X(134)},{y - k(66)} {X(146)},{y - k(66)} {X(152)},{y - k(72)}" class="t" style="stroke-width:2"/>')
+    # spikes on the back
+    for sx in (-40, -16, 8):
+        g.append(f'<path d="M{X(sx)},{y - k(40)} L{X(sx + 10)},{y - k(58)} L{X(sx + 20)},{y - k(40)} Z" fill="{PAL["yellow"]}" class="o" style="stroke-width:1.8"/>')
+    # front wing
+    g.append(f'<path d="M{X(14)},{y - k(28)} L{X(-6)},{y - k(130)} L{X(-28)},{y - k(78)} L{X(-58)},{y - k(104)} L{X(-50)},{y - k(36)} Z" fill="{wing}" class="o"/>')
+    if rider:
+        g.append(person(X(40), y - k(30), PAL["blue"], PAL["navy"], 1, reach=(X(84), y - k(64)), face=d, scale=0.42 * s, sit=True))
+    return "".join(g)
+
+
+def wave(x, y, w, h):
+    return (f'<path d="M{x},{y + h} C{x + w * .1},{y + h * .4} {x + w * .35},{y - h * .05} {x + w * .62},{y} '
+            f'C{x + w * .82},{y + h * .02} {x + w * .9},{y + h * .2} {x + w * .82},{y + h * .36} '
+            f'C{x + w * .74},{y + h * .5} {x + w * .62},{y + h * .3} {x + w * .66},{y + h * .2} '
+            f'C{x + w * .74},{y + h * .5} {x + w * .9},{y + h * .7} {x + w},{y + h} Z" fill="{PAL["teal"]}" class="o"/>'
+            f'<path d="M{x + w * .6},{y + h * .12} C{x + w * .7},{y + h * .06} {x + w * .78},{y + h * .1} {x + w * .8},{y + h * .2}" class="t" style="stroke:#fff;stroke-width:5"/>')
+
+
+def surfer(x, y, s=1.0):
+    return (f'<path d="M{x - 70 * s},{y + 8 * s} C{x - 30 * s},{y - 4 * s} {x + 40 * s},{y - 6 * s} {x + 80 * s},{y + 2 * s} C{x + 40 * s},{y + 16 * s} {x - 30 * s},{y + 20 * s} {x - 70 * s},{y + 8 * s} Z" fill="{PAL["yellow"]}" class="o"/>'
+            + person(x, y, PAL["coral"], PAL["navy"], 1, reach=(x + 54 * s, y - 120 * s), scale=0.62 * s))
+
+
+SCENES.update({
+    "dragon-attack": (520, 320,
+                      blob(260, 200, 240, 110, PAL["peach"]) + house(60, 300, 1.1) + house(130, 300, 0.9, PAL["peri"], PAL["plum"]) +
+                      house(190, 300, 1.0, PAL["rose"], PAL["coral"]) + flames(262, 54, 0.9, -1) + dragon(390, 130, 0.8, d=-1),
+                      "A big cartoon dragon breathing fire towards a small village."),
+    "village-decides": (520, 320,
+                        blob(260, 196, 236, 112, PAL["mint"]) + house(40, 300, 1.0) + house(440, 300, 1.0, PAL["peri"], PAL["plum"]) +
+                        board(170, 70, 180, 130, -2, "flow") +
+                        person(130, 300, PAL["yellow"], PAL["orange"], 0, reach=(196, 140), scale=0.82) +
+                        person(390, 300, PAL["green"], PAL["navy"], 1, reach=(330, 150), face=-1, scale=0.82) + bulb(260, 40),
+                        "Villagers gather at a board and plan how to face the dragon."),
+    "dragon-ride": (520, 320,
+                    blob(260, 170, 240, 120, PAL["peri"]) +
+                    "".join(f'<ellipse cx="{cx}" cy="{cy}" rx="{rx}" ry="{rx * .38}" fill="#fff" class="o" style="stroke-width:1.8"/>' for cx, cy, rx in ((90, 70, 40), (440, 60, 34), (420, 250, 30))) +
+                    house(60, 310, 0.6) + house(100, 310, 0.5, PAL["peri"], PAL["plum"]) + dragon(250, 190, 0.9, d=1, rider=True),
+                    "A person rides a friendly dragon high above the village."),
+    "surfer": (520, 320,
+               blob(260, 180, 240, 115, PAL["butter"]) + wave(90, 90, 380, 230) + surfer(260, 152, 0.9) +
+               f'<circle cx="440" cy="64" r="26" fill="{PAL["yellow"]}" class="o"/>',
+               "A surfer rides on top of a big wave."),
+})
+
+
 if __name__ == "__main__":
     main()

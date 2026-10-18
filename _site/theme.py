@@ -38,9 +38,9 @@ THEME = """<style>
   a { color:var(--accent); text-underline-offset:3px; }
 
   header { padding:26px 0 0; }
-  nav { display:flex; align-items:baseline; gap:6px 24px; flex-wrap:wrap; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
   .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
-  nav a.n { font-size:15px; color:var(--muted); text-decoration:none; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
   nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
 
   h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
