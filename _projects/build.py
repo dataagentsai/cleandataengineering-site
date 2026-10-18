@@ -38,21 +38,23 @@ EMAIL = "basant@cleandataengineering.ai"
 
 CSS = """<style>
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; margin-top:18px; }
-  .card { background:var(--surface); border:1px solid var(--rule); border-left:3px solid var(--accent); padding:16px 18px; font-family:var(--sans); display:flex; flex-direction:column; text-decoration:none; color:inherit; }
-  .card:hover { border-color:var(--rule-firm); }
-  .card h3 { font-size:16px; margin:0 0 4px; color:var(--ink); } .card p { font-size:14px; color:var(--muted); margin:0 0 10px; line-height:1.5; }
+  .card { background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:16px 20px; font-family:var(--sans); display:flex; flex-direction:column; text-decoration:none; color:inherit; transition:transform .15s; }
+  .card:hover { transform:rotate(-.4deg) translateY(-2px); }
+  .card[data-subject=ai] { background:var(--peri-wash); } .card[data-subject=llm] { background:var(--mint-wash); }
+  .card[data-subject=data] { background:var(--rose-wash); } .card[data-subject=cost] { background:var(--butter-wash); }
+  .card h3 { font-family:var(--hand); font-weight:400; font-size:24px; margin:0 0 4px; color:var(--ink); } .card p { font-size:14px; color:var(--muted); margin:0 0 10px; line-height:1.5; }
   .pills { display:flex; gap:6px; flex-wrap:wrap; margin-top:auto; }
-  .pill { font:11.5px var(--sans); letter-spacing:.04em; padding:2px 8px; border-radius:999px; border:1px solid var(--rule-firm); color:var(--muted); }
+  .pill { font:12px var(--sans); padding:1px 9px; border-radius:999px; border:1.5px solid var(--ink); color:var(--ink); background:#fff; }
   .pill.st-active { background:var(--accent); color:var(--paper); border-color:var(--accent); }
   .pill.st-starting { border-color:var(--accent); color:var(--accent); }
-  .bar { height:6px; background:var(--surface-2); border-radius:3px; margin:8px 0 10px; overflow:hidden; } .bar i { display:block; height:100%; background:var(--accent); }
+  .bar { height:9px; background:#fff; border:1.5px solid var(--ink); border-radius:999px; margin:8px 0 10px; overflow:hidden; } .bar i { display:block; height:100%; background:var(--butter); }
   .proj h2 { margin-top:38px; } .proj ul { padding-left:22px; } .proj li { margin:5px 0; }
   .benefits { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:12px; font-family:var(--sans); }
-  .benefits div { background:var(--surface); border:1px solid var(--rule); padding:12px 14px; } .benefits b { display:block; margin-bottom:4px; } .benefits span { font-size:14px; color:var(--muted); }
-  .join { background:var(--accent-wash); border:1px solid var(--rule-firm); padding:16px 18px; font-family:var(--sans); font-size:15px; }
+  .benefits div { background:var(--mint-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:12px 16px; } .benefits b { display:block; font-family:var(--hand); font-weight:400; font-size:21px; margin-bottom:2px; } .benefits span { font-size:14.5px; color:var(--ink-soft); }
+  .join { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:18px 22px; font-family:var(--sans); font-size:15px; }
   .join .btns { display:flex; gap:12px; flex-wrap:wrap; margin-top:10px; }
-  .join .btns a { background:var(--accent); color:var(--paper); padding:7px 14px; border-radius:4px; text-decoration:none; font-weight:600; }
-  .join .btns a.alt { background:transparent; color:var(--accent); border:1px solid var(--accent); }
+  .join .btns a { background:var(--peri); color:var(--ink); border:1.5px solid var(--ink); padding:7px 16px; border-radius:999px; text-decoration:none; font-weight:700; }
+  .join .btns a.alt { background:#fff; color:var(--ink); }
   .tw { overflow-x:auto; } .proj table { border-collapse:collapse; width:100%; font-family:var(--sans); font-size:14px; margin:6px 0 16px; }
   .proj th, .proj td { text-align:left; padding:7px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
   .proj th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }

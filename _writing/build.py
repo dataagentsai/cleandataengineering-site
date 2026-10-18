@@ -180,22 +180,22 @@ POST_CSS = """<style>
   .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
   .post-meta a { color:var(--muted); }
   article h1 { max-width:none; }
-  .summary { background:var(--surface); border:1px solid var(--rule); border-left:3px solid var(--accent); padding:14px 18px; font-family:var(--sans); font-size:15px; color:var(--ink-soft); margin:0 0 28px; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
   article h2 { margin-top:34px; }
   article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
   article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
   article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
   article pre code { background:none; padding:0; }
-  article blockquote { margin:0 0 16px; padding:4px 18px; border-left:3px solid var(--rule-firm); color:var(--ink-soft); font-style:italic; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
   .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
   article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
   article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
-  .drawing { margin:22px 0; background:#fff; border:1px solid var(--rule); padding:14px; }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
   .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
   .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
   .deeper p { margin:0 0 8px; }
   .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
-  .chips button { font:13px var(--sans); border:1px solid var(--rule-firm); background:var(--surface); color:var(--muted); padding:4px 12px; border-radius:999px; cursor:pointer; }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
   .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
   ul.posts .soon { color:var(--faint); }
 </style>"""
@@ -223,6 +223,9 @@ def page(title, desc, canonical, body, extra_head=""):
 <title>{E(title)} · Clean Data Engineering</title>
 <meta name="description" content="{E(desc)}"><link rel="canonical" href="{canonical}">
 <meta property="og:title" content="{E(title)}"><meta property="og:description" content="{E(desc)}"><meta property="og:url" content="{canonical}">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
 <link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
 {css}{POST_CSS}{extra_head}</head><body>
 {nav}

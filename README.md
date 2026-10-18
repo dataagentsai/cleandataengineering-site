@@ -30,3 +30,10 @@ purpose, business benefits, status and how to join, requirements, a very high-le
 tech stack per platform (✓ = built), what needs to be done, roles, what you'll learn, links.
 To update a project, edit its dict (status, work items, good_first) and rebuild. `FDE_READY` in build.py marks
 projects someone could take into a real customer setting (the forward-deployed practice label).
+
+## The look
+
+One theme, light only: white background, soft pastels (periwinkle = AI, mint = LLM, rose = data, butter = cost),
+1.5px hand-drawn outlines, DM Sans for reading and Patrick Hand for headings, sketch-style diagrams.
+It lives in `_site/theme.py` (`python3 _site/theme.py` re-applies it to the home page, /learn/ and the
+certifications hub and redraws the home cartoon). /writing/ and /projects/ copy the home page's style when they build.
