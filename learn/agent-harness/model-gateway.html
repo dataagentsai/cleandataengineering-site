@@ -27,7 +27,7 @@
 
 
 
-<h2>How it is done: the real code</h2><p class="deeper">Cut from the live repositories each time the site is built, so it always matches what runs.</p><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/claims-fnol-azure/blob/main/infra/policies/groq-api.xml#L17"><code>infra/policies/groq-api.xml:17</code></a><span>1. Only the allowed model gets through (403 model_not_allowed)</span></div><pre>    <span class="c">&lt;!-- Tier 4a A8: only an allowed model gets through. Checked first, so a refused
+<h2>How it is done: the real code</h2><p class="deeper">Cut from the live repositories each time the site is built, so it always matches what runs.</p><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/claims-fnol-azure/blob/e9ce5ea99babfff8b66f8be79dd7db9f1d09ad00/infra/policies/groq-api.xml#L17"><code>infra/policies/groq-api.xml:17</code></a><span>1. Only the allowed model gets through (403 model_not_allowed)</span></div><pre>    <span class="c">&lt;!-- Tier 4a A8: only an allowed model gets through. Checked first, so a refused
          request costs no Content Safety call and no tokens. The agent checks the
          same list (approved_models); this is the second wall, at the door. --&gt;</span>
     &lt;set-variable name="model" value="@{
@@ -43,13 +43,13 @@
           &lt;set-body&gt;@(new JObject(new JProperty("error", new JObject(new JProperty("code", "model_not_allowed"), new JProperty("message", "This agent may not use model '" + (string)context.Variables["model"] + "'.")))).ToString())&lt;/set-body&gt;
         &lt;/return-response&gt;
       &lt;/when&gt;
-    &lt;/choose&gt;</pre></div><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/claims-fnol-azure/blob/main/infra/policies/groq-api.xml#L34"><code>infra/policies/groq-api.xml:34</code></a><span>2. 30 calls a minute, and token counts into App Insights</span></div><pre>    <span class="c">&lt;!-- Request rate per subscription key (the agent's): 30 calls a minute. --&gt;</span>
+    &lt;/choose&gt;</pre></div><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/claims-fnol-azure/blob/e9ce5ea99babfff8b66f8be79dd7db9f1d09ad00/infra/policies/groq-api.xml#L34"><code>infra/policies/groq-api.xml:34</code></a><span>2. 30 calls a minute, and token counts into App Insights</span></div><pre>    <span class="c">&lt;!-- Request rate per subscription key (the agent's): 30 calls a minute. --&gt;</span>
     &lt;rate-limit calls="30" renewal-period="60" remaining-calls-header-name="x-ratelimit-remaining" /&gt;
     <span class="c">&lt;!-- Token counts per call into Application Insights (customMetrics). --&gt;</span>
     &lt;llm-emit-token-metric namespace="claims-fnol"&gt;
       &lt;dimension name="API ID" /&gt;
       &lt;dimension name="Subscription ID" /&gt;
-    &lt;/llm-emit-token-metric&gt;</pre></div><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/claims-fnol-azure/blob/main/infra/policies/groq-api.xml#L41"><code>infra/policies/groq-api.xml:41</code></a><span>3. Content Safety on the newest user message: Prompt Shields and the harm check</span></div><pre>    <span class="c">&lt;!-- The newest user message: the text Content Safety screens. --&gt;</span>
+    &lt;/llm-emit-token-metric&gt;</pre></div><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/claims-fnol-azure/blob/e9ce5ea99babfff8b66f8be79dd7db9f1d09ad00/infra/policies/groq-api.xml#L41"><code>infra/policies/groq-api.xml:41</code></a><span>3. Content Safety on the newest user message: Prompt Shields and the harm check</span></div><pre>    <span class="c">&lt;!-- The newest user message: the text Content Safety screens. --&gt;</span>
     &lt;set-variable name="prompt" value="@{
         var body = context.Request.Body.As&lt;JObject&gt;(preserveContent: true);
         var messages = body["messages"] as JArray;
@@ -79,7 +79,7 @@
           &lt;set-body&gt;@(new JObject(new JProperty("text", (string)context.Variables["prompt"]), new JProperty("outputType", "FourSeverityLevels")).ToString())&lt;/set-body&gt;
           &lt;authentication-managed-identity resource="https://cognitiveservices.azure.com" client-id="{{apim-identity-client-id}}" /&gt;
         &lt;/send-request&gt;
-        &lt;set-variable name="promptVerdict" value="@{</pre></div><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/claims-fnol-azure/blob/main/infra/policies/groq-api.xml#L71"><code>infra/policies/groq-api.xml:71</code></a><span>4. The verdict: block on an attack or severity ≥ threshold; &quot;unavailable&quot; passes (fails open)</span></div><pre>        &lt;set-variable name="promptVerdict" value="@{
+        &lt;set-variable name="promptVerdict" value="@{</pre></div><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/claims-fnol-azure/blob/e9ce5ea99babfff8b66f8be79dd7db9f1d09ad00/infra/policies/groq-api.xml#L71"><code>infra/policies/groq-api.xml:71</code></a><span>4. The verdict: block on an attack or severity ≥ threshold; &quot;unavailable&quot; passes (fails open)</span></div><pre>        &lt;set-variable name="promptVerdict" value="@{
             var shield = context.Variables.GetValueOrDefault&lt;IResponse&gt;("shield");
             var harm = context.Variables.GetValueOrDefault&lt;IResponse&gt;("promptHarm");
             if (shield == null || harm == null || shield.StatusCode != 200 || harm.StatusCode != 200) { return "unavailable"; }
@@ -99,7 +99,7 @@
               &lt;set-body&gt;{"error":{"code":"content_safety","message":"the prompt was blocked by Content Safety"}}&lt;/set-body&gt;
             &lt;/return-response&gt;
           &lt;/when&gt;
-        &lt;/choose&gt;</pre></div><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/claims-fnol-azure/blob/main/infra/policies/groq-api.xml#L94"><code>infra/policies/groq-api.xml:94</code></a><span>5. Forward to Groq with the key from Key Vault; the agent&#x27;s own key never leaves APIM</span></div><pre>    <span class="c">&lt;!-- To Groq, with the key from Key Vault; the agent's subscription key stays here. --&gt;</span>
+        &lt;/choose&gt;</pre></div><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/claims-fnol-azure/blob/e9ce5ea99babfff8b66f8be79dd7db9f1d09ad00/infra/policies/groq-api.xml#L94"><code>infra/policies/groq-api.xml:94</code></a><span>5. Forward to Groq with the key from Key Vault; the agent&#x27;s own key never leaves APIM</span></div><pre>    <span class="c">&lt;!-- To Groq, with the key from Key Vault; the agent's subscription key stays here. --&gt;</span>
     &lt;set-backend-service backend-id="groq" /&gt;
     &lt;set-header name="Authorization" exists-action="override"&gt;&lt;value&gt;Bearer {{groq-api-key}}&lt;/value&gt;&lt;/set-header&gt;
     &lt;set-header name="Ocp-Apim-Subscription-Key" exists-action="delete" /&gt;</pre></div>
