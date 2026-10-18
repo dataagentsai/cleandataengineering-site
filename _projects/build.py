@@ -214,9 +214,9 @@ def list_page():
         cards += (f'<a class="card" href="/projects/{p["id"]}/" data-subject="{p["subject"]}" data-status="{p["status"]}" '
                   f'data-group="{p["group"]}" data-practice="{"fde" if p["id"] in FDE_READY else ""}">'
                   f'<h3>{E(p["title"])}</h3><p>{E(p["one_liner"])}</p><p><em>{E(benefit)}</em></p>{bar}<div class="pills">{pills(p)}</div></a>')
-    body = f"""<div class="hero"><h1>Projects</h1>
+    body = f"""<div class="hero hub-hero"><div><h1>Projects</h1>
 <p class="thesis">Real things to build, each with a page that says why it matters, what it looks like, what it's built with on each cloud, and exactly what needs doing next. Some are under way and you can join; some haven't started and need a lead.</p>
-<p style="font-family:var(--sans);font-size:14px">To join: open a project and use <strong>Join this project</strong>, or pick a good first task from its repository.</p></div>
+<p style="font-family:var(--sans);font-size:14px">To join: open a project and use <strong>Join this project</strong>, or pick a good first task from its repository.</p></div><img src="/assets/illustrations/projects.svg" alt="" width="420" height="300"></div>
 {chips("status", {k: v.split(" · ")[0] for k, v in STATUS.items()})}{chips("subject", SUBJECTS)}{chips("group", GROUPS)}{chips("practice", {"fde": "Forward-deployed ready"})}
 <div class="cards">{cards}</div>
 <script>

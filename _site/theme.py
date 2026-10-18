@@ -12,6 +12,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PAGES = ["index.html", "learn/index.html", "certifications/index.html"]
+HUBS = {"learn/index.html": "learn", "certifications/index.html": "certifications"}
 
 THEME = """<style>
   /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
@@ -84,7 +85,12 @@ THEME = """<style>
 
   footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
   footer a { color:var(--muted); }
-  @media (max-width:760px) { .hero.art-hero { grid-template-columns:1fr; } .art { max-width:440px; } }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
 </style>"""
 
 FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
@@ -92,6 +98,11 @@ FONTS = ('<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="
 
 
 def hero_art():
+    return ('<div class="art"><img src="/assets/illustrations/hero-team.svg" alt="Two people at a whiteboard sketching a flow, with a lightbulb above them." width="600" height="440">'
+            '<p class="eyebrow" style="text-align:center;margin-top:4px"><a href="/learn/agent-harness/arch-horse.html">Why our mascot is a horse →</a></p></div>')
+
+
+def hero_art_horse():
     """The horse in harness on a soft green road: the site's mascot drawing."""
     sys.path.insert(0, str(Path.home() / "agent-harness-tutorial"))
     import kit
@@ -134,6 +145,18 @@ def main():
                 s = s.replace('<div class="hero">', '<div class="hero art-hero"><div>', 1)
                 s = s.replace("</p>\n  </div>", f"</p>\n  </div>\n  {a}{b}\n  </div>", 1)
             s = s[: s.index(a) + len(a)] + hero_art() + s[s.index(b):]
+        if rel == "index.html":
+            for sec, art in (("learn", "learn"), ("projects", "projects"), ("standards", "standards"),
+                             ("research", "research"), ("writing", "writing"), ("about", "about")):
+                tag = f'<section id="{sec}">'
+                img = f'<img class="spot" src="/assets/illustrations/{art}.svg" alt="" width="420" height="300">'
+                if tag in s and img not in s:
+                    s = s.replace(tag, tag + "\n    " + img, 1)
+        if rel in HUBS and 'class="hub-hero"' not in s:
+            art = HUBS[rel]
+            s = re.sub(r'<div class="hero">(.*?)</div>',
+                       lambda m: f'<div class="hero hub-hero"><div>{m.group(1)}</div><img src="/assets/illustrations/{art}.svg" alt="" width="420" height="300"></div>',
+                       s, count=1, flags=re.S)
         p.write_text(s)
         print("themed", rel)
 

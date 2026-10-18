@@ -267,8 +267,8 @@ def list_page(posts):
     def chips(name, opts):
         return f'<div class="chips" data-f="{name}"><button class="on" data-v="">All</button>' + "".join(
             f'<button data-v="{k}">{E(v)}</button>' for k, v in opts.items()) + "</div>"
-    body = f"""<div class="hero"><h1>Writing</h1><p class="thesis">Five- and ten-minute pieces: what broke and how it was fixed, one idea explained plainly, a decision with its trade-offs, and short briefs for the people who fund and run these systems.</p>
-<p style="font-family:var(--sans);font-size:14px"><a href="/writing/feed.xml">RSS feed</a></p></div>
+    body = f"""<div class="hero hub-hero"><div><h1>Writing</h1><p class="thesis">Five- and ten-minute pieces: what broke and how it was fixed, one idea explained plainly, a decision with its trade-offs, and short briefs for the people who fund and run these systems.</p>
+<p style="font-family:var(--sans);font-size:14px"><a href="/writing/feed.xml">RSS feed</a></p></div><img src="/assets/illustrations/writing.svg" alt="" width="420" height="300"></div>
 {chips("subject", SUBJECTS)}{chips("audience", AUDIENCES)}{chips("kind", KINDS)}
 <ul class="posts">{items}{soon}</ul>
 <script>
