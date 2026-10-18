@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hooks in your own loop · Eval Harness Tutorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="style.css"></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg>
+<header class="top"><div class="row"><button class="menu" aria-label="Show the page list">☰ Pages</button>
+<a class="home" href="https://cleandataengineering.ai/">cleandataengineering.ai</a><a class="brand" href="index.html">Eval Harness, drawn simply</a><nav class="tabs" aria-label="Sections"><a class="" href="index.html">Start</a><a class="on" href="arch.html">Architecture</a><a class="" href="session.html">Sessions</a><a class="" href="patterns.html">Five patterns</a><a class="" href="yaml.html">Writing rules</a><a class="" href="traces.html">From traces</a><a class="" href="catalog.html">Catalog</a><a class="" href="requirements.html">Requirements</a><a class="" href="design.html">Design</a><a class="" href="review.html">Your review</a></nav></div>
+<div class="crumbs">You are here: <a href="arch.html">Architecture</a> › <b>Hooks in your own loop</b></div></header>
+<aside class="side" aria-label="All pages"><h4>Start here</h4><ul><li><a class="" href="index.html">Overview</a></li></ul><ul><li><a class="" href="why.html">Why check?</a></li><li><a class="" href="picture.html">The whole picture</a></li></ul><h4>Architecture</h4><ul><li><a class="" href="arch.html">Overview</a></li></ul><ul><li><a class="" href="arch-modes.html">Offline, inline, online</a></li><li><a class="" href="arch-integrations.html">Integrations</a></li><li><a class="" href="arch-engine.html">Inside the engine</a></li><li><a class="on" href="arch-hooks.html">Hooks in your own loop</a></li><li><a class="" href="arch-outputs.html">On top of your tools</a></li></ul><h4>Sessions</h4><ul><li><a class="" href="session.html">Overview</a></li></ul><ul><li><a class="" href="session-shape.html">In code</a></li><li><a class="" href="from-messages.html">From chat messages</a></li></ul><h4>Five patterns</h4><ul><li><a class="" href="patterns.html">Overview</a></li></ul><ul><li><a class="" href="p-requires-before.html">requires_before</a></li><li><a class="" href="p-argument-limit.html">argument_limit</a></li><li><a class="" href="p-claim-needs-action.html">claim_needs_action</a></li><li><a class="" href="p-decision-vs-should.html">decision_vs_should</a></li><li><a class="" href="p-consistency.html">consistency</a></li></ul><h4>Writing rules</h4><ul><li><a class="" href="yaml.html">Overview</a></li></ul><ul><li><a class="" href="presets.html">Presets</a></li></ul><h4>From traces</h4><ul><li><a class="" href="traces.html">Overview</a></li></ul><ul><li><a class="" href="trace-rebuild.html">Three traps</a></li><li><a class="" href="trace-gaps.html">Gaps in the standard</a></li></ul><h4>Catalog</h4><ul><li><a class="" href="catalog.html">Overview</a></li></ul><ul><li><a class="" href="cat-any.html">Any agent</a></li><li><a class="" href="cat-kind.html">By kind of agent</a></li><li><a class="" href="cat-domain.html">For one business</a></li></ul><h4>Requirements</h4><ul><li><a class="" href="requirements.html">Overview</a></li></ul><ul><li><a class="" href="req-fnol.html">Motor-claims FNOL agent</a></li><li><a class="" href="req-clothing.html">Clothing shop support agent</a></li><li><a class="" href="req-standard.html">The standard</a></li></ul><h4>Design</h4><ul><li><a class="" href="design.html">Overview</a></li></ul><ul><li><a class="" href="design-decisions.html">Decisions</a></li></ul><h4>Your review</h4><ul><li><a class="" href="review.html">Your review</a></li></ul></aside>
+<main><div class="wrap"><article class="page">
+<header><p class="kicker">Eval Harness Tutorial · Architecture</p><h1>Hooks in a loop of your own</h1></header>
+
+<div class="text">
+<p><b>Your question:</b> a framework gives us hooks before and after model and tool
+calls. In our own loop, code added “before a tool call” runs for every tool. How
+do we run something before <i>one</i> tool only, and keep injection points simple?</p>
+<p><b>The answer is two separate jobs.</b></p>
+<ol>
+<li><b>The loop only reports the moment.</b> Five lines, one per moment, each saying
+“here's what's happening”: which tool, its arguments, the conversation so far. These
+lines never change, however many rules you add.</li>
+<li><b>Each hook says what it's for.</b> Targeting lives on the hook, as a
+<b>matcher</b>: one tool by name, a family by pattern (<code>issue_*</code>), or a whole
+kind of tool (every <i>irreversible</i> one). The loop never has an <code>if tool == …</code>.</li>
+</ol>
+</div>
+<figure><div class="scroll"><svg viewBox="0 0 1120 400" role="img" aria-label="Your loop, the hook runner, and hooks with matchers" style="min-width:680px"><rect class="pf pf-bx" x="24" y="34" width="298" height="328" rx="12"/><rect class="bx ol" x="20" y="30" width="300" height="330" rx="12"/><text class="tt" x="170.0" y="125.0" text-anchor="middle">Your loop (5 lines added)</text><text class="sm" x="170.0" y="149.0" text-anchor="middle"></text><text class="sm" x="170.0" y="168.0" text-anchor="middle">hooks.run(pre_model)</text><text class="sm" x="170.0" y="187.0" text-anchor="middle">  model call</text><text class="sm" x="170.0" y="206.0" text-anchor="middle">hooks.run(post_model)</text><text class="sm" x="170.0" y="225.0" text-anchor="middle">hooks.run(pre_tool)</text><text class="sm" x="170.0" y="244.0" text-anchor="middle">  tool runs</text><text class="sm" x="170.0" y="263.0" text-anchor="middle">hooks.run(post_tool)</text><text class="sm" x="170.0" y="282.0" text-anchor="middle">hooks.run(reply)</text><line class="ln" x1="320" y1="195" x2="400" y2="195" marker-end="url(#ar)"/><text class="sm" x="360.0" y="185" text-anchor="middle">event</text><rect class="pf pf-solid" x="404" y="124" width="248" height="148" rx="12"/><rect class="solid ol" x="400" y="120" width="250" height="150" rx="12"/><text class="tt inv" x="525.0" y="163.0" text-anchor="middle">Hooks.run(event)</text><text class="inv sm2" x="525.0" y="187.0" text-anchor="middle">keep the hooks whose</text><text class="inv sm2" x="525.0" y="206.0" text-anchor="middle">moment and matcher fit,</text><text class="inv sm2" x="525.0" y="225.0" text-anchor="middle">run them in order;</text><text class="inv sm2" x="525.0" y="244.0" text-anchor="middle">first block wins</text><line class="ln" x1="650" y1="195" x2="720" y2="195" marker-end="url(#ar)"/><text class="lbl" x="720" y="40" text-anchor="start">HOOKS, each with a matcher</text><rect class="pf pf-bxs" x="724" y="59" width="378" height="54" rx="12"/><rect class="bxs ol" x="720" y="55" width="380" height="56" rx="12"/><text class="tt" x="910.0" y="79.5" text-anchor="middle">refund_needs_lookup</text><text class="sm" x="910.0" y="103.5" text-anchor="middle">pre_tool · tools: issue_refund</text><rect class="pf pf-bxs" x="724" y="126" width="378" height="54" rx="12"/><rect class="bxs ol" x="720" y="122" width="380" height="56" rx="12"/><text class="tt" x="910.0" y="146.5" text-anchor="middle">refund_cap</text><text class="sm" x="910.0" y="170.5" text-anchor="middle">pre_tool · tools: issue_refund</text><rect class="pf pf-bxs" x="724" y="193" width="378" height="54" rx="12"/><rect class="bxs ol" x="720" y="189" width="380" height="56" rx="12"/><text class="tt" x="910.0" y="213.5" text-anchor="middle">every irreversible tool</text><text class="sm" x="910.0" y="237.5" text-anchor="middle">pre_tool · side_effect: irreversible</text><rect class="pf pf-bx" x="724" y="260" width="378" height="54" rx="12"/><rect class="bx ol" x="720" y="256" width="380" height="56" rx="12"/><text class="tt" x="910.0" y="280.5" text-anchor="middle">pii_in_results</text><text class="sm" x="910.0" y="304.5" text-anchor="middle">post_tool · every tool</text><rect class="pf pf-bx" x="724" y="327" width="378" height="54" rx="12"/><rect class="bx ol" x="720" y="323" width="380" height="56" rx="12"/><text class="tt" x="910.0" y="347.5" text-anchor="middle">redact the reply</text><text class="sm" x="910.0" y="371.5" text-anchor="middle">reply</text></svg></div><figcaption>For an issue_refund call, the first three hooks fit and run; for get_order, none of them do. Adding a rule never touches the loop.</figcaption></figure>
+<h2>The five lines in your loop</h2>
+<div class="snip"><div class="snip-h"><span>Your own loop, with the five moments marked</span></div><pre>for step in range(max_steps):
+    hooks.run(Event(&quot;pre_model&quot;, text=prompt))              # 1
+    reply = model(messages)
+    hooks.run(Event(&quot;post_model&quot;, text=reply.text))         # 2
+    for call in reply.tool_calls:
+        d = hooks.run(Event(&quot;pre_tool&quot;, tool=call.name,     # 3
+                            arguments=call.arguments,
+                            side_effect=registry[call.name].side_effect,
+                            session=session))
+        if d.stops:                      # block or escalate: the tool never runs;
+            result = refused(d)          # the model is told why
+        else:
+            result = tools[call.name](**(d.arguments or call.arguments))
+            hooks.run(Event(&quot;post_tool&quot;, tool=call.name, result=result))   # 4
+    ...
+hooks.run(Event(&quot;reply&quot;, text=final_text))                  # 5</pre></div>
+<h2>Targeting one tool, three ways</h2>
+<div class="snip"><div class="snip-h"><span>In code: decorators, like a framework's hooks</span></div><pre>hooks = Hooks()
+
+@hooks.before_tool(&quot;issue_refund&quot;)                 # one tool
+def refund_cap(event):
+    if event.arguments[&quot;amount&quot;] &gt; 10_000:
+        return Decision(&quot;escalate&quot;, &quot;refunds over ₹10,000 need a person&quot;)
+
+@hooks.before_tool(&quot;issue_*&quot;)                      # a family of tools
+def ...
+
+@hooks.before_tool(side_effect=&quot;irreversible&quot;)     # every tool of a kind
+def ...
+
+hooks.add(&quot;pre_tool&quot;, check(refund_needs_lookup), tools=[&quot;issue_refund&quot;])   # any of our checks</pre></div>
+<div class="snip"><div class="snip-h"><span>In YAML: no code at all (what an ops person writes)</span></div><pre>evaluators:
+  refund_needs_lookup:
+    adapter: requires_before
+    action: issue_refund
+    before: get_order
+    at: pre_tool               # the moment
+    tools: [issue_refund]      # the matcher: which tools
+    on_fail: block             # block · escalate · allow (just record)</pre></div>
+<h2>Try it: five tool calls, four hooks</h2>
+<div class="text"><p>Run when this page was built: the hooks in the drawing, and five tool calls
+the model asked for. Which hooks ran, and what was decided:</p></div>
+<div class="tw"><table><tr><th>Tool call</th><th>Hooks that ran</th><th>Decision</th></tr><tr><td>get_order, a read</td><td>none</td><td><b>allow</b></td></tr><tr><td>issue_refund ₹500, order looked up</td><td><code>refund_needs_lookup</code>, <code>refund_cap</code>, <code>irreversible_needs_named_order</code></td><td><b>allow</b></td></tr><tr><td>issue_refund ₹500, no lookup</td><td><code>refund_needs_lookup</code></td><td><b>block</b>: 0 of 1 held; issue_refund without an earlier get_order for the same order_id</td></tr><tr><td>issue_refund ₹48,000, looked up</td><td><code>refund_needs_lookup</code>, <code>refund_cap</code></td><td><b>escalate</b>: over ₹10,000</td></tr><tr><td>cancel_order, irreversible</td><td><code>irreversible_needs_named_order</code></td><td><b>allow</b></td></tr></table></div>
+<h2>What a decision does at each moment</h2>
+<div class="tw"><table><tr><th>Moment</th><th>allow</th><th>modify</th><th>block</th><th>escalate</th></tr><tr><td>before the model</td><td>goes on</td><td>changed prompt (redacted)</td><td>turn ends with a safe reply</td><td>hand to a person</td></tr><tr><td>after the model</td><td>goes on</td><td>changed text</td><td>the model's answer is not used</td><td>hand to a person</td></tr><tr><td>before a tool</td><td>tool runs</td><td>changed arguments</td><td>tool doesn't run; the model is told why and may choose again</td><td>a person approves first</td></tr><tr><td>after a tool</td><td>result goes into context</td><td>redacted result</td><td>result replaced by a notice (the action already happened)</td><td>hand to a person</td></tr><tr><td>the reply</td><td>sent</td><td>redacted reply</td><td>safe reply instead</td><td>hand to a person</td></tr></table></div>
+<h2>What we borrowed, and from where</h2>
+<div class="tw"><table><tr><th>Idea</th><th>Borrowed from</th><th>What it gives us</th></tr><tr><td>An event plus a matcher on the tool name</td><td>Claude Code's PreToolUse and PostToolUse hooks</td><td>One tool, a pattern, or all, without touching the loop</td></tr><tr><td>A hook answers allow, deny or a changed input</td><td>Same hooks</td><td>Hooks can fix a call, not only stop it</td></tr><tr><td>A check beside the call that can trip it</td><td>Guardrails in the agent SDKs</td><td>Our checks become hooks with one line: <code>check(...)</code></td></tr><tr><td>Before and after the model call, at the gateway</td><td>LiteLLM's pre- and post-call guardrails</td><td>The same hook can run at the gateway for model calls (Tier 7)</td></tr><tr><td>Matching on the kind of tool, not its name</td><td>Our specs: every operation declares its side effect</td><td>New irreversible tools are covered without a new rule</td></tr></table></div>
+<div class="box"><b>Why this stays simple and effective</b><p><b>Simple:</b> one entry point, five calls, one decision type; rules are added in YAML or with a decorator, never in the loop. <b>Effective:</b> unmatched hooks cost nothing; the first block stops the rest; matching by kind of tool covers tools nobody listed; and the same hook runs in your loop, in a framework (an adapter turns its hook into an Event), or at the gateway. Still to come in Tier 3: a time budget per moment, fail-closed when a hook breaks, and every decision recorded on the trace.</p></div>
+<div class="snip"><div class="snip-h"><span>The hook runner, in real code</span><a href="https://github.com/dataagentsai/eval-harness-framework/blob/main/src/evalharness/hooks.py#L157"><code>src/evalharness/hooks.py:157</code></a></div><pre>    def run(self, event: Event) -&gt; Decision:
+        &quot;&quot;&quot;Every hook for this moment whose matcher fits, in order. The first
+        block or escalate wins; a modification is handed on to the next hook.&quot;&quot;&quot;
+        changed: Decision | None = None
+        for placed in self.placed:
+            if placed.position != event.position or not placed.match.matches(event):
+                continue
+            decision = placed.hook(event) or ALLOW
+            decision = replace(decision, hook=decision.hook or placed.name)
+            if decision.stops:
+                return decision
+            if decision.action == &quot;modify&quot;:
+                changed = decision
+                event = replace(
+                    event,
+                    arguments=decision.arguments
+                    if decision.arguments is not None
+                    else event.arguments,
+                    text=decision.text if decision.text is not None else event.text,
+                )
+        return changed or ALLOW</pre></div>
+<div class="review"><b>Decided · Hooks in your own loop</b><ol><li>Is “the loop reports the moment, the hook says what it's for” simple enough to explain to an agent team?<br><span class="dec">Decided: Recommended: yes, and lead with matching by kind of tool (irreversible, write), because it covers new tools without new rules.</span></li></ol></div>
+<p class="deeper">Where each moment sits in a turn: <a href="arch-modes.html">offline, inline, online</a>.</p>
+
+
+</article><nav class="pn"><a class="pv" href="arch-engine.html"><small>← Back</small>Inside the engine</a><a class="nx" href="arch-outputs.html"><small>Next →</small>On top of your tools</a></nav></div></main>
+<script src="nav.js"></script></body></html>
