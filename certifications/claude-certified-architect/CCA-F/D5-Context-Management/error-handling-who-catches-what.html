@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Who Catches What · 400 vs refusal vs is_error · CCA-F D5</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../CCA-F_Study_Guide.html">CCA-F</a> › <a href="index.html">Domain 5</a> › Error Handling — Who Catches What</div>
+    <h1>🧯 Who Catches What — <code>400</code> vs <code>refusal</code> vs <code>is_error</code></h1>
+    <div class="tag">Server-side validation vs a model decision vs your app · and every reason a request 400s</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">THE ANSWER</span> A 400 is caught before the model runs</h2>
+    <p>An <strong>invalid request (HTTP 400, <code>invalid_request_error</code>) is caught by Anthropic's API server at the
+    validation layer — <em>before</em> any model inference</strong>. The LLM never sees a malformed request, and you're
+    <b>not billed any tokens</b> for a 400. It's deterministic schema/structure/parameter checking, not the model "noticing"
+    a problem.</p>
+    <div class="note">So your example — a <code>tool_result</code> in a user turn with no preceding assistant
+    <code>tool_use</code>, or an assistant <code>tool_use</code> not followed by its <code>tool_result</code> — is a
+    <b>structural contract violation caught server-side as 400</b>, never handled by the LLM.</div>
+
+    <h2><span class="chip diagram">PIPELINE</span> Where each error lives</h2>
+    <p>A request passes through stages; a failure at each returns a different code. The model only runs if validation passes.</p>
+    <div class="mermaid">
+flowchart TD
+    R["Your request"] --> A{"Auth?"}
+    A -->|"bad/missing key"| E401["401 / 403"]:::err
+    A -->|ok| RL{"Under rate limit?"}
+    RL -->|"no"| E429["429"]:::err
+    RL -->|ok| SZ{"Within size?"}
+    SZ -->|"too big"| E413["413"]:::err
+    SZ -->|ok| V{"VALIDATION<br/>schema · structure · params"}
+    V -->|"invalid"| E400["400 invalid_request_error<br/>(pre-model · unbilled · deterministic)"]:::stop
+    V -->|"valid"| M["MODEL INFERENCE"]:::ok
+    M --> R200["200 OK + stop_reason:<br/>end_turn · tool_use · max_tokens ·<br/>pause_turn · refusal · stop_sequence"]:::ok
+    M -.->|"outage"| E5xx["500 / 529"]:::err
+    classDef err fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d;
+    classDef stop fill:#fef3c7,stroke:#b45309,color:#7c2d12;
+    classDef ok fill:#dcfce7,stroke:#15803d,color:#14532d;
+    </div>
+    <p><b>400 is the validation gate</b> — the model is the <em>next</em> stage and only runs on a valid request.</p>
+
+    <h2><span class="chip trade">WHO DECIDES</span> 400 vs refusal vs is_error vs max_tokens</h2>
+    <p>The distinction people get wrong: a <b>structure/parameter</b> problem is a 400 (server); a <b>behavioural outcome</b>
+    is a successful call (HTTP 200) with a <code>stop_reason</code> the <em>model</em> chose.</p>
+    <div style="overflow-x:auto">
+    <table>
+        <tr><th>Signal</th><th>Caught by</th><th>HTTP</th><th>Billed?</th><th>Example</th></tr>
+        <tr><td><b>Invalid request</b> (<code>400</code>)</td><td><b>Server — before the model</b></td><td>400 error</td><td><b>No</b></td><td>malformed messages, bad params, broken tool pairing</td></tr>
+        <tr><td><b>Refusal</b> (<code>stop_reason:"refusal"</code>)</td><td><b>The model / safety classifier</b></td><td><b>200</b> OK</td><td>Yes (or unbilled if declined before any output)</td><td>the model declines a request for safety</td></tr>
+        <tr><td><b>Tool failure</b> (<code>tool_result</code> + <code>is_error:true</code>)</td><td><b>Your app</b> telling the model</td><td>200</td><td>Yes</td><td>a tool you ran failed → the model self-corrects</td></tr>
+        <tr><td><b>Truncation</b> (<code>stop_reason:"max_tokens"</code>)</td><td>The model hit the output cap</td><td>200</td><td>Yes</td><td>output cut off mid-answer</td></tr>
+    </table>
+    </div>
+    <div class="warn"><b>A refusal is NOT a 400.</b> It's a <em>successful</em> HTTP 200 the model chose to decline — always
+    check <code>stop_reason</code> before reading <code>content</code>. And <code>is_error:true</code> is <em>you</em>
+    reporting a tool failure into the conversation, not an API error at all.</div>
+
+    <h2><span class="chip exam">400 CAUSES</span> Every reason a request raises 400</h2>
+
+    <h3>A · Message structure &amp; the tool contract</h3>
+    <ul>
+        <li><code>messages</code> roles don't alternate user/assistant</li>
+        <li>first message is <code>assistant</code> (must be <code>user</code>)</li>
+        <li>empty <code>messages</code> array</li>
+        <li>a <code>tool_result</code> with <b>no matching <code>tool_use</code></b> in the preceding assistant turn</li>
+        <li>an assistant <code>tool_use</code> <b>not immediately followed</b> by its <code>tool_result</code>
+        (literal error: <em>"tool_use ids were found without tool_result blocks immediately after"</em>)</li>
+        <li>text/blocks interleaved incorrectly around tool blocks</li>
+    </ul>
+
+    <h3>B · Malformed / missing basics</h3>
+    <ul>
+        <li>malformed JSON body</li>
+        <li>missing required params (<code>model</code>, <code>max_tokens</code>, <code>messages</code>)</li>
+        <li>wrong parameter types (string where an int is expected)</li>
+        <li>invalid tool-definition schema</li>
+    </ul>
+
+    <h3>C · Parameter constraint violations</h3>
+    <ul>
+        <li><code>max_tokens</code> exceeds the model's output limit</li>
+        <li><code>budget_tokens &gt;= max_tokens</code> (on models that still use extended thinking)</li>
+        <li>out-of-range values (e.g. invalid <code>temperature</code>)</li>
+    </ul>
+
+    <h3>D · Model-specific 400s (current models — Opus 4.8/4.7, Sonnet 5, Fable 5)</h3>
+    <ul>
+        <li>sending <code>temperature</code> / <code>top_p</code> / <code>top_k</code> at all — removed → 400</li>
+        <li><code>thinking:{type:"enabled", budget_tokens:N}</code> — removed → 400 (use <code>{type:"adaptive"}</code>)</li>
+        <li><b>assistant-turn prefill</b> (last message is <code>assistant</code>) → 400 on the 4.6/4.7/4.8/Fable-5 family</li>
+        <li>Fable 5 only: explicit <code>thinking:{type:"disabled"}</code> → 400 (omit the param instead)</li>
+        <li><code>citations</code> combined with <code>output_config.format</code> (structured outputs) → 400</li>
+        <li>Fable 5 under zero-data-retention / retention below 30 days → <b>every</b> request 400s (org config, not the payload)</li>
+    </ul>
+    <div class="note"><code>413 request_too_large</code> and <code>429 rate_limit_error</code> are their <em>own</em> codes,
+    not 400. 401/403 are auth/permission; 500/529 are server-side (retryable).</div>
+
+    <h2><span class="chip concept">CONSEQUENCE</span> Why SDKs don't retry a 400</h2>
+    <p>Because a 400 is <b>deterministic server-side validation, it never fixes itself</b>. That's why the Anthropic SDKs
+    <b>auto-retry 429 and 5xx</b> (transient) with backoff, but <b>never retry 400</b> — resending the identical malformed
+    request just 400s again. The fix is always in <em>your</em> request construction.</p>
+    <div class="good">This is exactly why a correct agent loop <b>appends the whole assistant turn</b> and returns
+    <b>all <code>tool_result</code>s in one user message</b> — it satisfies the tool contract and avoids these 400s. See
+    <a href="../D4-Tool-Design-MCP/subtopics/3-5-contract-failures.html">D4 · Tool-Result Contract Failures</a>.</div>
+
+    <h2><span class="chip exam">EXAM ONE-LINERS</span></h2>
+    <div class="note">
+    • <b>400 = server-side validation, before the model, unbilled, deterministic</b> — the LLM never sees an invalid request.<br>
+    • <b>refusal</b> is a model decision returned as <b>HTTP 200</b> with <code>stop_reason:"refusal"</code> — check
+    <code>stop_reason</code> before reading <code>content</code>.<br>
+    • <b><code>is_error:true</code></b> on a <code>tool_result</code> is <em>your app</em> reporting a tool failure to the model — not an API error.<br>
+    • SDKs retry <b>429/5xx</b>, never <b>400</b>.
+    </div>
+
+    <div class="warn">These are all the <b>loud</b> failures — a signal fires. The far more dangerous class is the
+    <b>silent</b> one: a valid request that returns <b>200 + <code>end_turn</code> with no flag, and a wrong answer</b>.
+    → <a href="silent-failures-wrong-but-valid.html"><b>Silent failures — passes but wrong</b></a>.</div>
+
+    <div class="good">Related: <a href="../D1-Agentic-Architecture/subtopics/2-1-stop-reason-overview.html">D1 · stop_reason values</a> ·
+    <a href="../D4-Tool-Design-MCP/subtopics/3-5-contract-failures.html">D4 · tool-result 400s</a> ·
+    <a href="subtopics/5-1-error-codes.html">D5 · API error codes</a> ·
+    <a href="subtopics/5-2-retryable-idempotency.html">D5 · retryable vs not</a>.</div>
+
+    <div class="pager">
+        <a href="index.html"><span class="k">← Back</span>Domain 5 hub</a>
+        <a class="next" href="caching-and-memory.html"><span class="k">Next →</span>Caching &amp; Memory</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Error Handling — Who Catches What</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

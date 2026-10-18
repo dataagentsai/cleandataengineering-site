@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.6 Hook Security · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 6 · Hooks</div>
+    <h1>6.6 · Hook Security</h1>
+    <div class="tag">You own what your hooks run</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Hooks run arbitrary shell — automatically, as you</h2>
+    <p>This is the single most important fact about hooks: <strong>they execute arbitrary shell commands on your
+    system automatically</strong>, with <em>your</em> user privileges, without asking for confirmation each time.
+    A hook can read files, hit the network, delete data, or exfiltrate secrets. The official docs frame this as
+    <strong>"USE AT YOUR OWN RISK"</strong>: by configuring hooks you accept responsibility for what they do, and
+    Anthropic is not liable for damage from a misconfigured hook.</p>
+
+    <div class="bad">A hook is not a sandbox and not gated by the permission system. Unlike a tool call, it does
+    <strong>not</strong> prompt you at runtime. If a malicious <code>command</code> lands in a settings file you
+    trust, it runs the next time its event fires — silently.</div>
+
+    <div class="warn">⚠️ Because hooks bypass the runtime permission prompt, <strong>never accept hook
+    configuration from an untrusted source</strong>. Review every hook in a repo before you work in it — a
+    committed <code>.claude/settings.json</code> is executable code, not just config.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Best practices before you deploy one</h2>
+    <ul>
+        <li><strong>Review the command</strong> — read exactly what each hook runs before adding it, especially
+        hooks that arrived via a cloned repo or plugin.</li>
+        <li><strong>Validate and sanitize input</strong> — the JSON on stdin is model/tool-influenced. Don't
+        <code>eval</code> it or interpolate it into a shell command unquoted.</li>
+        <li><strong>Always quote shell variables</strong> — write <code>"$VAR"</code>, not <code>$VAR</code>, so
+        a path with spaces or metacharacters can't break out of the command.</li>
+        <li><strong>Block path traversal</strong> — reject inputs containing <code>..</code> before touching a
+        file path.</li>
+        <li><strong>Use absolute paths</strong> — reference scripts with <code>"$CLAUDE_PROJECT_DIR"/…</code> or a
+        full path so the hook doesn't run a stray binary from the working directory.</li>
+        <li><strong>Skip sensitive files</strong> — have hooks avoid reading or writing <code>.env</code>,
+        <code>.git/</code>, keys, and credentials.</li>
+    </ul>
+    <div class="note">🔑 A hook's <em>power</em> is exactly why it's dangerous. The same deterministic
+    "always runs" property that makes it a great guardrail (6.4) makes a bad hook a great foothold for an
+    attacker. Treat hook config as code you are personally vouching for.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Trust boundary of a hook</h2>
+    <div class="mermaid">
+flowchart TD
+    SRC["Hook config source"] --> Q{"Do you trust &amp; understand it?"}
+    Q -->|"no — cloned repo / plugin"| REV["🔴 Review line-by-line first<br/>it runs as YOU, no prompt"]
+    Q -->|"yes — reviewed"| RUN["Event fires → command runs<br/>your privileges, automatically"]
+    RUN --> SAFE["✅ Quote vars · validate input<br/>absolute paths · block traversal"]
+    REV -.->|"only after review"| RUN
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class SAFE ok; class RUN gate; class REV bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Defensive vs. dangerous</h2>
+    <p>The same guard hook — written unsafely, then safely. The unsafe version interpolates untrusted input
+    straight into a command; the safe version quotes, validates, and rejects traversal.</p>
+<pre><span class="cm"># ❌ DANGEROUS — unquoted, no validation, injectable</span>
+INPUT=$(cat)
+FILE=$(<span class="fn">echo</span> $INPUT | jq -r .tool_input.file_path)
+rm $FILE                          <span class="cm"># spaces / ; / $() all break out</span>
+
+<span class="cm"># ✅ DEFENSIVE — quote, validate, block traversal</span>
+INPUT=$(cat)
+FILE=$(<span class="fn">echo</span> <span class="st">"$INPUT"</span> | jq -r <span class="st">'.tool_input.file_path // empty'</span>)
+<span class="kw">case</span> <span class="st">"$FILE"</span> <span class="kw">in</span>
+  *..*|<span class="st">""</span>) <span class="fn">echo</span> <span class="st">"Rejected suspicious path"</span> &gt;&amp;2; <span class="kw">exit</span> 2 ;;
+<span class="kw">esac</span>
+<span class="kw">if</span> [[ <span class="st">"$FILE"</span> == *<span class="st">".env"</span>* ]]; <span class="kw">then</span>
+  <span class="fn">echo</span> <span class="st">"Refusing to touch secrets file"</span> &gt;&amp;2; <span class="kw">exit</span> 2
+<span class="kw">fi</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Convenience vs. exposure</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Well-reviewed, tightly-scoped hooks</h4>
+            <ul><li>Deterministic guarantees you control</li>
+            <li>Narrow matchers + input validation limit blast radius</li>
+            <li>Committed to the repo, so the whole team can audit them</li></ul></div>
+        <div class="con"><h4>⚠️ Broad, unreviewed, or third-party hooks</h4>
+            <ul><li>Run silently with your full privileges</li>
+            <li>Unquoted input is a shell-injection vector</li>
+            <li>A trusted-looking settings file can hide a payload</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Hooks are gated by the permission system." → They are <b>not</b>. Hooks run
+    automatically with your privileges and don't prompt at runtime — that's why you review them yourself.</div>
+    <div class="trap"><b>Trap:</b> Trusting a hook because it shipped in a cloned repo or plugin. → A committed
+    <code>settings.json</code> hook is executable code. Review it before working in the repo.</div>
+    <div class="trap"><b>Trap:</b> Interpolating <code>.tool_input</code> into a shell command unquoted. → That's
+    a shell-injection hole. Always quote variables and validate/sanitize input.</div>
+    <div class="trap"><b>Trap:</b> "Anthropic secures my hooks." → Docs say <b>USE AT YOUR OWN RISK</b>; you own
+    the responsibility for what your hooks execute.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why are hooks riskier than a normal tool call?</summary>
+    <p class="answer">A tool call is mediated by the permission system and can prompt you. A hook runs
+    <b>arbitrary shell automatically with your privileges</b> and no runtime prompt — so a bad hook executes
+    silently.</p></details>
+    <details><summary>Q2 · Name three concrete hardening steps for a hook script.</summary>
+    <p class="answer">Quote all shell variables (<code>"$VAR"</code>); validate/sanitize the stdin JSON and reject
+    path traversal (<code>..</code>); use absolute paths and skip sensitive files like <code>.env</code> and
+    <code>.git/</code>.</p></details>
+    <details><summary>Q3 · You clone a repo with a <code>.claude/settings.json</code> full of hooks. First move?</summary>
+    <p class="answer"><b>Read them before running anything.</b> Those hooks are executable code that will run as
+    you when their events fire. Never trust hook config from an untrusted source unreviewed.</p></details>
+
+    <div class="pager">
+        <a href="6-5-hook-use-cases.html"><span class="k">← Back</span>6.5 · Hook Use Cases</a>
+        <a class="next" href="7-1-what-are-subagents.html"><span class="k">Next →</span>7.1 · What Subagents Are</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 6.6</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

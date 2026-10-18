@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.5 Example Pitfalls (Leakage, Over-fit) · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 3 · Examples (Multishot)</div>
+    <h1>3.5 · Example Pitfalls (Leakage, Over-fit)</h1>
+    <div class="tag">When examples backfire</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Examples steer — including in the wrong direction</h2>
+    <p>Examples are the most reliable steer (3.1), which is exactly why bad examples steer <em>wrongly</em>.
+    Because Claude pattern-matches whatever the examples share, any accidental trait, inconsistency, or specific
+    content in your examples becomes a signal it follows. Three failure modes recur:</p>
+
+    <ul>
+        <li><strong>Over-fitting (too few / too narrow)</strong> — with only a couple of similar examples, Claude
+        latches onto their <em>surface form</em> (length, phrasing, an incidental shared category) instead of the
+        underlying rule, and reproduces that form on inputs where it doesn't fit.</li>
+        <li><strong>Inconsistent formatting confuses</strong> — if examples use different tags, shapes, or output
+        conventions, Claude gets a mixed signal about the intended format and its output becomes erratic.</li>
+        <li><strong>Content leakage</strong> — specific literal content from an example (a name, a number, a
+        placeholder value, a canned phrase) can <em>leak into the model's outputs</em> for the real input, which
+        should have had none of it.</li>
+    </ul>
+
+    <div class="warn">🔑 The fix for all three is the discipline from 3.2–3.3: use <strong>enough</strong>
+    examples (3–5), keep them <strong>diverse</strong> (so no accidental trait dominates), keep their
+    <strong>formatting consistent</strong>, and make each example's specifics <strong>generic or varied</strong>
+    so no single value looks like it should be copied.</div>
+
+    <table>
+        <tr><th>Pitfall</th><th>Symptom</th><th>Root cause</th><th>Fix</th></tr>
+        <tr><td>Over-fit</td><td>Outputs mimic example length/phrasing on all inputs</td><td>Too few / too similar examples</td><td>More examples, more diversity (3.2)</td></tr>
+        <tr><td>Inconsistent format</td><td>Erratic, unpredictable output shape</td><td>Examples don't match each other</td><td>Identical structure across all (3.3)</td></tr>
+        <tr><td>Leakage</td><td>An example's literal name/number appears in real output</td><td>Distinctive shared content</td><td>Vary/genericize the specifics</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> How a good steer goes bad</h2>
+    <div class="mermaid">
+flowchart TD
+    EX["Examples (strong steer)"] --> M["Claude pattern-matches<br/>what they share"]
+    M --> Q{"What do they share?"}
+    Q -->|"the real rule + varied specifics"| GOOD["🟢 Generalizes correctly"]
+    Q -->|"an incidental trait / narrow form"| OF["🟠 Over-fit to surface form"]
+    Q -->|"a specific literal value"| LK["🔴 Content leaks into output"]
+    Q -->|"conflicting formats"| CF["🟠 Erratic output shape"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class GOOD ok; class OF gate; class CF gate; class LK bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Leakage & over-fit, then the fix</h2>
+    <p>The bad set shares a distinctive literal ("<em>Acme Corp</em>") and a single narrow form, so Claude
+    both over-fits the shape and leaks the name. The good set varies the specifics and broadens the range.</p>
+<pre><span class="cm"># BAD — one narrow shape + a distinctive literal repeated across examples</span>
+bad = <span class="st">"""&lt;examples&gt;
+  &lt;example&gt;&lt;in&gt;invoice from Acme Corp for $500&lt;/in&gt;&lt;out&gt;Acme Corp owes $500&lt;/out&gt;&lt;/example&gt;
+  &lt;example&gt;&lt;in&gt;invoice from Acme Corp for $750&lt;/in&gt;&lt;out&gt;Acme Corp owes $750&lt;/out&gt;&lt;/example&gt;
+&lt;/examples&gt;
+
+&lt;in&gt;invoice from Zenith Ltd for $300&lt;/in&gt;"""</span>
+<span class="cm"># Risk: over-fits the single phrasing; "Acme Corp" can LEAK into the Zenith output.</span>
+
+<span class="cm"># GOOD — varied vendors/amounts/phrasing; consistent tags; nothing distinctive to copy</span>
+good = <span class="st">"""&lt;examples&gt;
+  &lt;example&gt;&lt;in&gt;invoice from Acme Corp for $500&lt;/in&gt;&lt;out&gt;Acme Corp owes $500&lt;/out&gt;&lt;/example&gt;
+  &lt;example&gt;&lt;in&gt;$750 billed by Zenith Ltd&lt;/in&gt;&lt;out&gt;Zenith Ltd owes $750&lt;/out&gt;&lt;/example&gt;
+  &lt;example&gt;&lt;in&gt;Orbit Inc invoice, amount $1,200&lt;/in&gt;&lt;out&gt;Orbit Inc owes $1,200&lt;/out&gt;&lt;/example&gt;
+&lt;/examples&gt;
+
+&lt;in&gt;invoice from Vertex Co for $300&lt;/in&gt;"""</span>
+
+message = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">16000</span>,
+    system=<span class="st">"Extract who owes how much, following the examples' format."</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: good}],
+)
+<span class="cm"># → "Vertex Co owes $300"  — rule generalized, no leaked literal, stable shape.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> The tension examples create</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Strong steer (the upside)</h4>
+            <ul><li>Locks format, tone, and edge-case handling</li>
+            <li>Improves accuracy & consistency (3.1)</li></ul></div>
+        <div class="con"><h4>⚠️ Strong steer (the risk)</h4>
+            <ul><li>Too few / narrow → over-fits surface form</li>
+            <li>Distinctive shared content → leaks into outputs</li>
+            <li>Inconsistent formatting → erratic results</li>
+            <li>Every example is also token cost</li></ul></div>
+    </div>
+    <div class="good">The steer's strength <em>is</em> the risk. Manage it with count, diversity, consistency,
+    and generic specifics — the same levers from 3.2 and 3.3, applied defensively.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "More examples always help." → Too few/narrow over-fits, but redundant or
+    inconsistent examples also hurt. It's diversity and consistency that matter, not raw count.</div>
+    <div class="trap"><b>Trap:</b> "Reusing a real record as an example is fine." → Its literal content
+    (names, numbers, canned phrases) can <b>leak into outputs</b> for unrelated inputs. Genericize or vary the
+    specifics.</div>
+    <div class="trap"><b>Trap:</b> "Format inconsistency is harmless as long as content is right." →
+    <b>Inconsistent example formatting confuses Claude</b> and makes output shape erratic. Keep every example
+    structurally identical.</div>
+    <div class="trap"><b>Trap:</b> "If examples backfire, the technique is unreliable." → Examples are the
+    <em>most</em> reliable steer; backfires come from <b>bad example design</b> (too few, narrow, inconsistent,
+    leaky), all of which are fixable.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What is example over-fitting and what causes it?</summary>
+    <p class="answer">Claude reproducing the <b>surface form</b> of the examples (length, phrasing, an incidental
+    shared trait) instead of the underlying rule. It's caused by <b>too few or too similar</b> examples; the fix
+    is more examples with more diversity so no accidental trait dominates.</p></details>
+    <details><summary>Q2 · What is content leakage, and how do you prevent it?</summary>
+    <p class="answer">Leakage is when specific literal content from an example — a name, number, or canned phrase
+    — appears in the output for a real, unrelated input. Prevent it by making example specifics <b>generic or
+    varied</b> across the set so no single value looks like it should be copied.</p></details>
+    <details><summary>Q3 · Why does inconsistent formatting across examples hurt?</summary>
+    <p class="answer">Consistent formatting is the signal Claude generalizes from. If examples disagree on tags,
+    shape, or output convention, Claude gets a <b>mixed signal</b> and its output shape becomes erratic. Keep
+    every example structurally identical.</p></details>
+
+    <div class="pager">
+        <a href="3-4-edge-cases-examples.html"><span class="k">← Back</span>3.4 · Covering Edge Cases</a>
+        <a class="next" href="4-1-why-xml-tags.html"><span class="k">Next →</span>4.1 · Why XML Tags</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 3.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

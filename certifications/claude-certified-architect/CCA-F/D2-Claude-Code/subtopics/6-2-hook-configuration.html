@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.2 Hook Configuration &amp; Matchers · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 6 · Hooks</div>
+    <h1>6.2 · Hook Configuration &amp; Matchers</h1>
+    <div class="tag">Wiring hooks in settings.json</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The shape: event → matcher → hooks array</h2>
+    <p>Hooks live under a top-level <code>hooks</code> object in a <a href="2-1-settings-json-hierarchy.html">settings
+    file</a>. The object is keyed by <strong>event name</strong>. Each event maps to an <strong>array of matcher
+    groups</strong>, and each group has two keys:</p>
+    <ul>
+        <li><code>matcher</code> — a string (usually a tool-name pattern) that decides <em>which</em> occurrences
+        the group applies to. Omit it, or use <code>""</code> or <code>"*"</code>, to match everything.</li>
+        <li><code>hooks</code> — an array of hook handlers. The common one is
+        <code>{ "type": "command", "command": "…" }</code>, which runs a shell command.</li>
+    </ul>
+
+    <p>So the nesting is: <code>hooks</code> → <code>EventName</code> → <code>[{ matcher, hooks: [{ type, command }] }]</code>.
+    Note there are two levels named "hooks": the outer object, and the inner array of handlers inside each group.</p>
+
+    <div class="note">🔑 For <strong>tool events</strong> (<code>PreToolUse</code>, <code>PostToolUse</code>), the
+    matcher is tested against the <strong>tool name</strong> — e.g. <code>Bash</code>, or the alternation
+    <code>Edit|Write</code>. It is a regex-style match and is <strong>case-sensitive</strong>. MCP tools use the
+    name form <code>mcp__&lt;server&gt;__&lt;tool&gt;</code>, so a pattern like <code>mcp__github__.*</code>
+    targets one server.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Where you put it decides scope</h2>
+    <p>The <em>same</em> hook block behaves differently depending on which settings file holds it:</p>
+    <table>
+        <tr><th>Location</th><th>Scope</th><th>Shareable?</th></tr>
+        <tr><td><code>~/.claude/settings.json</code></td><td>All your projects</td><td>No — local to your machine</td></tr>
+        <tr><td><code>.claude/settings.json</code></td><td>This project</td><td>Yes — commit to the repo</td></tr>
+        <tr><td><code>.claude/settings.local.json</code></td><td>This project</td><td>No — gitignored</td></tr>
+        <tr><td>Managed policy settings</td><td>Organization-wide</td><td>Yes — admin-controlled</td></tr>
+    </table>
+    <div class="good">Run <code>/hooks</code> to browse every configured hook grouped by event. The
+    <code>/hooks</code> menu is <strong>read-only</strong> — to add or change a hook, edit the JSON directly (or
+    ask Claude to). Set <code>"disableAllHooks": true</code> to turn them all off.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The config tree</h2>
+    <div class="mermaid">
+flowchart TD
+    ROOT["settings.json"] --> H["hooks {}"]
+    H --> E1["PreToolUse (event key)"]
+    H --> E2["PostToolUse (event key)"]
+    E1 --> G1["group: matcher = 'Edit|Write'"]
+    G1 --> HK1["hooks[]: { type:'command', command:'…' }"]
+    E2 --> G2["group: matcher = 'Bash'"]
+    G2 --> HK2["hooks[]: { type:'command', command:'…' }"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class ROOT ok; class HK1 gate; class HK2 gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A realistic settings.json hooks block</h2>
+    <p>Format after edits, and log every Bash command. Note the <code>$CLAUDE_PROJECT_DIR</code> variable, which
+    resolves to the project root so script paths work regardless of the current directory.</p>
+<pre>{
+  <span class="st">"hooks"</span>: {
+    <span class="st">"PostToolUse"</span>: [
+      {
+        <span class="st">"matcher"</span>: <span class="st">"Edit|Write"</span>,
+        <span class="st">"hooks"</span>: [
+          { <span class="st">"type"</span>: <span class="st">"command"</span>,
+            <span class="st">"command"</span>: <span class="st">"jq -r '.tool_input.file_path' | xargs npx prettier --write"</span> }
+        ]
+      }
+    ],
+    <span class="st">"PreToolUse"</span>: [
+      {
+        <span class="st">"matcher"</span>: <span class="st">"Bash"</span>,
+        <span class="st">"hooks"</span>: [
+          { <span class="st">"type"</span>: <span class="st">"command"</span>,
+            <span class="st">"command"</span>: <span class="st">"jq -r .tool_input.command >> ~/.claude/bash.log"</span> },
+          { <span class="st">"type"</span>: <span class="st">"command"</span>,
+            <span class="st">"command"</span>: <span class="st">"\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-rm.sh"</span> }
+        ]
+      }
+    ]
+  }
+}</pre>
+    <div class="note">🔑 When several hooks match one event, they all run <strong>in parallel</strong> and every
+    result is merged — so the log hook above runs even if the guard hook denies. Never rely on one hook to
+    suppress another's side effects.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Specific matcher vs. match-everything</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Specific matcher (e.g. <code>Edit|Write</code>)</h4>
+            <ul><li>Hook fires only when relevant — no wasted processes</li>
+            <li>Intent is obvious to the next reader</li>
+            <li>Formatter doesn't run after a <code>Read</code> or <code>Bash</code></li></ul></div>
+        <div class="con"><h4>⚠️ Empty / <code>"*"</code> matcher</h4>
+            <ul><li>Fires on every occurrence of the event</li>
+            <li>Fine for logging; wasteful (and risky) for anything heavier</li>
+            <li>For per-argument filtering, the <code>if</code> field beats a broad matcher</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Putting <code>command</code> directly under the event key. → Wrong shape. It's
+    <code>event → [ { matcher, hooks: [ { type, command } ] } ]</code>. There are two "hooks" levels.</div>
+    <div class="trap"><b>Trap:</b> "The matcher is a filename glob." → For tool events it matches the <b>tool
+    name</b> (regex, case-sensitive), like <code>Bash</code> or <code>Edit|Write</code> — not the file path.</div>
+    <div class="trap"><b>Trap:</b> Editing a hook through the <code>/hooks</code> menu. → That menu is
+    <b>read-only</b>. Edit the settings JSON (or ask Claude); <code>/hooks</code> only browses.</div>
+    <div class="trap"><b>Trap:</b> Expecting sibling hooks to run in sequence. → Matching hooks run
+    <b>in parallel</b> and outputs are merged. Don't assume ordering between them.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Write a matcher that runs only after Edit and Write tools.</summary>
+    <p class="answer"><code>"matcher": "Edit|Write"</code> under the <code>PostToolUse</code> event. The alternation
+    matches either tool name; it's case-sensitive.</p></details>
+    <details><summary>Q2 · You commit <code>.claude/settings.json</code> with a hook. Who gets it?</summary>
+    <p class="answer">Every teammate who clones the repo — project <code>settings.json</code> is
+    <b>shareable</b>. For a machine-local, gitignored hook use <code>.claude/settings.local.json</code>; for all
+    of your own projects use <code>~/.claude/settings.json</code>.</p></details>
+    <details><summary>Q3 · How do you disable all hooks without deleting them?</summary>
+    <p class="answer">Set <code>"disableAllHooks": true</code> in the settings file. Browse what's active any time
+    with the <code>/hooks</code> menu.</p></details>
+
+    <div class="pager">
+        <a href="6-1-hook-events.html"><span class="k">← Back</span>6.1 · Hook Events Overview</a>
+        <a class="next" href="6-3-hook-io.html"><span class="k">Next →</span>6.3 · Hook Input &amp; Output</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 6.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.3 What Belongs in System vs User · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 2 · Roles &amp; System Prompts</div>
+    <h1>2.3 · What Belongs in System vs User</h1>
+    <div class="tag">Instructions vs data</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The split: instructions live in system, data lives in the turn</h2>
+    <p>The dividing line is simple. The <strong><code>system</code> prompt holds the <em>role and the
+    instructions</em></strong> — who Claude is and how it should behave, stable across the conversation. The
+    <strong><code>user</code> turn holds the <em>task and the data</em></strong> — the specific thing to do this
+    time and the content to do it on.</p>
+
+    <table>
+        <tr><th>Put in <code>system</code></th><th>Put in the <code>user</code> turn</th></tr>
+        <tr><td>Role / persona ("You are a legal analyst")</td><td>The specific question or command this turn</td></tr>
+        <tr><td>Standing rules &amp; constraints ("always cite sources")</td><td>The document / code / record to operate on</td></tr>
+        <tr><td>Output-format policy that never changes</td><td>Per-request parameters (the target language, the file)</td></tr>
+        <tr><td>Stable background context</td><td>Retrieved RAG chunks, user-supplied text</td></tr>
+        <tr><td>Tone &amp; voice guidance</td><td>Anything that changes call to call</td></tr>
+    </table>
+
+    <div class="note">🔑 Heuristic: <strong>if it's the same on every request, it's a system-prompt candidate; if
+    it changes per request, it's user-turn content.</strong> "How to behave" → system. "What to do now, on this" →
+    user.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Why the split matters</h2>
+    <ul>
+        <li><strong>Caching.</strong> A stable <code>system</code> prefix can be cached; interleaving volatile data
+        into it invalidates the cache on every call.</li>
+        <li><strong>Authority &amp; safety.</strong> Instructions in <code>system</code> carry more standing weight
+        than text buried in user data — keeping <em>data</em> in the user turn (ideally wrapped in tags, 2.5)
+        reduces the chance that content is mistaken for instructions.</li>
+        <li><strong>Clarity.</strong> Claude can tell the difference between "my job" and "the input" when they live
+        in different channels, instead of one giant blended prompt.</li>
+        <li><strong>Reuse.</strong> One frozen system prompt serves thousands of different user inputs (this is
+        exactly the template pattern in 2.5).</li>
+    </ul>
+
+    <div class="warn">Anti-pattern: interpolating a timestamp, user ID, or the current question <em>into</em> the
+    system prompt. It bloats the stable prefix, breaks caching, and blurs instruction-vs-data. Inject that dynamic
+    content in the user turn instead.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Routing content to the right channel</h2>
+    <div class="mermaid">
+flowchart TD
+    C["A piece of content"] --> Q{"Same on every request?"}
+    Q -->|"yes: role, rules, format policy"| SYS["🟢 system parameter<br/>(instructions, stable, cacheable)"]
+    Q -->|"no: this question, this document, RAG chunk"| USR["🔵 user turn<br/>(task + data, per-request)"]
+    USR --> WRAP["Wrap untrusted data in tags<br/>(&lt;document&gt;…&lt;/document&gt;) — 2.5"]
+    classDef sys fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef usr fill:#e7f0fd,stroke:#4a90d9,color:#1a3d6d;
+    class SYS sys; class USR,WRAP usr;
+    </div>
+
+    <h2><span class="chip code">CODE</span> BAD → GOOD: instructions vs. data</h2>
+    <p>The BAD version jams the role, the rules, and the data into one blended string with volatile content in
+    <code>system</code>. The GOOD version separates the stable instructions from the per-request data.</p>
+<pre><span class="cm"># BAD — everything blended; volatile doc &amp; timestamp in system</span>
+client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    system=<span class="st">f"You are a contract analyst. It is {now}. "</span>
+           <span class="st">f"Summarize this contract: {contract_text}"</span>,   <span class="cm"># data in system → no caching</span>
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"go"</span>}],
+)
+
+<span class="cm"># GOOD — stable instructions in system, per-request data in the user turn</span>
+client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    system=(
+        <span class="st">"You are a contract analyst. Summarize contracts in 5 bullet points, "</span>
+        <span class="st">"flag any auto-renewal clause, and cite the section for each point."</span>
+    ),
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: (
+        <span class="st">"&lt;contract&gt;\n"</span> + contract_text + <span class="st">"\n&lt;/contract&gt;"</span>   <span class="cm"># data, tagged, in the turn</span>
+    )}],
+)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Overloading system vs. keeping it lean</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Lean, stable system prompt</h4>
+            <ul><li>Cacheable prefix → cheaper, faster</li>
+            <li>Clear instruction-vs-data boundary</li>
+            <li>One system prompt reused across many inputs</li></ul></div>
+        <div class="con"><h4>⚠️ Everything crammed into system</h4>
+            <ul><li>Volatile content breaks the cache every call</li>
+            <li>Data can be misread as instructions</li>
+            <li>Hard to reuse; hard to reason about</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Putting the per-request question or document in <code>system</code>. → Those are
+    <b>data</b> — they belong in the <b>user turn</b>. System is for the stable role and instructions.</div>
+    <div class="trap"><b>Trap:</b> Interpolating <code>datetime.now()</code>, a UUID, or a session ID into the
+    system prompt. → It's volatile, so it <b>breaks prompt caching</b> and belongs in the user turn.</div>
+    <div class="trap"><b>Trap:</b> Treating instructions inside user-supplied data as trustworthy. → Keep
+    <b>data</b> in the user turn and wrap it in tags; instructions the model should obey live in <code>system</code>,
+    which carries standing authority.</div>
+    <div class="trap"><b>Trap:</b> "System is just the first user message." → No — it's a <b>separate channel</b>
+    with standing-instruction weight, not the same as a turn.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A RAG-retrieved document chunk — system or user turn?</summary>
+    <p class="answer"><b>User turn.</b> It's per-request data. Put the role and the "how to use retrieved context"
+    rules in <code>system</code>; put the retrieved chunk (tagged) in the user message.</p></details>
+    <details><summary>Q2 · Give the one-line heuristic for the split.</summary>
+    <p class="answer">If it's the <b>same on every request</b> → <code>system</code> (instructions). If it
+    <b>changes per request</b> → <b>user turn</b> (data). "How to behave" vs. "what to do now, on this."</p></details>
+    <details><summary>Q3 · Name two problems with putting volatile data in the system prompt.</summary>
+    <p class="answer">(1) It <b>breaks prompt caching</b> — the stable prefix changes every call. (2) It <b>blurs
+    instructions and data</b>, making it easier for injected content to be treated as a command.</p></details>
+
+    <div class="pager">
+        <a href="2-2-role-prompting.html"><span class="k">← Back</span>2.2 · Giving Claude a Role</a>
+        <a class="next" href="2-4-tone-and-character.html"><span class="k">Next →</span>2.4 · Tone &amp; Character</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 2.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

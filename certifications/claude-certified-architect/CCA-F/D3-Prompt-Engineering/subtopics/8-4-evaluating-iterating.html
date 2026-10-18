@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.4 Evaluating &amp; Iterating (Success Criteria) · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 8 · Reliability, Hallucination &amp; Iteration</div>
+    <h1>8.4 · Evaluating &amp; Iterating (Success Criteria)</h1>
+    <div class="tag">Measure, then improve</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Define measurable success criteria first</h2>
+    <p>You cannot improve a prompt you can't measure. Before iterating, define <strong>success criteria</strong>
+    that are <strong>specific, measurable, achievable, and relevant</strong>. Vague goals like "good performance"
+    or "safe outputs" give you nothing to test against; concrete targets do.</p>
+    <div class="tradeoff">
+        <div class="con"><h4>⚠️ Unmeasurable</h4>
+            <ul><li>"Good sentiment analysis"</li>
+            <li>"Safe outputs"</li>
+            <li>"Accurate answers"</li></ul></div>
+        <div class="pro"><h4>✅ Measurable</h4>
+            <ul><li>"F1 ≥ 0.85 on 10,000 held-out tweets"</li>
+            <li>"&lt; 0.1% of 10,000 outputs flagged toxic"</li>
+            <li>"95% of citations resolve to a real source span"</li></ul></div>
+    </div>
+    <p>Criteria are usually <strong>multidimensional</strong> — task fidelity, consistency, relevance, tone,
+    latency, and price often matter at once. State a target for each dimension that's relevant to your app
+    (citation accuracy is critical for a medical tool, minor for a casual chatbot).</p>
+
+    <h2><span class="chip concept">CONCEPT</span> Build representative test cases, then iterate empirically</h2>
+    <p>With criteria fixed, build an <strong>eval set</strong>. Three design principles from Anthropic:</p>
+    <ul>
+        <li><strong>Be task-specific</strong> — mirror your real-world input distribution, and deliberately
+        include <strong>edge cases</strong>: irrelevant or nonexistent data, overly long inputs, harmful input,
+        and ambiguous cases where humans themselves disagree.</li>
+        <li><strong>Automate grading when possible</strong> — structure questions for exact-match, string-match,
+        code-based, or LLM-based grading so the suite runs cheaply and often.</li>
+        <li><strong>Prioritize volume over perfection</strong> — many test cases with slightly noisier automated
+        grading beat a handful of perfectly hand-graded ones.</li>
+    </ul>
+    <table>
+        <tr><th>Grading method</th><th>Good for</th></tr>
+        <tr><td>Exact / string match (code)</td><td>Categorical tasks — classification, intent detection</td></tr>
+        <tr><td>Code-based (ROUGE-L, cosine similarity)</td><td>Summaries, consistency across paraphrases</td></tr>
+        <tr><td>LLM-based (Likert / binary / ordinal)</td><td>Subjective qualities — tone, empathy, PII presence</td></tr>
+        <tr><td>Human grading</td><td>Highest-fidelity but slowest; reserve for what can't be automated</td></tr>
+    </table>
+    <div class="note">🔑 For LLM-as-judge grading, use a <strong>different model to grade</strong> than the one
+    being evaluated, and give the judge a concrete rubric (e.g. "rate 1–5 for empathy").</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The empirical prompt-engineering loop</h2>
+    <div class="mermaid">
+flowchart TD
+    SC["1. Define success criteria<br/>(specific + measurable)"] --> TC["2. Build test cases<br/>(representative + edge cases)"]
+    TC --> EV["3. Build evals<br/>(automate grading)"]
+    EV --> RUN["4. Run prompt vs. eval suite"]
+    RUN --> PASS{"Meets criteria?"}
+    PASS -->|"no"| REF["🟠 Analyze failures,<br/>refine prompt"]
+    REF --> RUN
+    PASS -->|"yes"| VAL["5. Validate on held-out set"]
+    VAL --> SHIP["🟢 Ship + monitor"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class SHIP ok; class REF gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> An automated grader over a test set</h2>
+    <p>Exact-match grading for a classification task, run over the whole eval set to produce one measurable number
+    you can track across prompt versions:</p>
+<pre><span class="kw">def</span> <span class="fn">exact_match</span>(output, expected):
+    <span class="kw">return</span> output.<span class="fn">strip</span>().<span class="fn">lower</span>() == expected.<span class="fn">lower</span>()
+
+<span class="cm"># eval_set: representative inputs + edge cases + gold labels</span>
+correct = <span class="cm">0</span>
+<span class="kw">for</span> case <span class="kw">in</span> eval_set:
+    r = client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="cm">16</span>,
+        messages=[{<span class="st">"role"</span>:<span class="st">"user"</span>,<span class="st">"content"</span>: prompt.<span class="fn">format</span>(text=case[<span class="st">"input"</span>])}])
+    out = <span class="fn">next</span>(b.text <span class="kw">for</span> b <span class="kw">in</span> r.content <span class="kw">if</span> b.type == <span class="st">"text"</span>)
+    correct += <span class="fn">exact_match</span>(out, case[<span class="st">"label"</span>])
+
+accuracy = correct / <span class="fn">len</span>(eval_set)   <span class="cm"># the number you iterate against</span>
+<span class="fn">print</span>(<span class="st">f"accuracy = {accuracy:.3f}"</span>)   <span class="cm"># compare across prompt versions</span></pre>
+    <div class="good">The point isn't the metric itself — it's that every prompt change now produces a
+    <em>number that moves</em>, so iteration is evidence-driven instead of vibes-driven.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Automated vs. human grading</h2>
+    <table>
+        <tr><th></th><th>Automated grading</th><th>Human grading</th></tr>
+        <tr><td>Cost / speed</td><td>Cheap, runs on every change</td><td>Slow, expensive</td></tr>
+        <tr><td>Signal quality</td><td>Lower per-case, but high volume</td><td>Highest fidelity per case</td></tr>
+        <tr><td>Best for</td><td>Categorical + code-gradable tasks; regression suites</td><td>Nuanced quality the rubric can't capture</td></tr>
+    </table>
+    <div class="good">Anthropic's guidance: <em>prioritize volume over perfection</em> — a large auto-graded suite
+    catches more regressions than a few hand-graded cases. Reserve humans for what genuinely can't be automated.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Iterating on a prompt by eyeballing a few outputs. → Without measurable criteria
+    and a test set, you're tuning on vibes. <b>Define success criteria and evals first</b>, then iterate against a
+    number.</div>
+    <div class="trap"><b>Trap:</b> Building an eval set of only "happy path" inputs. → You must include
+    <b>edge cases</b> — irrelevant data, overly long or harmful inputs, ambiguous cases — because that's where
+    real failures live.</div>
+    <div class="trap"><b>Trap:</b> Insisting every case be hand-graded before you'll trust the eval. → Anthropic
+    says <b>prioritize volume over perfection</b>: more auto-graded cases beat a few perfect ones.</div>
+    <div class="trap"><b>Trap:</b> Using the same model as both worker and judge without thought. → For LLM-based
+    grading, prefer a <b>different model to grade</b>, and give it an explicit rubric.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Rewrite "the classifier should be safe" as a measurable success criterion.</summary>
+    <p class="answer">Something specific and quantified, e.g. <b>"Fewer than 0.1% of outputs across 10,000 trials
+    are flagged for toxicity by our content filter."</b> It's specific, measurable, achievable against a benchmark,
+    and relevant to the task.</p></details>
+    <details><summary>Q2 · Why deliberately include ambiguous and harmful inputs in your test set?</summary>
+    <p class="answer">Because evals must be <b>task-specific and mirror the real input distribution</b>, which
+    includes edge cases: irrelevant/nonexistent data, overly long inputs, harmful input, and cases where humans
+    disagree. Testing only clean inputs hides the failures that actually occur in production.</p></details>
+    <details><summary>Q3 · You have 2,000 test cases but only budget to grade a handful by hand. What does Anthropic's guidance say?</summary>
+    <p class="answer"><b>Prioritize volume over perfection.</b> Structure the task for automated grading (exact
+    match, code-graded, or LLM-graded) and run all 2,000 — a large suite with slightly noisier grading catches far
+    more regressions than a few perfectly hand-graded cases.</p></details>
+
+    <div class="pager">
+        <a href="8-3-chaining-prompts.html"><span class="k">← Back</span>8.3 · Chaining Complex Prompts</a>
+        <a class="next" href="8-5-prompt-improver-templates.html"><span class="k">Next →</span>8.5 · Prompt Improver &amp; Templates</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 8.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

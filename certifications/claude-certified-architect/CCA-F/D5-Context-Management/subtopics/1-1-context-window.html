@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1 The Context Window (Sizes, 1M) · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 1 · Context Windows &amp; Token Budgeting</div>
+    <h1>1.1 · The Context Window (Sizes, 1M)</h1>
+    <div class="tag">The finite working memory</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> One budget for everything the model reads and writes</h2>
+    <p>The <strong>context window</strong> is all the text a model can reference when generating a response —
+    <em>including the response itself</em>. Anthropic calls it the model's <strong>"working memory"</strong>: it is
+    not the training corpus, it's the finite space that holds this request. Everything counts toward it — the
+    <code>system</code> prompt, every message in <code>messages</code> (tool results, images, documents included),
+    your <strong>tool definitions</strong>, <em>and</em> the output Claude generates for the turn, extended thinking
+    included.</p>
+
+    <div class="note">🔑 The context window is a <strong>single shared budget</strong>: the growing message history
+    and the reserved output draw from the same pool. Fill it with history and you starve the reply; reserve too much
+    for the reply and you can't fit the history. 1.3 is where you learn to split it.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Current sizes — 1M is the default, not a beta</h2>
+    <p>The 1M-token tier is now the <strong>default</strong> for the top models: <em>no beta header</em>, and
+    long-context requests bill at standard pricing. The exam-relevant sizes:</p>
+
+    <table>
+        <tr><th>Model</th><th>Context window</th><th>How to enable</th></tr>
+        <tr><td>Opus 4.8 / 4.7 / 4.6</td><td>1M tokens</td><td>Default — no beta header</td></tr>
+        <tr><td>Sonnet 5 / Sonnet 4.6</td><td>1M tokens</td><td>Default — no beta header</td></tr>
+        <tr><td>Fable 5 / Mythos 5</td><td>1M tokens (up to 128K output)</td><td>Default — no beta header</td></tr>
+        <tr><td>Sonnet 4.5 &amp; other older models</td><td>200K tokens</td><td>—</td></tr>
+        <tr><td>Haiku 4.5</td><td>200K tokens</td><td>—</td></tr>
+    </table>
+
+    <div class="warn">⚠️ Bigger is not automatically better. As token count grows, <strong>accuracy and recall
+    degrade</strong> — Anthropic calls this <em>context rot</em>. Curating <em>what</em> is in context matters as
+    much as how much space you have. A 1M window is headroom, not a license to dump everything in.</div>
+
+    <div class="good">A single request can include up to 600 images or PDF pages (100 for 200K-context models) —
+    but you may hit request <em>size</em> limits before the token limit on heavy documents.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> History + output share one window</h2>
+    <div class="mermaid">
+flowchart TD
+    W["Context window (e.g. 1M tokens)"] --> IN["INPUT phase"]
+    W --> OUT["OUTPUT phase"]
+    IN --> SYS["System prompt"]
+    IN --> HIST["Message history<br/>(grows every turn)"]
+    IN --> TOOLS["Tool definitions"]
+    OUT --> RESP["Reply + extended thinking<br/>(reserved by max_tokens)"]
+    HIST -.->|"grows toward"| RESP
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class W ok; class RESP gate; class HIST gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> The <code>usage</code> field reports what the request consumed</h2>
+    <p>Every response tells you exactly how much of the window this turn used. With prompt caching the input count
+    is split across three fields — <strong>all three count toward the window</strong>.</p>
+<pre><span class="cm"># Anthropic Python SDK</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,   <span class="cm"># 1M context, default — no beta header</span>
+    max_tokens=<span class="st">4096</span>,             <span class="cm"># reserves OUTPUT room inside the window (see 1.3)</span>
+    messages=history,
+)
+
+u = resp.usage
+<span class="fn">print</span>(u.input_tokens)                 <span class="cm"># uncached input tokens</span>
+<span class="fn">print</span>(u.cache_read_input_tokens)      <span class="cm"># served from cache — still counts to window</span>
+<span class="fn">print</span>(u.cache_creation_input_tokens)  <span class="cm"># written to cache — still counts to window</span>
+<span class="fn">print</span>(u.output_tokens)                <span class="cm"># the reply (+ thinking) — also in the window</span>
+
+<span class="cm"># Total window used = input + cache_read + cache_creation + output</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> A big window is capacity, not a free lunch</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Large (1M) window</h4>
+            <ul><li>Fits long documents, big histories, many tools</li>
+            <li>Fewer premature "too long" errors</li>
+            <li>Default &amp; standard-priced on top models</li></ul></div>
+        <div class="con"><h4>⚠️ Filling it up</h4>
+            <ul><li>Context rot — recall/accuracy fall as tokens climb</li>
+            <li>Every re-sent token is re-billed each turn (1.4)</li>
+            <li>Latency and cost scale with what's in context</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The 1M window needs a beta header." → Not anymore. On Opus 4.8/4.7/4.6, Sonnet 5,
+    Sonnet 4.6, and Fable 5, <b>1M is the default</b> — no header, standard pricing.</div>
+    <div class="trap"><b>Trap:</b> "The context window is just the input." → It's the <b>total</b> input <em>plus</em>
+    the generated output (including extended thinking). Reply tokens live in the same window.</div>
+    <div class="trap"><b>Trap:</b> "Tool definitions don't count." → They do. System prompt, all messages, tool
+    results, images, documents, <b>and tool definitions</b> all consume the window.</div>
+    <div class="trap"><b>Trap:</b> "More context is always better." → No — <b>context rot</b> degrades recall as the
+    window fills. Curate what goes in; a bigger window is headroom, not a dumping ground.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Which models have a 1M-token context window today, and what enables it?</summary>
+    <p class="answer">Opus 4.8 / 4.7 / 4.6, Sonnet 5, Sonnet 4.6, and Fable 5 / Mythos 5. It's the
+    <b>default</b> — no beta header, billed at standard pricing. Sonnet 4.5 and Haiku 4.5 are 200K.</p></details>
+    <details><summary>Q2 · Name four things that consume the context window.</summary>
+    <p class="answer">Any four of: the system prompt, every message in <code>messages</code> (including tool results,
+    images, documents), the tool definitions, and the generated output (reply + extended thinking). All count.</p></details>
+    <details><summary>Q3 · Why isn't a 1M window a reason to stop curating context?</summary>
+    <p class="answer"><b>Context rot</b>: as token count grows, accuracy and recall degrade. And every token in the
+    window is re-sent and re-billed each turn. Curating what's in context matters as much as the raw capacity.</p></details>
+
+    <div class="pager">
+        <a href="../index.html"><span class="k">← Back</span>Domain 5 hub</a>
+        <a class="next" href="1-2-token-counting.html"><span class="k">Next →</span>1.2 · Token Counting &amp; the Count Endpoint</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 1.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

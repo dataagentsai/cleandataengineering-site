@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.5 The Memory Tool / External Memory · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 3 · Managing Long Conversations</div>
+    <h1>3.5 · The Memory Tool / External Memory</h1>
+    <div class="tag">Persist beyond the window</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A file-based tool that outlives the context window</h2>
+    <p>Truncation, summarization, and context editing all operate <em>inside</em> the window — they decide what the
+    model sees this turn. The <strong>memory tool</strong> reaches <em>outside</em> it: a file-based tool that lets
+    Claude <strong>store and recall information across context windows and across sessions</strong>. Instead of
+    keeping everything in context, the agent writes what it learns to memory files and reads them back on demand —
+    <strong>just-in-time retrieval</strong> that keeps the active context focused.</p>
+
+    <p>Declare it as an Anthropic-provided tool — <code>{"type": "memory_20250818", "name": "memory"}</code> is the
+    entire configuration (no input schema to define). It's <strong>generally available on the Messages API — no beta
+    header required</strong> — on all Claude 4 and later models. When it's present, the API automatically injects a
+    system-prompt instruction telling Claude to check its memory directory before starting work.</p>
+
+    <div class="note">🔑 Because memory is <strong>external files</strong>, it's the right home for facts that must
+    survive <em>exactly</em> — names, IDs, decisions, progress logs — the very things a lossy summary (3.3) or a
+    clear (3.4) would blur or drop.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Client-executed — you own the storage</h2>
+    <p>The memory tool is <strong>client-side / client-executed</strong>. Claude only <em>requests</em> file
+    operations; <strong>your application executes each one against storage you control</strong> and returns the
+    result in a <code>tool_result</code> block — the standard tool-use loop. Operations target a
+    <code>/memories</code> directory, which is a <strong>prefix your handler maps onto real storage</strong> (a
+    per-user folder, database keys, cloud storage — your choice). The commands are:
+    <code>view</code>, <code>create</code>, <code>str_replace</code>, <code>insert</code>, <code>delete</code>, and
+    <code>rename</code>.</p>
+
+    <p>Persistence is entirely in your hands: a <em>later</em> conversation continues from the same memory when it
+    sends the same <code>memory</code> tool entry and your handler serves the same store. That's how memory bridges
+    sessions — nothing about it lives on Anthropic's servers.</p>
+
+    <div class="warn">⚠️ Because <em>you</em> execute the file ops, security is your responsibility. A malicious path
+    like <code>/memories/../../secrets.env</code> escapes the directory — <strong>validate every path</strong>:
+    require the <code>/memories</code> prefix, resolve to canonical form, reject <code>../</code> and URL-encoded
+    traversal. Don't let Claude write secrets/PII to memory.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> How it complements context editing</h2>
+    <p>Memory and context editing (3.4) are designed to work <strong>together</strong>. Context editing clears
+    stale tool results from the window to reclaim space; the memory tool preserves the information that must
+    <em>survive</em> that clearing. The workflow: Claude writes durable facts to a memory file, then context editing
+    (or compaction) safely prunes the raw transcript — because the important bits are already saved outside the
+    window. Long-running agents typically use both.</p>
+
+    <div class="good">Multi-session pattern: an initializer session writes a progress log + task checklist to
+    <code>/memories</code>; each later session opens by <code>view</code>-ing those files to restore state without
+    re-exploring, and updates them before ending. Memory becomes the recovery mechanism across window resets.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Memory lives outside the window, across sessions</h2>
+    <div class="mermaid">
+flowchart TD
+    subgraph S1["Session 1 (context window A)"]
+      A1["Claude learns a fact"] --> A2["tool_use: memory create<br/>/memories/progress.md"]
+    end
+    A2 --> H["YOUR handler executes<br/>the file op → your storage"]
+    H --> STORE[("/memories<br/>(your storage)")]
+    subgraph S2["Session 2 (fresh window B)"]
+      B1["Claude: view /memories first"] --> B2["Reads progress.md → resumes"]
+    end
+    STORE --> B1
+    STORE -.->|"survives context editing (3.4)<br/>& compaction (3.3)"| KEEP["Durable facts persist<br/>beyond the window"]
+    classDef s fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef host fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class A1,A2,B1,B2,KEEP s; class H,STORE host;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Declare the tool; you execute the file ops</h2>
+    <p>Add the memory tool (no beta header), then implement a client-side handler for each command — validating
+    every path stays inside <code>/memories</code>.</p>
+<pre><span class="cm"># Memory tool is GA on the Messages API — no beta header needed.</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="cm">2048</span>,
+    tools=[{<span class="st">"type"</span>: <span class="st">"memory_20250818"</span>, <span class="st">"name"</span>: <span class="st">"memory"</span>}],  <span class="cm"># whole config</span>
+    messages=messages,
+)
+
+<span class="cm"># Claude REQUESTS file ops; YOUR app executes them (client-side).</span>
+<span class="kw">import</span> os
+MEM_ROOT = <span class="st">"/srv/app/memories"</span>   <span class="cm"># /memories → real storage you control</span>
+
+<span class="kw">def</span> <span class="fn">handle_memory</span>(cmd):
+    <span class="cm"># Path-traversal guard: reject anything that escapes /memories.</span>
+    real = os.path.<span class="fn">realpath</span>(os.path.<span class="fn">join</span>(MEM_ROOT, cmd[<span class="st">"path"</span>].lstrip(<span class="st">"/"</span>)))
+    <span class="kw">if</span> <span class="kw">not</span> real.<span class="fn">startswith</span>(MEM_ROOT):
+        <span class="kw">return</span> {<span class="st">"is_error"</span>: <span class="kw">True</span>, <span class="st">"content"</span>: <span class="st">"Error: path escapes /memories"</span>}
+    <span class="kw">if</span> cmd[<span class="st">"command"</span>] == <span class="st">"view"</span>:    <span class="kw">return</span> <span class="fn">read_file_or_dir</span>(real)
+    <span class="kw">if</span> cmd[<span class="st">"command"</span>] == <span class="st">"create"</span>:  <span class="kw">return</span> <span class="fn">write_file</span>(real, cmd[<span class="st">"file_text"</span>])
+    <span class="cm"># ...str_replace, insert, delete, rename → your storage</span>
+
+<span class="cm"># A LATER session that sends the same memory tool + same store</span>
+<span class="cm"># continues from these files — persistence beyond the window.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> External memory vs. in-window strategies</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Memory tool</h4>
+            <ul><li>Persists across context windows <em>and</em> sessions — survives resets</li>
+            <li>Exact recall of facts a summary would blur; just-in-time retrieval</li>
+            <li>Complements 3.4/3.3 — prune the window, keep the knowledge</li></ul></div>
+        <div class="con"><h4>⚠️ What you take on</h4>
+            <ul><li>You implement &amp; secure the storage (path-traversal, size caps, PII)</li>
+            <li>Reads/writes cost tool-use round-trips and tokens</li>
+            <li>Only helps if Claude actually writes &amp; re-reads the right files</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb: use <b>in-window</b> strategies (3.2–3.4) to control what the model sees
+    <em>this</em> turn; use <b>external memory</b> for what must persist across turns, windows, and sessions.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The memory tool is server-side / Anthropic stores my memory." → It's
+    <b>client-executed</b>. Claude requests file ops; <b>your app</b> runs them against storage <b>you</b> control.
+    Nothing persists on Anthropic's side.</div>
+    <div class="trap"><b>Trap:</b> "Memory needs a beta header." → No — <code>{"type": "memory_20250818", "name":
+    "memory"}</code> is <b>generally available</b> on the Messages API, no beta header, on Claude 4+.</div>
+    <div class="trap"><b>Trap:</b> Skipping path validation. → Because you execute the ops, a path like
+    <code>/memories/../../secrets.env</code> can escape the directory. Enforce the <code>/memories</code> prefix and
+    reject traversal — it's your responsibility.</div>
+    <div class="trap"><b>Trap:</b> Treating memory as a replacement for context editing. → They're
+    <b>complementary</b>: context editing clears the window; memory preserves what must survive the clear. Long
+    agents use both.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What makes the memory tool different from truncation, summarization, and context editing?</summary>
+    <p class="answer">Those three manage what's <b>inside</b> the context window this turn. The memory tool stores
+    information in <b>external files</b> that persist <b>across context windows and sessions</b> — Claude writes what
+    it learns and reads it back on demand, so knowledge outlives any single window.</p></details>
+    <details><summary>Q2 · Is the memory tool client- or server-executed, and what does that imply?</summary>
+    <p class="answer"><b>Client-executed.</b> Claude only requests operations (view/create/str_replace/insert/delete/rename
+    on <code>/memories</code>); your application runs them against storage you control and returns a
+    <code>tool_result</code>. Implication: you own persistence <b>and</b> security — validate every path to prevent
+    traversal outside <code>/memories</code>.</p></details>
+    <details><summary>Q3 · How does the memory tool complement context editing (3.4)?</summary>
+    <p class="answer">Context editing clears stale tool results to reclaim window space; the memory tool preserves
+    the facts that must survive that clearing. Claude writes durable info to a memory file, then editing/compaction
+    safely prunes the raw transcript. Long-running agents use both together.</p></details>
+
+    <div class="pager">
+        <a href="3-4-context-editing.html"><span class="k">← Back</span>3.4 · Context Editing (Clearing Tool Results)</a>
+        <a class="next" href="4-1-long-context-prompting.html"><span class="k">Next →</span>4.1 · Long-Context Prompting</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 3.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

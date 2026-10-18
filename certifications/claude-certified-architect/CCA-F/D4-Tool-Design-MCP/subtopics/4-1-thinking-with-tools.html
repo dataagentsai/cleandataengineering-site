@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.1 Tool Use with Extended Thinking · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 4 · Advanced Tool Use</div>
+    <h1>4.1 · Tool Use with Extended Thinking</h1>
+    <div class="tag">Reason across tool results</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Claude reasons about which tool — and about what came back</h2>
+    <p>Extended thinking (on current 4.x models this is <strong>adaptive thinking</strong>,
+    <code>thinking: {"type": "adaptive"}</code>) gives Claude a private reasoning scratchpad. Combined with
+    tools, that reasoning happens in <strong>two places</strong>: <em>before</em> a tool call, Claude thinks about
+    <strong>which tool to call and with what arguments</strong>; <em>after</em> a <code>tool_result</code> returns,
+    Claude thinks again — <strong>reasoning across the result</strong> — before deciding the next action or the final
+    answer. This second pass is <strong>interleaved thinking</strong>, and adaptive thinking turns it on
+    automatically (no beta header on 4.6+).</p>
+
+    <div class="note">🔑 Interleaved thinking is what lets Claude chain tool calls intelligently: it can look at
+    what <code>search()</code> returned, notice the answer is incomplete, and <em>reason its way</em> to a second,
+    better-targeted call — rather than blindly firing a fixed sequence.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Two rules the exam tests: replay signed blocks, and no forced tools</h2>
+    <p>Thinking + tools comes with two hard constraints:</p>
+    <ul>
+      <li><strong>Replay <code>thinking</code> blocks unchanged, with their <code>signature</code>.</strong> When you
+      continue a tool-use conversation on the <em>same model</em>, the assistant turn you send back must include the
+      original <code>thinking</code> block(s) <strong>exactly as received</strong> — the opaque
+      <code>signature</code> field is a cryptographic seal. Editing, reconstructing, or dropping a signed block
+      breaks the turn (the API rejects tampered blocks). You <em>may</em> read and display a summary; you may not
+      alter the block.</li>
+      <li><strong><code>tool_choice</code> is limited to <code>auto</code> or <code>none</code> when thinking is
+      on.</strong> <code>{"type": "any"}</code> and <code>{"type": "tool", "name": …}</code> are
+      <strong>not supported with extended thinking and return an error</strong> — forcing a tool would require
+      prefilling the assistant turn, which is incompatible with a thinking block leading the response.</li>
+    </ul>
+    <div class="warn">⚠️ If you need both "Claude must call a tool" <em>and</em> deep reasoning, you can't force it —
+    steer with a strong <code>user</code>-message instruction instead, or drop thinking for that call.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Thinking wraps every tool round-trip</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant U as User
+    participant C as Claude
+    participant H as Your harness
+    U->>C: question + tools
+    Note over C: 🧠 thinking (signed):<br/>which tool? which args?
+    C->>H: tool_use(search, ...)
+    H->>C: tool_result
+    Note over C: 🧠 interleaved thinking:<br/>reason across the result
+    C->>H: tool_use(fetch, ...)
+    H->>C: tool_result
+    Note over C: 🧠 thinking: enough to answer
+    C->>U: final answer
+    Note over H: replay ALL thinking blocks<br/>+ signatures unchanged each turn
+    </div>
+
+    <h2><span class="chip code">CODE</span> Adaptive thinking + tools, then echo signed blocks back</h2>
+    <p>First call enables adaptive thinking with <code>tool_choice</code> at its only legal values (<code>auto</code>).
+    The follow-up turn must carry the original <code>thinking</code> block <em>and</em> the <code>tool_use</code>
+    block back, unmodified, alongside the <code>tool_result</code>.</p>
+<pre><span class="cm"># 1) First request — thinking on, tool_choice must be auto/none</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">16000</span>,
+    thinking={<span class="st">"type"</span>: <span class="st">"adaptive"</span>},   <span class="cm"># interleaved thinking auto-on</span>
+    tools=tools,
+    tool_choice={<span class="st">"type"</span>: <span class="st">"auto"</span>},     <span class="cm"># 'any'/'tool' would 400 here</span>
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"What changed in the Q3 report?"</span>}],
+)
+
+<span class="cm"># resp.content = [ thinking(signature=...), tool_use(id=..., name="search") ]</span>
+tool_use = <span class="fn">next</span>(b <span class="kw">for</span> b <span class="kw">in</span> resp.content <span class="kw">if</span> b.type == <span class="st">"tool_use"</span>)
+result = <span class="fn">run_tool</span>(tool_use.name, tool_use.input)
+
+<span class="cm"># 2) Continue — replay resp.content VERBATIM (thinking block + signature intact)</span>
+resp2 = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">16000</span>,
+    thinking={<span class="st">"type"</span>: <span class="st">"adaptive"</span>}, tools=tools,
+    messages=[
+        {<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"What changed in the Q3 report?"</span>},
+        {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content},   <span class="cm"># ← unchanged, signed</span>
+        {<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: [{
+            <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+            <span class="st">"tool_use_id"</span>: tool_use.id,
+            <span class="st">"content"</span>: result,
+        }]},
+    ],
+)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Interleaved reasoning vs. its constraints</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Thinking + tools</h4>
+            <ul><li>Claude reasons <em>across</em> results, not just before the first call</li>
+            <li>Smarter multi-step chains: adapts the next call to what came back</li>
+            <li>Fewer wasted / redundant tool calls on hard, ambiguous tasks</li></ul></div>
+        <div class="con"><h4>⚠️ The price</h4>
+            <ul><li>Must replay every <code>thinking</code> block + <code>signature</code> unchanged</li>
+            <li>Can't force a tool (<code>any</code>/<code>tool</code> error) — only <code>auto</code>/<code>none</code></li>
+            <li>More output tokens; thinking is billed even when its text is <code>omitted</code></li></ul></div>
+    </div>
+    <div class="good">Use thinking + tools for genuinely multi-step, ambiguous work. For a single deterministic
+    extraction where you'd force one tool, skip thinking and force the tool instead (see 4.5).</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Force a specific tool while extended thinking is on." → Not allowed.
+    <code>tool_choice: any</code> / <code>tool</code> <b>error</b> with thinking; only <code>auto</code> and
+    <code>none</code> are compatible.</div>
+    <div class="trap"><b>Trap:</b> Stripping or regenerating <code>thinking</code> blocks before the next turn to
+    "save tokens." → The <code>signature</code> is a seal; altered or missing signed blocks break the continuation.
+    Replay them <b>verbatim</b> on the same model.</div>
+    <div class="trap"><b>Trap:</b> Assuming thinking only happens before the first tool call. → With adaptive
+    thinking, Claude thinks <b>again after each <code>tool_result</code></b> (interleaved) — that's the whole point.</div>
+    <div class="trap"><b>Trap:</b> Setting <code>budget_tokens</code> to bound thinking on Opus 4.8. → Removed on
+    4.7/4.8 (400). Use <code>thinking: {"type":"adaptive"}</code> and steer depth with
+    <code>output_config.effort</code>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why must you send the assistant's <code>thinking</code> block back on the next turn?</summary>
+    <p class="answer">Because on the same model Claude expects its prior reasoning — sealed by an opaque
+    <code>signature</code> — to be replayed <b>unchanged</b>. It uses the signed block to continue coherently;
+    tampering with or dropping it makes the API reject the turn. You can display a summary, but never edit the block.</p></details>
+    <details><summary>Q2 · A teammate sets <code>tool_choice:{"type":"tool","name":"lookup"}</code> with adaptive
+    thinking and gets an error. Why?</summary>
+    <p class="answer">Forced tool use (<code>any</code> or <code>tool</code>) is incompatible with extended thinking —
+    forcing a tool prefills the assistant turn, which can't coexist with a leading thinking block. Only
+    <code>auto</code> (default) and <code>none</code> work. To bias selection, put "use the lookup tool" in a
+    <code>user</code> message.</p></details>
+    <details><summary>Q3 · What is "interleaved" thinking and what does it buy you?</summary>
+    <p class="answer">Thinking that occurs <b>between</b> tool calls — after each <code>tool_result</code> Claude
+    reasons again before its next move. It buys smarter multi-step behavior: Claude can notice a partial result and
+    reformulate the next call instead of following a fixed script.</p></details>
+
+    <div class="pager">
+        <a href="3-5-contract-failures.html"><span class="k">← Back</span>3.5 · Contract Failures</a>
+        <a class="next" href="4-2-structured-json-via-tools.html"><span class="k">Next →</span>4.2 · Forcing Structured JSON via Tools</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 4.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

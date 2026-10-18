@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.2 'Lost in the Middle' &amp; Attention · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 4 · Long Context &amp; Retrieval</div>
+    <h1>4.2 · 'Lost in the Middle' &amp; Attention</h1>
+    <div class="tag">The middle gets less attention</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Attention isn't uniform across a long window</h2>
+    <p>"Lost in the middle" is a widely-observed phenomenon for long-context language models: a model attends most
+    reliably to content near the <strong>start</strong> and <strong>end</strong> of its context, and least reliably to
+    content buried in the <strong>middle</strong>. A fact placed halfway through a 200K-token dump can be present, correct,
+    and still under-used — the window <em>held</em> it, but the model didn't <em>weight</em> it. A 1M-token window does
+    not make this go away; it just gives you more room to bury things.</p>
+    <div class="note">🔑 "In the context window" ≠ "attended to." Retrieval recall (was the fact present?) and
+    <em>attention</em> (did the model use it?) are two different failures. A huge window fixes the first, not the second.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The mitigations are placement + explicit retrieve-then-answer</h2>
+    <p>Anthropic's long-context best practices are, in effect, "lost in the middle" countermeasures — and they line up
+    exactly with 4.1:</p>
+    <ul>
+        <li><strong>Placement:</strong> put long documents <em>near the top</em> and the query <em>at the end</em>, so the
+        load-bearing material sits at the high-attention edges of the window (query-at-the-end is worth <strong>up to
+        30%</strong> on complex multi-document inputs).</li>
+        <li><strong>Explicit retrieve-then-answer:</strong> ask Claude to <em>quote the relevant passages first</em>, then
+        answer from those quotes. This re-surfaces buried evidence into the recent, high-attention tail before the model
+        reasons — it "cuts through the noise."</li>
+        <li><strong>Structure:</strong> wrap each doc in <code>&lt;document&gt;</code> tags with a <code>&lt;source&gt;</code>,
+        so boundaries and metadata are unambiguous.</li>
+    </ul>
+    <div class="good">Think of quote-first as manually pulling the middle out to the edge: the model copies the relevant
+    lines into a fresh <code>&lt;quotes&gt;</code> block at the end, then reasons over that focused, well-attended set.</div>
+    <div class="warn">If a specific fact <em>must</em> land, don't rely on it surviving in the middle of a huge dump.
+    Either retrieve it into a small prompt (4.3) or place it deliberately near the query (4.5).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Attention across a long window</h2>
+    <div class="mermaid">
+flowchart TD
+    W["Long context window"] --> TOP["🟢 Top: well attended<br/>→ put long docs here"]
+    W --> MID["🔴 Middle: attention sags<br/>→ facts get 'lost'"]
+    W --> BOT["🟢 Bottom: well attended<br/>→ put the query here"]
+    MID -.->|"quote relevant<br/>passages first"| BOT
+    BOT --> ANS["Answer grounded in<br/>re-surfaced quotes"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class TOP ok; class BOT ok; class MID bad; class ANS ok;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Retrieve-then-answer in one prompt</h2>
+    <p>Force the model to extract quotes into a tagged block <em>before</em> answering — the buried middle gets copied to
+    the recent tail, where attention is strong.</p>
+<pre><span class="cm"># Long docs on top (high-attention edge)…</span>
+corpus = <span class="fn">wrap_documents</span>(records, history)   <span class="cm"># &lt;documents&gt;…&lt;/documents&gt;</span>
+
+<span class="cm"># …retrieve-then-answer instruction at the bottom (the other edge).</span>
+instruction = <span class="st">"""
+First, find quotes from the records and appointment history that are
+relevant to the reported symptoms. Place them in &lt;quotes&gt; tags.
+Then, based ONLY on those quotes, list what would help diagnose the
+symptoms in &lt;info&gt; tags. If a claim has no supporting quote, say so.
+"""</span>
+
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">4096</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+               <span class="st">"content"</span>: corpus + <span class="st">"\n"</span> + instruction}],
+)
+<span class="cm"># The &lt;quotes&gt; block is the model's own retrieval pass over the middle.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Stuff-and-hope vs. surface-then-reason</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Placement + quote-first</h4>
+            <ul><li>Load-bearing material sits at attention edges</li>
+            <li>Buried facts get re-surfaced to the tail</li>
+            <li>Answer is grounded in explicit extracted quotes</li></ul></div>
+        <div class="con"><h4>⚠️ Stuff the whole window, query on top</h4>
+            <ul><li>Middle facts present but under-weighted</li>
+            <li>No re-surfacing step → silent omissions</li>
+            <li>Bigger window ≠ better recall of the middle</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "A 1M-token window means I can dump everything and it'll all be used equally." → No.
+    Attention still sags in the <b>middle</b>; a bigger window just gives more room to lose things.</div>
+    <div class="trap"><b>Trap:</b> Conflating "in context" with "attended to." → A fact can be present and correct yet
+    under-used. Recall and attention are different failure modes.</div>
+    <div class="trap"><b>Trap:</b> Fixing lost-in-the-middle by re-ordering nothing but adding "pay attention!" → The
+    documented fixes are structural: <b>top/bottom placement</b> and <b>quote-relevant-passages-first</b>, not louder
+    instructions.</div>
+    <div class="trap"><b>Trap:</b> Putting the single most critical fact in the exact middle of a huge dump. → Place it near
+    the query, or retrieve it into a small prompt instead (4.3).</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What is "lost in the middle"?</summary>
+    <p class="answer">Long-context models attend most to content near the <b>start and end</b> of the window and least to
+    content in the <b>middle</b>. A fact buried mid-prompt may be present but under-used — so answers silently miss it even
+    though it was "in context."</p></details>
+    <details><summary>Q2 · Two documented mitigations?</summary>
+    <p class="answer">(1) <b>Placement</b> — long docs on top, query at the end (the query-at-the-end lift is up to 30%).
+    (2) <b>Explicit retrieve-then-answer</b> — ask Claude to quote the relevant passages first, which re-surfaces buried
+    evidence into the high-attention tail before it reasons.</p></details>
+    <details><summary>Q3 · Does a larger context window solve this?</summary>
+    <p class="answer">No. A larger window improves how much you <i>can</i> include (recall), but attention is still uneven —
+    the middle stays weakly attended. Good placement and retrieval matter more, not less, as the window grows.</p></details>
+
+    <div class="pager">
+        <a href="4-1-long-context-prompting.html"><span class="k">← Back</span>4.1 · Long-Context Prompting</a>
+        <a class="next" href="4-3-rag-vs-long-context.html"><span class="k">Next →</span>4.3 · RAG vs Long Context</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 4.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

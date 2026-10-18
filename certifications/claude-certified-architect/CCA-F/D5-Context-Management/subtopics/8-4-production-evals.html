@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.4 Evaluations in Production · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 8 · Observability &amp; Production Ops</div>
+    <h1>8.4 · Evaluations in Production</h1>
+    <div class="tag">Catch regressions &amp; drift</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Evals are your regression suite for prompts and models</h2>
+    <p>Metrics (8.1–8.3) tell you the system is <em>up</em>; they don't tell you the answers are <em>good</em>.
+    That's what <strong>evals</strong> are for. Build a held-out test set that mirrors your real task
+    distribution — baseline cases, edge cases (typos, sarcasm, mixed sentiment), and adversarial inputs — then run
+    it as a <strong>regression suite before every prompt or model change</strong>. Anthropic's guidance:
+    <em>prioritize volume over hand-crafted quality</em> — many automatically-graded cases beat a handful of
+    lovingly hand-graded ones.</p>
+
+    <table>
+        <tr><th>Grading method</th><th>Best for</th><th>Cost / scale</th></tr>
+        <tr><td>Code-based (exact match, string, regex)</td><td>Categorical answers — classification, extraction</td><td>Cheap, instant, fully automatable</td></tr>
+        <tr><td>LLM-as-judge (rubric-scored)</td><td>Subjective dimensions — tone, coherence, faithfulness</td><td>Scales to subjective grading; use a <em>different</em> model</td></tr>
+        <tr><td>Human grading</td><td>Ground truth, complex judgment, validation</td><td>Slow &amp; costly — reserve for calibration</td></tr>
+    </table>
+
+    <div class="note">🔑 Make success criteria <b>SMART</b>: not "good sentiment analysis" but "F1 ≥ 0.85 on a
+    held-out set of 10,000 tweets." Quantify even hazy goals — "&lt;0.1% of outputs flagged for toxicity in 10,000
+    trials."</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Sample live traffic to catch drift</h2>
+    <p>A static test set goes stale as real inputs evolve. <strong>Periodically sample from production
+    traffic</strong> and fold it back into the eval set so grades track reality — this is how you catch
+    <strong>drift</strong>: a slow degradation as the input distribution shifts away from what you originally
+    tested. For subjective quality at scale, run <strong>LLM-as-judge</strong>: a <em>different</em> model scores
+    the primary model's output against an explicit rubric (Likert 1–5, binary yes/no, or ordinal). Using a
+    separate grader model avoids a model rubber-stamping its own work.</p>
+
+    <div class="good">Two triggers for a full eval run: (1) any <b>prompt or model change</b> → run the regression
+    suite before shipping; (2) <b>continuous</b> → sample live traffic, grade it, watch the score trend for drift.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Regression gate + drift watch</h2>
+    <div class="mermaid">
+flowchart TD
+    CH["Prompt / model change"] --> REG["Run regression eval<br/>on held-out set"]
+    REG --> G{"Scores hold<br/>vs baseline?"}
+    G -->|"yes"| SHIP["🟢 Ship"]
+    G -->|"no"| BLOCK["🔴 Block — regression"]
+    PROD["Live traffic"] -.->|"sample"| JUDGE["LLM-as-judge<br/>(different model + rubric)"]
+    JUDGE --> TREND{"Score trending<br/>down?"}
+    TREND -->|"yes"| DRIFT["🟠 Drift alert →<br/>refresh eval set"]
+    TREND -->|"no"| OK["🟢 Stable"]
+    DRIFT -.->|"fold samples in"| REG
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class SHIP ok; class OK ok; class DRIFT gate; class BLOCK bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> LLM-as-judge with a different model + rubric</h2>
+    <p>A binary faithfulness judge. The grader is a <em>separate</em> model scoring against an explicit rubric;
+    aggregate pass-rate over the suite is your regression signal.</p>
+<pre><span class="kw">def</span> <span class="fn">judge_faithful</span>(question, context, answer):
+    rubric = <span class="st">f"""You are grading an answer for faithfulness to the source.</span>
+<span class="st">&lt;context&gt;{context}&lt;/context&gt;</span>
+<span class="st">&lt;answer&gt;{answer}&lt;/answer&gt;</span>
+<span class="st">Is every claim in the answer supported by the context?</span>
+<span class="st">Output only 'yes' or 'no'."""</span>
+    <span class="cm"># Grade with a DIFFERENT model than the one under test.</span>
+    r = grader.messages.create(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">5</span>,
+                               messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: rubric}])
+    <span class="kw">return</span> r.content[<span class="st">0</span>].text.strip().lower() == <span class="st">"yes"</span>
+
+<span class="cm"># Regression gate: run the whole suite, compare to baseline before shipping.</span>
+passed = <span class="fn">sum</span>(<span class="fn">judge_faithful</span>(c.q, c.ctx, <span class="fn">run_under_test</span>(c)) <span class="kw">for</span> c <span class="kw">in</span> suite)
+score = passed / <span class="fn">len</span>(suite)
+<span class="kw">assert</span> score &gt;= BASELINE - <span class="st">0.02</span>, <span class="st">f"regression: {score:.3f} &lt; baseline"</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Code-based vs. LLM-as-judge grading</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Code-based grading</h4>
+            <ul><li>Deterministic, instant, free — run on every commit</li>
+            <li>Perfect for classification / extraction</li>
+            <li>No grader model to drift or bias</li></ul></div>
+        <div class="con"><h4>⚖️ LLM-as-judge</h4>
+            <ul><li>Grades tone, coherence, faithfulness at scale</li>
+            <li>But: needs a <em>different</em> grader model + clear rubric</li>
+            <li>Grader itself must be validated against human labels</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Grading with the same model you're evaluating. → Best practice is a
+    <b>different model</b> as judge, scored against an explicit <b>rubric</b> — a model judging its own output is
+    biased.</div>
+    <div class="trap"><b>Trap:</b> Treating uptime/latency dashboards as "evals." → Those confirm the system is
+    <em>up</em>. Evals confirm the answers are <em>correct</em>. You need both.</div>
+    <div class="trap"><b>Trap:</b> A frozen test set forever. → Input distributions drift. <b>Sample live
+    traffic</b> periodically and fold it back in, or your green suite will slowly stop reflecting reality.</div>
+    <div class="trap"><b>Trap:</b> Shipping a prompt tweak without re-running evals. → Prompt and model changes are
+    exactly when regressions sneak in — run the suite as a <b>gate before shipping</b>, not after users complain.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · When should the regression eval suite run?</summary>
+    <p class="answer">Before shipping <b>any prompt or model change</b> — those are exactly when regressions appear.
+    The suite is a gate: block the change if scores drop below baseline. Additionally run it continuously on
+    sampled live traffic to catch drift.</p></details>
+    <details><summary>Q2 · Why use a different model for LLM-as-judge, and what else does it need?</summary>
+    <p class="answer">A model grading its own output is biased toward passing itself, so use a <b>separate grader
+    model</b>. It also needs an <b>explicit rubric</b> (binary, Likert 1–5, or ordinal) so grades are consistent
+    and the judge can be validated against human labels.</p></details>
+    <details><summary>Q3 · What is drift and how do production evals surface it?</summary>
+    <p class="answer"><b>Drift</b> is gradual degradation as real inputs shift away from what you originally
+    tested. Surface it by <b>sampling live traffic</b>, grading it (often via LLM-as-judge), and watching the
+    score trend — a downward trend flags drift and tells you to refresh the eval set.</p></details>
+
+    <div class="pager">
+        <a href="8-3-monitoring-slos.html"><span class="k">← Back</span>8.3 · Monitoring &amp; SLOs</a>
+        <a class="next" href="8-5-runtime-guardrails.html"><span class="k">Next →</span>8.5 · Safety &amp; Guardrails</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 8.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

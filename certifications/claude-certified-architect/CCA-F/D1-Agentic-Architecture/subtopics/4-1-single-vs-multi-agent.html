@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.1 Single-Agent-+-Tools vs Multi-Agent · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 4 · Multi-Agent</div>
+    <h1>4.1 · Single-Agent-+-Tools vs. Multi-Agent</h1>
+    <div class="tag">Pick the simplest tier that works</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The escalation, one tier up</h2>
+    <p>4.1 lives <em>inside</em> the agent tier from 1.1. Once you've decided you need an agent, the next
+    restraint question is: <strong>one agent with a rich toolbox, or several agents coordinating?</strong>
+    The architect's default is unchanged — <strong>pick the simplest tier that solves the problem</strong>.
+    A single agent + tools is simpler, cheaper, and lower-latency; multi-agent is a deliberate escalation you
+    justify, not a starting point.</p>
+
+    <table>
+        <tr><th>Dimension</th><th>Single agent + tools</th><th>Multi-agent</th></tr>
+        <tr><td><strong>Structure</strong></td><td>One model loop, many tools (hub-and-spoke)</td><td>A coordinator plus specialist sub-agents, each with its own context</td></tr>
+        <tr><td><strong>Cost / latency</strong></td><td>Lower — one context, fewer round-trips</td><td>Higher — extra agents each cost tokens; sequential ones add latency</td></tr>
+        <tr><td><strong>Predictability</strong></td><td>Easier to test and reason about</td><td>More moving parts, more failure modes</td></tr>
+        <tr><td><strong>Best fit</strong></td><td>Most agent tasks</td><td>Genuinely parallel sub-tasks, 5+ step workflows, distinct specialised roles</td></tr>
+    </table>
+
+    <div class="note">🔑 <strong>Default to a single agent + tools.</strong> Reach for multi-agent only when the
+    task is <em>genuinely parallel</em>, is a <em>5+ step workflow</em>, or needs <em>distinct specialised roles</em>.
+    Cost- or latency-sensitive? Stay single.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The three "go multi-agent" triggers</h2>
+    <p>Multi-agent earns its overhead only when at least one of these clearly holds:</p>
+    <ul>
+        <li><strong>Genuinely parallel sub-tasks</strong> — independent units of work that can run at once to cut wall-clock (see 4.6).</li>
+        <li><strong>5+ step workflow</strong> — enough depth that one context window gets bloated or unfocused; decomposition helps.</li>
+        <li><strong>Distinct specialised roles</strong> — a researcher, a coder, a reviewer, each wanting a different system prompt, toolset, or model.</li>
+    </ul>
+    <div class="warn">⚠️ None of these hold? A single agent + tools is the design. If you're
+    <em>cost- or latency-sensitive</em>, that pressure points firmly at single-agent.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The decision tree</h2>
+    <div class="mermaid">
+flowchart TD
+    A([You've decided you need an agent]) --> Q1{"Genuinely parallel<br/>independent sub-tasks?"}
+    Q1 -->|Yes| M["🟣 Multi-agent<br/>parallel fan-out"]
+    Q1 -->|No| Q2{"5+ step workflow<br/>bloating one context?"}
+    Q2 -->|Yes| M2["🟣 Multi-agent<br/>pipeline / coordinator"]
+    Q2 -->|No| Q3{"Distinct specialised<br/>roles needed?"}
+    Q3 -->|Yes| M3["🟣 Multi-agent<br/>coordinator + specialists"]
+    Q3 -->|No| S["🟢 Single agent + tools<br/>hub-and-spoke · cheapest"]
+    Q4{"Cost / latency<br/>sensitive?"} -.forces.-> S
+    classDef s fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef m fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    class S s; class M m; class M2 m; class M3 m;
+    </div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> What multi-agent buys and costs</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Multi-agent gains</h4>
+            <ul><li>Parallelism cuts wall-clock on independent work</li>
+            <li>Specialised prompts/tools/models per role</li>
+            <li>Context isolation keeps each sub-task focused</li>
+            <li>Decomposes 5+ step workflows into digestible units</li></ul></div>
+        <div class="con"><h4>⚠️ Multi-agent costs</h4>
+            <ul><li>More tokens — every agent has its own context</li>
+            <li>Sequential agents add latency additively</li>
+            <li>State must be passed explicitly (see 4.5)</li>
+            <li>More failure modes; harder to test</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb: <strong>single agent + tools → multi-agent</strong>, and escalate only when a
+    concrete trigger (parallel / 5+ steps / distinct roles) forces it.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Reaching for multi-agent because the task "sounds complex." → Complexity alone
+    doesn't justify it. Look for a concrete trigger: genuine parallelism, 5+ steps, or distinct roles. Absent those,
+    single agent + tools wins.</div>
+    <div class="trap"><b>Trap:</b> Ignoring cost/latency signals. → Words like "cost-effective," "low-latency," or
+    "high-volume" in the stem steer you <b>toward</b> a single agent, not away.</div>
+    <div class="trap"><b>Trap:</b> Assuming two sequential specialists are "parallel." → Parallelism only helps when
+    sub-tasks are <b>independent</b>. Dependent steps run sequentially and add latency (see 4.6).</div>
+    <div class="trap"><b>Trap:</b> Thinking multi-agent is "more powerful, so better." → It's an escalation with real
+    overhead. The exam rewards the <b>simplest tier that works</b>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A support bot needs to look up orders, check inventory, and issue refunds — sequentially, per conversation. Single or multi-agent?</summary>
+    <p class="answer"><b>Single agent + tools.</b> The work is sequential and dependent, not parallel, and the three
+    actions are just tools, not distinct specialised roles. One hub-and-spoke agent with three tools is simpler,
+    cheaper, and lower-latency.</p></details>
+    <details><summary>Q2 · A research report must gather facts on 8 independent companies, then synthesize. Single or multi-agent?</summary>
+    <p class="answer"><b>Multi-agent.</b> The 8 lookups are genuinely independent, so parallel fan-out sub-agents cut
+    wall-clock, and a coordinator synthesizes. This hits the "genuinely parallel sub-tasks" trigger.</p></details>
+    <details><summary>Q3 · A stakeholder says "make it as cheap and fast as possible." How does that bias the single-vs-multi call?</summary>
+    <p class="answer">Toward <b>single agent + tools</b>. Multi-agent adds tokens and (if sequential) latency.
+    Only override that bias if a hard trigger — true parallelism or genuinely distinct roles — is present.</p></details>
+
+    <div class="pager">
+        <a href="3-6-human-in-the-loop-gates.html"><span class="k">← Prev</span>3.6 · Human-in-the-loop gates</a>
+        <a class="next" href="4-2-orchestration-patterns.html"><span class="k">Next →</span>4.2 · Orchestration patterns</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 4.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

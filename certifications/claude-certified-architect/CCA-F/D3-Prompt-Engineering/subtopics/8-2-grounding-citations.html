@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.2 Grounding in Documents &amp; Citations · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 8 · Reliability, Hallucination &amp; Iteration</div>
+    <h1>8.2 · Grounding in Documents &amp; Citations</h1>
+    <div class="tag">Answer only from the source</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Provide the source, then constrain the answer to it</h2>
+    <p><strong>Grounding</strong> means the answer is derived from documents <em>you supply</em> rather than the
+    model's training data. It's the structural cousin of 8.1: where 8.1 lowers the pressure to answer, grounding
+    <strong>gives Claude the material</strong> and then <strong>restricts it to that material</strong>. Three moves
+    compose it:</p>
+    <ul>
+        <li><strong>Provide the source documents</strong> in the prompt — ideally inside XML tags like
+        <code>&lt;documents&gt;…&lt;/documents&gt;</code> so Claude can tell context from instruction.</li>
+        <li><strong>Ask Claude to quote the passages it used</strong> and cite them per claim — making the answer
+        auditable and self-correcting.</li>
+        <li><strong>Verify claims against the source</strong> after generation: for each claim, find a supporting
+        quote; if none exists, drop the claim.</li>
+    </ul>
+
+    <div class="good">The verification loop is the powerful bit: <em>"After drafting, review each claim. For each,
+    find a direct supporting quote in the documents. If you can't, remove the claim and mark it with empty
+    <code>[]</code> brackets."</em> Claude polices its own output against the source.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The Citations capability (high level)</h2>
+    <p>Beyond prompting Claude to quote passages, the Claude API has a built-in <strong>Citations</strong> feature
+    that grounds answers structurally rather than by instruction. You set <code>citations: {enabled: true}</code>
+    on each <code>document</code> content block; the response then splits into multiple <code>text</code> blocks,
+    and cited blocks carry a <code>citations</code> array. Each citation gives you the <code>cited_text</code>, the
+    <code>document_index</code>, the <code>document_title</code>, and a location — <code>char_location</code> for
+    plain text or <code>page_location</code> (1-indexed pages) for PDFs.</p>
+
+    <div class="note">🔑 Key facts for the exam: Citations needs <strong>no beta header</strong>; it must be enabled
+    on <strong>all documents or none</strong>; and it is <strong>incompatible with structured outputs</strong>
+    (<code>output_config.format</code>) — combining them returns a 400. The model produces verifiable references to
+    exact source spans instead of you parsing quotes out of prose.</p></div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Prompted quoting vs. the Citations feature</h2>
+    <div class="mermaid">
+flowchart TD
+    D["Source documents<br/>in the request"] --> C{"How to ground?"}
+    C -->|"prompt technique"| PQ["Ask Claude to quote<br/>+ cite each claim in prose"]
+    C -->|"API feature"| CF["citations: enabled<br/>on every document block"]
+    PQ --> V["Verify each claim<br/>against a quote; retract if none"]
+    CF --> R["🟢 Response splits into text blocks;<br/>cited blocks carry cited_text +<br/>document_index + location"]
+    V --> A["🟢 Auditable, source-backed answer"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class A ok; class R ok; class V gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Grounding prompt + the Citations request shape</h2>
+    <p>First, the pure-prompt grounding pattern with a self-verification pass:</p>
+<pre><span class="cm"># Prompt-only grounding: quote, cite, and self-verify</span>
+Draft a press release for AcmeSecurity Pro using ONLY information from these briefs.
+&lt;documents&gt;{{DOCUMENTS}}&lt;/documents&gt;
+
+After drafting, review each claim in the release. For each claim, find a direct
+quote from the documents that supports it. If you cannot find a supporting quote,
+remove that claim and mark where it was with empty [] brackets.</pre>
+    <p>And the API-native Citations feature — grounding enforced by the platform, not by instructions:</p>
+<pre><span class="kw">import</span> anthropic
+client = anthropic.<span class="fn">Anthropic</span>()
+
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="cm">1024</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: [
+        {<span class="st">"type"</span>: <span class="st">"document"</span>,
+         <span class="st">"source"</span>: {<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"media_type"</span>: <span class="st">"text/plain"</span>,
+                    <span class="st">"data"</span>: policy_text},
+         <span class="st">"title"</span>: <span class="st">"Privacy Policy"</span>,
+         <span class="st">"citations"</span>: {<span class="st">"enabled"</span>: <span class="kw">True</span>}},        <span class="cm"># all docs or none</span>
+        {<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: <span class="st">"Which sections cover data retention?"</span>},
+    ]}],
+)
+
+<span class="kw">for</span> block <span class="kw">in</span> resp.content:
+    <span class="kw">if</span> block.type == <span class="st">"text"</span>:
+        <span class="fn">print</span>(block.text)
+        <span class="kw">for</span> c <span class="kw">in</span> (block.citations <span class="kw">or</span> []):
+            <span class="fn">print</span>(<span class="st">"  ↳ cited:"</span>, c.cited_text, <span class="st">"@"</span>, c.document_title)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Prompted quoting vs. the Citations feature</h2>
+    <table>
+        <tr><th></th><th>Prompt Claude to quote</th><th>Citations feature</th></tr>
+        <tr><td>Setup</td><td>Just prompt wording</td><td><code>citations: {enabled: true}</code> per document</td></tr>
+        <tr><td>Enforcement</td><td>Instruction — model may drift</td><td>Structural — returns exact spans + offsets</td></tr>
+        <tr><td>Output shape</td><td>Free prose with inline quotes</td><td>Text blocks with a <code>citations</code> array</td></tr>
+        <tr><td>Limits</td><td>None, but weaker guarantee</td><td>All-or-none; incompatible with <code>output_config.format</code></td></tr>
+    </table>
+    <div class="good">Use the Citations feature when you need machine-verifiable, click-through-to-source
+    references; use pure prompting when you just want the answer anchored and can't (or don't need to) restructure
+    the response.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Enabling <code>citations</code> on some documents but not others in one request. →
+    It's <b>all documents or none</b> — a mixed request is rejected.</div>
+    <div class="trap"><b>Trap:</b> Combining Citations with structured outputs (<code>output_config.format</code>). →
+    <b>Incompatible — returns a 400.</b> Pick one: cited spans or a JSON schema, not both in the same call.</div>
+    <div class="trap"><b>Trap:</b> Thinking "grounding" just means pasting the document in. → Providing the source
+    is necessary but not sufficient; you must also <b>restrict Claude to it</b> and ideally verify claims against
+    quotes, or it will still blend in parametric knowledge.</div>
+    <div class="trap"><b>Trap:</b> Assuming Citations requires a beta header. → It does <b>not</b> — it's GA.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A RAG answer looks right but you can't tell which retrieved chunk each sentence came from. Which capability fixes this and how?</summary>
+    <p class="answer">Enable the <b>Citations feature</b> (<code>citations: {enabled: true}</code>) on each document
+    block. The response splits into text blocks where cited blocks carry a <code>citations</code> array with
+    <code>cited_text</code>, <code>document_index/title</code>, and a char- or page-location — so every sentence
+    traces to an exact source span.</p></details>
+    <details><summary>Q2 · You need both citations and a strict JSON schema in one call. What happens?</summary>
+    <p class="answer">You can't — Citations is <b>incompatible with <code>output_config.format</code></b> and the
+    request returns a 400. Split it into two steps (cite first, then structure) or choose the one the task needs
+    most.</p></details>
+    <details><summary>Q3 · Without the Citations feature, how do you make a drafted document self-verify against its sources?</summary>
+    <p class="answer">Add a verification pass to the prompt: after drafting, have Claude find a direct supporting
+    quote for each claim and <b>remove any claim it can't support</b> (e.g. marking the gap with empty
+    <code>[]</code> brackets). This grounds and audits the output using prompting alone.</p></details>
+
+    <div class="pager">
+        <a href="8-1-reduce-hallucinations.html"><span class="k">← Back</span>8.1 · Reducing Hallucinations</a>
+        <a class="next" href="8-3-chaining-prompts.html"><span class="k">Next →</span>8.3 · Chaining Complex Prompts</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 8.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

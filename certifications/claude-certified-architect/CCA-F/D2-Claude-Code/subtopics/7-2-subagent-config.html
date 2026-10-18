@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.2 Subagent Configuration · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 7 · Subagents</div>
+    <h1>7.2 · Subagent Configuration</h1>
+    <div class="tag">name · description · tools · model</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Four frontmatter fields do the heavy lifting</h2>
+    <p>A subagent's YAML frontmatter defines its metadata and configuration. There are more optional fields, but
+    four cover almost every case — and only the first two are <strong>required</strong>.</p>
+    <table>
+        <tr><th>Field</th><th>Required</th><th>What it does</th></tr>
+        <tr><td><code>name</code></td><td><b>Yes</b></td><td>Unique identifier, lowercase letters and hyphens. This is how the subagent is invoked; the filename doesn't have to match.</td></tr>
+        <tr><td><code>description</code></td><td><b>Yes</b></td><td>States <em>when</em> Claude should delegate to this subagent. Claude reads it to decide whether to hand off the task.</td></tr>
+        <tr><td><code>tools</code></td><td>No</td><td>Allowlist of tools the subagent may use. <strong>Omit it and the subagent inherits all tools</strong> from the main conversation.</td></tr>
+        <tr><td><code>model</code></td><td>No</td><td>Which model to run on: <code>sonnet</code>, <code>opus</code>, <code>haiku</code>, <code>fable</code>, a full model ID, or <code>inherit</code>. <strong>Defaults to <code>inherit</code></strong>.</td></tr>
+    </table>
+
+    <div class="note">🔑 Minimum viable subagent = <code>name</code> + <code>description</code> + a system-prompt
+    body. Everything else refines <em>capability</em> (tools) and <em>cost/quality</em> (model).</div>
+
+    <h2><span class="chip concept">CONCEPT</span> tools: restrict or inherit; model: pick a tier or inherit</h2>
+    <p><strong>Tools.</strong> Leaving <code>tools</code> out means the subagent inherits every internal and MCP
+    tool the main conversation has. Listing tools turns it into an <em>allowlist</em> — a read-only reviewer, for
+    instance, lists <code>Read, Grep, Glob</code> and therefore <em>cannot</em> edit or write files. (A companion
+    <code>disallowedTools</code> field works as a denylist instead, removing tools from the inherited set.)</p>
+
+    <p><strong>Model.</strong> The <code>model</code> field controls which model the subagent uses. Use an alias
+    (<code>sonnet</code> / <code>opus</code> / <code>haiku</code> / <code>fable</code>), a full model ID, or
+    <code>inherit</code> to match the main conversation. If you omit it, the default <em>is</em>
+    <code>inherit</code>. Routing a verbose, mechanical task to a cheaper/faster model like Haiku is a common way
+    to control cost.</p>
+
+    <div class="good">Read-only reviewer pattern: <code>tools: Read, Grep, Glob</code> guarantees the agent can
+    analyse but never modifies files — capability enforced by config, not by hoping the prompt behaves.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> How each field is resolved</h2>
+    <div class="mermaid">
+flowchart TD
+    START["Subagent frontmatter"] --> N["name → identifier used to invoke"]
+    START --> D["description → Claude uses it to decide when to delegate"]
+    START --> T{"tools listed?"}
+    T -->|"yes"| TR["🟠 Restrict to that allowlist"]
+    T -->|"omitted"| TI["🟢 Inherit ALL tools"]
+    START --> M{"model set?"}
+    M -->|"alias / full ID"| MS["Run on that model"]
+    M -->|"omitted / inherit"| MI["🟢 Use main conversation's model"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class TI ok; class MI ok; class TR gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A fully-specified subagent</h2>
+    <p>A read-only code-improver on Sonnet: it can scan but not modify, and it runs on a fixed model regardless
+    of the session's model.</p>
+<pre><span class="cm"># file: ~/.claude/agents/code-improver.md</span>
+<span class="kw">---</span>
+<span class="kw">name:</span> code-improver
+<span class="kw">description:</span> <span class="st">Scans files and suggests improvements for readability,</span>
+  <span class="st">performance, and best practices. Use after writing or modifying code.</span>
+<span class="kw">tools:</span> <span class="st">Read, Grep, Glob</span>          <span class="cm"># allowlist → cannot Write or Edit</span>
+<span class="kw">model:</span> <span class="st">sonnet</span>                     <span class="cm"># fixed model instead of inherit</span>
+<span class="kw">---</span>
+
+You are a code improvement specialist. For each issue you find, explain
+the problem, show the current code, and provide an improved version.</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Restrict tools/model vs. inherit everything</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Explicit restriction</h4>
+            <ul><li>Enforces capability limits (e.g. read-only) at the config layer</li>
+            <li>Predictable model → predictable cost & behaviour</li>
+            <li>Smaller tool surface = tighter, more focused agent</li></ul></div>
+        <div class="con"><h4>⚠️ Inherit everything (omit fields)</h4>
+            <ul><li>Least configuration; agent is maximally capable</li>
+            <li>But no tool guardrail — it can do anything the main session can</li>
+            <li>Model tracks the session, so cost varies with your current model</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "All four fields are required." → Only <b><code>name</code> and
+    <code>description</code></b> are required. <code>tools</code> and <code>model</code> are optional.</div>
+    <div class="trap"><b>Trap:</b> "Omitting <code>tools</code> means the subagent has no tools." → The opposite:
+    omit <code>tools</code> and it <b>inherits all</b> tools. To limit it, you must list an allowlist (or use
+    <code>disallowedTools</code>).</div>
+    <div class="trap"><b>Trap:</b> "Omitting <code>model</code> defaults to Sonnet / a fixed model." → The default
+    is <b><code>inherit</code></b> — it uses the same model as the main conversation.</div>
+    <div class="trap"><b>Trap:</b> "The filename must equal the <code>name</code>." → It doesn't. Identity comes
+    from the <code>name</code> field; the filename is free-form.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Which frontmatter fields are required, and which are optional?</summary>
+    <p class="answer">Required: <code>name</code> and <code>description</code>. Optional (among others):
+    <code>tools</code> and <code>model</code>.</p></details>
+    <details><summary>Q2 · You want a subagent that can read but never write files. How?</summary>
+    <p class="answer">Set an allowlist that excludes Write/Edit, e.g. <code>tools: Read, Grep, Glob</code> (or use
+    <code>disallowedTools: Write, Edit</code>). Since <code>tools</code> is an allowlist, only the listed tools
+    are available.</p></details>
+    <details><summary>Q3 · A subagent has no <code>model</code> field. What model does it run on?</summary>
+    <p class="answer">It defaults to <code>inherit</code> — the same model as the main conversation. To pin it, set
+    <code>model:</code> to <code>sonnet</code>, <code>opus</code>, <code>haiku</code>, <code>fable</code>, or a
+    full model ID.</p></details>
+
+    <div class="pager">
+        <a href="7-1-what-are-subagents.html"><span class="k">← Back</span>7.1 · What Subagents Are</a>
+        <a class="next" href="7-3-context-isolation.html"><span class="k">Next →</span>7.3 · Context Isolation &amp; Delegation</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 7.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

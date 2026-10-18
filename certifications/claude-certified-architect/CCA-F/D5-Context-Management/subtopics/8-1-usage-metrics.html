@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.1 Usage Metrics (Tokens, Cache, Cost) · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 8 · Observability &amp; Production Ops</div>
+    <h1>8.1 · Usage Metrics (Tokens, Cache, Cost)</h1>
+    <div class="tag">Measure every call</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Every response carries a <code>usage</code> object</h2>
+    <p>You cannot manage what you don't measure. <strong>Every Messages API response returns a <code>usage</code>
+    object</strong> — non-streaming and streaming alike — and it is the ground truth for cost and cache health.
+    The four fields you must know:</p>
+
+    <table>
+        <tr><th>Field</th><th>What it counts</th><th>Relative price</th></tr>
+        <tr><td><code>input_tokens</code></td><td>Uncached prompt tokens processed at full price</td><td>1× input rate</td></tr>
+        <tr><td><code>output_tokens</code></td><td>Tokens the model generated (incl. thinking)</td><td>1× output rate</td></tr>
+        <tr><td><code>cache_creation_input_tokens</code></td><td>Tokens <em>written</em> to the cache this request</td><td>~1.25× (5m TTL) / 2× (1h TTL)</td></tr>
+        <tr><td><code>cache_read_input_tokens</code></td><td>Tokens <em>served</em> from the cache this request</td><td>~0.1× input rate</td></tr>
+    </table>
+
+    <div class="warn">⚠️ <code>input_tokens</code> is the <b>uncached remainder only</b>, not the total prompt.
+    The full prompt size = <code>input_tokens + cache_creation_input_tokens + cache_read_input_tokens</code>. If an
+    agent ran for hours but <code>input_tokens</code> shows 4K, the rest was served from cache — sum the three,
+    don't read one field.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Deriving cost and cache hit-rate</h2>
+    <p>The usage object is the raw material for the two numbers finance and SRE actually care about.</p>
+    <p><strong>Cost</strong> is a weighted sum of the four fields against the model's per-token prices — cache reads
+    at ~0.1× and cache writes at the 1.25×/2× premium, so caching only pays off after repeated reads (break-even is
+    two requests on the 5-minute TTL, three on the 1-hour TTL).</p>
+    <p><strong>Cache hit-rate</strong> tells you whether your prefix is actually being reused. Compute it as
+    <code>cache_read / (cache_read + cache_creation + input_tokens)</code> across requests. If
+    <code>cache_read_input_tokens</code> is <b>zero</b> across repeated identical-prefix requests, a silent
+    invalidator is at work — a timestamp or UUID in the system prompt, unsorted JSON, or a varying tool set.</p>
+
+    <div class="good">🔑 Log the raw <code>usage</code> object per call and aggregate downstream. Storing derived
+    cost only throws away the detail you need when prices change or you want to attribute spend by tier.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> From <code>usage</code> to the two numbers that matter</h2>
+    <div class="mermaid">
+flowchart TD
+    R["API response.usage"] --> I["input_tokens<br/>(uncached)"]
+    R --> O["output_tokens"]
+    R --> CW["cache_creation_input_tokens"]
+    R --> CR["cache_read_input_tokens"]
+    I --> COST["💰 Cost = Σ tokens × price<br/>(reads ~0.1×, writes 1.25–2×)"]
+    O --> COST
+    CW --> COST
+    CR --> COST
+    I --> HIT["📊 Hit-rate = read /<br/>(read + create + input)"]
+    CW --> HIT
+    CR --> HIT
+    HIT --> AL{"read == 0<br/>on repeat?"}
+    AL -->|"yes"| BAD["🔴 Silent invalidator<br/>audit the prefix"]
+    AL -->|"no"| OK["🟢 Cache working"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class OK ok; class COST gate; class BAD bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Read <code>usage</code>, compute cost + hit-rate</h2>
+    <p>The response object exposes all four fields directly. Streaming works too: the final message from
+    <code>stream.get_final_message()</code> carries the same <code>usage</code>.</p>
+<pre><span class="cm"># Prices per 1M tokens (Opus 4.8 example): $5 input / $25 output.</span>
+<span class="cm"># Cache read ~0.1x input; cache write ~1.25x input (5-minute TTL).</span>
+IN, OUT, C_READ, C_WRITE = <span class="st">5.0</span>, <span class="st">25.0</span>, <span class="st">0.5</span>, <span class="st">6.25</span>
+
+resp = client.messages.create(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+                              system=SYSTEM, messages=msgs)
+u = resp.usage
+
+<span class="kw">def</span> <span class="fn">cost_usd</span>(u):
+    <span class="kw">return</span> (u.input_tokens*IN + u.output_tokens*OUT
+          + u.cache_creation_input_tokens*C_WRITE
+          + u.cache_read_input_tokens*C_READ) / <span class="st">1_000_000</span>
+
+prompt_total = u.input_tokens + u.cache_creation_input_tokens + u.cache_read_input_tokens
+hit_rate = u.cache_read_input_tokens / prompt_total <span class="kw">if</span> prompt_total <span class="kw">else</span> <span class="st">0</span>
+
+<span class="fn">emit_metric</span>(<span class="st">"llm.cost_usd"</span>, <span class="fn">cost_usd</span>(u))
+<span class="fn">emit_metric</span>(<span class="st">"llm.cache_hit_rate"</span>, hit_rate)
+<span class="fn">emit_metric</span>(<span class="st">"llm.output_tokens"</span>, u.output_tokens)  <span class="cm"># feeds OTPM tracking (8.3)</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Log raw usage vs. log derived cost</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Log the raw usage object</h4>
+            <ul><li>Survives price changes — recompute cost anytime</li>
+            <li>Cache hit-rate and token throughput both derivable</li>
+            <li>Attribute spend by tenant, route, or model later</li></ul></div>
+        <div class="con"><h4>⚠️ Log only a computed dollar figure</h4>
+            <ul><li>Smaller records, one number to chart</li>
+            <li>But: hard-codes today's prices into history</li>
+            <li>Can't reconstruct hit-rate or ITPM/OTPM after the fact</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Treating <code>input_tokens</code> as the whole prompt. → It's the
+    <b>uncached remainder</b>. Total = <code>input_tokens + cache_creation_input_tokens +
+    cache_read_input_tokens</code>.</div>
+    <div class="trap"><b>Trap:</b> Assuming the field names. → It's <code>cache_creation_input_tokens</code> and
+    <code>cache_read_input_tokens</code> — not <code>cache_write</code>, <code>cached_tokens</code>, or
+    <code>prompt_tokens</code>. Don't invent usage fields.</div>
+    <div class="trap"><b>Trap:</b> "Caching is always cheaper." → A cache <b>write</b> costs 1.25× (5m) or 2× (1h).
+    It only pays off once you get enough reads — break-even is 2 requests on 5m TTL, 3 on 1h.</div>
+    <div class="trap"><b>Trap:</b> "Streaming responses don't report usage." → They do. Usage arrives on
+    <code>message_start</code> (input) and cumulatively on <code>message_delta</code> (output); the final message
+    carries the complete object.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Name the four token fields on the <code>usage</code> object.</summary>
+    <p class="answer"><code>input_tokens</code>, <code>output_tokens</code>,
+    <code>cache_creation_input_tokens</code> (tokens written to cache), and <code>cache_read_input_tokens</code>
+    (tokens served from cache). The two cache fields are how you compute cache hit-rate.</p></details>
+    <details><summary>Q2 · <code>cache_read_input_tokens</code> is 0 on every repeated request. What's wrong?</summary>
+    <p class="answer">A <b>silent cache invalidator</b> is changing the prefix each time — a
+    <code>datetime.now()</code> or UUID in the system prompt, unsorted <code>json.dumps()</code>, or a tool set
+    that varies per request. Diff the rendered prompt bytes between two requests to find it.</p></details>
+    <details><summary>Q3 · How do you compute total prompt size from the usage object?</summary>
+    <p class="answer">Sum the three input-side fields:
+    <code>input_tokens + cache_creation_input_tokens + cache_read_input_tokens</code>. Reading
+    <code>input_tokens</code> alone undercounts because it excludes everything served from or written to cache.</p></details>
+
+    <div class="pager">
+        <a href="7-5-caching-batch-economics.html"><span class="k">← Back</span>7.5 · Caching + Batch</a>
+        <a class="next" href="8-2-logging-tracing.html"><span class="k">Next →</span>8.2 · Logging &amp; Tracing</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 8.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

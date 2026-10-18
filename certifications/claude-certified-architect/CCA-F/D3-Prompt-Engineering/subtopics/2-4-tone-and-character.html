@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.4 Tone, Character &amp; Staying in Character · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 2 · Roles &amp; System Prompts</div>
+    <h1>2.4 · Tone, Character &amp; Staying in Character</h1>
+    <div class="tag">Consistent voice across a conversation</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The system prompt is the anchor for voice</h2>
+    <p>Because <code>system</code> is resent on every request and carries standing authority, it's the right place
+    to <strong>define character once and let it hold across the whole conversation</strong>. Spell out the voice
+    explicitly: register (formal/casual), verbosity (terse/thorough), stance (opinionated/neutral), and any hard
+    "never do this" rules. A concrete character description in <code>system</code> is far more durable than tone hints
+    scattered in user turns.</p>
+
+    <div class="good">Be explicit and concrete. "Warm, encouraging, uses plain language, never condescending, keeps
+    replies under 120 words" steers voice much harder than "be friendly." Positive examples of the desired voice
+    beat abstract adjectives.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Why character can drift, and how to hold it</h2>
+    <p>Over a long chat, the <em>weight</em> of the original persona shrinks as user turns, tool results, and data
+    pile up after it. The model attends to the whole growing context, so a voice set in one line at the top can get
+    diluted. Techniques to keep Claude in character:</p>
+    <ul>
+        <li><strong>Reinforce in <code>system</code>, not by nagging.</strong> Keep the character definition in the
+        system prompt where it stays present every turn — don't rely on a single early user message.</li>
+        <li><strong>Use consistent framing.</strong> Refer to the persona the same way throughout; don't switch
+        between "the tutor" and "the assistant."</li>
+        <li><strong>Re-anchor long conversations.</strong> For very long chats, re-inject the key voice reminders
+        into a later user turn (or a mid-conversation operator instruction), rather than editing the top-level
+        system prompt (which would break caching).</li>
+        <li><strong>Give a few in-voice examples.</strong> One or two short exemplars of the character speaking
+        lock the register better than adjectives (this is the few-shot idea, expanded in Cluster 3).</li>
+        <li><strong>Name what breaks character.</strong> Explicit "don't" rules ("never break the fourth wall",
+        "never mention you are an AI unless asked") prevent common slips.</li>
+    </ul>
+
+    <div class="warn">Don't try to hold character by re-editing the top-level <code>system</code> prompt mid-chat —
+    that changes the cached prefix and re-processes the whole history uncached. Re-anchor via a later user turn or a
+    mid-conversation system message instead.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Anchoring &amp; re-anchoring voice</h2>
+    <div class="mermaid">
+flowchart TD
+    SYS["system: explicit character<br/>register · verbosity · 'never' rules"] --> T1["Turn 1: in character"]
+    T1 --> T2["Turn 2–N: data &amp; tools pile up"]
+    T2 --> DRIFT{"Voice diluted<br/>in long chat?"}
+    DRIFT -->|"no"| OK["🟢 Stays in character<br/>(system still present each turn)"]
+    DRIFT -->|"yes"| RE["🟠 Re-anchor in a LATER user turn<br/>(not by editing system)"]
+    RE --> OK
+    classDef sys fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef re fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class SYS,OK sys; class DRIFT,RE re;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A durable character prompt + a re-anchor</h2>
+    <p>Character defined once in <code>system</code>; a lightweight re-anchor injected later in the conversation
+    (a user-turn reminder) without touching the cached system prefix.</p>
+<pre>SYSTEM = (
+    <span class="st">"You are 'Sol', a calm astronomy guide for curious kids. "</span>
+    <span class="st">"Voice: warm, plain language, one idea per sentence, &lt;100 words. "</span>
+    <span class="st">"Always end with a short wonder-question. "</span>
+    <span class="st">"Never use jargon without explaining it; never say you are an AI."</span>
+)
+
+messages = [ ... long conversation ... ]
+
+<span class="cm"># Re-anchor voice in a LATER user turn — keeps the cached system prefix intact</span>
+messages.append({
+    <span class="st">"role"</span>: <span class="st">"user"</span>,
+    <span class="st">"content"</span>: <span class="st">"(Staying as Sol — warm, &lt;100 words, end with a wonder-question.)\n"</span>
+               <span class="st">"Why is the sky blue?"</span>,
+})
+
+client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    system=SYSTEM, messages=messages,
+)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Strong locked character vs. flexibility</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Tightly specified character</h4>
+            <ul><li>Consistent brand voice across turns &amp; sessions</li>
+            <li>Fewer embarrassing tone slips</li>
+            <li>Predictable UX</li></ul></div>
+        <div class="con"><h4>⚠️ Over-constrained character</h4>
+            <ul><li>Can feel rigid or repetitive</li>
+            <li>May resist legitimately different registers (e.g. an urgent safety note)</li>
+            <li>More prompt to maintain</li></ul></div>
+    </div>
+    <div class="note">Balance: lock the <em>voice</em>, but allow escape hatches for cases that need a different
+    register ("drop the playful tone for safety warnings").</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Setting the character in the first <i>user</i> message only. → It fades as the
+    chat grows. Put the character in <code>system</code> so it's present on every turn.</div>
+    <div class="trap"><b>Trap:</b> Re-editing the top-level system prompt each turn to reinforce voice. → That
+    <b>invalidates the cached prefix</b>. Re-anchor via a later user turn or a mid-conversation system message.</div>
+    <div class="trap"><b>Trap:</b> Vague tone words ("be nice", "be professional"). → Specify register, verbosity,
+    and explicit "never" rules; add an in-voice example. Concreteness holds character; adjectives don't.</div>
+    <div class="trap"><b>Trap:</b> Assuming character never drifts. → In long conversations the persona's weight
+    shrinks against accumulating context. Plan to <b>re-anchor</b>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Where should a persistent character be defined, and why there?</summary>
+    <p class="answer">In the <code>system</code> prompt — it's resent on every request and carries standing
+    authority, so the voice stays present across the whole conversation instead of fading like a one-off user
+    message.</p></details>
+    <details><summary>Q2 · A long chat is drifting out of character. What's the right fix?</summary>
+    <p class="answer">Re-anchor by injecting a short voice reminder into a <b>later user turn</b> (or a
+    mid-conversation system message) — <b>not</b> by editing the top-level system prompt, which would break the
+    cached prefix.</p></details>
+    <details><summary>Q3 · Why do concrete voice rules beat adjectives like "friendly"?</summary>
+    <p class="answer">Concrete rules (register, length caps, explicit "never" clauses, a short in-voice example)
+    give the model something specific to match, so the character is reproducible. "Friendly" is too vague to steer
+    consistently.</p></details>
+
+    <div class="pager">
+        <a href="2-3-system-vs-user.html"><span class="k">← Back</span>2.3 · System vs User</a>
+        <a class="next" href="2-5-prompt-templates-variables.html"><span class="k">Next →</span>2.5 · Prompt Templates &amp; Variables</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 2.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

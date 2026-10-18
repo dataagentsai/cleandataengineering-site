@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.5 refusal &amp; stop_details · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 2 · Stop Reasons</div>
+    <h1>2.5 · <code>refusal</code> &amp; <code>stop_details</code></h1>
+    <div class="tag">A 200 that declines — and may have no content</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A refusal is a success-status decline</h2>
+    <p>When a safety classifier or the model itself declines, the API returns <strong>HTTP 200</strong> with
+    <code>stop_reason == "refusal"</code>. It is <em>not</em> an HTTP error — your <code>try/except</code> around the
+    request won't catch it. You must branch on <code>stop_reason</code>. Critically, the response
+    <strong>content</strong> may be:</p>
+    <ul>
+        <li><strong>Empty</strong> — the refusal happened <em>before</em> any output. This is <em>not billed</em> for output.</li>
+        <li><strong>Partial</strong> — the refusal happened <em>mid-stream</em>. <strong>Discard</strong> the partial content; it's not a usable answer.</li>
+    </ul>
+    <p>Because content can be empty, <strong>reading <code>content[0]</code> without checking <code>stop_reason</code>
+    first will throw an index error.</strong> Inspect <code>stop_details.category</code> to learn <em>why</em> it declined.</p>
+
+    <div class="note">🔑 Order of operations: (1) check <code>stop_reason == "refusal"</code>; (2) read
+    <code>stop_details.category</code>; (3) only then, if content exists, read it — and if it was mid-stream,
+    discard the partial.</div>
+
+    <table>
+        <tr><th>Fact</th><th>Detail</th></tr>
+        <tr><td>HTTP status</td><td><strong>200</strong> — not an exception; branch on <code>stop_reason</code>.</td></tr>
+        <tr><td>Content (pre-output)</td><td><strong>Empty</strong>, <em>not billed</em> for output.</td></tr>
+        <tr><td>Content (mid-stream)</td><td><strong>Partial</strong> — <em>discard</em> it.</td></tr>
+        <tr><td>Why it declined</td><td>Inspect <code>stop_details.category</code>.</td></tr>
+        <tr><td>Danger</td><td>Reading <code>content[0]</code> first → <code>IndexError</code> on empty content.</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The refusal-safe read path</h2>
+    <div class="mermaid">
+flowchart TD
+    A([response received · HTTP 200]) --> B{stop_reason == refusal?}
+    B -->|No| N["read content normally<br/>(other branches, 2.1)"]
+    B -->|Yes| C["read stop_details.category"]
+    C --> D{content empty?}
+    D -->|Yes| E["🔴 nothing to read<br/>(pre-output, not billed)"]
+    D -->|No| F["⚠️ mid-stream partial<br/>DISCARD it"]
+    E --> G["report decline · do NOT index content[0]"]
+    F --> G
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef warn fill:#fff3cd,stroke:#ffc107,color:#856404;
+    class N ok; class E,G bad; class F warn;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A refusal-safe read</h2>
+    <p>Branch on <code>stop_reason</code> <strong>before</strong> touching <code>content[0]</code>.</p>
+<pre><span class="cm"># HTTP 200 even on refusal — no exception is raised. Branch first.</span>
+resp = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    messages=messages,
+)
+
+<span class="kw">if</span> resp.stop_reason == <span class="st">"refusal"</span>:
+    <span class="cm"># Learn WHY before reading any content.</span>
+    category = resp.stop_details.category      <span class="cm"># e.g. inspect the reason</span>
+    log.warning(<span class="st">f"declined: {category}"</span>)
+    <span class="cm"># content may be EMPTY (pre-output) or PARTIAL (mid-stream) → don't trust it.</span>
+    <span class="kw">return</span> {<span class="st">"refused"</span>: True, <span class="st">"category"</span>: category}   <span class="cm"># do NOT read content[0]</span>
+
+<span class="cm"># Safe only now: stop_reason is not refusal, content is present.</span>
+text = resp.content[<span class="st">0</span>].text
+<span class="kw">return</span> {<span class="st">"refused"</span>: False, <span class="st">"text"</span>: text}</pre>
+
+    <div class="bad">Anti-pattern: <code>text = resp.content[0].text</code> as the <em>first</em> line after the call.
+    On a pre-output refusal, <code>content</code> is empty and this raises <code>IndexError</code>.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Expecting a refusal to be an HTTP error. → It's <b>HTTP 200</b> with
+    <code>stop_reason == "refusal"</code>. Your <code>except</code> block won't catch it; you must branch on the field.</div>
+    <div class="trap"><b>Trap:</b> Reading <code>content[0]</code> before checking <code>stop_reason</code>. → On a
+    pre-output refusal, content is <b>empty</b> → <code>IndexError</code>. Always branch first.</div>
+    <div class="trap"><b>Trap:</b> Using the partial text from a mid-stream refusal. → <b>Discard</b> it. It's not a
+    valid answer, and it can be misleading.</div>
+    <div class="trap"><b>Trap:</b> Ignoring <code>stop_details.category</code>. → That field tells you <em>why</em> it
+    declined; it's what you inspect to decide how to respond or reroute.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Your service throws IndexError on some requests but the HTTP status was 200. Cause?</summary>
+    <p class="answer">A <b>refusal</b>. On a pre-output refusal the content is <b>empty</b>, so reading
+    <code>content[0]</code> before checking <code>stop_reason</code> throws <code>IndexError</code>. Branch on
+    <code>stop_reason == "refusal"</code> first.</p></details>
+    <details><summary>Q2 · A refusal arrives with some partial text already streamed. Do you show it to the user?</summary>
+    <p class="answer">No — <b>discard</b> the partial content. It isn't a usable answer. Report the decline (optionally
+    using <code>stop_details.category</code>) instead.</p></details>
+    <details><summary>Q3 · Where do you look to learn WHY the model refused?</summary>
+    <p class="answer"><code>stop_details.category</code>. Check it before (and instead of) trusting
+    <code>content</code>, which may be empty or partial.</p></details>
+
+    <div class="pager">
+        <a href="2-4-pause-turn-server-tools.html"><span class="k">← Prev</span>2.4 · pause_turn &amp; server tools</a>
+        <a class="next" href="2-6-stop-sequence.html"><span class="k">Next →</span>2.6 · stop_sequence &amp; custom protocols</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 2.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

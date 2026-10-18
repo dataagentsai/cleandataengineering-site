@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.1 Why XML Tags Reduce Ambiguity · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 4 · Structure with XML Tags</div>
+    <h1>4.1 · Why XML Tags Reduce Ambiguity</h1>
+    <div class="tag">Clear boundaries for Claude</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Tags give each part of the prompt a boundary</h2>
+    <p>When a prompt mixes <strong>instructions, context, examples, and variable input</strong> as one flat blob
+    of text, Claude has to <em>guess</em> where one part ends and the next begins. XML tags remove the guessing:
+    wrapping each kind of content in its own tag — e.g. <code>&lt;instructions&gt;</code>,
+    <code>&lt;context&gt;</code>, <code>&lt;input&gt;</code> — gives Claude <strong>unambiguous section
+    boundaries</strong>. The official guidance is direct: <em>"XML tags help Claude parse complex prompts
+    unambiguously, especially when your prompt mixes instructions, context, examples, and variable inputs.
+    Wrapping each type of content in its own tag reduces misinterpretation."</em></p>
+
+    <p>Three concrete wins come from the boundaries:</p>
+    <table>
+        <tr><th>Benefit</th><th>What it prevents</th></tr>
+        <tr><td><strong>Unambiguous boundaries</strong></td><td>Claude no longer confuses where the document ends and your question starts.</td></tr>
+        <tr><td><strong>Parseable structure</strong></td><td>Both Claude and <em>your</em> code can locate a section by tag name — easy to assemble, easy to post-process.</td></tr>
+        <tr><td><strong>Fewer misread instructions</strong></td><td>A command buried next to pasted data can't be skimmed over or mistaken for part of that data.</td></tr>
+    </table>
+
+    <div class="bad">Unstructured: <code>Summarize this. Contact us at 5pm for the Q3 review. The board meets Tuesday…</code>
+    — is "Contact us at 5pm" an instruction to Claude, or part of the text being summarized? Ambiguous.</div>
+    <div class="good">Structured: the text to summarize sits inside <code>&lt;document&gt;…&lt;/document&gt;</code> and the
+    command sits inside <code>&lt;instructions&gt;Summarize the document.&lt;/instructions&gt;</code>. No overlap,
+    no guessing.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> There are no reserved or "magic" tag names</h2>
+    <p>A common misconception: that Claude was trained on a fixed list of official tags. It was not. <strong>There
+    are no special, reserved, or canonical XML tag names</strong> — <code>&lt;document&gt;</code> is not a keyword
+    and <code>&lt;my_stuff&gt;</code> is not "wrong." What actually matters is that your tag names are
+    <strong>descriptive</strong> (they make sense for the content they wrap) and used <strong>consistently</strong>
+    across the prompt. <code>&lt;instructions&gt;</code> works because it reads like what it holds, not because
+    it's on an approved list.</p>
+
+    <div class="note">🔑 The power is in the <em>consistency and clarity</em> of your tags, not in any specific
+    string. Pick sensible names, then reuse them everywhere — including when you refer back to them in your
+    instructions (covered in 4.2 and 4.4).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Flat blob vs. tagged prompt</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Prompt =<br/>instructions + data + examples"] --> Q{"How is it delimited?"}
+    Q -->|"one flat blob of text"| BLUR["🔴 Claude guesses boundaries<br/>data read as commands<br/>instructions skimmed over"]
+    Q -->|"each part in its own XML tag"| CLEAR["🟢 Unambiguous boundaries<br/>parseable by Claude & your code<br/>instructions can't be misread"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class CLEAR ok; class BLUR bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Same task, before → after</h2>
+    <p>The BAD version leaves boundaries to chance; the GOOD version names every part. Note the tag names are
+    ordinary, descriptive words — nothing reserved.</p>
+<pre><span class="cm"># ❌ BAD — flat blob: where does the data end and the instruction begin?</span>
+Here is a customer review: The app crashes on launch and support never replied.
+Classify the sentiment and also tell me to escalate if it is negative.
+
+<span class="cm"># ✅ GOOD — tagged: boundaries are explicit, instruction can't be misread as data</span>
+&lt;review&gt;
+The app crashes on launch and support never replied.
+&lt;/review&gt;
+
+&lt;instructions&gt;
+Classify the sentiment of the text in &lt;review&gt; as positive, neutral, or negative.
+If it is negative, add a line that says ESCALATE.
+&lt;/instructions&gt;</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> When tags earn their keep</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Use XML tags when…</h4>
+            <ul><li>The prompt mixes instructions, context, examples, and pasted input</li>
+            <li>You inject variable/user data into a template</li>
+            <li>You want to reliably post-process a named section of the output</li>
+            <li>The task is multi-document or long-context (4.5)</li></ul></div>
+        <div class="con"><h4>⚠️ Don't over-tag when…</h4>
+            <ul><li>The prompt is a single short instruction — tags add noise</li>
+            <li>You invent a new tag name for every sentence — inconsistency hurts more than it helps</li>
+            <li>Tags aren't closed or nested cleanly — malformed structure reintroduces ambiguity</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb: reach for tags the moment two <em>different kinds</em> of content share the
+    same prompt. One instruction alone rarely needs them.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Claude has a fixed set of official XML tags you must use." → False. <b>No tag
+    names are reserved.</b> Descriptiveness and consistency matter — not the specific string.</div>
+    <div class="trap"><b>Trap:</b> "XML tags are for machine-readable output only." → Their first job is
+    disambiguating the <b>input</b>: separating instructions from data so Claude parses the prompt correctly.</div>
+    <div class="trap"><b>Trap:</b> "More tags always means a better prompt." → Over-tagging a trivial prompt adds
+    noise. Use tags where content types would otherwise blur together.</div>
+    <div class="trap"><b>Trap:</b> Confusing XML tags with the API's <code>tool_use</code> / function-calling
+    schema. → XML tags are plain text <em>inside</em> your prompt content; they are not an API parameter.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Give three reasons XML tags reduce ambiguity in a prompt.</summary>
+    <p class="answer">(1) <b>Unambiguous boundaries</b> — Claude knows where each section starts and ends;
+    (2) <b>parseable structure</b> — Claude and your own code can locate content by tag name; (3) <b>fewer misread
+    instructions</b> — commands can't be mistaken for the surrounding data.</p></details>
+    <details><summary>Q2 · A teammate says "&lt;document&gt; is the correct tag, &lt;doc&gt; is wrong." Right?</summary>
+    <p class="answer">No. There are <b>no reserved or canonical tag names</b>. Either works. What matters is that the
+    name is descriptive and used <b>consistently</b> throughout the prompt.</p></details>
+    <details><summary>Q3 · When is tagging overkill?</summary>
+    <p class="answer">For a single short instruction with no pasted data, examples, or variable input — there's
+    nothing to disambiguate, so tags only add noise. Tags pay off once two different kinds of content share the
+    prompt.</p></details>
+
+    <div class="pager">
+        <a href="3-5-example-pitfalls.html"><span class="k">← Back</span>3.5 · Example Pitfalls</a>
+        <a class="next" href="4-2-common-tag-patterns.html"><span class="k">Next →</span>4.2 · Common Tag Patterns</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 4.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.1 Building a Server (SDK) · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design & MCP</a> › Cluster 7 · Building &amp; Consuming MCP Servers</div>
+    <h1>7.1 · Building a Server (SDK)</h1>
+    <div class="tag">Define tools, resources, prompts</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> An MCP server exposes three primitives over a transport</h2>
+    <p>A <strong>Model Context Protocol server</strong> is a small program that advertises capabilities to any MCP
+    <em>host</em> (Claude Desktop, Claude Code, the Messages API connector, your own client). You don't write a
+    protocol parser — the official SDKs handle the JSON-RPC wire format. You register handlers and pick a transport.
+    Per the spec, a server can expose three kinds of capability:</p>
+
+    <table>
+        <tr><th>Primitive</th><th>Who controls it</th><th>What it is</th><th>SDK registration (Python FastMCP)</th></tr>
+        <tr><td><strong>Tools</strong></td><td>Model-controlled</td><td>Functions the LLM can call (with host/user approval) — side effects, lookups</td><td><code>@mcp.tool()</code></td></tr>
+        <tr><td><strong>Resources</strong></td><td>Application-controlled</td><td>File-like data a client can read (API responses, file contents) addressed by URI</td><td><code>@mcp.resource(uri)</code></td></tr>
+        <tr><td><strong>Prompts</strong></td><td>User-controlled</td><td>Pre-written templates the user invokes to accomplish a task</td><td><code>@mcp.prompt()</code></td></tr>
+    </table>
+
+    <div class="note">🔑 <strong>Tools</strong> are the primitive Claude decides to call on its own; <strong>resources</strong>
+    are pulled in by the client/user (e.g. an <code>@</code>-mention); <strong>prompts</strong> are slash-command
+    templates the user triggers. Get the primitive right and the host wires it into the correct UX.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> FastMCP infers the schema; you pick the transport</h2>
+    <p>The Python <code>mcp</code> package ships <strong>FastMCP</strong>, which reads your function's
+    <strong>type hints and docstring</strong> to auto-generate the tool's name, description, and JSON
+    <code>input_schema</code> — no hand-written schema. The TypeScript SDK's <code>McpServer.registerTool</code>
+    takes a Zod <code>inputSchema</code> instead. Either way, the same server code runs over two transports:</p>
+    <div class="good"><strong>stdio</strong> — the server runs as a local child process; the host speaks JSON-RPC over
+    stdin/stdout. Best for local tools with filesystem/system access. <strong>Streamable HTTP</strong> — the server is
+    a remote HTTP endpoint; required for anything the Messages API connector (7.2) or a hosted client reaches by URL.</div>
+    <div class="warn">⚠️ On <strong>stdio</strong>, <code>stdout</code> is the JSON-RPC channel — never
+    <code>print()</code> to it. Log to <code>stderr</code> only, or you corrupt the protocol stream (see 7.5).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Register handlers → run on a transport → host calls them</h2>
+    <div class="mermaid">
+flowchart TD
+    DEF["Your server code"] --> T["@mcp.tool()<br/>model-controlled action"]
+    DEF --> R["@mcp.resource(uri)<br/>readable data"]
+    DEF --> P["@mcp.prompt()<br/>template"]
+    T --> RUN["mcp.run(transport=...)"]
+    R --> RUN
+    P --> RUN
+    RUN -->|"stdio: local child proc"| HOST1["🟢 Claude Desktop / Claude Code"]
+    RUN -->|"Streamable HTTP: remote URL"| HOST2["🔵 Messages API connector / hosted client"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef net fill:#cce5ff,stroke:#4a90d9,color:#0b3d66;
+    class HOST1 ok; class HOST2 net;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A minimal server: Python FastMCP and TypeScript</h2>
+    <p>Same server, two SDKs. FastMCP infers the schema from hints + docstring; the TS SDK uses an explicit Zod schema.
+    Both run over stdio for local use.</p>
+<pre><span class="cm"># Python — pip install "mcp[cli]"</span>
+<span class="kw">from</span> mcp.server.fastmcp <span class="kw">import</span> FastMCP
+
+mcp = <span class="fn">FastMCP</span>(<span class="st">"weather"</span>)
+
+<span class="cm"># TOOL — model-controlled; schema inferred from type hints + docstring</span>
+<span class="kw">@mcp.tool</span>()
+<span class="kw">async def</span> <span class="fn">get_forecast</span>(latitude: <span class="kw">float</span>, longitude: <span class="kw">float</span>) -&gt; <span class="kw">str</span>:
+    <span class="st">"""Get the weather forecast for a location."""</span>
+    <span class="kw">return</span> <span class="kw">await</span> <span class="fn">fetch_forecast</span>(latitude, longitude)
+
+<span class="cm"># RESOURCE — application/user-controlled, addressed by URI</span>
+<span class="kw">@mcp.resource</span>(<span class="st">"config://units"</span>)
+<span class="kw">def</span> <span class="fn">units</span>() -&gt; <span class="kw">str</span>:
+    <span class="kw">return</span> <span class="st">"imperial"</span>
+
+<span class="cm"># PROMPT — user-controlled template</span>
+<span class="kw">@mcp.prompt</span>()
+<span class="kw">def</span> <span class="fn">trip_brief</span>(city: <span class="kw">str</span>) -&gt; <span class="kw">str</span>:
+    <span class="kw">return</span> <span class="st">f"Summarize the weather outlook for {city} for a weekend trip."</span>
+
+<span class="kw">if</span> __name__ == <span class="st">"__main__"</span>:
+    mcp.<span class="fn">run</span>(transport=<span class="st">"stdio"</span>)   <span class="cm"># or a Streamable HTTP transport for remote</span></pre>
+<pre><span class="cm">// TypeScript — npm install @modelcontextprotocol/sdk zod</span>
+<span class="kw">import</span> { McpServer } <span class="kw">from</span> <span class="st">"@modelcontextprotocol/sdk/server/mcp.js"</span>;
+<span class="kw">import</span> { StdioServerTransport } <span class="kw">from</span> <span class="st">"@modelcontextprotocol/sdk/server/stdio.js"</span>;
+<span class="kw">import</span> { z } <span class="kw">from</span> <span class="st">"zod"</span>;
+
+<span class="kw">const</span> server = <span class="kw">new</span> <span class="fn">McpServer</span>({ name: <span class="st">"weather"</span>, version: <span class="st">"1.0.0"</span> });
+
+server.<span class="fn">registerTool</span>(
+  <span class="st">"get_forecast"</span>,
+  {
+    description: <span class="st">"Get the weather forecast for a location"</span>,
+    inputSchema: {
+      latitude:  z.<span class="fn">number</span>().<span class="fn">min</span>(-90).<span class="fn">max</span>(90),
+      longitude: z.<span class="fn">number</span>().<span class="fn">min</span>(-180).<span class="fn">max</span>(180),
+    },
+  },
+  <span class="kw">async</span> ({ latitude, longitude }) =&gt; ({
+    content: [{ type: <span class="st">"text"</span>, text: <span class="kw">await</span> <span class="fn">fetchForecast</span>(latitude, longitude) }],
+  }),
+);
+
+<span class="kw">const</span> transport = <span class="kw">new</span> <span class="fn">StdioServerTransport</span>();
+<span class="kw">await</span> server.<span class="fn">connect</span>(transport);</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Promoting an action to a tool vs. leaving it as a resource/prompt</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Expose as a tool</h4>
+            <ul><li>The <em>model</em> can invoke it autonomously mid-task</li>
+            <li>Auto-schema means less boilerplate to maintain</li>
+            <li>Host can gate/approve each call individually</li></ul></div>
+        <div class="con"><h4>⚠️ Expose as a resource or prompt</h4>
+            <ul><li>Resource: read-only, pulled in by user/app — not something the model triggers on its own</li>
+            <li>Prompt: a user-launched template, not an autonomous capability</li>
+            <li>Wrong choice → the capability shows up in the wrong place in the host UI</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb: if the <em>model</em> should decide when to run it, it's a <strong>tool</strong>.
+    If the <em>user</em> supplies context or launches a workflow, it's a <strong>resource</strong> or
+    <strong>prompt</strong>.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "MCP servers only expose tools." → The spec defines <b>three</b> primitives: tools,
+    resources, and prompts. Tools are model-controlled; resources are app/user-controlled data; prompts are
+    user-launched templates.</div>
+    <div class="trap"><b>Trap:</b> Writing the JSON <code>input_schema</code> by hand in FastMCP. → FastMCP
+    <b>infers</b> the schema from Python type hints and the docstring. The docstring becomes the tool description, so
+    write it for the model (2.1).</div>
+    <div class="trap"><b>Trap:</b> <code>print()</code>-debugging a stdio server. → On stdio, <code>stdout</code> is the
+    JSON-RPC transport. Any stray write to stdout breaks the protocol. Log to <b>stderr</b>.</div>
+    <div class="trap"><b>Trap:</b> Assuming one transport fits everywhere. → <b>stdio</b> is for local child-process
+    servers; a server reached by the Messages API connector (7.2) or a hosted client must run over
+    <b>Streamable HTTP</b> at a public URL.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What are the three primitives an MCP server can expose, and who controls each?</summary>
+    <p class="answer"><b>Tools</b> (model-controlled functions the LLM calls), <b>resources</b> (application/user-controlled
+    file-like data read by URI), and <b>prompts</b> (user-launched templates). The distinction determines how the host
+    surfaces each capability.</p></details>
+    <details><summary>Q2 · In FastMCP, where does a tool's input schema and description come from?</summary>
+    <p class="answer">FastMCP generates them automatically from the function's <b>type hints</b> (the schema) and its
+    <b>docstring</b> (the description). You don't hand-write JSON schema — which is why the docstring quality matters.</p></details>
+    <details><summary>Q3 · You need a server the Messages API connector can call. Which transport, and why not stdio?</summary>
+    <p class="answer"><b>Streamable HTTP</b> at a public HTTPS URL. stdio only works for a local child process the host
+    spawns; a remote/hosted consumer reaches the server by URL over HTTP, and the connector cannot launch a local
+    stdio process (7.2).</p></details>
+
+    <div class="pager">
+        <a href="6-5-mcp-roots-elicitation.html"><span class="k">← Back</span>6.5 · Roots &amp; Elicitation</a>
+        <a class="next" href="7-2-mcp-connector-api.html"><span class="k">Next →</span>7.2 · The Claude API MCP Connector</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 7.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

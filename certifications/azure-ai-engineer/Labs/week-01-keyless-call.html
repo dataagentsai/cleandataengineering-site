@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Week 1 lab · AI-103</title><link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@500;600&display=swap"><link rel="stylesheet" href="../assets/site.css"></head>
+<body><div class="bar"><div class="bar-in"><a class="brand" href="../index.html">Azure AI Engineer · AI-103</a><ul class="nav"><li><a href="../index.html">Home</a></li><li><a href="../AI-103/index.html">Study guide</a></li><li><a href="../D1-Plan-Manage/index.html">D1</a></li><li><a href="../D2-GenAI-Agents/index.html">D2</a></li><li><a href="../D3-Vision/index.html">D3</a></li><li><a href="../D4-Text/index.html">D4</a></li><li><a href="../D5-Extraction/index.html">D5</a></li><li><a href="../Choose-Model/index.html">Choose a model</a></li><li><a href="../Agent-TCO/index.html">Agent TCO</a></li><li><a href="../Mock-Exam-1/index.html">Mock #1</a></li></ul></div></div>
+<main><div class="eyebrow"><b>Lab · Week 1</b>Plan and manage · Foundry foundations</div>
+<h1>A keyless call to a <span>Foundry model</span></h1>
+<p class="lede">Create a project, deploy a small model, and call it from Python with no API key. <em>Then break it four ways, the ways the exam asks about.</em></p>
+<div class="tiles">
+<div class="tile"><span class="lv">Time</span><b>45 minutes</b><p>Portal setup, one Python script, four break-it exercises.</p></div>
+<div class="tile"><span class="lv">Cost</span><b>A few cents</b><p>Pay-per-token on a small model. Delete the resource group afterwards.</p></div>
+<div class="tile"><span class="lv">Subscription</span><b>Pay-as-you-go needed</b><p>Free-trial subscriptions have zero model quota. Upgrading to pay-as-you-go unlocks it and keeps the free credit.</p></div>
+<div class="tile"><span class="lv">No subscription?</span><b>Read along</b><p>Every step shows the expected result, so you can follow without running it.</p></div>
+</div>
+<h2>Steps</h2>
+<div class="box"><ul>
+<li><b>1.</b> In the Foundry portal (ai.azure.com), create a project. This creates a Foundry resource with the project inside it.</li>
+<li><b>2.</b> Deploy <span class="k">gpt-5-mini</span> with the <b>Global Standard</b> deployment type.</li>
+<li><b>3.</b> In the project's Access control (IAM), assign yourself <b>Foundry User</b>. Note the least-privilege choice: not Owner, not Azure AI Developer.</li>
+<li><b>4.</b> Copy the project endpoint: <span class="k">https://&lt;resource&gt;.services.ai.azure.com/api/projects/&lt;project&gt;</span>.</li>
+<li><b>5.</b> On your machine: <span class="k">pip install "azure-ai-projects&gt;=2.3" azure-identity openai</span>, then <span class="k">az login</span>, then set <span class="k">PROJECT_ENDPOINT</span> and <span class="k">MODEL_DEPLOYMENT</span>.</li>
+<li><b>6.</b> Run the script below.</li></ul></div>
+<pre class="code">&quot;&quot;&quot;Week 1 skeleton: a keyless call to a model in a Foundry project.
+
+Setup (once):
+    python -m venv .venv &amp;&amp; source .venv/bin/activate
+    pip install &quot;azure-ai-projects&gt;=2.3&quot; azure-identity openai
+    az login
+    export PROJECT_ENDPOINT=&quot;https://&lt;resource&gt;.services.ai.azure.com/api/projects/&lt;project&gt;&quot;
+    export MODEL_DEPLOYMENT=&quot;gpt-5-mini&quot;
+
+Run:
+    python main.py
+&quot;&quot;&quot;
+import os
+
+from azure.ai.projects import AIProjectClient
+from azure.identity import DefaultAzureCredential
+
+NOTE = (
+    &quot;Policyholder reports rear-end collision on 6 Oct at a traffic light in Pune. &quot;
+    &quot;No injuries. Bumper and tail light damaged. Photos uploaded. Third party admitted fault.&quot;
+)
+
+
+def main() -&gt; None:
+    project = AIProjectClient(
+        endpoint=os.environ[&quot;PROJECT_ENDPOINT&quot;],
+        credential=DefaultAzureCredential(),  # keyless: uses your az login or a managed identity
+    )
+    client = project.get_openai_client()
+    response = client.responses.create(
+        model=os.environ.get(&quot;MODEL_DEPLOYMENT&quot;, &quot;gpt-5-mini&quot;),
+        input=f&quot;Summarise this claim note in two lines for a claims handler:\n{NOTE}&quot;,
+        max_output_tokens=300,
+    )
+    print(response.output_text)
+    print(f&quot;\n[tokens] input={response.usage.input_tokens} output={response.usage.output_tokens}&quot;)
+
+
+if __name__ == &quot;__main__&quot;:
+    main()
+</pre>
+<div class="box"><h4>Expected output (illustrative; wording varies run to run)</h4><pre class="code">Rear-end collision in Pune on 6 Oct; no injuries; bumper and tail light damaged.
+Third party admitted fault; photos are on file.
+
+[tokens] input=74 output=152</pre><p class="note">Output tokens include the model's reasoning tokens, which are billed as output.</p></div>
+<h2>Break it on purpose</h2>
+<div class="tiles">
+<div class="box"><h4>Break it 1 · Remove your role</h4><p><b>Do:</b> In IAM, remove your Foundry User assignment and run again (role changes can take a few minutes).</p><p><b>You will see:</b> an HTTP 403 permission error for your identity.</p><p><b>Why it matters for the exam:</b> keyless access is only as good as the role behind it; Foundry User is the least privilege for building.</p><p class="note">Practice: <a href="../D1-Plan-Manage/practice.html#Q-d1-q1">d1-q1</a></p></div>
+<div class="box"><h4>Break it 2 · Use the old length parameter</h4><p><b>Do:</b> Replace max_output_tokens=300 with max_tokens=300.</p><p><b>You will see:</b> an HTTP 400 error: the parameter isn't supported for this model.</p><p><b>Why it matters for the exam:</b> reasoning models reject max_tokens and temperature; the Responses API uses max_output_tokens.</p><p class="note">Practice: <a href="../D1-Plan-Manage/practice.html#Q-d1-c1">d1-c1</a></p></div>
+<div class="box"><h4>Break it 3 · Use an API key instead</h4><p><b>Do:</b> Create the client with the resource key instead of DefaultAzureCredential, then try to create an agent or run an evaluation.</p><p><b>You will see:</b> model calls may work, but agents and evaluations fail: they require Entra ID.</p><p><b>Why it matters for the exam:</b> keys grant full access with no role scoping, and Foundry's agent and evaluation features don't accept them.</p><p class="note">Practice: <a href="../D1-Plan-Manage/practice.html#Q-d1-y2">d1-y2</a></p></div>
+<div class="box"><h4>Break it 4 · Hit the rate limit</h4><p><b>Do:</b> Lower the deployment's TPM to the minimum and send 30 requests in parallel.</p><p><b>You will see:</b> some requests return HTTP 429 with a Retry-After value.</p><p><b>Why it matters for the exam:</b> a 429 means wait and back off; then check quota per model and deployment type.</p><p class="note">Practice: <a href="../D1-Plan-Manage/practice.html#Q-d1-o1">d1-o1</a></p></div>
+</div>
+<h2>Clean up</h2>
+<div class="frame">Delete the resource group that holds the Foundry resource. Deployments and quota are released with it.</div></main>
+<footer>Original study material for Microsoft exam AI-103. Not affiliated with Microsoft. Practice items are original and are not real exam questions. Facts checked against Microsoft Learn on 8 October 2026.</footer>
+</body></html>

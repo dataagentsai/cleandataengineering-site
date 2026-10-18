@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.2 Logging &amp; Tracing (Request IDs) · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 8 · Observability &amp; Production Ops</div>
+    <h1>8.2 · Logging &amp; Tracing (Request IDs)</h1>
+    <div class="tag">Make failures debuggable</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Capture the <code>request-id</code> on every call</h2>
+    <p>When a request behaves oddly and you open a support ticket, the first thing Anthropic asks for is the
+    <strong>request ID</strong>. Every API response carries a unique <code>request-id</code> <em>response
+    header</em> (a value like <code>req_018EeWyXxfu5pfWkrYcMdjWG</code>), and the same identifier appears as the
+    <code>request_id</code> field inside <em>error response bodies</em>. Log it on <strong>both success and
+    failure</strong> — you can't retrieve it after the fact.</p>
+
+    <table>
+        <tr><th>Surface</th><th>Where the ID lives</th><th>How to read it</th></tr>
+        <tr><td>Successful response</td><td><code>request-id</code> header</td><td>Python/TS: <code>message._request_id</code>; others: raw-response accessor</td></tr>
+        <tr><td>Error body</td><td><code>request_id</code> JSON field</td><td>On the parsed error object</td></tr>
+        <tr><td>Raw headers (any SDK)</td><td><code>request-id</code></td><td><code>.with_raw_response</code> → <code>headers.get("request-id")</code></td></tr>
+    </table>
+
+    <div class="note">🔑 The <code>_request_id</code> property on Python/TS response objects is public despite the
+    underscore. Include it in every log line so a customer complaint maps to one exact call.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Log I/O + latency + tokens, propagate a trace ID</h2>
+    <p>A useful log record is more than the request ID. For each call capture the <strong>inputs</strong> (model,
+    prompt/params — redacted as policy requires), the <strong>outputs</strong> (text, <code>stop_reason</code>),
+    the <strong>latency</strong>, and the <strong>token usage</strong> (8.1). For agents, a single user task fans
+    out into many API calls and tool invocations — so mint <strong>one trace ID at the top of the task and
+    propagate it</strong> across every model call and tool call. That's what lets you reconstruct "what did the
+    agent do" as a single timeline instead of disconnected log lines.</p>
+
+    <div class="good">Correlate two IDs: your own <b>trace ID</b> (spans the whole agent run, your invention) and
+    Anthropic's <b>request-id</b> (one per API call, for support). The trace ID answers "what happened"; the
+    request-id answers "which exact call, and can Anthropic see it too."</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> One trace ID across an agent's tool calls</h2>
+    <div class="mermaid">
+flowchart TD
+    U["User task"] --> T["Mint trace_id<br/>(one per run)"]
+    T --> C1["API call 1<br/>trace_id + request-id A"]
+    C1 --> TOOL["Tool call<br/>trace_id propagated"]
+    TOOL --> C2["API call 2<br/>trace_id + request-id B"]
+    C2 --> DONE["Final answer"]
+    C2 -.->|"error?"| ERR["🔴 Log request_id<br/>from error body"]
+    C1 --> LOG["📋 One correlated timeline:<br/>inputs · outputs · latency · tokens"]
+    C2 --> LOG
+    ERR --> LOG
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class DONE ok; class LOG gate; class ERR bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A correlated log record per call</h2>
+    <p>Read the request ID from the response, and from the error body when a call throws. One <code>trace_id</code>
+    threads the whole run.</p>
+<pre><span class="kw">import</span> time, uuid, anthropic
+
+trace_id = uuid.uuid4().hex  <span class="cm"># mint ONCE at the top of the agent task</span>
+
+<span class="kw">def</span> <span class="fn">call</span>(client, **params):
+    t0 = time.monotonic()
+    <span class="kw">try</span>:
+        resp = client.messages.create(**params)
+        <span class="fn">log</span>({
+            <span class="st">"trace_id"</span>: trace_id,
+            <span class="st">"request_id"</span>: resp._request_id,          <span class="cm"># from the request-id header</span>
+            <span class="st">"latency_ms"</span>: (time.monotonic() - t0) * <span class="st">1000</span>,
+            <span class="st">"input"</span>: params[<span class="st">"messages"</span>], <span class="st">"stop_reason"</span>: resp.stop_reason,
+            <span class="st">"usage"</span>: resp.usage.to_dict(),           <span class="cm"># tokens (8.1)</span>
+        })
+        <span class="kw">return</span> resp
+    <span class="kw">except</span> anthropic.APIStatusError <span class="kw">as</span> e:
+        <span class="fn">log</span>({<span class="st">"trace_id"</span>: trace_id,
+             <span class="st">"request_id"</span>: e.request_id,           <span class="cm"># same id, from the error body</span>
+             <span class="st">"status"</span>: e.status_code, <span class="st">"error_type"</span>: e.type,
+             <span class="st">"latency_ms"</span>: (time.monotonic() - t0) * <span class="st">1000</span>})
+        <span class="kw">raise</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> What to put in the log</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Structured, ID-rich records</h4>
+            <ul><li>request-id → Anthropic can trace it end-to-end</li>
+            <li>trace-id → whole agent run reconstructs as one timeline</li>
+            <li>Redact PII in prompts; keep IDs, latency, tokens</li></ul></div>
+        <div class="con"><h4>⚠️ Prose logs / no IDs</h4>
+            <ul><li>Cheap to write, human-readable at a glance</li>
+            <li>But: support can't locate the call without a request-id</li>
+            <li>Agent runs can't be stitched back together</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Only capturing the request ID on success. → The same
+    <code>request_id</code> is on the <b>error body</b> too — and that's exactly the call you'll need to report.
+    Log it on failure.</div>
+    <div class="trap"><b>Trap:</b> Thinking <code>_request_id</code> is private because of the underscore. → It's a
+    documented, public property on Python/TS response objects. Other SDKs read the <code>request-id</code> header
+    via the raw-response accessor.</div>
+    <div class="trap"><b>Trap:</b> Using the Anthropic request-id to correlate an agent's whole run. → One
+    request-id = one API call. To span a multi-call agent run you need <b>your own trace ID</b>, minted once and
+    propagated across tool calls.</div>
+    <div class="trap"><b>Trap:</b> Logging full prompts with user PII and no redaction. → Logs are a distribution
+    surface. Redact sensitive input; keep the load-bearing metadata (IDs, latency, tokens, stop_reason).</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A customer reports a bad response. What's the one field you need to have logged?</summary>
+    <p class="answer">The <b>request-id</b> (from the <code>request-id</code> response header, exposed as
+    <code>_request_id</code> in Python/TS). It lets Anthropic support trace that exact request end-to-end. Without
+    it, there's no reliable way to locate the call.</p></details>
+    <details><summary>Q2 · How do you correlate the 6 API calls an agent made for one user task?</summary>
+    <p class="answer">Mint <b>one trace ID at the start of the task</b> and propagate it through every model call
+    and tool call, logging it on each record. Anthropic's request-id is per-call and can't span the run; your
+    trace ID stitches the timeline together.</p></details>
+    <details><summary>Q3 · Where do you get the request ID when a call raises an error?</summary>
+    <p class="answer">From the <b>error response body</b> — it carries a <code>request_id</code> field (surfaced on
+    the SDK's typed exception, e.g. <code>e.request_id</code>). Same identifier as the success-path
+    <code>request-id</code> header.</p></details>
+
+    <div class="pager">
+        <a href="8-1-usage-metrics.html"><span class="k">← Back</span>8.1 · Usage Metrics</a>
+        <a class="next" href="8-3-monitoring-slos.html"><span class="k">Next →</span>8.3 · Monitoring &amp; SLOs</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 8.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

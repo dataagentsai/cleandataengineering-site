@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.4 Skills vs Commands vs Subagents vs MCP · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 5 · Skills</div>
+    <h1>5.4 · Skills vs Commands vs Subagents vs MCP</h1>
+    <div class="tag">Choosing the right primitive</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Four primitives, four jobs</h2>
+    <p>Claude Code gives you several extension points that are easy to confuse. The clean way to keep them apart is
+    to ask two questions: <strong>who triggers it</strong> and <strong>what it adds</strong>.</p>
+
+    <table>
+        <tr><th>Primitive</th><th>Who invokes</th><th>What it adds</th><th>Context</th></tr>
+        <tr><td><b>Skill</b> (<code>SKILL.md</code>)</td><td><b>Claude</b> (model-invoked) — also typable as <code>/name</code></td><td>Instructions, bundled files &amp; scripts loaded on demand</td><td>Runs inline in the main conversation (unless <code>context: fork</code>)</td></tr>
+        <tr><td><b>Slash command</b> (<code>.claude/commands/*.md</code>)</td><td><b>You</b> (user-invoked) by typing <code>/name</code></td><td>A saved prompt / procedure</td><td>Inline. <em>Now merged into skills</em> — same mechanism</td></tr>
+        <tr><td><b>Subagent</b> (<code>.claude/agents/*.md</code>)</td><td>Claude delegates, or you target it</td><td>A separate agent with its own system prompt, tools &amp; permissions</td><td><b>Separate / isolated context</b> — returns a summary</td></tr>
+        <tr><td><b>MCP server</b></td><td>Claude calls the exposed tools</td><td><b>External tools &amp; data</b> (APIs, DBs, services) over a protocol</td><td>Tools appear in the main loop</td></tr>
+    </table>
+
+    <div class="note">🔑 In Claude Code today, <strong>custom commands have been merged into skills</strong>. A file at
+    <code>.claude/commands/deploy.md</code> and a skill at <code>.claude/skills/deploy/SKILL.md</code> both create
+    <code>/deploy</code> and work the same way. Old <code>commands/</code> files keep working; skills just add extras
+    (a folder for supporting files, invocation-control frontmatter, and automatic model invocation). If a skill and
+    a command share a name, the <em>skill</em> takes precedence.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The distinctions that get tested</h2>
+    <p><strong>Skill vs. slash command</strong> — the axis is <em>who invokes</em>. A pure slash command is
+    user-invoked: nothing happens until you type it. A skill is model-invoked: Claude fires it by matching the
+    <code>description</code>. Since commands are now skills, you get user-invocation by adding
+    <code>disable-model-invocation: true</code> to a skill — that <em>is</em> a "slash command."</p>
+
+    <p><strong>Skill vs. subagent</strong> — the axis is <em>context</em>. A skill runs <strong>inline</strong>, in
+    your current conversation, adding instructions to what Claude already sees. A subagent runs in a
+    <strong>separate context window</strong> with its own tools and permissions, then returns only a summary — good
+    for isolating a big, noisy task (research, exploration) so it doesn't flood the main thread. The two compose: a
+    skill with <code>context: fork</code> runs <em>as</em> a subagent, and a subagent can preload skills as
+    reference material.</p>
+
+    <p><strong>Skill vs. MCP</strong> — the axis is <em>internal knowledge vs. external capability</em>. A skill is
+    instructions and bundled files that shape <em>how</em> Claude works. <strong>MCP (Model Context Protocol)</strong>
+    connects Claude to <em>external</em> tools and data — a Jira API, a database, a company service. Reach for a
+    skill to teach a procedure; reach for MCP to plug in a system Claude otherwise can't touch. They're
+    complementary: a skill can document <em>how</em> to use the tools an MCP server exposes.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Which primitive do I need?</h2>
+    <div class="mermaid">
+flowchart TD
+    Q0["I want to extend Claude Code"] --> Q1{"Need to reach an<br/>external system / API / DB?"}
+    Q1 -->|"yes"| MCP["🔌 MCP server<br/>external tools &amp; data"]
+    Q1 -->|"no"| Q2{"Need an isolated<br/>context / separate tools?"}
+    Q2 -->|"yes"| SUB["🧭 Subagent<br/>own context, returns a summary"]
+    Q2 -->|"no"| Q3{"Should Claude trigger it<br/>automatically by task?"}
+    Q3 -->|"yes"| SK["🟢 Skill (default)<br/>model-invoked SKILL.md"]
+    Q3 -->|"no, only when I type it"| CMD["🟠 Skill with<br/>disable-model-invocation: true<br/>(a slash command)"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class SK ok; class CMD gate; class SUB gate; class MCP bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> The same intent, three framings</h2>
+    <p>Notice how "deploy" can be a user-only command or a forked subagent just by changing frontmatter — the file
+    <em>is</em> a skill either way.</p>
+<pre><span class="cm"># 1) Model-invoked skill: Claude loads it when the task matches.</span>
+---
+name: api-conventions
+description: API design patterns for this codebase
+---
+When writing API endpoints, use RESTful naming and consistent error formats.
+
+<span class="cm"># 2) User-only "slash command": add disable-model-invocation.</span>
+---
+name: deploy
+description: Deploy the application to production
+disable-model-invocation: true
+---
+Deploy $ARGUMENTS to production: run tests, build, push, verify.
+
+<span class="cm"># 3) Skill that runs AS a subagent: context: fork + an agent type.</span>
+---
+name: deep-research
+description: Research a topic thoroughly
+context: fork
+agent: Explore
+---
+Research $ARGUMENTS: find files, read code, summarize with file references.</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Inline skill vs. forked subagent</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Inline skill</h4>
+            <ul><li>Sees your full conversation context</li>
+            <li>Instructions apply alongside ongoing work</li>
+            <li>Cheapest way to add a procedure or convention</li></ul></div>
+        <div class="con"><h4>✅ Forked subagent (<code>context: fork</code>)</h4>
+            <ul><li>Isolated context — keeps the main thread clean</li>
+            <li>Own tools/permissions/model</li>
+            <li>But: no conversation history; needs an explicit task, not just guidelines</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Slash commands and skills are separate systems." → In current Claude Code they've
+    <b>merged</b>: a command file and a <code>SKILL.md</code> both make a <code>/name</code>. A "slash command" is
+    just a skill with <code>disable-model-invocation: true</code>.</div>
+    <div class="trap"><b>Trap:</b> "Use a subagent to add a procedure to the current chat." → A subagent runs in a
+    <b>separate context</b> and returns a summary. To inject instructions into the current conversation, use a
+    <b>skill</b>.</div>
+    <div class="trap"><b>Trap:</b> "Use a skill to connect to an external API." → External tools/data are the job of
+    an <b>MCP server</b>. A skill supplies instructions and bundled files; it can document how to <i>use</i> MCP
+    tools but isn't the connector.</div>
+    <div class="trap"><b>Trap:</b> "Skills and subagents don't mix." → They compose both ways: a skill with
+    <code>context: fork</code> runs as a subagent, and a subagent can preload skills as reference material.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What single frontmatter field turns a model-invoked skill into a user-only "slash command"?</summary>
+    <p class="answer"><code>disable-model-invocation: true</code>. Claude will no longer auto-trigger it; it runs only
+    when you type <code>/name</code>. Since commands are now skills, this is exactly the slash-command behavior.</p></details>
+    <details><summary>Q2 · You want a research task that won't clutter your main conversation. Skill or subagent?</summary>
+    <p class="answer">A <b>subagent</b> (or a skill with <code>context: fork</code>, which runs as one). It executes in
+    an isolated context with its own tools and returns just a summary, keeping the main thread clean. An inline skill
+    would run in your current context.</p></details>
+    <details><summary>Q3 · Jira, a Postgres database, and an internal HTTP service — which primitive?</summary>
+    <p class="answer"><b>MCP servers</b>. MCP is the primitive for connecting Claude to external tools and data. A
+    skill could then document the procedure for using those MCP tools, but the connection itself is MCP.</p></details>
+
+    <div class="pager">
+        <a href="5-3-skill-structure.html"><span class="k">← Back</span>5.3 · Skill Structure &amp; Bundled Resources</a>
+        <a class="next" href="5-5-distributing-skills.html"><span class="k">Next →</span>5.5 · Distributing Skills (Plugins)</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 5.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

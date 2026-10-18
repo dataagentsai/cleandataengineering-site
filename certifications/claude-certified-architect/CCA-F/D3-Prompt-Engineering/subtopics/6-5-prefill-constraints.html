@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.5 Prefill Constraints &amp; Gotchas · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 6 · Prefill &amp; Output Control</div>
+    <h1>6.5 · Prefill Constraints &amp; Gotchas</h1>
+    <div class="tag">The rules you must respect</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Four rules that break prefills</h2>
+    <p>Prefilling is powerful (6.1–6.4) but hemmed in by hard constraints. Miss one and you get a 400 error, an
+    unparseable response, or silently wrong output. These four are the ones the exam leans on.</p>
+
+    <table>
+        <tr><th>Rule</th><th>Consequence if violated</th></tr>
+        <tr><td>Prefill text must <strong>not end with trailing whitespace</strong></td><td>Request rejected</td></tr>
+        <tr><td>Prefill is <strong>not available with extended thinking</strong></td><td>Cannot combine the two</td></tr>
+        <tr><td>Final assistant text = <strong>prefill + generation</strong></td><td>Parse fails if you forget to prepend</td></tr>
+        <tr><td><strong>Unsupported on Claude 4.6+ / Fable 5 / Mythos</strong> (last turn)</td><td><code>400</code> error</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> Rule by rule</h2>
+
+    <div class="bad"><strong>1 · No trailing whitespace.</strong> A prefill of <code>"The answer is "</code> (note
+    the trailing space) is invalid. End on the last non-space character: <code>"The answer is"</code>. Same for
+    tabs and newlines — <code>"{\n"</code> is out; use <code>"{"</code>.</div>
+
+    <div class="warn"><strong>2 · Not with extended thinking.</strong> When extended/adaptive thinking is
+    enabled, you cannot prefill the assistant turn. The model needs to produce its own thinking block first, so
+    there's no partial assistant message for you to seed. Choose one or the other.</div>
+
+    <div class="note"><strong>3 · Final text = prefill + generation.</strong> The API returns <em>only</em> the
+    continuation in <code>content</code>. The complete assistant message is your prefill concatenated with the
+    generated text. Whenever you parse or store the reply, <strong>prepend the prefill</strong> — and if a stop
+    sequence stripped the closing delimiter (6.4), add that back too.</div>
+
+    <div class="bad"><strong>4 · Rejected on new models.</strong> On Claude 4.6-and-newer models, plus Fable 5
+    and Mythos, a <em>last-turn</em> prefill returns a <strong>400</strong>. Adding assistant messages
+    <em>elsewhere</em> in the conversation (few-shot examples, prior turns) is unaffected — only the final,
+    to-be-continued assistant turn is blocked. The recommended replacement is <strong>Structured Outputs</strong>
+    for format, and a clear system/user instruction for preamble-skipping and persona.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Decision: can I prefill this request?</h2>
+    <div class="mermaid">
+flowchart TD
+    A["I want to prefill the assistant turn"] --> M{"Model is 4.6+ / Fable / Mythos?"}
+    M -->|"yes"| SO["🔴 400 — use Structured Outputs<br/>or an instruction instead"]
+    M -->|"no (earlier model)"| T{"Extended thinking on?"}
+    T -->|"yes"| NO["🔴 Incompatible — turn off thinking<br/>or drop the prefill"]
+    T -->|"no"| W{"Prefill ends in whitespace?"}
+    W -->|"yes"| FIX["🟠 Trim trailing space/newline"]
+    W -->|"no"| OK["🟢 Valid — remember:<br/>final = prefill + generation"]
+    FIX --> OK
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class OK ok; class SO bad; class NO bad; class FIX gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> BAD prefills → GOOD prefills</h2>
+<pre><span class="cm"># ❌ trailing space → rejected</span>
+{<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: <span class="st">"The answer is "</span>}
+<span class="cm"># ✅ trim it</span>
+{<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: <span class="st">"The answer is"</span>}
+
+<span class="cm"># ❌ prefill + extended thinking in the same request → not allowed</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-5"</span>, max_tokens=<span class="st">1024</span>,
+    thinking={<span class="st">"type"</span>: <span class="st">"enabled"</span>, <span class="st">"budget_tokens"</span>: <span class="st">2000</span>},
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"..."</span>},
+              {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: <span class="st">"{"</span>}],   <span class="cm"># incompatible</span>
+)
+
+<span class="cm"># ❌ parsing without prepending the prefill</span>
+json.<span class="fn">loads</span>(resp.content[<span class="st">0</span>].text)          <span class="cm"># starts at '"name"...' → error</span>
+<span class="cm"># ✅ reconstruct: prefill + generation (+ stopped delimiter)</span>
+json.<span class="fn">loads</span>(<span class="st">"{"</span> + resp.content[<span class="st">0</span>].text + <span class="st">"}"</span>)
+
+<span class="cm"># ❌ last-turn prefill on a new model → 400</span>
+<span class="cm">#    model="claude-opus-4-8", messages=[..., {"role":"assistant","content":"{"}]</span>
+<span class="cm"># ✅ replacement on new models: Structured Outputs</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">300</span>,
+    output_config={<span class="st">"format"</span>: {<span class="st">"type"</span>: <span class="st">"json_schema"</span>, <span class="st">"schema"</span>: schema}},
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Return {name, id} for Ada."</span>}],
+)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Keep prefill (legacy) vs. move to the modern path</h2>
+    <table>
+        <tr><th></th><th>Prefill (earlier models)</th><th>Modern replacement</th></tr>
+        <tr><td>Format control</td><td>Prefill <code>{</code> / a tag</td><td>Structured Outputs (<code>output_config.format</code>)</td></tr>
+        <tr><td>Skip preamble</td><td>Prefill the first word</td><td>System instruction: "no preamble"</td></tr>
+        <tr><td>Persona</td><td>Prefill <code>[Name]:</code></td><td>System-prompt persona + instruction</td></tr>
+        <tr><td>Works with thinking?</td><td>No</td><td>Yes</td></tr>
+        <tr><td>Works on 4.6+ / Fable?</td><td>No (400)</td><td>Yes</td></tr>
+    </table>
+    <div class="good">If you're on a current model or want extended thinking, don't reach for prefill — the
+    features it provided now live in Structured Outputs and clearer prompting.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "A trailing space in the prefill is harmless." → It's a <b>rejected request</b>.
+    Prefill content must not end in whitespace — trim spaces, tabs, and newlines.</div>
+    <div class="trap"><b>Trap:</b> Combining prefill with extended thinking. → <b>Not supported</b>. The model
+    emits its own thinking block first, leaving no partial assistant message to continue from.</div>
+    <div class="trap"><b>Trap:</b> "Just parse <code>content</code> and you're done." → The final message is
+    <b>prefill + generation</b>. Prepend the prefill (and re-add any stop-sequence delimiter) before parsing.</div>
+    <div class="trap"><b>Trap:</b> Using last-turn prefill on Claude 4.6+/Fable/Mythos. → Returns a <b>400</b>.
+    Only earlier models allow it; on new models use Structured Outputs or an instruction. (Assistant messages
+    <i>earlier</i> in the conversation are still fine.)</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why is <code>{"role":"assistant","content":"Answer: "}</code> rejected?</summary>
+    <p class="answer">The prefill ends in <b>trailing whitespace</b> (the space after the colon), which is not
+    allowed. End on the last non-space character: <code>"Answer:"</code>.</p></details>
+    <details><summary>Q2 · Can you prefill and use extended thinking together?</summary>
+    <p class="answer">No — prefilling the assistant turn is <b>not available with extended thinking enabled</b>.
+    The model produces its own thinking block first, so there's no partial assistant message for you to seed.
+    Pick one.</p></details>
+    <details><summary>Q3 · Your prefill request 400s on <code>claude-opus-4-8</code>. What's wrong and what do you do?</summary>
+    <p class="answer">Last-turn prefill is <b>unsupported on Claude 4.6-and-newer models</b> (and Fable 5 /
+    Mythos), so it returns a 400. Switch to the modern equivalent: <b>Structured Outputs</b>
+    (<code>output_config.format</code>) for JSON shape, or a clear system/user instruction for preamble-skipping
+    and persona. Assistant messages earlier in the conversation are still allowed.</p></details>
+
+    <div class="pager">
+        <a href="6-4-stop-sequences.html"><span class="k">← Back</span>6.4 · Stop Sequences as Output Control</a>
+        <a class="next" href="7-1-output-consistency.html"><span class="k">Next →</span>7.1 · Output Consistency</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 6.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

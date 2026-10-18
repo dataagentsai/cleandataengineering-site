@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.4 Cache TTL (5m / 1h) &amp; Hits/Misses · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 2 · Prompt Caching</div>
+    <h1>2.4 · Cache TTL (5m / 1h) &amp; Hits/Misses</h1>
+    <div class="tag">The cache is ephemeral</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Two TTLs — 5-minute default, 1-hour opt-in</h2>
+    <p>Cache entries are <strong>ephemeral</strong> — they expire. There are two time-to-live options:</p>
+    <ul>
+        <li><strong>5 minutes (default):</strong> <code>cache_control: {"type": "ephemeral"}</code>. Write costs
+        <strong>1.25×</strong> base input.</li>
+        <li><strong>1 hour (opt-in):</strong> <code>cache_control: {"type": "ephemeral", "ttl": "1h"}</code>. Write
+        costs <strong>2×</strong> base input — you pay more up front to keep the entry alive across longer gaps.</li>
+    </ul>
+    <p><strong>Each hit refreshes the TTL.</strong> Every time cached content is read, its expiry clock resets from
+    that moment. So a prefix that's used at least once inside the window stays warm indefinitely — continuous
+    traffic keeps the cache alive without any re-warming. The TTL only matters during <em>gaps</em> in usage.</p>
+
+    <div class="note">🔑 Refresh-on-hit means the "5 minutes" is a <strong>5-minute idle timeout</strong>, not a
+    hard 5-minute lifetime. Steady traffic keeps it warm; a &gt;5-minute quiet spell lets it lapse.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Hit, miss, and the fallback to a write</h2>
+    <p>On each request the API looks for a live cache entry matching the prefix (walking back up to 20 content
+    blocks from the breakpoint):</p>
+    <ul>
+        <li><strong>Hit</strong> — a live, byte-identical entry exists. Tokens are served from cache at ~0.1×, and
+        the TTL is refreshed. Reported in <code>usage.cache_read_input_tokens</code>.</li>
+        <li><strong>Miss</strong> — no live matching entry (expired, evicted, first-ever call, or a prefix byte
+        changed). The request <strong>falls back to a write</strong>: it re-processes and re-caches the prefix at
+        the 1.25× (or 2× for 1h) write price. Reported in <code>usage.cache_creation_input_tokens</code>.</li>
+    </ul>
+    <p>A miss is never an error — it just costs a write. The danger is a <em>silent</em> miss where you expected
+    a hit (a TTL lapse, or a prefix-invalidating byte change from 2.3).</p>
+
+    <table>
+        <tr><th><code>usage</code> field</th><th>Meaning</th><th>Price paid</th></tr>
+        <tr><td><code>cache_read_input_tokens</code></td><td>Served from cache (hit)</td><td>~0.1×</td></tr>
+        <tr><td><code>cache_creation_input_tokens</code></td><td>Written to cache (miss → write)</td><td>1.25× (5m) / 2× (1h)</td></tr>
+        <tr><td><code>input_tokens</code></td><td>Uncached remainder (after last breakpoint)</td><td>1×</td></tr>
+    </table>
+
+    <div class="warn">⚠️ <code>input_tokens</code> is <em>only</em> the uncached tail. Total prompt size =
+    <code>input_tokens + cache_creation_input_tokens + cache_read_input_tokens</code>. A tiny
+    <code>input_tokens</code> after a long run means the rest was served from cache — check the sum.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Lookup decides read vs. write</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Request with cached prefix"] --> Q{"Live matching<br/>entry in cache?"}
+    Q -->|"yes"| HIT["🟢 HIT · read ~0.1×<br/>refresh TTL"]
+    Q -->|"no: expired / first call /<br/>prefix byte changed"| MISS["🟠 MISS → WRITE<br/>re-cache · 1.25× (or 2× for 1h)"]
+    HIT --> NEXT["next request within TTL<br/>→ another hit"]
+    MISS --> NEXT2["next request within TTL<br/>→ now a hit"]
+    IDLE["&gt; TTL idle gap"] -.->|"entry lapses"| Q
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef neutral fill:#e7f1ff,stroke:#4a90d9,color:#1a4971;
+    class HIT ok; class MISS gate; class NEXT neutral; class NEXT2 neutral; class IDLE neutral;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Choosing a TTL and verifying hits</h2>
+    <p>Use the 1-hour TTL only for bursty traffic with gaps longer than 5 minutes — the doubled write cost needs
+    more reads to pay off. Then confirm hits via <code>usage</code>.</p>
+<pre>resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    system=[{<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: LARGE_PROMPT,
+             <span class="cm"># 1-hour TTL: survives longer idle gaps, costs 2× to write</span>
+             <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>, <span class="st">"ttl"</span>: <span class="st">"1h"</span>}}],
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: question}],
+)
+
+u = resp.usage
+<span class="kw">if</span> u.cache_read_input_tokens:
+    <span class="fn">print</span>(<span class="st">"HIT — served from cache at ~0.1x"</span>)
+<span class="kw">elif</span> u.cache_creation_input_tokens:
+    <span class="fn">print</span>(<span class="st">"MISS → WRITE — re-cached this request"</span>)
+
+<span class="cm"># Zero reads across identical-prefix calls? Either the TTL lapsed</span>
+<span class="cm"># between calls, or a silent invalidator changed the prefix bytes (2.3).</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> 5-minute vs. 1-hour TTL</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ 1-hour TTL</h4>
+            <ul><li>Survives idle gaps up to an hour without re-writing</li>
+            <li>Fewer cold misses in bursty, spaced-out traffic</li>
+            <li>Still refreshes on every hit</li></ul></div>
+        <div class="con"><h4>⚠️ Its cost</h4>
+            <ul><li>Write is <b>2×</b> base input (vs 1.25× for 5-min)</li>
+            <li>Needs ≥3 reuses to break even (2× + 0.2× vs 3× uncached)</li>
+            <li>Wasteful under continuous traffic — the 5-min default stays warm anyway</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The 5-minute cache always dies after 5 minutes." → It's an <b>idle</b> timeout —
+    <b>each hit refreshes the TTL</b>. Continuous use keeps it alive; only a &gt;5-min gap lets it expire.</div>
+    <div class="trap"><b>Trap:</b> "A cache miss throws an error." → A miss just <b>falls back to a write</b>
+    (re-caches at 1.25×/2×). No error — the risk is a silent, unexpected miss.</div>
+    <div class="trap"><b>Trap:</b> Reading <code>input_tokens</code> as the total prompt size. → It's only the
+    <b>uncached tail</b>. Add <code>cache_read_input_tokens</code> + <code>cache_creation_input_tokens</code> for
+    the full input.</div>
+    <div class="trap"><b>Trap:</b> Reaching for the 1-hour TTL by default. → It doubles the write cost. Under
+    steady traffic the 5-minute default stays warm on its own; use 1h only for gappy, bursty patterns.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Does a cache entry expire exactly 5 minutes after it's written?</summary>
+    <p class="answer">No — <b>each hit refreshes the TTL</b>, so the 5-minute clock resets on every read. It expires
+    only after a &gt;5-minute <b>idle gap</b> with no hits. Continuous traffic keeps it warm indefinitely.</p></details>
+    <details><summary>Q2 · What happens on a cache miss?</summary>
+    <p class="answer">The request <b>falls back to a write</b>: it re-processes and re-caches the prefix at the
+    write price (1.25× for 5-min, 2× for 1h), reported in <code>cache_creation_input_tokens</code>. It's not an
+    error.</p></details>
+    <details><summary>Q3 · When is the 1-hour TTL worth its 2× write cost?</summary>
+    <p class="answer">For <b>bursty traffic with gaps longer than 5 minutes</b>, where the 5-minute entry would
+    lapse between bursts. It needs at least three reuses to break even, so under continuous traffic the 5-minute
+    default is cheaper.</p></details>
+
+    <div class="pager">
+        <a href="2-3-cacheable-prefix-rule.html"><span class="k">← Back</span>2.3 · What's Cacheable</a>
+        <a class="next" href="2-5-caching-in-loops.html"><span class="k">Next →</span>2.5 · Caching in Loops</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 2.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

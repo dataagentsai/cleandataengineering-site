@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.3 Hook Input &amp; Output · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 6 · Hooks</div>
+    <h1>6.3 · Hook Input &amp; Output</h1>
+    <div class="tag">stdin JSON → exit codes / JSON</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Input arrives as JSON on stdin</h2>
+    <p>When an event fires, Claude Code runs your command and pipes <strong>event data as JSON to stdin</strong>.
+    Your script reads it (typically with <code>jq</code> or a language JSON parser), does its work, and replies
+    through its <strong>exit code</strong> and/or <strong>stdout</strong>.</p>
+
+    <p>Every event includes common fields; each event adds its own:</p>
+    <table>
+        <tr><th>Field</th><th>Meaning</th><th>Present on</th></tr>
+        <tr><td><code>session_id</code></td><td>Unique ID for this session</td><td>All events</td></tr>
+        <tr><td><code>cwd</code></td><td>Working directory when the event fired</td><td>All events</td></tr>
+        <tr><td><code>hook_event_name</code></td><td>Which event triggered the hook</td><td>All events</td></tr>
+        <tr><td><code>transcript_path</code></td><td>Path to the conversation transcript</td><td>All events</td></tr>
+        <tr><td><code>tool_name</code></td><td>The tool involved (e.g. <code>Bash</code>)</td><td>Tool events</td></tr>
+        <tr><td><code>tool_input</code></td><td>The arguments Claude passed to the tool</td><td>PreToolUse / PostToolUse</td></tr>
+        <tr><td><code>tool_response</code></td><td>The tool's result</td><td>PostToolUse</td></tr>
+        <tr><td><code>prompt</code></td><td>The submitted prompt text</td><td>UserPromptSubmit</td></tr>
+        <tr><td><code>source</code></td><td><code>startup</code> / <code>resume</code> / <code>clear</code> / <code>compact</code></td><td>SessionStart</td></tr>
+        <tr><td><code>stop_hook_active</code></td><td><code>true</code> if a Stop hook already forced a continuation</td><td>Stop / SubagentStop</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> Output: exit codes, or structured JSON</h2>
+    <p>A hook answers Claude Code in one of two ways:</p>
+    <ul>
+        <li><strong>Exit codes (simple)</strong> —
+            <code>0</code> = success/no objection;
+            <code>2</code> = block the action and feed <em>stderr</em> back to Claude;
+            any other code = non-blocking error (stderr goes to the debug log, action proceeds).
+            On <code>exit 0</code>, stdout is added to Claude's context for <code>UserPromptSubmit</code> and
+            <code>SessionStart</code>; for other events plain stdout just goes to the debug log.</li>
+        <li><strong>Structured JSON (rich)</strong> — <code>exit 0</code> and print a JSON object to stdout for
+            fine control: <code>continue</code>, <code>decision</code>, <code>hookSpecificOutput</code>, etc.
+            (covered in 6.4).</li>
+    </ul>
+    <div class="warn">⚠️ Don't mix the two. If you <code>exit 2</code>, Claude Code <strong>ignores any JSON</strong> —
+    exit 2 wins. Use exit 2 <em>with a stderr message</em>, or exit 0 <em>with JSON</em>, never both.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The stdin → work → reply loop</h2>
+    <div class="mermaid">
+flowchart TD
+    EV["Event fires"] --> IN["Claude Code pipes<br/>event JSON to stdin"]
+    IN --> HK["Your command reads it<br/>(jq / parser)"]
+    HK --> DEC{"How to reply?"}
+    DEC -->|"exit 0"| OK["✅ Proceed<br/>(stdout may add context)"]
+    DEC -->|"exit 2 + stderr"| BLK["🔴 Block<br/>stderr → Claude"]
+    DEC -->|"exit 0 + JSON stdout"| JSON["🟠 Structured control<br/>decision / permissionDecision"]
+    DEC -->|"other code"| ERR["Non-blocking error<br/>stderr → debug log"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class OK ok; class JSON gate; class BLK bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Read stdin, act on it</h2>
+    <p>A <code>PreToolUse</code> hook that inspects the Bash command and blocks table drops via <code>exit 2</code>.
+    Everything on stderr becomes Claude's feedback; <code>exit 0</code> means "no objection."</p>
+<pre><span class="cm">#!/bin/bash</span>
+INPUT=$(cat)                                       <span class="cm"># read the JSON from stdin</span>
+COMMAND=$(<span class="fn">echo</span> <span class="st">"$INPUT"</span> | jq -r <span class="st">'.tool_input.command'</span>)
+
+<span class="kw">if</span> <span class="fn">echo</span> <span class="st">"$COMMAND"</span> | grep -q <span class="st">"drop table"</span>; <span class="kw">then</span>
+  <span class="fn">echo</span> <span class="st">"Blocked: dropping tables is not allowed"</span> &gt;&amp;2   <span class="cm"># stderr → Claude</span>
+  <span class="kw">exit</span> 2                                            <span class="cm"># 2 = block the action</span>
+<span class="kw">fi</span>
+
+<span class="kw">exit</span> 0   <span class="cm"># 0 = no decision; normal permission flow applies</span></pre>
+    <div class="note">🔑 For a <code>PreToolUse</code> hook, <code>exit 0</code> does <strong>not</strong> auto-approve
+    the tool — the normal <a href="3-1-permission-modes.html">permission flow</a> still runs. It only means "this
+    hook has no objection."</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Exit codes vs. structured JSON</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Exit codes</h4>
+            <ul><li>Dead simple: <code>0</code>, <code>2</code>, other</li>
+            <li>stderr on exit 2 is the feedback channel</li>
+            <li>Perfect for block / format / log hooks</li></ul></div>
+        <div class="con"><h4>⚠️ Structured JSON</h4>
+            <ul><li>More expressive: allow / deny / ask, rewrite input, inject context</li>
+            <li>Must be valid JSON on stdout with <code>exit 0</code></li>
+            <li>Ignored if you exit 2 — pick one channel</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The hook gets arguments as <code>$1 $2</code>." → No. Input is a <b>JSON object
+    on stdin</b>. Read it with <code>cat</code> / <code>jq</code>, not positional args.</div>
+    <div class="trap"><b>Trap:</b> "Exit 0 approves the tool." → For <code>PreToolUse</code>, exit 0 just means "no
+    objection"; the normal permission prompt still applies. To skip it you need JSON <code>"allow"</code>.</div>
+    <div class="trap"><b>Trap:</b> Printing JSON <em>and</em> exiting 2. → Exit 2 makes Claude Code ignore the
+    JSON. Use stderr+exit 2, or JSON+exit 0 — not both.</div>
+    <div class="trap"><b>Trap:</b> Expecting stdout to reach Claude on every event. → On exit 0, stdout is added to
+    context only for <code>UserPromptSubmit</code> and <code>SessionStart</code>; elsewhere it goes to the debug
+    log unless you emit structured JSON.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · How does a hook receive the tool's arguments?</summary>
+    <p class="answer">As a JSON object on <b>stdin</b>. For a tool event, <code>.tool_input</code> holds the
+    arguments — e.g. <code>jq -r '.tool_input.command'</code> for a Bash call.</p></details>
+    <details><summary>Q2 · Your PreToolUse hook exits 2 and writes to stderr. What happens?</summary>
+    <p class="answer">The tool call is <b>blocked</b> and the stderr text is fed back to Claude as feedback so it
+    can adjust. Any JSON you also printed is ignored.</p></details>
+    <details><summary>Q3 · You want a SessionStart hook to add notes to context. Which channel?</summary>
+    <p class="answer">Write the notes to <b>stdout and exit 0</b>. For <code>SessionStart</code> (and
+    <code>UserPromptSubmit</code>), stdout on exit 0 is injected into Claude's context.</p></details>
+
+    <div class="pager">
+        <a href="6-2-hook-configuration.html"><span class="k">← Back</span>6.2 · Hook Configuration &amp; Matchers</a>
+        <a class="next" href="6-4-blocking-decisions.html"><span class="k">Next →</span>6.4 · Blocking &amp; Decision Control</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 6.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

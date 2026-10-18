@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.3 What's Cacheable &amp; the Prefix Rule · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 2 · Prompt Caching</div>
+    <h1>2.3 · What's Cacheable &amp; the Prefix Rule</h1>
+    <div class="tag">Static first, volatile last</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The prefix rule — one byte breaks the cache</h2>
+    <p><strong>Prompt caching is a prefix match.</strong> The cache key is derived from the exact bytes of the
+    rendered prompt up to each breakpoint. Everything before a breakpoint must be <strong>byte-for-byte
+    identical</strong> across requests to score a hit. A single differing byte anywhere in the prefix — a
+    reordered JSON key, a timestamp, a swapped tool — <strong>invalidates the cache for that breakpoint and every
+    breakpoint after it</strong>. This is the one invariant everything else follows from.</p>
+
+    <div class="warn">⚠️ Any change <em>anywhere</em> in the prefix invalidates <em>everything downstream</em>.
+    Caching rewards discipline: keep the prefix frozen and deterministic.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Render order — tools → system → messages</h2>
+    <p>The prompt is assembled and hashed in a fixed order: <strong>tools → system → messages</strong>. That
+    ordering dictates the canonical caching strategy: <strong>put the most static content first, the most volatile
+    last</strong>, and drop your breakpoint at the boundary between them.</p>
+    <ul>
+        <li><strong>tools</strong> — the tool catalog; render at position 0, usually the most stable.</li>
+        <li><strong>system</strong> — the system prompt; a breakpoint on its last block also caches the tools.</li>
+        <li><strong>messages</strong> — conversation turns; the newest, per-request content lives here, <em>after</em>
+        the last breakpoint.</li>
+    </ul>
+
+    <table>
+        <tr><th>Stability</th><th>Belongs…</th><th>Examples</th></tr>
+        <tr><td>Never changes</td><td>Early, before any breakpoint</td><td>Frozen system prompt, deterministic tool list</td></tr>
+        <tr><td>Per-session</td><td>After the global prefix</td><td>User profile, retrieved documents</td></tr>
+        <tr><td>Per-turn / per-request</td><td>After the last breakpoint</td><td>The new question, fresh tool results</td></tr>
+        <tr><td>Per-request noise</td><td>Eliminate or move to the very end</td><td>Timestamps, UUIDs, request IDs</td></tr>
+    </table>
+
+    <div class="bad">Silent cache killers hiding in the prefix: <code>datetime.now()</code> in the system prompt,
+    <code>uuid4()</code> in early content, <code>json.dumps(d)</code> without <code>sort_keys=True</code>,
+    interpolating a session ID into the system text, or a tool set that varies per user.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Static prefix cached, volatile suffix fresh</h2>
+    <div class="mermaid">
+flowchart TD
+    subgraph PREFIX["Cacheable prefix — byte-stable"]
+      T["tools (deterministic order)"] --> S["system prompt (frozen)"]
+      S --> D["retrieved docs / few-shot"]
+    end
+    D --> BP["🟢 cache_control breakpoint"]
+    BP --> Q["volatile: today's question,<br/>timestamps, per-request IDs"]
+    Q --> R["🔴 processed fresh every call"]
+    BAD["datetime.now() in system prompt"] -.->|"invalidates<br/>whole prefix"| S
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef neutral fill:#e7f1ff,stroke:#4a90d9,color:#1a4971;
+    class BP ok; class R bad; class BAD bad;
+    class T neutral; class S neutral; class D neutral; class Q neutral;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A shared prefix with a varying suffix</h2>
+    <p>Put the breakpoint at the end of the <em>shared</em> portion — never at the very end of the whole prompt,
+    or every request writes a distinct entry and nothing is ever read.</p>
+<pre>resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    system=[{<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: FROZEN_SYSTEM,      <span class="cm"># no now()/uuid inside!</span>
+             <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>}}],
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: [
+        {<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: shared_context,        <span class="cm"># same across requests</span>
+         <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>}},     <span class="cm"># breakpoint ends the shared part</span>
+        {<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: varying_question},     <span class="cm"># differs every call → no marker</span>
+    ]}],
+)
+
+<span class="cm"># Serialize tools deterministically so their bytes never shift:</span>
+tools = <span class="fn">sorted</span>(tool_defs, key=<span class="kw">lambda</span> t: t[<span class="st">"name"</span>])</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Freezing the prefix costs flexibility</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Static-first discipline</h4>
+            <ul><li>Reliable, repeated cache hits</li>
+            <li>Cheap, fast large shared context</li>
+            <li>Forces deterministic prompt assembly (a good habit)</li></ul></div>
+        <div class="con"><h4>⚠️ The cost of it</h4>
+            <ul><li>Can't sprinkle timestamps / per-user data into the system prompt</li>
+            <li>Changing tools or reordering them mid-run wipes the cache</li>
+            <li>Dynamic context must move after the last breakpoint</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "I can cache the volatile part too." → Only a <b>stable prefix</b> caches.
+    Anything that changes per request must sit <b>after the last breakpoint</b>, or you write a new entry every
+    call and never read one.</div>
+    <div class="trap"><b>Trap:</b> Putting the current date/time or a UUID in the system prompt. → It changes the
+    prefix bytes every request → <b>zero cache hits</b>. Inject dynamic context later in <code>messages</code>.</div>
+    <div class="trap"><b>Trap:</b> Assuming JSON order doesn't matter. → <code>json.dumps</code> without
+    <code>sort_keys=True</code> (or iterating a <code>set</code>) produces non-deterministic bytes → prefix
+    mismatch. Serialize deterministically.</div>
+    <div class="trap"><b>Trap:</b> "System comes before tools." → Render order is <b>tools → system → messages</b>.
+    A change to the tool list invalidates the system and message caches too, because tools sit first.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · State the prefix rule in one sentence.</summary>
+    <p class="answer">Everything before a cache breakpoint must be <b>byte-for-byte identical</b> across requests to
+    hit the cache; any change in the prefix invalidates that breakpoint and all breakpoints after it.</p></details>
+    <details><summary>Q2 · In what order are tools, system, and messages hashed, and why does it matter?</summary>
+    <p class="answer"><b>tools → system → messages.</b> Static content should go first and volatile content last, so
+    a breakpoint at the boundary reuses the frozen prefix while per-request data (after it) is processed fresh.
+    Because tools render first, changing them invalidates the system and message caches too.</p></details>
+    <details><summary>Q3 · Why does <code>datetime.now()</code> in the system prompt destroy caching?</summary>
+    <p class="answer">It changes the prefix bytes on every request, so the cache key never matches — you pay the
+    write premium each time and get no reads. Keep the system prompt frozen and inject the timestamp later in a
+    message.</p></details>
+
+    <div class="pager">
+        <a href="2-2-cache-control-breakpoints.html"><span class="k">← Back</span>2.2 · cache_control &amp; Breakpoints</a>
+        <a class="next" href="2-4-cache-ttl-hits.html"><span class="k">Next →</span>2.4 · Cache TTL &amp; Hits/Misses</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 2.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

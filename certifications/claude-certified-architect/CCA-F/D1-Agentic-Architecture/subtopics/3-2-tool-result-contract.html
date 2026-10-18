@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.2 The tool_result Contract · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 3 · Tool Use</div>
+    <h1>3.2 · The tool_result Contract</h1>
+    <div class="tag">Matching ids, user-role turns, and the three ways to earn a 400</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The four invariants of a valid tool_result</h2>
+    <p>Returning a tool result looks trivial, but the API enforces a strict contract. Violate any part and you get a
+    hard <strong>HTTP 400</strong> — not a soft degradation. Memorize these four invariants; the exam tests them directly.</p>
+
+    <table>
+        <tr><th>Invariant</th><th>Rule</th><th>Violate it →</th></tr>
+        <tr><td><strong>Matching id</strong></td><td><code>tool_use_id</code> must equal the <code>id</code> of the <code>tool_use</code> block it answers.</td><td>400</td></tr>
+        <tr><td><strong>User role</strong></td><td>The <code>tool_result</code> lives in a <code>user</code> turn, never assistant.</td><td>400</td></tr>
+        <tr><td><strong>One user message</strong></td><td>ALL results for one assistant turn go in a <em>single</em> user message.</td><td>400 / missing result</td></tr>
+        <tr><td><strong>Alternation</strong></td><td>Roles must alternate user → assistant → user; no two same-role turns in a row.</td><td>400</td></tr>
+    </table>
+
+    <div class="note">🔑 A <code>tool_result</code> block is shaped
+    <code>{"type":"tool_result", "tool_use_id": &lt;id&gt;, "content": &lt;str or blocks&gt;}</code>. Add
+    <code>"is_error": true</code> to signal the tool failed — Claude reads it as a failure and can retry or adapt,
+    rather than treating the payload as a valid answer.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The id must match, the role must be user</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant App as Your code
+    participant API as Messages API
+    API-->>App: assistant turn<br/>tool_use { id: "toolu_A1", name, input }
+    Note over App: run the tool
+    App->>API: user turn<br/>tool_result { tool_use_id: "toolu_A1" }
+    Note over App: ✅ id matches + role=user
+    API-->>App: end_turn (final answer)
+    App-->>App: ❌ tool_use_id "toolu_XX"?  → 400
+    App-->>App: ❌ put in assistant turn?   → 400
+    App-->>App: ❌ two user turns in a row? → 400
+    </div>
+
+    <h2><span class="chip code">CODE</span> Building the tool_result turn</h2>
+    <p>Success path, the <code>is_error</code> path, and returning results for <em>every</em> <code>tool_use</code> in the
+    same assistant turn in ONE user message.</p>
+<pre>tool_uses = [b <span class="kw">for</span> b <span class="kw">in</span> resp.content <span class="kw">if</span> b.type == <span class="st">"tool_use"</span>]
+
+results = []
+<span class="kw">for</span> tu <span class="kw">in</span> tool_uses:
+    <span class="kw">try</span>:
+        out = <span class="fn">run_tool</span>(tu.name, tu.input)
+        results.<span class="fn">append</span>({
+            <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+            <span class="st">"tool_use_id"</span>: tu.id,          <span class="cm"># MUST match the tool_use id</span>
+            <span class="st">"content"</span>: out,                 <span class="cm"># str, or a list of content blocks</span>
+        })
+    <span class="kw">except</span> Exception <span class="kw">as</span> e:
+        results.<span class="fn">append</span>({
+            <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+            <span class="st">"tool_use_id"</span>: tu.id,
+            <span class="st">"content"</span>: <span class="st">f"Error: {e}"</span>,
+            <span class="st">"is_error"</span>: True,              <span class="cm"># tells Claude the tool FAILED</span>
+        })
+
+<span class="cm"># ONE user message carrying ALL results from that assistant turn.</span>
+messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: results})
+
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=TOOLS, messages=messages,
+)</pre>
+
+    <div class="bad">Do <strong>not</strong> split results across multiple user messages, and do <strong>not</strong> drop
+    the result for a tool_use you chose not to run — every <code>tool_use</code> id in an assistant turn must be answered in
+    the next single user turn.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap (400 cause #1):</b> <b>Mismatched id.</b> <code>tool_use_id</code> doesn't equal the
+    <code>tool_use.id</code> it answers (typo, wrong index, stale id). → HTTP 400.</div>
+    <div class="trap"><b>Trap (400 cause #2):</b> <b>Wrong role.</b> Putting the <code>tool_result</code> in an
+    <code>assistant</code> turn. Results are <b>always</b> a <code>user</code> turn. → HTTP 400.</div>
+    <div class="trap"><b>Trap (400 cause #3):</b> <b>Non-alternating roles / split results.</b> Two same-role turns in a
+    row, or spreading one turn's results across multiple user messages instead of one. → HTTP 400.</div>
+    <div class="trap"><b>Trap:</b> Treating a failed tool as success. → A tool that errored should return
+    <code>is_error: true</code> so Claude adapts, not a fabricated "OK".</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Claude returned two tool_use blocks. How many user messages should carry the results?</summary>
+    <p class="answer"><b>One.</b> All results from a single assistant turn go in one user message, as a list of two
+    <code>tool_result</code> blocks — each with its own matching <code>tool_use_id</code>. Splitting them 400s.</p></details>
+    <details><summary>Q2 · Your DB tool timed out. What do you send back?</summary>
+    <p class="answer">A <code>tool_result</code> with the matching <code>tool_use_id</code>, an explanatory
+    <code>content</code>, and <code>"is_error": true</code>. Claude then knows the call failed and can retry, choose a
+    different tool, or explain the failure — instead of trusting a fake result.</p></details>
+    <details><summary>Q3 · Name the three ways to get a 400 from a tool_result.</summary>
+    <p class="answer">(1) <b>Mismatched <code>tool_use_id</code></b>, (2) <b>wrong role</b> (assistant instead of user),
+    (3) <b>non-alternating roles</b> — including splitting one turn's results across multiple user messages.</p></details>
+
+    <div class="pager">
+        <a href="3-1-tool-request-result-cycle.html"><span class="k">← Prev</span>3.1 · The Tool Request/Result Cycle</a>
+        <a class="next" href="3-3-parallel-tool-calls.html"><span class="k">Next →</span>3.3 · Parallel Tool Calls</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 3.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

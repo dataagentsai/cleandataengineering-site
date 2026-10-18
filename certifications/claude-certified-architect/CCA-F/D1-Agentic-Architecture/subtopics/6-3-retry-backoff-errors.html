@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.3 Retry with Backoff &amp; Error Codes · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 6 · Reliability</div>
+    <h1>6.3 · Retry with Backoff &amp; Error Codes</h1>
+    <div class="tag">The SDK already retries — know what it retries and what it won't</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The SDK auto-retries — you rarely hand-roll backoff</h2>
+    <p>The Anthropic SDK <strong>automatically retries</strong> transient failures with <strong>exponential
+    backoff</strong>. Retryable status codes are <code>408</code>, <code>409</code>, <code>429</code>,
+    <code>5xx</code>, and <code>529</code>, plus connection errors. The default is <code>max_retries=2</code>,
+    configurable per-client or per-request.</p>
+<pre><span class="kw">import</span> anthropic
+
+<span class="cm"># Configure retries at the client level...</span>
+client = anthropic.Anthropic(max_retries=<span class="st">4</span>)
+
+<span class="cm"># ...or per-request, without a new client:</span>
+resp = client.with_options(max_retries=<span class="st">5</span>).messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Hello"</span>}],
+)</pre>
+    <div class="note">🔑 The default is <code>max_retries=2</code>. Set it via
+    <code>Anthropic(max_retries=…)</code> or <code>client.with_options(max_retries=…)</code>. You usually
+    <strong>don't</strong> write your own retry loop for API calls — the SDK does exponential backoff for you.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Retryable vs. not</h2>
+    <p>The dividing line: <strong>transient</strong> faults are worth retrying; a <strong>4xx client error (except
+    429)</strong> is a problem with <em>your</em> request and will fail identically on retry — retrying it just
+    wastes calls and can cascade.</p>
+    <table>
+        <tr><th>Code</th><th>Meaning</th><th>Retryable?</th><th>Note</th></tr>
+        <tr><td><code>400</code></td><td>invalid_request</td><td>🔴 No</td><td>Fix the request; identical failure on retry</td></tr>
+        <tr><td><code>401</code></td><td>authentication</td><td>🔴 No</td><td>Bad/missing API key</td></tr>
+        <tr><td><code>403</code></td><td>permission</td><td>🔴 No</td><td>Key lacks access</td></tr>
+        <tr><td><code>404</code></td><td>not_found</td><td>🔴 No</td><td>Wrong resource</td></tr>
+        <tr><td><code>408</code></td><td>request timeout</td><td>🟢 Yes</td><td>SDK auto-retries</td></tr>
+        <tr><td><code>409</code></td><td>conflict</td><td>🟢 Yes</td><td>SDK auto-retries</td></tr>
+        <tr><td><code>413</code></td><td>request_too_large</td><td>🔴 No</td><td>Shrink the payload</td></tr>
+        <tr><td><code>429</code></td><td>rate_limit</td><td>🟢 Yes</td><td>Has a <code>retry-after</code> header; the one retryable 4xx</td></tr>
+        <tr><td><code>500</code></td><td>api_error</td><td>🟢 Yes</td><td>Server-side; SDK auto-retries</td></tr>
+        <tr><td><code>529</code></td><td>overloaded</td><td>🟢 Yes</td><td>API busy; back off and retry</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Should this failure be retried?</h2>
+    <div class="mermaid">
+flowchart TD
+    E([Request fails]) --> Q1{"Status code?"}
+    Q1 -->|"408 · 409 · 429<br/>5xx · 529 · conn err"| R["🟢 Retryable<br/>SDK backs off & retries"]
+    Q1 -->|"4xx except 429<br/>(400/401/403/404/413)"| N["🔴 Not retryable<br/>fix the request"]
+    R --> Q2{"Retries exhausted<br/>(max_retries)?"}
+    Q2 -->|No| R
+    Q2 -->|Yes| L["Climb the ladder →<br/>fallback (6.4) / escalate (6.5)"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef no fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef nx fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    class R ok; class N no; class L nx;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Catch <em>typed</em> exceptions, don't string-match</h2>
+    <p>The SDK raises typed exceptions. Branch on the type — matching on error-message text is brittle and breaks silently when wording changes.</p>
+<pre><span class="kw">import</span> anthropic
+client = anthropic.Anthropic()   <span class="cm"># default max_retries=2 already active</span>
+
+<span class="kw">try</span>:
+    resp = client.messages.create(
+        model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+        messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: prompt}],
+    )
+<span class="kw">except</span> anthropic.RateLimitError:                 <span class="cm"># 429 — SDK already retried & gave up</span>
+    escalate_or_queue()                          <span class="cm"># honour retry-after; shed load</span>
+<span class="kw">except</span> anthropic.APIConnectionError:            <span class="cm"># network / transport failure</span>
+    fallback()                                   <span class="cm"># the request never reached the API</span>
+<span class="kw">except</span> anthropic.APIStatusError <span class="kw">as</span> e:            <span class="cm"># any non-2xx after retries</span>
+    <span class="kw">if</span> e.status_code &lt; <span class="st">500</span>:                     <span class="cm"># 4xx (not 429): our bug — do NOT retry</span>
+        log_and_raise(e)
+    <span class="kw">else</span>:
+        fallback()                               <span class="cm"># 5xx/529 exhausted → degrade</span></pre>
+    <div class="warn">⚠️ If you <em>do</em> hand-roll backoff (e.g. custom orchestration outside the SDK), the SDK
+    is already retrying underneath — stacking loops multiplies your effective retry count and can amplify a 429
+    storm. Prefer tuning <code>max_retries</code> over wrapping the call.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Retry the 400 with backoff." → <b>No.</b> 4xx except 429 are <b>not</b> retryable;
+    a 400 is your malformed request and fails identically. Retrying wastes calls.</div>
+    <div class="trap"><b>Trap:</b> "Write a retry loop for 429s." → The SDK <b>already</b> retries 429/5xx/529 with
+    exponential backoff. Adjust <code>max_retries</code> instead of reimplementing it.</div>
+    <div class="trap"><b>Trap:</b> Detecting errors by parsing the message string. → Use the <b>typed exceptions</b>
+    (<code>RateLimitError</code>, <code>APIStatusError</code>, <code>APIConnectionError</code>). Strings change; types don't.</div>
+    <div class="trap"><b>Trap:</b> Forgetting <b>529 overloaded</b> is retryable. → It's the API being busy, not your
+    request — back off and retry, same bucket as 5xx.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Your call fails with 413 request_too_large. Retry?</summary>
+    <p class="answer">No — 413 is not retryable. The payload is too big and will fail identically. Shrink the input
+    (trim context, chunk, or drop attachments), don't retry.</p></details>
+    <details><summary>Q2 · What's special about 429 among the 4xx codes?</summary>
+    <p class="answer">It's the <b>only retryable 4xx</b>. It carries a <code>retry-after</code> header, and the SDK
+    auto-retries it with backoff. All other 4xx (400/401/403/404/413) are client errors you must fix.</p></details>
+    <details><summary>Q3 · You need up to 5 automatic retries on one specific critical call, but the default elsewhere. How?</summary>
+    <p class="answer">Use <code>client.with_options(max_retries=5).messages.create(...)</code> for that call. It
+    returns a copy with the override applied per-request, leaving the base client's default (2) untouched.</p></details>
+
+    <div class="pager">
+        <a href="6-2-circuit-breakers.html"><span class="k">← Prev</span>6.2 · Circuit Breakers</a>
+        <a class="next" href="6-4-fallback-strategies.html"><span class="k">Next →</span>6.4 · Fallback Strategies</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 6.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

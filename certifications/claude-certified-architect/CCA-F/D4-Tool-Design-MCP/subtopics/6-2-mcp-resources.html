@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.2 Resources (Readable Data) · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design & MCP</a> › Cluster 6 · MCP Primitives</div>
+    <h1>6.2 · Resources (Readable Data)</h1>
+    <div class="tag">Application-controlled context</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Resources are <em>data</em>, not actions</h2>
+    <p>A <strong>resource</strong> lets a server share <em>readable data</em> that gives the model context — a file,
+    a database schema, a config, application state. The critical distinction from Tools (6.1): a resource is
+    <strong>data, not an action</strong>. Reading a resource has no side effect; it just returns content.</p>
+
+    <p>Each resource is uniquely identified by a <strong>URI</strong> (e.g. <code>file:///project/src/main.rs</code>).
+    The control model is <strong>application-controlled</strong> (the spec calls it "application-driven"): the
+    <em>host application decides</em> how and when to pull a resource into context — via a picker UI, search, or a
+    heuristic — rather than the model unilaterally invoking it the way it does a tool.</p>
+
+    <table>
+        <tr><th>Aspect</th><th>How resources work</th></tr>
+        <tr><td>Control</td><td><strong>Application-controlled</strong> — the host app decides what to include</td></tr>
+        <tr><td>Identity</td><td>A <strong>URI</strong> (<code>file://</code>, <code>https://</code>, <code>git://</code>, custom)</td></tr>
+        <tr><td>Discovery</td><td><code>resources/list</code> → <code>uri</code>, <code>name</code>, <code>description</code>, <code>mimeType</code></td></tr>
+        <tr><td>Read</td><td><code>resources/read</code> with a <code>uri</code> → <code>contents</code> (text or blob)</td></tr>
+        <tr><td>Parameterized</td><td>Resource <em>templates</em> via <code>resources/templates/list</code> (RFC 6570 URI templates)</td></tr>
+        <tr><td>Live updates</td><td><code>resources/subscribe</code> → <code>notifications/resources/updated</code></td></tr>
+        <tr><td>Nature</td><td><strong>Readable data / context</strong> — no side effect</td></tr>
+    </table>
+
+    <div class="note">🔑 The <code>resources</code> capability advertises two optional features:
+    <code>subscribe</code> (per-resource change notifications) and <code>listChanged</code> (the whole list
+    changed). A server can support neither, either, or both.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Subscriptions keep context fresh</h2>
+    <p>Because resources are data that can change, a client may <code>resources/subscribe</code> to a specific URI.
+    When that resource changes, the server sends <code>notifications/resources/updated</code> with the URI, and the
+    client re-reads it. This is how a server keeps the model's context in sync with a file that is being edited or a
+    metric that keeps moving — without the model polling.</p>
+
+    <div class="good">Think "watch a file." Subscribe once, get pinged on change, re-read on demand — the update
+    notification carries the <code>uri</code>, not the new contents.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> List → read → subscribe → updated</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant Client
+    participant Server
+    Note over Client,Server: Discovery
+    Client->>Server: resources/list
+    Server-->>Client: [uri, name, mimeType, ...]
+    Note over Client,Server: Access (no side effect)
+    Client->>Server: resources/read {uri}
+    Server-->>Client: {contents:[{uri, text|blob}]}
+    Note over Client,Server: Stay in sync
+    Client->>Server: resources/subscribe {uri}
+    Server--)Client: notifications/resources/updated {uri}
+    Client->>Server: resources/read {uri}
+    Server-->>Client: Updated contents
+    classDef srv fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef cli fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class Server srv; class Client cli;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A resource definition and a read</h2>
+    <p>The server lists a resource by <code>uri</code> + <code>mimeType</code>; the client reads it and gets a
+    <code>contents</code> array (text here; binary resources use a base64 <code>blob</code> instead of
+    <code>text</code>).</p>
+<pre><span class="cm">// resources/list  → server advertises readable data by URI</span>
+{
+  <span class="st">"uri"</span>: <span class="st">"file:///project/src/main.rs"</span>,
+  <span class="st">"name"</span>: <span class="st">"main.rs"</span>,
+  <span class="st">"title"</span>: <span class="st">"Rust Application Main File"</span>,
+  <span class="st">"description"</span>: <span class="st">"Primary application entry point"</span>,
+  <span class="st">"mimeType"</span>: <span class="st">"text/x-rust"</span>
+}
+
+<span class="cm">// resources/read  → client pulls the data in (no side effect)</span>
+{ <span class="st">"method"</span>: <span class="st">"resources/read"</span>,
+  <span class="st">"params"</span>: { <span class="st">"uri"</span>: <span class="st">"file:///project/src/main.rs"</span> } }
+
+<span class="cm">// result  → contents array (text OR base64 blob)</span>
+{ <span class="st">"contents"</span>: [ {
+    <span class="st">"uri"</span>: <span class="st">"file:///project/src/main.rs"</span>,
+    <span class="st">"mimeType"</span>: <span class="st">"text/x-rust"</span>,
+    <span class="st">"text"</span>: <span class="st">"fn main() { println!(\"Hello world!\"); }"</span>
+} ] }</pre>
+
+    <div class="note">🔑 Note the shape difference vs. a tool: a resource read returns <code>contents</code> (each
+    item keyed by <code>uri</code>); a tool call returns <code>content</code> + <code>isError</code>. Same idea,
+    different envelope — a favorite fine-detail trap.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Expose data as a Resource vs. a Tool</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Resource (application-controlled data)</h4>
+            <ul><li>No side effect — safe to include as context</li>
+            <li>Host app curates exactly what enters the window</li>
+            <li>Subscriptions keep changing data fresh</li></ul></div>
+        <div class="con"><h4>⚠️ Tool that "just returns data"</h4>
+            <ul><li>Model decides to call — less app control over context</li>
+            <li>Looks like an action; muddies the model/app boundary</li>
+            <li>Use a tool when a <b>parameterized fetch/side effect</b> is truly needed</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb: static/known context the app should curate → <b>Resource</b>. A dynamic
+    operation the <em>model</em> should decide to run → <b>Tool</b>.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Resources are model-controlled like tools." → No. Resources are
+    <b>application-controlled</b> — the host app decides what to surface. Tools are model-controlled.</div>
+    <div class="trap"><b>Trap:</b> "A resource can perform an action." → Resources are <b>readable data</b> with no
+    side effect. If it <em>does</em> something, it should be a Tool.</div>
+    <div class="trap"><b>Trap:</b> Identifying a resource by name. → Resources are identified by a <b>URI</b>
+    (RFC 3986). Templates use RFC 6570 <code>uriTemplate</code> strings.</div>
+    <div class="trap"><b>Trap:</b> "Subscriptions push the new content." → <code>notifications/resources/updated</code>
+    carries only the <b>uri</b>; the client must <code>resources/read</code> again to get the new contents.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What makes resources "application-controlled" and why does it matter?</summary>
+    <p class="answer">The host application — not the model — decides which resources to pull into context (picker,
+    search, or heuristic). It matters because it keeps the app in charge of what data enters the context window,
+    unlike model-controlled tools.</p></details>
+    <details><summary>Q2 · Which methods discover, read, and watch a resource?</summary>
+    <p class="answer"><code>resources/list</code> to discover, <code>resources/read</code> to fetch contents, and
+    <code>resources/subscribe</code> to watch — with change signals arriving as
+    <code>notifications/resources/updated</code>.</p></details>
+    <details><summary>Q3 · You need dynamic weather data. Resource or tool?</summary>
+    <p class="answer">If the model should <em>decide to fetch</em> it as an action, expose a <b>tool</b>. If the app
+    curates a known feed as context (optionally with a template URI and subscription), a <b>resource</b> fits. The
+    control model — model vs. application — decides.</p></details>
+
+    <div class="pager">
+        <a href="6-1-mcp-tools.html"><span class="k">← Back</span>6.1 · Tools</a>
+        <a class="next" href="6-3-mcp-prompts.html"><span class="k">Next →</span>6.3 · Prompts</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 6.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

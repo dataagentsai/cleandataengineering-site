@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.1 · Let Claude Think (CoT) — When It Helps · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 5 · Chain of Thought &amp; Extended Thinking</div>
+    <h1>5.1 · Let Claude Think (CoT) — When It Helps</h1>
+    <div class="tag">Reasoning before the answer</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Ask for reasoning, get accuracy</h2>
+    <p><strong>Chain-of-thought (CoT) prompting</strong> means asking Claude to reason <em>step by step</em>
+    before it commits to an answer. Instead of demanding the final result in one leap, you invite the model to
+    externalize intermediate steps — the arithmetic, the case analysis, the logical chain. For
+    <strong>complex, multi-step tasks</strong> — math, logic puzzles, financial or legal analysis, multi-hop
+    questions — this reliably <strong>improves accuracy</strong>, because the model works the problem instead of
+    pattern-matching to a plausible-looking guess.</p>
+
+    <div class="note">🔑 The core intuition: giving the model <em>room to reason in tokens</em> before the answer
+    lets it catch its own mistakes mid-derivation. The answer is only as good as the reasoning that produced it.</div>
+
+    <p>CoT comes in three levels of increasing structure:</p>
+    <table>
+        <tr><th>Level</th><th>How you prompt</th><th>Use when</th></tr>
+        <tr><td><strong>Basic</strong></td><td>"Think step by step."</td><td>Quick uplift; you don't need to parse the reasoning out.</td></tr>
+        <tr><td><strong>Guided</strong></td><td>Name the steps: "First compute X, then compare to Y, then decide."</td><td>You know the reasoning shape and want to steer it.</td></tr>
+        <tr><td><strong>Structured</strong></td><td>Reason in <code>&lt;thinking&gt;</code>, answer in <code>&lt;answer&gt;</code> tags.</td><td>You need to <em>separate</em> and strip reasoning from the shipped output (see 5.2).</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> When it helps — and when it's wasted</h2>
+    <p>CoT is not free: every reasoning step is <strong>output tokens and latency</strong>. The gain is real on
+    hard problems and roughly <strong>zero on easy ones</strong>. Classification, lookups, format conversion,
+    sentiment tagging — a direct answer is faster, cheaper, and just as correct. Reserve CoT for tasks where a
+    naive one-shot answer is genuinely error-prone.</p>
+
+    <div class="good">Use CoT when: multi-step math, logical deduction, analysis that weighs several factors,
+    or anything where you'd want a human to "show their work."</div>
+    <div class="bad">Skip CoT when: the task is a single lookup, a classification into known labels, or a
+    mechanical transform. Reasoning here only adds tokens and latency with no accuracy payoff.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Route the task by complexity</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Incoming task"] --> Q{"Multi-step or<br/>error-prone?"}
+    Q -->|"no: lookup / classify / convert"| DIRECT["🟢 Answer directly<br/>fewer tokens, lower latency"]
+    Q -->|"yes: math / logic / analysis"| COT["🔵 Prompt for step-by-step<br/>reasoning (CoT)"]
+    COT --> STRUCT{"Need to strip<br/>the reasoning?"}
+    STRUCT -->|"yes"| TAGS["🟠 Structured CoT:<br/>&lt;thinking&gt; then &lt;answer&gt; (5.2)"]
+    STRUCT -->|"no"| PLAIN["Plain 'think step by step'"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef mid fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class DIRECT ok; class COT mid; class TAGS gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> BAD → GOOD: give the model room to reason</h2>
+    <p>A bare "what's the answer" on a multi-step word problem invites a fast wrong guess. Asking for the steps
+    first fixes it — same model, same question, better answer.</p>
+<pre><span class="cm"># BAD — one-shot, no room to reason. Error-prone on multi-step math.</span>
+system = <span class="st">"You are a financial analyst."</span>
+user   = <span class="st">"A bond pays $50/yr for 3 yrs then $1050. At 6% discount, what's its price?"</span>
+<span class="cm"># → model blurts a number; may fumble the discounting.</span>
+
+<span class="cm"># GOOD — ask for step-by-step reasoning first.</span>
+user = <span class="st">"""A bond pays $50/yr for 3 yrs then $1050. At a 6% discount rate,
+what is its present value?
+
+Think step by step: discount each cash flow, then sum them.
+Show your work, then give the final price."""</span>
+<span class="cm"># → model discounts each flow, sums, and states the price — far more reliable.</span></pre>
+
+    <div class="warn">⚠️ CoT surfaces the reasoning <em>in the visible response</em>. If you don't want that text
+    shipped to the end user, use the structured <code>&lt;thinking&gt;</code>/<code>&lt;answer&gt;</code> pattern in
+    5.2 so you can strip it — or use native extended thinking (5.3), which keeps reasoning in separate blocks.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Reasoning vs. a direct answer</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Prompt for CoT</h4>
+            <ul><li>Higher accuracy on math, logic, multi-factor analysis</li>
+            <li>Model catches its own mistakes mid-derivation</li>
+            <li>Reasoning is inspectable and debuggable</li></ul></div>
+        <div class="con"><h4>⚠️ Costs of CoT</h4>
+            <ul><li>More output tokens → higher cost</li>
+            <li>Higher latency (reasoning streams before the answer)</li>
+            <li>No benefit on simple tasks — pure overhead</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Always add 'think step by step.'" → CoT helps <b>complex</b> tasks; on lookups and
+    classification it just burns tokens and latency for no accuracy gain.</div>
+    <div class="trap"><b>Trap:</b> Assuming CoT is free. → It costs <b>output tokens and latency</b>. The reasoning
+    is generated text, billed and streamed like any other output.</div>
+    <div class="trap"><b>Trap:</b> Confusing CoT with a longer answer. → CoT is about <b>reasoning before the
+    answer</b>, not verbosity. The goal is a correct final result, with the steps as scaffolding.</div>
+    <div class="trap"><b>Trap:</b> Thinking prompted CoT and native extended thinking are the same thing. →
+    Prompted CoT is <b>you engineering the prompt</b>; extended thinking (5.3) is a <b>native model capability</b>
+    with its own <code>thinking</code> parameter and separate reasoning blocks.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You're classifying support tickets into 5 known categories. Should you add CoT?</summary>
+    <p class="answer">No. Classification into a fixed label set is a simple task — a direct answer is faster and
+    just as accurate. CoT here only adds tokens and latency. Reserve it for multi-step reasoning like math or
+    analysis.</p></details>
+    <details><summary>Q2 · Why does "think step by step" improve accuracy on a multi-step math problem?</summary>
+    <p class="answer">It gives the model room to externalize intermediate steps in tokens before committing to an
+    answer, so it works the problem instead of guessing a plausible number — and it can catch its own errors
+    mid-derivation.</p></details>
+    <details><summary>Q3 · Name the two costs of prompted CoT and one task where they're not worth paying.</summary>
+    <p class="answer">Extra <b>output tokens</b> and higher <b>latency</b>. They're not worth it on simple tasks —
+    e.g. a single lookup, a format conversion, or classification into known labels — where a direct answer is
+    equally correct.</p></details>
+
+    <div class="pager">
+        <a href="4-5-long-context-structuring.html"><span class="k">← Back</span>4.5 · Long-Context Structuring</a>
+        <a class="next" href="5-2-structured-thinking-tags.html"><span class="k">Next →</span>5.2 · Structured Thinking with Tags</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 5.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

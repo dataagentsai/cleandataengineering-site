@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.2 The Claude API MCP Connector · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design & MCP</a> › Cluster 7 · Building &amp; Consuming MCP Servers</div>
+    <h1>7.2 · The Claude API MCP Connector</h1>
+    <div class="tag">Call remote MCP from the Messages API</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Claude connects to a remote MCP server for you — no client to build</h2>
+    <p>The <strong>MCP connector</strong> lets the Messages API reach a remote MCP server <em>directly</em>, without
+    you writing or hosting an MCP client. You name the server(s) in the request; Anthropic makes the connection
+    server-side, exposes the tools to Claude, executes the calls, and returns the results as content blocks. It
+    requires <strong>two</strong> request components that work together:</p>
+    <table>
+        <tr><th>Component</th><th>Where</th><th>What it declares</th></tr>
+        <tr><td><code>mcp_servers</code></td><td>top-level request param (array)</td><td>Connection details: <code>type</code>, <code>url</code>, <code>name</code>, optional <code>authorization_token</code></td></tr>
+        <tr><td><code>mcp_toolset</code></td><td>an entry in the <code>tools</code> array</td><td>Which tools from a named server are enabled (via <code>mcp_server_name</code>)</td></tr>
+    </table>
+    <div class="warn">⚠️ <strong>Every server in <code>mcp_servers</code> must be referenced by exactly one
+    <code>mcp_toolset</code></strong> in <code>tools</code>. Supplying <code>mcp_servers</code> alone is a validation
+    error — the toolset is what actually surfaces the tools to the model.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The required beta header, the fields, and the limits</h2>
+    <p><strong>Beta header (verified):</strong> <code>anthropic-beta: mcp-client-2025-11-20</code> — pass it as
+    <code>betas=["mcp-client-2025-11-20"]</code> and call the <code>client.beta.messages.create(...)</code> path. (The
+    older <code>mcp-client-2025-04-04</code>, which put tool config inside the server definition, is deprecated.)</p>
+    <div class="note">🔑 <code>mcp_servers[]</code> fields — <code>type</code> (only <code>"url"</code> is supported),
+    <code>url</code> (must start with <code>https://</code>), <code>name</code> (unique; referenced by one toolset),
+    and optional <code>authorization_token</code> (OAuth Bearer token — see 7.3). Do <strong>not</strong> invent other
+    fields.</div>
+    <div class="bad">Limits to know: it supports <strong>remote HTTP servers only</strong> — both <strong>Streamable
+    HTTP and SSE</strong> transports; local <strong>STDIO</strong> servers cannot be connected. Of the MCP feature set,
+    only <strong>tool calls</strong> are supported (not resources/prompts). It is <strong>not ZDR-eligible</strong>.
+    Available on the Claude API, Claude Platform on AWS, and Microsoft Foundry — <strong>not</strong> on Amazon Bedrock
+    or Google Vertex.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> One request, server-side connection, tool blocks back</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant You as Your app
+    participant API as Messages API
+    participant MCP as Remote MCP server (HTTPS)
+    You->>API: mcp_servers:[{type:url,url,name,authorization_token}]<br/>tools:[{type:mcp_toolset,mcp_server_name}]<br/>beta: mcp-client-2025-11-20
+    API->>MCP: connect + list tools (server-side)
+    API->>MCP: call tool (Claude decided)
+    MCP-->>API: result
+    API-->>You: content: mcp_tool_use + mcp_tool_result blocks
+    </div>
+
+    <h2><span class="chip code">CODE</span> A connector request and the response blocks</h2>
+    <p>Enable all tools from one authenticated server. The response carries two new block types.</p>
+<pre><span class="cm"># Python — client.beta.messages.create, beta header required</span>
+response = client.beta.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">1000</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"What tools do you have available?"</span>}],
+    mcp_servers=[
+        {
+            <span class="st">"type"</span>: <span class="st">"url"</span>,                                 <span class="cm"># only "url" is valid</span>
+            <span class="st">"url"</span>: <span class="st">"https://mcp.example.com/sse"</span>,        <span class="cm"># must be https</span>
+            <span class="st">"name"</span>: <span class="st">"example-mcp"</span>,                       <span class="cm"># unique; referenced below</span>
+            <span class="st">"authorization_token"</span>: <span class="st">"YOUR_OAUTH_TOKEN"</span>,  <span class="cm"># optional (7.3)</span>
+        }
+    ],
+    tools=[{<span class="st">"type"</span>: <span class="st">"mcp_toolset"</span>, <span class="st">"mcp_server_name"</span>: <span class="st">"example-mcp"</span>}],
+    betas=[<span class="st">"mcp-client-2025-11-20"</span>],
+)</pre>
+<pre><span class="cm">// Response content blocks — two new types</span>
+{ <span class="st">"type"</span>: <span class="st">"mcp_tool_use"</span>,
+  <span class="st">"id"</span>: <span class="st">"mcptoolu_014Q35..."</span>,
+  <span class="st">"name"</span>: <span class="st">"echo"</span>,
+  <span class="st">"server_name"</span>: <span class="st">"example-mcp"</span>,
+  <span class="st">"input"</span>: { <span class="st">"param1"</span>: <span class="st">"value1"</span> } }
+
+{ <span class="st">"type"</span>: <span class="st">"mcp_tool_result"</span>,
+  <span class="st">"tool_use_id"</span>: <span class="st">"mcptoolu_014Q35..."</span>,
+  <span class="st">"is_error"</span>: <span class="kw">false</span>,
+  <span class="st">"content"</span>: [{ <span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: <span class="st">"Hello"</span> }] }</pre>
+    <p>Allowlist / denylist individual tools via the toolset's <code>default_config</code> (defaults for all tools) and
+    <code>configs</code> (per-tool overrides), each supporting <code>enabled</code> and <code>defer_loading</code>:</p>
+<pre><span class="cm"># Allowlist: disable all by default, enable two</span>
+{ <span class="st">"type"</span>: <span class="st">"mcp_toolset"</span>, <span class="st">"mcp_server_name"</span>: <span class="st">"example-mcp"</span>,
+  <span class="st">"default_config"</span>: { <span class="st">"enabled"</span>: <span class="kw">false</span> },
+  <span class="st">"configs"</span>: { <span class="st">"search_events"</span>: { <span class="st">"enabled"</span>: <span class="kw">true</span> },
+              <span class="st">"list_events"</span>:   { <span class="st">"enabled"</span>: <span class="kw">true</span> } } }</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> The connector vs. running your own MCP client</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ MCP connector (<code>mcp_servers</code>)</h4>
+            <ul><li>No client to build or host — Anthropic makes the connection</li>
+            <li>One API call; multiple servers per request</li>
+            <li>Allowlist/denylist &amp; <code>defer_loading</code> per tool</li></ul></div>
+        <div class="con"><h4>⚠️ SDK client-side MCP helpers</h4>
+            <ul><li>Needed for local <b>stdio</b> servers, or MCP <b>prompts/resources</b></li>
+            <li>You manage the connection, but gain full protocol access</li>
+            <li>More control, more code (you host the client)</li></ul></div>
+    </div>
+    <div class="good">Use the connector when you have a <em>remote, URL-addressable</em> server and only need
+    <em>tools</em>. Reach for the SDK's client-side helpers (<code>mcpTools</code>, <code>mcpMessages</code>, …) when
+    you need local servers, prompts, or resources.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Sending only <code>mcp_servers</code> and expecting tools to appear. → You must also
+    add an <code>mcp_toolset</code> entry in <code>tools</code> referencing the server by <code>mcp_server_name</code>.
+    Every declared server needs exactly one toolset.</div>
+    <div class="trap"><b>Trap:</b> Pointing the connector at a local stdio server. → The connector reaches
+    <b>remote HTTP</b> servers only (Streamable HTTP or SSE). STDIO is not supported; the <code>url</code> must be
+    <code>https://</code>.</div>
+    <div class="trap"><b>Trap:</b> Guessing connector fields (e.g. a <code>headers</code> or <code>command</code> key). →
+    The only <code>mcp_servers</code> fields are <code>type</code>, <code>url</code>, <code>name</code>, and optional
+    <code>authorization_token</code>. Tool config lives in the toolset, not the server definition.</div>
+    <div class="trap"><b>Trap:</b> Assuming resources/prompts flow through the connector. → Only <b>tool calls</b> are
+    supported. Results arrive as <code>mcp_tool_use</code> / <code>mcp_tool_result</code> blocks, not
+    <code>tool_use</code> / <code>tool_result</code>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What beta header and which two request components does the connector require?</summary>
+    <p class="answer">Header <code>anthropic-beta: mcp-client-2025-11-20</code>, plus (1) an <code>mcp_servers</code> array
+    with <code>{type:"url", url, name, authorization_token?}</code> and (2) a matching
+    <code>{type:"mcp_toolset", mcp_server_name}</code> entry in the <code>tools</code> array.</p></details>
+    <details><summary>Q2 · Which transports and MCP features does the connector support?</summary>
+    <p class="answer">Remote <b>HTTP</b> servers over <b>Streamable HTTP or SSE</b> — no local STDIO. Of the MCP feature
+    set, only <b>tool calls</b> are supported (not resources or prompts). It is not ZDR-eligible and is unavailable on
+    Bedrock/Vertex.</p></details>
+    <details><summary>Q3 · How do the response blocks differ from ordinary tool use?</summary>
+    <p class="answer">The connector returns <code>mcp_tool_use</code> (which also carries a <code>server_name</code>) and
+    <code>mcp_tool_result</code> blocks — Anthropic executed the call server-side, so unlike a normal
+    <code>tool_use</code> you don't send a <code>tool_result</code> back yourself.</p></details>
+
+    <div class="pager">
+        <a href="7-1-building-mcp-server.html"><span class="k">← Back</span>7.1 · Building a Server (SDK)</a>
+        <a class="next" href="7-3-remote-mcp-auth.html"><span class="k">Next →</span>7.3 · Remote MCP Servers &amp; OAuth</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 7.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

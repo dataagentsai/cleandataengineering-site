@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.2 Handling tool_use · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 2 · Stop Reasons</div>
+    <h1>2.2 · Handling <code>tool_use</code></h1>
+    <div class="tag">The continue path that drives every agent</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> <code>tool_use</code> is the "keep looping" signal</h2>
+    <p>When <code>stop_reason == "tool_use"</code>, the model has decided it needs a tool before it can finish.
+    The response's <code>content</code> is a <em>list of blocks</em>: some may be <code>text</code>
+    (the model thinking aloud), and one or more are <code>tool_use</code> blocks — each with an <code>id</code>,
+    a <code>name</code>, and an <code>input</code> dict. Your job is a fixed four-step cycle.</p>
+
+    <table>
+        <tr><th>Step</th><th>Action</th><th>Detail</th></tr>
+        <tr><td>1</td><td>Append the WHOLE assistant turn</td><td><code>messages.append({"role":"assistant","content": resp.content})</code> — the entire <code>content</code> list, text blocks included.</td></tr>
+        <tr><td>2</td><td>Extract every <code>tool_use</code> block</td><td>There can be <strong>more than one</strong> in a single turn (parallel tool calls).</td></tr>
+        <tr><td>3</td><td>Run each tool; build a <code>tool_result</code></td><td><code>tool_result.tool_use_id</code> MUST match the block's <code>id</code>.</td></tr>
+        <tr><td>4</td><td>Send results back in a <strong>user</strong> turn</td><td>All <code>tool_result</code> blocks go in one user message; call the API again.</td></tr>
+    </table>
+
+    <div class="note">🔑 Two hard rules from Cluster 1 apply here: <strong>append the whole <code>response.content</code></strong>
+    (not just the tool_use block), and <strong><code>tool_result.tool_use_id</code> must equal the <code>tool_use.id</code></strong>.
+    A mismatch or a dropped block is a 400-class error.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The tool_use cycle</h2>
+    <div class="mermaid">
+flowchart TD
+    A([stop_reason == tool_use]) --> B["append WHOLE assistant turn<br/>(role: assistant, content: resp.content)"]
+    B --> C{"iterate content blocks"}
+    C -->|text block| D["(optional) log / show thinking"]
+    C -->|tool_use block| E["run tool(name, input)<br/>→ result"]
+    E --> F["build tool_result<br/>tool_use_id = block.id"]
+    D --> G
+    F --> G["collect all tool_result blocks"]
+    G --> H["append ONE user turn<br/>(role: user, content: [tool_result, ...])"]
+    H --> I([call messages.create again → loop])
+    classDef loop fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef act fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    class A,I loop; class E,F act;
+    </div>
+
+    <h2><span class="chip code">CODE</span> The tool_use branch (handles multiple calls)</h2>
+    <p>Note the loop over <em>all</em> blocks — a single turn may contain several <code>tool_use</code> blocks, and
+    every one needs a matching <code>tool_result</code>.</p>
+<pre><span class="kw">def</span> <span class="fn">handle_tool_use</span>(resp, messages):
+    <span class="cm"># 1) Append the WHOLE assistant turn (text + tool_use blocks).</span>
+    messages.append({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content})
+
+    <span class="cm"># 2) + 3) Run EVERY tool_use block; collect results.</span>
+    results = []
+    <span class="kw">for</span> block <span class="kw">in</span> resp.content:
+        <span class="kw">if</span> block.type != <span class="st">"tool_use"</span>:
+            <span class="kw">continue</span>                      <span class="cm"># skip text/thinking blocks</span>
+        output = run_tool(block.name, block.input)   <span class="cm"># your dispatch</span>
+        results.append({
+            <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+            <span class="st">"tool_use_id"</span>: block.id,     <span class="cm"># MUST match the tool_use id</span>
+            <span class="st">"content"</span>: output,
+        })
+
+    <span class="cm"># 4) Send ALL results back in ONE user turn, then loop.</span>
+    messages.append({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: results})
+    <span class="kw">return</span> messages                    <span class="cm"># caller re-invokes messages.create()</span></pre>
+
+    <div class="good">Because you append the assistant turn <em>and</em> the user <code>tool_result</code> turn, the next
+    stateless request carries the full context: the model sees what it asked for and what came back.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> One tool per turn vs. parallel tool_use</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Handle all blocks in a turn</h4>
+            <ul><li>Model can request several tools at once → fewer round-trips</li>
+            <li>Lower latency for independent lookups</li>
+            <li>Correct: every <code>tool_use</code> gets its <code>tool_result</code></li></ul></div>
+        <div class="con"><h4>⚠️ Only handling the first block</h4>
+            <ul><li>Leaves <code>tool_use</code> blocks without results → API error next turn</li>
+            <li>Silently drops work the model asked for</li>
+            <li>Breaks as soon as the model parallelizes</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Appending only the <code>tool_use</code> block instead of the whole
+    <code>resp.content</code>. → You lose accompanying text blocks and can desync the turn. Append the
+    <b>entire</b> content list.</div>
+    <div class="trap"><b>Trap:</b> Putting <code>tool_result</code> in an <b>assistant</b> turn. → Tool results are the
+    <b>user</b>'s turn (you are speaking on the environment's behalf). Role must be <code>user</code>.</div>
+    <div class="trap"><b>Trap:</b> Assuming exactly one tool call per turn. → A turn can contain <b>multiple</b>
+    <code>tool_use</code> blocks. Loop over all of them; each needs a matching <code>tool_result</code>.</div>
+    <div class="trap"><b>Trap:</b> Mismatched IDs. → <code>tool_result.tool_use_id</code> must equal the originating
+    <code>tool_use.id</code>. Copy it verbatim; don't regenerate.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · The model returns a text block AND two tool_use blocks. What goes back to the API?</summary>
+    <p class="answer">First append the <b>whole</b> assistant turn (text + both tool_use blocks). Then run both tools and
+    append <b>one user turn</b> containing <b>two</b> <code>tool_result</code> blocks, each with a
+    <code>tool_use_id</code> matching its tool_use. Then call again.</p></details>
+    <details><summary>Q2 · Your next request fails with an error about an unresolved tool call. Likely cause?</summary>
+    <p class="answer">You handled only the first <code>tool_use</code> block and left another without a matching
+    <code>tool_result</code>, or an ID didn't match. The API requires every <code>tool_use</code> in the prior
+    assistant turn to be answered.</p></details>
+    <details><summary>Q3 · After appending tool_result, do you set stop_reason yourself to keep looping?</summary>
+    <p class="answer">No — you never set <code>stop_reason</code>. You just call <code>messages.create</code> again with the
+    updated <code>messages</code>; the <em>next</em> response carries its own <code>stop_reason</code>
+    (possibly <code>end_turn</code> now, or another <code>tool_use</code>).</p></details>
+
+    <div class="pager">
+        <a href="2-1-stop-reason-overview.html"><span class="k">← Prev</span>2.1 · The six stop_reason values</a>
+        <a class="next" href="2-3-max-tokens-vs-context-window.html"><span class="k">Next →</span>2.3 · max_tokens vs. context window</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 2.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

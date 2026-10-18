@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.2 The Messages API as Substrate · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 1 · Foundations</div>
+    <h1>1.2 · The Messages API as Substrate</h1>
+    <div class="tag">One endpoint — everything else is a feature of it</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> One endpoint underneath everything</h2>
+    <p>Every agent, workflow, tool call, chain-of-thought, and structured output you build on Claude bottoms
+    out at a <strong>single HTTP endpoint</strong>: <code>POST /v1/messages</code>. There is no separate
+    "tools API", "thinking API", or "agents API". Tool use, extended thinking, structured output, streaming —
+    these are all <strong>features expressed <em>through</em> the same request/response shape</strong>, toggled
+    by fields you pass and blocks you get back.</p>
+
+    <div class="note">🔑 Architect framing: the Messages API is a <strong>substrate</strong>, not a menu of
+    endpoints. When the exam says "which API do you call to use tools?", the answer is the same one you always
+    call — <code>/v1/messages</code> — with a <code>tools</code> field added.</div>
+
+    <p>The endpoint is <strong>stateless</strong>. It holds no memory between calls. Each request must carry
+    the full <code>system</code> prompt and the entire <code>messages[]</code> history; the server reads it,
+    produces one response, and forgets everything (see 1.4).</p>
+
+    <table>
+        <tr><th>You might think it's…</th><th>It's actually…</th></tr>
+        <tr><td>A "tools API"</td><td><code>/v1/messages</code> + a <code>tools</code> field → <code>tool_use</code> blocks back</td></tr>
+        <tr><td>A "thinking API"</td><td><code>/v1/messages</code> + a <code>thinking</code> config → <code>thinking</code> blocks back</td></tr>
+        <tr><td>A "structured-output API"</td><td><code>/v1/messages</code> steered by tools / prompt → text or <code>tool_use</code> you parse</td></tr>
+        <tr><td>A stateful "chat session"</td><td>Stateless replay: you resend <code>system</code> + all <code>messages[]</code> each turn</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Request → endpoint → response anatomy</h2>
+    <div class="mermaid">
+flowchart LR
+    subgraph REQ["📤 Request body"]
+      R1["model"]
+      R2["max_tokens"]
+      R3["system (prompt)"]
+      R4["messages[] (full history)"]
+      R5["tools (optional)"]
+    end
+    REQ --> EP["🟣 POST /v1/messages<br/>STATELESS · one shot"]
+    EP --> RESP
+    subgraph RESP["📥 Response = Message"]
+      P1["content[] blocks<br/>text · thinking · tool_use"]
+      P2["stop_reason"]
+      P3["usage<br/>input/output tokens"]
+    end
+    classDef req fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef ep fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    classDef res fill:#d4edda,stroke:#28a745,color:#155724;
+    class R1,R2,R3,R4,R5 req; class EP ep; class P1,P2,P3 res;
+    </div>
+
+    <h2><span class="chip concept">CONCEPT</span> Request anatomy</h2>
+    <p>Five fields carry almost everything. <code>system</code> and <code>tools</code> are optional; the rest
+    define a valid request.</p>
+    <table>
+        <tr><th>Field</th><th>Role</th><th>Notes</th></tr>
+        <tr><td><code>model</code></td><td>Which model runs the request</td><td>Exact IDs: <code>claude-opus-4-8</code>, <code>claude-sonnet-4-6</code>, <code>claude-haiku-4-5</code></td></tr>
+        <tr><td><code>max_tokens</code></td><td>Cap on <strong>output</strong> tokens</td><td>Required. Hitting it → <code>stop_reason="max_tokens"</code> (output truncated, not the context window). Default ~16000 for non-streaming.</td></tr>
+        <tr><td><code>system</code></td><td>The system prompt (persona, rules)</td><td>Top-level field, <em>not</em> a message role. Resent every call.</td></tr>
+        <tr><td><code>messages</code></td><td>The full conversation so far</td><td>List of <code>{role, content}</code>; roles alternate user/assistant; first is user.</td></tr>
+        <tr><td><code>tools</code></td><td>Tool schemas the model may call</td><td>Presence enables tool use; model may emit <code>tool_use</code> blocks.</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> Response anatomy</h2>
+    <p>The response is a <strong>Message</strong> object. Three parts matter for orchestration:</p>
+    <ul>
+        <li><code>response.content</code> — a <strong>list of blocks</strong>, not a string. Each block has a
+        <code>type</code> (<code>text</code>, <code>thinking</code>, <code>tool_use</code>). Check
+        <code>block.type</code> before touching <code>.text</code> (see 1.5).</li>
+        <li><code>response.stop_reason</code> — why generation stopped. Your loop branches on this (see 1.3).</li>
+        <li><code>response.usage</code> — <code>input_tokens</code>, <code>output_tokens</code>,
+        <code>cache_read_input_tokens</code>, etc. Your cost &amp; budget signal.</li>
+    </ul>
+
+    <h2><span class="chip code">CODE</span> Basic call + iterating content by block type</h2>
+<pre><span class="cm"># The one call that underlies everything: POST /v1/messages via the SDK.</span>
+<span class="kw">import</span> anthropic
+client = anthropic.<span class="fn">Anthropic</span>()   <span class="cm"># reads ANTHROPIC_API_KEY from env</span>
+
+response = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">1024</span>,
+    system=<span class="st">"You are a concise assistant."</span>,   <span class="cm"># top-level field, NOT a message</span>
+    messages=[
+        {<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Summarize the CAP theorem in one line."</span>},
+    ],
+)
+
+<span class="cm"># response.content is a LIST of blocks — never assume it's a string.</span>
+<span class="kw">for</span> block <span class="kw">in</span> response.content:
+    <span class="kw">if</span> block.type == <span class="st">"text"</span>:
+        <span class="fn">print</span>(block.text)
+    <span class="kw">elif</span> block.type == <span class="st">"thinking"</span>:
+        <span class="fn">print</span>(<span class="st">"[thinking]"</span>, block.thinking)
+    <span class="kw">elif</span> block.type == <span class="st">"tool_use"</span>:
+        <span class="fn">print</span>(<span class="st">"[wants tool]"</span>, block.name, block.input)
+
+<span class="cm"># Orchestration signals live outside content:</span>
+<span class="fn">print</span>(response.stop_reason)          <span class="cm"># e.g. "end_turn" or "tool_use"</span>
+<span class="fn">print</span>(response.usage.input_tokens, response.usage.output_tokens)</pre>
+
+    <div class="good">Because the endpoint is uniform, the <em>same</em> parsing loop above works whether the
+    call used tools, thinking, or neither. You add <em>features</em> by adding fields — not by switching APIs.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Stateless single-endpoint design</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Why it's designed this way</h4>
+            <ul><li>One shape to learn — tools/thinking/output are just fields &amp; blocks</li>
+            <li>Statelessness scales horizontally; any server can handle any request</li>
+            <li>You own the full context → total control over what the model sees</li></ul></div>
+        <div class="con"><h4>⚠️ What it costs you</h4>
+            <ul><li>You must resend <code>system</code> + full history every call (tokens)</li>
+            <li>No server memory — you build conversation state yourself (1.4)</li>
+            <li>Growing history → growing cost; you own pruning/compaction (see 7.5)</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Which endpoint / API do you call to use tools (or thinking, or structured
+    output)?" → Always the same one: <code>POST /v1/messages</code>. There is no separate tools/thinking API;
+    they're features toggled by request fields.</div>
+    <div class="trap"><b>Trap:</b> Treating <code>system</code> as a message with <code>role:"system"</code>. →
+    In the Messages API, <code>system</code> is a <b>top-level field</b>, not an entry in <code>messages[]</code>.
+    Message roles are only <code>user</code> and <code>assistant</code>.</div>
+    <div class="trap"><b>Trap:</b> Reading <code>response.content[0].text</code> as the whole answer. →
+    <code>content</code> is a <b>list of typed blocks</b>; a call using tools or thinking may put a non-text
+    block first. Iterate and check <code>block.type</code> (see 1.5).</div>
+    <div class="trap"><b>Trap:</b> Assuming <code>max_tokens</code> refers to the context window. → It caps the
+    <b>output</b>. Hitting it yields <code>stop_reason="max_tokens"</code> with truncated output — a distinct
+    thing from a context-window overflow.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A teammate asks "what's the URL for the Claude tools API?" What do you tell them?</summary>
+    <p class="answer">There isn't a separate one. Tool use rides on <b><code>POST /v1/messages</code></b> — you add a
+    <code>tools</code> field to the normal request and the model may return <code>tool_use</code> blocks. Tools,
+    thinking, and structured output are all features of the single Messages endpoint.</p></details>
+    <details><summary>Q2 · Your code does <code>print(response.content)</code> and gets a list of objects, not text. Bug?</summary>
+    <p class="answer">Not a bug — that's the contract. <code>response.content</code> is a <b>list of content blocks</b>.
+    Iterate them and check <code>block.type</code>, reading <code>block.text</code> only for <code>text</code>
+    blocks. Assuming a string is the classic mistake (see 1.5).</p></details>
+    <details><summary>Q3 · Which top-level request fields are required vs optional in a basic call?</summary>
+    <p class="answer">Required: <code>model</code>, <code>max_tokens</code>, and <code>messages</code>. Optional:
+    <code>system</code> and <code>tools</code> (add them to enable a persona or tool use). All of them are resent
+    every call because the endpoint is stateless.</p></details>
+
+    <div class="pager">
+        <a href="1-1-agent-vs-workflow-vs-call.html"><span class="k">← Prev</span>1.1 · Agent vs. Workflow vs. Call</a>
+        <a class="next" href="1-3-loop-mechanics.html"><span class="k">Next →</span>1.3 · The Loop Mechanics</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 1.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

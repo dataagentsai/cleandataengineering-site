@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.4 Fallback Strategies · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 6 · Reliability</div>
+    <h1>6.4 · Fallback Strategies</h1>
+    <div class="tag">When retry won't help: alternate tool · skip · degraded path</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Rung 2 of the recovery ladder</h2>
+    <p>Retry (6.3) handles <em>transient</em> failures. When a failure is <strong>durable</strong> — the tool is
+    down, the input is unsupported, retries exhausted — you climb to <strong>fallback</strong>. A fallback keeps
+    the task moving on a lesser path instead of failing the whole request.</p>
+    <table>
+        <tr><th>Fallback</th><th>What it does</th><th>Use when</th></tr>
+        <tr><td><strong>Alternate tool</strong></td><td>Route to a second tool that serves the same need</td><td>The task still fully achievable another way (e.g. secondary search provider)</td></tr>
+        <tr><td><strong>Skip</strong></td><td>Omit the failed step and proceed</td><td>The step was optional / enrichment, not load-bearing</td></tr>
+        <tr><td><strong>Degraded path</strong></td><td>Return a partial or lower-fidelity result</td><td>A worse-but-useful answer beats no answer (e.g. cached data, coarser estimate)</td></tr>
+    </table>
+
+    <div class="note">🔑 The most important move is to <strong>tell Claude</strong> the tool failed. Return the
+    <code>tool_result</code> with <code>"is_error": true</code> and a short reason. The model then <em>adapts</em> —
+    tries a different tool, asks for clarification, or answers without that data — instead of hallucinating a result.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Fallback decision flow</h2>
+    <div class="mermaid">
+flowchart TD
+    T([Tool call]) --> R{"Succeeds after<br/>retries (6.3)?"}
+    R -->|Yes| OK["🟢 Use result"]
+    R -->|No| A{"Alternate tool<br/>available?"}
+    A -->|Yes| ALT["🔵 Call alternate tool"]
+    A -->|No| S{"Step optional?"}
+    S -->|Yes| SKIP["🔵 Skip · proceed"]
+    S -->|No| D{"Degraded result<br/>acceptable?"}
+    D -->|Yes| DEG["🔵 Degraded path<br/>(cache / partial)"]
+    D -->|No| ESC["🟣 Escalate to human (6.5)"]
+    ALT --> IE["Return tool_result<br/>is_error:true on failure<br/>→ model adapts"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef fb fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef es fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    class OK ok; class ALT,SKIP,DEG,IE fb; class ESC es;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Alternate-tool fallback + <code>is_error</code> signal</h2>
+    <p>Try the primary tool; on durable failure try an alternate; if that also fails, hand the model an error result so it can adapt rather than fabricate.</p>
+<pre><span class="kw">def</span> <span class="fn">run_tool</span>(name, args):
+    <span class="cm"># Primary → alternate → signal failure to the model.</span>
+    <span class="kw">try</span>:
+        <span class="kw">return</span> {<span class="st">"content"</span>: primary_search(args[<span class="st">"q"</span>])}
+    <span class="kw">except</span> Exception:
+        <span class="kw">try</span>:
+            <span class="kw">return</span> {<span class="st">"content"</span>: backup_search(args[<span class="st">"q"</span>])}   <span class="cm"># alternate tool</span>
+        <span class="kw">except</span> Exception <span class="kw">as</span> e:
+            <span class="cm"># Degraded/skip: hand the model an ERROR so it adapts.</span>
+            <span class="kw">return</span> {<span class="st">"content"</span>: <span class="st">f"search unavailable: {e}"</span>, <span class="st">"is_error"</span>: True}
+
+<span class="cm"># In the agent loop, attach is_error to the tool_result block:</span>
+out = run_tool(block.name, block.input)
+tool_result = {
+    <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+    <span class="st">"tool_use_id"</span>: block.id,
+    <span class="st">"content"</span>: out[<span class="st">"content"</span>],
+    <span class="st">"is_error"</span>: out.get(<span class="st">"is_error"</span>, False),   <span class="cm"># True → Claude sees the failure</span>
+}
+messages.append({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: [tool_result]})</pre>
+    <div class="good">By marking the block <code>is_error: true</code>, the next turn's model sees "this tool failed"
+    and can pick another approach or explain the gap — turning a crash into graceful degradation.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Fallback vs. failing loudly</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Fallback / degrade</h4>
+            <ul><li>Task still completes (partially) — better UX under partial outage</li>
+            <li>Contains blast radius of one flaky dependency</li></ul></div>
+        <div class="con"><h4>⚠️ Silent fallback risk</h4>
+            <ul><li>A degraded answer can look authoritative — mask the outage</li>
+            <li>Wrong for high-stakes steps (payments, legal) — those should escalate, not silently degrade</li>
+            <li>Needs surfacing: log + flag the reduced fidelity</li></ul></div>
+    </div>
+    <div class="warn">⚠️ Never silently fall back on an <strong>irreversible or high-stakes</strong> action. There,
+    the right rung is <strong>escalate to a human</strong> (6.5), not a quiet degraded path.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Retrying a durably-down tool forever. → After retries are exhausted, the ladder says
+    <b>fallback</b>, not more retries. Retry is only for transient faults.</div>
+    <div class="trap"><b>Trap:</b> On tool failure, returning a fake/empty success. → Mark it <code>is_error: true</code>
+    so the model <b>adapts</b>. A silent empty result invites hallucination.</div>
+    <div class="trap"><b>Trap:</b> Silently degrading a payment/irreversible step. → High-stakes failures escalate to a
+    human (6.5); they don't get a quiet degraded path.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Your primary geocoding API returns 503 after retries. The task can be done by a second provider. Which fallback?</summary>
+    <p class="answer"><b>Alternate tool</b> — route to the backup geocoder. The task is still fully achievable, so
+    prefer the equivalent path before skipping or degrading.</p></details>
+    <details><summary>Q2 · A tool fails and you can't recover its data. What must you return to the model, and why?</summary>
+    <p class="answer">A <code>tool_result</code> with <code>"is_error": true</code> and a brief reason. It tells
+    Claude the tool failed so it can adapt (different tool, ask the user, or answer without that data) instead of
+    fabricating a value.</p></details>
+    <details><summary>Q3 · When is a degraded path the wrong choice?</summary>
+    <p class="answer">For <b>high-stakes or irreversible</b> actions (payments, deletions, legal commitments). A
+    silent degraded result there can cause real harm and look authoritative — escalate to a human instead (6.5).</p></details>
+
+    <div class="pager">
+        <a href="6-3-retry-backoff-errors.html"><span class="k">← Prev</span>6.3 · Retry with Backoff &amp; Error Codes</a>
+        <a class="next" href="6-5-escalation.html"><span class="k">Next →</span>6.5 · Escalation to Human</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 6.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.1 Why Examples Work (Multishot) · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 3 · Examples (Multishot)</div>
+    <h1>3.1 · Why Examples Work (Multishot)</h1>
+    <div class="tag">Show, don't just tell</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Examples are the highest-leverage steer</h2>
+    <p><strong>Examples are one of the single most reliable ways to steer Claude's output</strong> — its
+    format, tone, and structure. Anthropic's own guidance puts it plainly: a few well-crafted examples
+    (called <em>few-shot</em> or <em>multishot</em> prompting) <strong>improve accuracy and consistency</strong>
+    more dependably than any amount of abstract description. A prose instruction like "return the result as a
+    concise JSON object" leaves dozens of decisions open — key names, casing, nesting, how to handle a missing
+    field. A single concrete example closes all of them at once by <em>demonstrating</em> the exact shape you
+    want.</p>
+
+    <div class="note">🔑 "Zero-shot" = instructions only. "One-shot" = one example. "Few-shot / multishot" =
+    several examples. The examples <em>are</em> the specification — Claude pattern-matches your desired output
+    from them.</div>
+
+    <p>The mechanism is pattern completion. When Claude sees two or three input→output pairs, it infers the
+    latent function connecting them and applies it to the real input. This does two things instructions alone
+    can't: it <strong>pins the exact output shape</strong> (so you get parseable, uniform results), and it
+    <strong>reduces misinterpretation</strong> of ambiguous instructions (Claude sees what you meant, not just
+    what you said).</p>
+
+    <table>
+        <tr><th>Approach</th><th>What Claude gets</th><th>Typical result</th></tr>
+        <tr><td>Zero-shot (tell only)</td><td>An abstract description of the task</td><td>Correct-ish, but format & edge-case handling drift</td></tr>
+        <tr><td>One-shot</td><td>One concrete input→output pair</td><td>Format locked; still guesses on variety</td></tr>
+        <tr><td><strong>Multishot (3–5 examples)</strong></td><td>The pattern <em>plus</em> its range</td><td>Consistent shape, fewer misreads, edge cases covered</td></tr>
+    </table>
+
+    <div class="good">Reach for examples whenever the output must be <strong>uniform</strong> (parsed
+    downstream), <strong>stylistically specific</strong> (a house tone), or the instruction is
+    <strong>hard to phrase precisely</strong> ("classify sentiment" — but by whose rubric?).</div>
+
+    <div class="warn">Examples don't replace clear instructions — they <em>disambiguate</em> them. The strongest
+    prompts pair a short, direct instruction with a few examples that show it in action.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Tell vs. show</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Task: produce a specific output shape"] --> Q{"How is the spec conveyed?"}
+    Q -->|"prose only (zero-shot)"| TELL["Claude infers shape<br/>from abstract words"]
+    Q -->|"3–5 worked examples (multishot)"| SHOW["Claude pattern-matches<br/>the demonstrated shape"]
+    TELL --> DRIFT["🟠 Format drift<br/>ambiguity misread"]
+    SHOW --> LOCK["🟢 Shape locked<br/>misreads reduced"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class LOCK ok; class DRIFT gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Zero-shot vs. multishot on the same task</h2>
+    <p>Same classifier, two prompts. The multishot version demonstrates the exact label vocabulary and output
+    shape instead of hoping Claude guesses it. Note the current model id <code>claude-opus-4-8</code> and the
+    top-level <code>system</code> parameter carrying the instruction, with the few-shot examples in the
+    <code>user</code> turn.</p>
+<pre><span class="cm"># BAD — zero-shot: format & label set left to chance</span>
+system = <span class="st">"Classify the support ticket's urgency."</span>
+user   = <span class="st">"The checkout page 500s for every user."</span>
+<span class="cm"># → "This seems highly urgent..." (prose, not a label — unparseable)</span>
+
+<span class="cm"># GOOD — multishot: examples pin the label set AND the shape</span>
+system = <span class="st">"Classify each support ticket's urgency as one of: P0, P1, P2."</span>
+user = <span class="st">"""&lt;examples&gt;
+&lt;example&gt;
+&lt;ticket&gt;Login works but the logo is slightly misaligned.&lt;/ticket&gt;
+&lt;urgency&gt;P2&lt;/urgency&gt;
+&lt;/example&gt;
+&lt;example&gt;
+&lt;ticket&gt;Checkout 500s for every user; no one can pay.&lt;/ticket&gt;
+&lt;urgency&gt;P0&lt;/urgency&gt;
+&lt;/example&gt;
+&lt;/examples&gt;
+
+&lt;ticket&gt;Password reset emails are delayed by ~10 minutes.&lt;/ticket&gt;"""</span>
+
+message = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">16000</span>,
+    system=system,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: user}],
+)
+<span class="cm"># → "P1"  (exactly the vocabulary and shape the examples demonstrated)</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> What examples cost you</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Adding examples</h4>
+            <ul><li>Locks output format & label vocabulary</li>
+            <li>Reduces misinterpretation of vague instructions</li>
+            <li>Improves accuracy and consistency across runs</li>
+            <li>Cheaper to write than an exhaustive spec</li></ul></div>
+        <div class="con"><h4>⚠️ The costs</h4>
+            <ul><li>Every example is input tokens on every call</li>
+            <li>Poorly chosen examples steer <em>wrongly</em> (see 3.5)</li>
+            <li>Too few / too narrow → over-fit to their surface form</li>
+            <li>Inconsistent example formatting confuses Claude</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb: if you can't fully describe the output in one sentence a stranger would
+    follow, add examples. It's usually less effort and more reliable than more prose.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Examples are just for when the model is confused." → No — examples are the
+    <b>single most reliable</b> steer for output <b>format, tone, and structure</b> even on tasks Claude
+    already understands.</div>
+    <div class="trap"><b>Trap:</b> "One example is enough." → One locks format but not <em>range</em>.
+    Anthropic recommends <b>3–5</b> relevant, diverse examples for best results (covered in 3.2).</div>
+    <div class="trap"><b>Trap:</b> "Examples replace instructions." → They <b>disambiguate</b> instructions.
+    Best prompts pair a clear instruction with examples that demonstrate it.</div>
+    <div class="trap"><b>Trap:</b> Confusing few-shot examples with assistant-turn prefill. → Few-shot examples
+    are content you provide (in the user/system turn, or as prior conversation turns); they are not the same as
+    prefilling the model's final answer.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why do examples reduce misinterpretation better than more instructions?</summary>
+    <p class="answer">Instructions describe the task abstractly and leave many decisions (format, casing,
+    edge cases, label vocabulary) unspecified. An example <b>demonstrates</b> the resolved output, so Claude
+    pattern-matches the exact shape you meant rather than guessing from words. This is why multishot reliably
+    improves accuracy and consistency.</p></details>
+    <details><summary>Q2 · When is multishot most worth the token cost?</summary>
+    <p class="answer">When output must be <b>uniform</b> (parsed downstream), <b>stylistically specific</b>
+    (a house tone/format), or the instruction is <b>hard to phrase precisely</b>. In those cases a few examples
+    are cheaper and more reliable than an exhaustive prose spec.</p></details>
+    <details><summary>Q3 · Do examples replace clear instructions?</summary>
+    <p class="answer">No. They <b>disambiguate</b> instructions. The strongest prompts combine a short, direct
+    instruction with 3–5 examples that show it applied — instructions state intent, examples pin the exact
+    realization.</p></details>
+
+    <div class="pager">
+        <a href="2-5-prompt-templates-variables.html"><span class="k">← Back</span>2.5 · Prompt Templates</a>
+        <a class="next" href="3-2-how-many-examples.html"><span class="k">Next →</span>3.2 · How Many Examples</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 3.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

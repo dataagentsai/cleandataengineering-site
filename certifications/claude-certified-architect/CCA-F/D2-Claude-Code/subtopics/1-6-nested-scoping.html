@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.6 Nested / Sub-directory CLAUDE.md · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 1 · Memory &amp; CLAUDE.md</div>
+    <h1>1.6 · Nested / Sub-directory CLAUDE.md</h1>
+    <div class="tag">Path-scoped guidance</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Ancestors load eagerly; descendants load lazily</h2>
+    <p>The tree walk from 1.3 has two halves, and the exam leans on the difference:</p>
+    <ul>
+        <li><strong>Above your cwd (ancestors):</strong> every <code>CLAUDE.md</code> / <code>CLAUDE.local.md</code>
+        from your working directory up to the root loads <strong>in full at launch</strong>. Ordering is
+        root-down, so the file <em>closest</em> to where you launched Claude is read last.</li>
+        <li><strong>Below your cwd (descendants):</strong> <code>CLAUDE.md</code> files in subdirectories are
+        <strong>not</strong> loaded at launch. They're pulled in <strong>on demand</strong> — the moment Claude
+        reads a file inside that subdirectory.</li>
+    </ul>
+
+    <div class="note">🔑 This is what makes nested CLAUDE.md a <strong>path-scoping</strong> tool. A
+    <code>src/frontend/CLAUDE.md</code> stays out of context until Claude actually works under
+    <code>src/frontend/</code> — so a monorepo can give each area its own conventions without every session paying
+    for all of them.</div>
+
+    <table>
+        <tr><th>File position relative to cwd</th><th>When it loads</th></tr>
+        <tr><td>cwd and every parent directory up to root</td><td><b>At launch</b>, in full (root-down order)</td></tr>
+        <tr><td>A subdirectory <em>below</em> cwd</td><td><b>On demand</b>, when Claude reads a file there</td></tr>
+        <tr><td>Within one directory: <code>CLAUDE.md</code> then <code>CLAUDE.local.md</code></td>
+            <td>Local is appended <b>after</b> CLAUDE.md at that level</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> Compaction &amp; the lazy-load gotcha</h2>
+    <p>Because nested files load lazily, two behaviors trip people up:</p>
+    <ul>
+        <li><strong>After <code>/compact</code>:</strong> the project-root CLAUDE.md is re-read from disk and
+        re-injected, so it survives. <strong>Nested</strong> CLAUDE.md files are <em>not</em> re-injected
+        automatically — they reload the next time Claude reads a file in that subdirectory.</li>
+        <li><strong>Monorepo noise:</strong> ancestor CLAUDE.md files from other teams may get picked up. Use the
+        <code>claudeMdExcludes</code> setting (glob patterns against absolute paths) to skip them — but note
+        <em>managed policy</em> CLAUDE.md can never be excluded.</li>
+    </ul>
+
+    <div class="warn">⚠️ If an instruction "disappears" after <code>/compact</code>, it was either given only in
+    conversation or lives in a nested CLAUDE.md that hasn't reloaded yet. Put durable rules in a CLAUDE.md so they
+    persist; the <em>root</em> one always comes back.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> A monorepo tree and what's in context</h2>
+    <div class="mermaid">
+flowchart TD
+    ROOT["repo/CLAUDE.md<br/>(ancestor → loads at launch)"] --> FE["repo/frontend/CLAUDE.md"]
+    ROOT --> BE["repo/backend/CLAUDE.md"]
+    CWD["You launch in repo/frontend/"] --> INCTX["🟢 In context now:<br/>repo/CLAUDE.md + repo/frontend/CLAUDE.md"]
+    FE -.->|"already an ancestor of cwd"| INCTX
+    BE -.->|"below a sibling — NOT loaded<br/>until Claude reads a backend/ file"| LAZY["🟠 Loads on demand"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class INCTX ok; class LAZY gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Path-scoped conventions via nested files</h2>
+    <p>Each area carries only the rules relevant to it; they enter context when Claude works in that subtree.</p>
+<pre><span class="cm"># repo/CLAUDE.md — always loaded (ancestor)</span>
+## Global
+- Conventional Commits for every commit
+- Never commit secrets
+
+<span class="cm"># repo/frontend/CLAUDE.md — loads when Claude touches frontend/ files</span>
+## Frontend
+- React function components only; hooks over classes
+- Styling via Tailwind utility classes
+
+<span class="cm"># repo/backend/CLAUDE.md — loads when Claude touches backend/ files</span>
+## Backend
+- FastAPI routers in `app/routers/`
+- All DB access through `app/db/session.py`
+
+<span class="cm"># Skip a noisy other-team file (in .claude/settings.local.json):</span>
+{ <span class="st">"claudeMdExcludes"</span>: [<span class="st">"**/other-team/CLAUDE.md"</span>] }</pre>
+
+    <div class="good">Prefer nested CLAUDE.md when guidance is tied to a <em>whole subtree</em>. If you want
+    even finer control (by file extension/glob), reach for a path-scoped rule in <code>.claude/rules/</code> with
+    <code>paths:</code> frontmatter instead.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Nested CLAUDE.md vs. one root file</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Nested / sub-directory files</h4>
+            <ul><li>Area-specific rules load only when relevant</li>
+            <li>Keeps launch context small in big repos</li>
+            <li>Each team owns its own subtree file</li></ul></div>
+        <div class="con"><h4>⚠️ One big root CLAUDE.md</h4>
+            <ul><li>Simple — one place to look</li>
+            <li>But everything loads every session (token cost)</li>
+            <li>Mixes unrelated conventions → lower adherence</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "All CLAUDE.md files in the repo load at startup." → Only <b>ancestors</b> of cwd
+    load at launch. Subdirectory files load <b>on demand</b> when Claude reads a file there.</div>
+    <div class="trap"><b>Trap:</b> "A nested CLAUDE.md overrides the root one." → They're <b>concatenated</b>. The
+    nested file loads <em>after</em> ancestors (more specific = later), but both are in context together.</div>
+    <div class="trap"><b>Trap:</b> "After <code>/compact</code> all my CLAUDE.md files come back." → Only the
+    <b>project-root</b> file is re-injected automatically. Nested files reload only when Claude next reads a file in
+    that subdirectory.</div>
+    <div class="trap"><b>Trap:</b> "<code>claudeMdExcludes</code> can silence any CLAUDE.md, even the org's." →
+    <b>Managed policy</b> CLAUDE.md can never be excluded; excludes only skip project/team files.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You launch Claude in <code>repo/frontend/</code>. Is <code>repo/backend/CLAUDE.md</code> in context?</summary>
+    <p class="answer">Not at launch — it's below a sibling, not an ancestor of cwd. It loads <b>on demand</b> only if
+    Claude reads a file under <code>backend/</code>. Loaded at launch: <code>repo/CLAUDE.md</code> and
+    <code>repo/frontend/CLAUDE.md</code>.</p></details>
+    <details><summary>Q2 · A subdirectory rule vanished after <code>/compact</code>. Why, and what returns it?</summary>
+    <p class="answer">Nested files aren't re-injected on compaction — only the project-root CLAUDE.md is. The nested
+    rule reloads the <b>next time Claude reads a file in that subdirectory</b>.</p></details>
+    <details><summary>Q3 · When do you pick a nested CLAUDE.md over a <code>.claude/rules/</code> path rule?</summary>
+    <p class="answer">Use a nested CLAUDE.md when guidance applies to a <b>whole subtree</b> and should load whenever
+    Claude works there. Use a path-scoped rule when you need finer targeting by <b>file glob/extension</b> via
+    <code>paths:</code> frontmatter.</p></details>
+
+    <div class="pager">
+        <a href="1-5-quick-add-and-memory-command.html"><span class="k">← Back</span>1.5 · Quick-Add (#) &amp; the /memory Command</a>
+        <a class="next" href="2-1-settings-json-hierarchy.html"><span class="k">Next →</span>2.1 · settings.json</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 1.6</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

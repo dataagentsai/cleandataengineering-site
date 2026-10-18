@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.3 Imports (@path) & Tree Lookup · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 1 · Memory &amp; CLAUDE.md</div>
+    <h1>1.3 · Imports (@path) &amp; Tree Lookup</h1>
+    <div class="tag">@-imports &amp; recursive discovery</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Two ways CLAUDE.md pulls in more content</h2>
+    <p>A CLAUDE.md rarely stands alone. There are two distinct composition mechanisms — don't confuse them:</p>
+    <ul>
+        <li><strong>Tree lookup (automatic):</strong> Claude discovers CLAUDE.md files by <em>walking up the
+        directory tree</em> from your cwd, loading each ancestor file it finds. You do nothing.</li>
+        <li><strong>Imports (explicit):</strong> inside any CLAUDE.md you write <code>@path/to/file</code> to pull
+        another file's contents inline. You choose exactly what gets imported.</li>
+    </ul>
+
+    <h2><span class="chip concept">CONCEPT</span> The @path import syntax</h2>
+    <p>Write <code>@path/to/import</code> anywhere in a CLAUDE.md and that file is <strong>expanded and loaded into
+    context at launch</strong>, alongside the CLAUDE.md that references it. The rules that get tested:</p>
+    <ul>
+        <li><strong>Relative &amp; absolute paths both work.</strong> Relative paths resolve against the file
+        containing the import — <em>not</em> your working directory.</li>
+        <li><strong>Home-dir imports:</strong> <code>@~/.claude/my-instructions.md</code> pulls from your home
+        directory. This is the recommended way to share personal instructions across git worktrees (since a
+        gitignored <code>CLAUDE.local.md</code> only exists in the one worktree you made it in).</li>
+        <li><strong>Recursion is allowed, up to a max depth of <em>4 hops</em>.</strong> An imported file may itself
+        import others, chaining up to four levels deep.</li>
+        <li><strong>Code spans and fenced code blocks are skipped.</strong> Import parsing ignores text inside
+        backticks and <code>```</code> fences — so <code>`@README`</code> stays literal, while <code>@README</code>
+        outside backticks imports the file.</li>
+        <li><strong>Imports don't save context.</strong> Imported files still load in full at launch — imports are
+        for <em>organization</em>, not for reducing token cost.</li>
+    </ul>
+
+    <div class="warn">⚠️ The first time a project uses <strong>external</strong> imports, Claude shows a one-time
+    approval dialog listing the files. If you decline, imports stay disabled and the dialog won't reappear.</div>
+
+    <div class="note">🔑 <code>CLAUDE.local.md</code> is increasingly superseded by home-dir imports. Instead of a
+    gitignored local file that's stuck in one worktree, import <code>@~/.claude/my-project-instructions.md</code>
+    so your personal notes follow you across all worktrees of the repo.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Walk-up discovery + import expansion</h2>
+    <div class="mermaid">
+flowchart TD
+    CWD["cwd: foo/bar/"] --> W["Walk UP the tree"]
+    W --> A["foo/bar/CLAUDE.md"]
+    W --> B["foo/CLAUDE.md"]
+    W --> R["…up to repo root / filesystem root"]
+    A --> IMP{"Contains @path?"}
+    IMP -->|"@docs/git.md"| E1["🟢 Expand inline"]
+    E1 --> D2{"That file imports more?"}
+    D2 -->|"yes, ≤ 4 hops"| E2["🟢 Keep expanding"]
+    D2 -->|"depth 5"| STOP["🔴 Stop — max depth reached"]
+    IMP -->|"`@README` in backticks"| LIT["Literal text, NOT imported"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef mid fill:#e2e3f3,stroke:#6c63ff,color:#2a2a6a;
+    class E1 ok; class E2 ok; class STOP bad; class LIT mid;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Imports in practice</h2>
+    <p>Reference files with <code>@</code> anywhere in the file; wrap a path in backticks to mention it without
+    importing.</p>
+<pre><span class="cm"># CLAUDE.md</span>
+
+See @README for the project overview and @package.json for npm commands.
+
+<span class="kw">## Additional instructions</span>
+- Git workflow: @docs/git-instructions.md   <span class="cm"># relative to THIS file</span>
+- Absolute path also works: @/opt/team/standards.md
+
+<span class="kw">## Individual preferences (shared across worktrees)</span>
+- @~/.claude/my-project-instructions.md      <span class="cm"># home-dir import</span>
+
+<span class="cm"># To MENTION a path without importing it, wrap it in backticks:</span>
+Write `@README` in backticks and it stays literal — no import.</pre>
+
+    <div class="good">Common pattern: a repo that already has <code>AGENTS.md</code> for other tools creates a
+    <code>CLAUDE.md</code> whose first line is <code>@AGENTS.md</code>, then adds Claude-specific notes below — one
+    source of truth, no duplication.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Splitting into imports vs. one flat file</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Split with @imports</h4>
+            <ul><li>Modular, easier for teams to maintain</li>
+            <li>Reuse shared files (<code>@~/…</code>) across worktrees</li>
+            <li>Keeps the main file readable</li></ul></div>
+        <div class="con"><h4>⚠️ Reality check</h4>
+            <ul><li>Imported files <b>still load at launch</b> — no context savings</li>
+            <li>To actually cut context, use <b>path-scoped rules</b>, not imports</li>
+            <li>External imports trigger a one-time approval prompt</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Imports reduce context/token usage." → They do <b>not</b>. Imported files load
+    in full at launch. For context savings use <b>path-scoped rules</b> that load only for matching files.</div>
+    <div class="trap"><b>Trap:</b> "<code>@path</code> works inside code blocks." → Import parsing <b>skips</b>
+    Markdown code spans and fenced blocks. <code>`@README`</code> in backticks is literal; only a bare
+    <code>@README</code> imports.</div>
+    <div class="trap"><b>Trap:</b> "Relative import paths resolve from my working directory." → They resolve
+    relative to the <b>file containing the import</b>, not cwd.</div>
+    <div class="trap"><b>Trap:</b> "Imports can nest infinitely." → Recursive imports are capped at a
+    <b>maximum depth of 4 hops</b>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · How does Claude find CLAUDE.md without you pointing at it?</summary>
+    <p class="answer">It <b>walks up the directory tree</b> from your cwd, loading every ancestor <code>CLAUDE.md</code>
+    (and <code>CLAUDE.local.md</code>) it finds, concatenated root-down. Subdirectory files below cwd load on demand
+    when Claude reads files there.</p></details>
+    <details><summary>Q2 · Write an import that shares personal notes across all worktrees of a repo. Why this way?</summary>
+    <p class="answer"><code>@~/.claude/my-project-instructions.md</code>. A gitignored <code>CLAUDE.local.md</code>
+    only exists in the one worktree you created it in; a home-dir import is reachable from every worktree.</p></details>
+    <details><summary>Q3 · You want to mention <code>@config.yml</code> in prose without importing it. How?</summary>
+    <p class="answer">Wrap it in backticks: <code>`@config.yml`</code>. Import parsing skips code spans and fenced
+    code blocks, so the text stays literal.</p></details>
+
+    <div class="pager">
+        <a href="1-2-memory-hierarchy.html"><span class="k">← Back</span>1.2 · The Memory Hierarchy</a>
+        <a class="next" href="1-4-writing-effective-claude-md.html"><span class="k">Next →</span>1.4 · Writing an Effective CLAUDE.md</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 1.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

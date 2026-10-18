@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CCA-F — Domain 3 Hands-On Lab</title>
+<link rel="stylesheet" href="../Foundations-Mock-Exam-4/assets/exam.css">
+<style>
+  .ex{background:var(--card);border:1px solid var(--line);border-radius:12px;
+      padding:18px 20px;margin-bottom:18px}
+  .ex h3{margin:0 0 4px;font-size:17px}
+  .exnum{font-size:11px;letter-spacing:.7px;text-transform:uppercase;
+         color:var(--acc2);font-weight:700}
+  .obj{font-size:12px;color:var(--dim);background:var(--card2);border:1px solid var(--line);
+       border-radius:5px;padding:2px 8px;display:inline-block;margin:4px 6px 10px 0}
+  pre{background:var(--card2);border:1px solid var(--line);border-radius:9px;
+      padding:12px 14px;overflow-x:auto;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre code{background:none;padding:0;font-size:inherit}
+  .watch{border-left:3px solid var(--ok);background:rgba(34,197,94,.07);
+         padding:10px 14px;border-radius:0 9px 9px 0;margin:12px 0}
+  .watch b{color:var(--ok)}
+  .kills{border-left:3px solid var(--warn);background:rgba(245,158,11,.07);
+         padding:10px 14px;border-radius:0 9px 9px 0;margin:12px 0;font-size:14px}
+  .kills b{color:var(--warn)}
+  .caveat{border-left:3px solid var(--no);background:rgba(239,68,68,.07);
+          padding:10px 14px;border-radius:0 9px 9px 0;margin:12px 0;font-size:14px}
+  .caveat b{color:var(--no)}
+  h2.sec{margin:34px 0 14px;font-size:20px;border-bottom:1px solid var(--line);padding-bottom:8px}
+  ol.steps{padding-left:20px;margin:10px 0}
+  ol.steps li{margin-bottom:7px}
+  table.map{border-collapse:collapse;width:100%;font-size:13.5px;margin:10px 0}
+  table.map th,table.map td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);
+                            vertical-align:top}
+  table.map th{color:var(--acc2)}
+</style>
+</head>
+<body>
+<header class="page">
+  <div class="crumb"><a href="../CCA-F_Study_Guide.html">CCA-F</a> › Domain 3 Hands-On Lab</div>
+  <h1>Domain 3 — <span style="color:var(--acc2)">Hands-On Lab</span></h1>
+  <div class="tag">Claude Code Configuration &amp; Workflows · 20% of the exam · ~60–90 minutes · do it, don't read it</div>
+</header>
+
+<div class="wrap">
+
+  <div class="intro" style="border-color:var(--acc);background:linear-gradient(135deg,rgba(124,92,255,.10),transparent)">
+    <h2 style="margin-bottom:6px">New to this? Read the explainer first</h2>
+    <p style="margin-bottom:10px">The exercises below assume you know what a session, a glob, frontmatter and a
+    skill are, and that you know where to type <code>/memory</code>. If any of that is fuzzy,
+    <b><a href="start-here.html" style="color:var(--acc2)">Start Here</a></b> covers the mental model, the
+    vocabulary and your first five minutes — about ten minutes of reading.</p>
+    <a href="start-here.html" style="display:inline-block;background:var(--acc);color:#fff;text-decoration:none;
+       font-weight:700;padding:10px 18px;border-radius:9px">Open Start Here →</a>
+  </div>
+
+  <div class="intro">
+    <h2>Why this lab exists</h2>
+    <p>Domain 3 is the one exam domain you can settle by <em>doing</em> rather than revising. Every mechanism it
+    tests — the memory hierarchy, path-scoped rules, commands, skills, plan mode, permissions, headless mode — is a
+    file you create or a command you type, and each takes about five minutes to see working.</p>
+    <p>The lab runs in a throwaway repository at <code>~/cca-f-lab</code>. Nothing touches your real projects.
+    When you are finished: <code>rm -rf ~/cca-f-lab</code>.</p>
+    <p><b>Work in order.</b> Later exercises depend on files earlier ones create, and several of them are built to
+    contradict each other on purpose — that is how you see precedence.</p>
+    <div>
+      <span class="pill">8 exercises</span>
+      <span class="pill">Throwaway repo</span>
+      <span class="pill">Objectives 3.1 – 3.6</span>
+    </div>
+  </div>
+
+  <h2 class="sec">Setup</h2>
+  <div class="ex">
+    <div class="exnum">Before you start</div>
+    <h3>Create the lab repository</h3>
+    <pre><code>bash ~/ClaudeCertifiedArchitect/CCA-F/D3-Hands-On-Lab/setup.sh</code></pre>
+    <p>This builds a small monorepo with the one property that matters for Domain 3: <b>test files sit beside their
+    sources in both trees</b> — <code>order_test.go</code> next to <code>order.go</code>,
+    <code>Button.test.tsx</code> next to <code>Button.tsx</code>. Several exam items turn on exactly that detail,
+    because it is what makes a directory-scoped rule insufficient.</p>
+    <p>Then open <code>~/cca-f-lab</code> as your working folder in the editor and start a Claude Code session
+    there.</p>
+    <div class="caveat"><b>One thing to check first.</b> You have no standalone <code>claude</code> CLI on your PATH —
+    you have been using the VS Code extension only. Exercises 1–6 work entirely in the extension. Exercise 7 needs
+    the CLI; install it when you get there, or run it through <code>npx</code>. Exercise 8 is reading, not typing.</div>
+  </div>
+
+  <h2 class="sec">Part A — Memory: what loads, where, and when</h2>
+
+  <div class="ex">
+    <div class="exnum">Exercise 1</div>
+    <h3>The three-level memory hierarchy, and how to observe it</h3>
+    <span class="obj">3.1 CLAUDE.md hierarchy &amp; scoping</span>
+    <p>You are going to create three conflicting instructions at three levels, then find out which one wins —
+    by asking rather than guessing.</p>
+    <ol class="steps">
+      <li>Create a <b>project-level</b> file at <code>~/cca-f-lab/CLAUDE.md</code>:
+        <pre><code># Lab conventions
+
+- Name Go test helpers with a `mk` prefix, e.g. `mkOrder`.
+- Every exported Go function needs a doc comment.</code></pre></li>
+      <li>Create a <b>directory-level</b> file at <code>~/cca-f-lab/web/CLAUDE.md</code>:
+        <pre><code># Web conventions
+
+- Name React test helpers with a `build` prefix, e.g. `buildButtonProps`.</code></pre></li>
+      <li>Create a <b>user-level</b> file. This one is yours, not the project's — and note that
+        <b>version control will never distribute it</b>, which is the point being tested:
+        <pre><code>mkdir -p ~/.claude
+cat &gt;&gt; ~/.claude/CLAUDE.md &lt;&lt;'EOF'
+
+&lt;!-- CCA-F LAB — delete this block when the lab is done --&gt;
+- Personal preference: prefer table-driven tests everywhere.
+EOF</code></pre></li>
+      <li>In your Claude Code session, run <code>/memory</code>.</li>
+    </ol>
+    <div class="watch"><b>What to look for:</b> which files are listed as loaded, and at which level. Then run
+    <code>git status</code> — the project and directory <code>CLAUDE.md</code> files show as untracked (they would be
+    committed and shared); the user-level file does not appear at all, because it lives outside the repo. That
+    difference <em>is</em> the answer to every "who gets this on clone?" question.</div>
+    <div class="kills"><b>Kills the trap:</b> <em>Wrong scope or wrong home.</em> Shared and required → project.
+    Personal or experimental → user level. If you can't remember which, <code>/memory</code> tells you what is
+    actually loaded rather than what you assume is.</div>
+  </div>
+
+  <div class="ex">
+    <div class="exnum">Exercise 2</div>
+    <h3>Path-scoped rules — the mechanism directory files cannot replace</h3>
+    <span class="obj">3.3 Path-specific rules</span>
+    <p>Your lab has test files in <code>services/orders/</code> and in <code>web/src/components/</code>. A convention
+    that applies to <em>all tests regardless of location</em> has no single directory to live in. That is the
+    problem path globs solve.</p>
+    <ol class="steps">
+      <li>Create <code>~/cca-f-lab/.claude/rules/tests.md</code>:
+        <pre><code>---
+paths:
+  - "**/*_test.go"
+  - "**/*.test.tsx"
+---
+
+# Test conventions (all trees)
+
+- One assertion per test case.
+- Test names read as sentences: `TestOrder_IsSettled_ReturnsTrueWhenSettled`.
+- Never assert on unexported state.</code></pre></li>
+      <li>Ask Claude to add a test case to <code>services/orders/order_test.go</code>. Note whether the naming
+        convention is applied.</li>
+      <li>Now ask it to add a function to <code>services/billing/invoice.go</code> — a file the glob does
+        <b>not</b> match. Note whether the test convention shows up in its reasoning.</li>
+    </ol>
+    <div class="watch"><b>What to look for:</b> the rule influencing work on matching files and being absent for
+    non-matching ones. Then ask yourself the exam question directly: could a <code>CLAUDE.md</code> in
+    <code>services/</code> have achieved this? No — <code>Button.test.tsx</code> is in a different tree entirely.
+    Could one in the root? Only by loading it for every file, everywhere.</div>
+    <div class="caveat"><b>Be honest about what you observe.</b> If your build of Claude Code does not appear to
+    honour <code>paths:</code> frontmatter, do not conclude the exam answer is different — the exam tests the
+    documented behaviour in the exam guide. Note the discrepancy and move on; the reasoning is what is being
+    assessed.</div>
+    <div class="kills"><b>Kills the trap:</b> <em>Wrong scope or wrong home.</em> Glob rules scope by <b>file
+    pattern</b>; directory <code>CLAUDE.md</code> scopes by <b>subtree</b>. When a convention crosses trees, only
+    the first can express it.</div>
+  </div>
+
+  <div class="ex">
+    <div class="exnum">Exercise 3</div>
+    <h3>@import — modular, but still always loaded</h3>
+    <span class="obj">3.1 Modular organisation</span>
+    <p>This exercise exists to kill one specific distractor that catches people: <code>@import</code> looks like
+    the answer to "my CLAUDE.md is too big", and it is not.</p>
+    <ol class="steps">
+      <li>Create <code>~/cca-f-lab/.claude/go-conventions.md</code> with a few Go rules in it.</li>
+      <li>Replace the Go section of <code>~/cca-f-lab/CLAUDE.md</code> with an import of that file.</li>
+      <li>Run <code>/memory</code> again, and open a file in <code>web/</code>.</li>
+    </ol>
+    <div class="watch"><b>What to look for:</b> the imported content is loaded <b>regardless of what you are
+    editing</b>. The file on disk got shorter; the context did not. Compare that directly with what Exercise 2 did.</div>
+    <div class="kills"><b>Kills the trap:</b> <em>Modular-looking but still always loaded.</em> <code>@import</code>
+    improves how humans maintain the file. It does nothing for context economy or relevance. When a question
+    complains about both size <em>and</em> irrelevant conventions being applied, the answer is path-scoped rules.</div>
+  </div>
+
+  <h2 class="sec">Part B — Invocable things: commands vs skills</h2>
+
+  <div class="ex">
+    <div class="exnum">Exercise 4</div>
+    <h3>Project command vs personal command</h3>
+    <span class="obj">3.2 Custom slash commands</span>
+    <ol class="steps">
+      <li>Create <code>~/cca-f-lab/.claude/commands/rfc.md</code>:
+        <pre><code>---
+argument-hint: [decision title]
+---
+
+Draft an architecture decision record for: $ARGUMENTS
+
+Use these headings: Context, Decision, Consequences, Alternatives considered.
+Keep it under one page.</code></pre></li>
+      <li>Create a personal variant at <code>~/.claude/commands/rfc-mine.md</code> with an extra heading.</li>
+      <li>In the session, type <code>/</code> and look at the list. Run <code>/rfc caching layer</code>.</li>
+      <li>Run <code>git status</code> in the lab repo.</li>
+    </ol>
+    <div class="watch"><b>What to look for:</b> both commands are available to you, but only
+    <code>.claude/commands/rfc.md</code> appears in <code>git status</code>. That is the entire distinction the exam
+    draws: a teammate cloning this repo gets <code>/rfc</code> and does not get <code>/rfc-mine</code>.</div>
+    <div class="kills"><b>Kills the trap:</b> <em>Personal scope for shared assets.</em> "Everyone must have it on
+    clone" has exactly one answer, and it is the committed project directory.</div>
+  </div>
+
+  <div class="ex">
+    <div class="exnum">Exercise 5</div>
+    <h3>A skill with real frontmatter — the part that separates it from a command</h3>
+    <span class="obj">3.2 Agent Skills</span>
+    <p>A command is a prompt template. A skill can <b>restrict its own tools</b> and <b>run in an isolated
+    context</b>. Those two frontmatter fields are what most exam items about skills actually turn on.</p>
+    <ol class="steps">
+      <li>Create <code>~/cca-f-lab/.claude/skills/audit-tests/SKILL.md</code>:
+        <pre><code>---
+name: audit-tests
+description: Scan every test file in the repo and report coverage gaps and naming violations.
+argument-hint: [optional path to narrow the scan]
+allowed-tools: Read, Grep, Glob
+context: fork
+---
+
+Find every test file in the repository. For each one, report:
+
+1. Test functions whose names do not read as sentences.
+2. Test functions containing more than one assertion.
+3. Source files with no corresponding test file.
+
+Return a compact table. Do not modify any file.</code></pre></li>
+      <li>Invoke it. Watch the main conversation while it runs.</li>
+      <li>Afterwards, ask Claude something that would require the raw scan output — for example, "what was in
+        the third file you read?"</li>
+    </ol>
+    <div class="watch"><b>What to look for:</b> two things. First, <code>allowed-tools</code> excludes
+    <code>Write</code> and <code>Edit</code>, so the skill <em>cannot</em> modify a file even if you ask it to —
+    that is an enforced boundary, not an instruction. Second, with <code>context: fork</code> the scan happens in an
+    isolated sub-context and only the summary comes back, so the main conversation never carries the raw output.</div>
+    <div class="kills"><b>Kills the trap:</b> <em>Always-loaded home for on-demand work.</em> When a question
+    specifies tool restriction <b>or</b> keeping verbose output out of the conversation, a slash command cannot
+    satisfy it and CLAUDE.md certainly cannot. Only a skill has those fields.</div>
+  </div>
+
+  <h2 class="sec">Part C — How work proceeds</h2>
+
+  <div class="ex">
+    <div class="exnum">Exercise 6</div>
+    <h3>Plan mode versus direct execution, on the same task</h3>
+    <span class="obj">3.4 Plan mode</span>
+    <p>Run the <em>same</em> request twice so the difference is the mode and nothing else.</p>
+    <ol class="steps">
+      <li><b>Direct:</b> ask Claude to "add soft-delete to the Order type and filter it out everywhere orders are
+        read." Let it start. Watch what it assumes.</li>
+      <li>Discard the changes: <code>git checkout . &amp;&amp; git clean -fd</code>.</li>
+      <li><b>Plan mode:</b> enter plan mode, make the identical request, and read the plan it produces before
+        approving anything.</li>
+    </ol>
+    <div class="watch"><b>What to look for:</b> in direct mode it picks an approach silently and starts typing. In
+    plan mode it surfaces that there <em>is</em> a choice — filter in the accessor, filter at each call site, or
+    expose a filtered view — and that they differ for any caller that legitimately wants deleted rows. The exam's
+    plan-mode items are all built on that distinction: the tell is <b>several valid approaches</b>, not merely
+    "this is a big change".</div>
+    <div class="kills"><b>Kills the trap:</b> <em>Assuming the decision away.</em> A distractor that says "pick
+    approach X and proceed" is not answering the question — it is deciding, by assertion, the very thing the
+    question is about.</div>
+  </div>
+
+  <div class="ex">
+    <div class="exnum">Exercise 7</div>
+    <h3>Headless mode and structured output — the CI shape</h3>
+    <span class="obj">3.6 Claude Code in CI/CD</span>
+    <p>This is the one exercise that needs the CLI. Two exam facts become obvious the moment you run it.</p>
+    <ol class="steps">
+      <li>Get the CLI available — either install it, or use <code>npx</code> for a one-off.</li>
+      <li>Run it <b>without</b> the print flag first, from a non-interactive context:
+        <pre><code>cd ~/cca-f-lab
+echo "" | npx @anthropic-ai/claude-code "List the Go files in this repo"</code></pre>
+        Observe the behaviour. Then interrupt it.</li>
+      <li>Now run it properly:
+        <pre><code>npx @anthropic-ai/claude-code -p "List the Go files in this repo, one per line"</code></pre></li>
+      <li>Then ask for machine-readable output and pipe it:
+        <pre><code>npx @anthropic-ai/claude-code -p "List every Go file with its line count" \
+  --output-format json | jq .</code></pre></li>
+    </ol>
+    <div class="watch"><b>What to look for:</b> that <code>-p</code> / <code>--print</code> is what makes the run
+    non-interactive, and that closing stdin is <em>not</em> a substitute — it ends the session rather than running it
+    headlessly. Then look at the JSON shape and ask yourself how a workflow would turn it into an inline PR comment
+    anchored to a file and line. That question is what <code>--json-schema</code> exists to answer.</div>
+    <div class="kills"><b>Kills the trap:</b> <em>Silencing a prompt instead of not prompting</em>, and
+    <em>better parsing of unstructured prose.</em> When output is consumed by a program, declare its schema — never
+    regex the prose.</div>
+  </div>
+
+  <div class="ex">
+    <div class="exnum">Exercise 8</div>
+    <h3>Permissions are a control; plan mode and CLAUDE.md are not</h3>
+    <span class="obj">3.x Tool permissions</span>
+    <p>Your lab repo has an <code>infra/</code> directory. Treat it as production Terraform.</p>
+    <ol class="steps">
+      <li>Add a rule to <code>~/cca-f-lab/.claude/settings.json</code> denying writes under <code>infra/</code>
+        and denying Terraform commands through Bash. Use <code>/config</code> or the settings schema at
+        <code>~/.vscode/extensions/anthropic.claude-code-*/claude-code-settings.schema.json</code> as your
+        reference for the exact shape.</li>
+      <li>Ask Claude to add a tag to the S3 bucket in <code>infra/main.tf</code>.</li>
+      <li>Now try the opposite experiment: remove the permission rule, and instead put
+        <b>"never modify anything under infra/"</b> in <code>CLAUDE.md</code>. Ask again, a few times, with
+        slightly different phrasings.</li>
+    </ol>
+    <div class="watch"><b>What to look for:</b> the permission rule stops the write every time, visibly, at the
+    tool layer. The CLAUDE.md rule is followed — usually. "Usually" is precisely the gap the exam is testing when
+    it says a requirement must hold <em>every time</em>.</div>
+    <div class="kills"><b>Kills the trap:</b> <em>Prompt where enforcement was required</em>, and <em>a working mode
+    used as a security control.</em> Permissions allow and deny; CLAUDE.md supplies context; plan mode governs how
+    work proceeds. Only the first is a control.</div>
+  </div>
+
+  <h2 class="sec">Cleaning up</h2>
+  <div class="ex">
+    <p>Delete the lab repo, and remove the block you appended to your real user-level memory:</p>
+    <pre><code>rm -rf ~/cca-f-lab
+# then edit ~/.claude/CLAUDE.md and delete the "CCA-F LAB" block
+# and remove the personal command you created:
+rm -f ~/.claude/commands/rfc-mine.md</code></pre>
+  </div>
+
+  <h2 class="sec">What this maps to on the exam</h2>
+  <div class="ex">
+    <table class="map">
+      <tr><th>Exercise</th><th>Objective</th><th>The question shape it answers</th></tr>
+      <tr><td>1</td><td>3.1 Hierarchy &amp; scoping</td><td>"Every developer must have X on clone" / "which memory file wins?"</td></tr>
+      <tr><td>2</td><td>3.3 Path-specific rules</td><td>"Conventions apply to files scattered across directories"</td></tr>
+      <tr><td>3</td><td>3.1 Modular organisation</td><td>"CLAUDE.md is too big and applies irrelevant rules"</td></tr>
+      <tr><td>4</td><td>3.2 Slash commands</td><td>"Shared with the team vs personal to one developer"</td></tr>
+      <tr><td>5</td><td>3.2 Skills</td><td>"Needs tool restriction and/or context isolation"</td></tr>
+      <tr><td>6</td><td>3.4 Plan mode</td><td>"Multiple valid approaches, architectural consequences"</td></tr>
+      <tr><td>7</td><td>3.6 CI/CD</td><td>"The job hangs" / "findings must post as inline comments"</td></tr>
+      <tr><td>8</td><td>3.x Permissions</td><td>"This must never happen" — enforced vs instructed</td></tr>
+    </table>
+    <p style="margin-top:14px">When you finish, re-sit the Domain 3 items in
+    <a href="../Foundations-Mock-Exam-4/">Mock Exam #4</a> (Q11–Q16, Q38–Q39, Q41–Q44) and check whether you can now
+    say <em>why</em> each distractor fails, not just which option is right. That is the difference between 11/12 by
+    recognition and 11/12 by understanding.</p>
+  </div>
+
+</div>
+
+<footer>CCA-F · Domain 3 Hands-On Lab · configuration &amp; workflows, 20% of the exam</footer>
+</body>
+</html>

@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.4 tool_choice as a Control Lever · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 3 · Tool Use</div>
+    <h1>3.4 · tool_choice as a Control Lever</h1>
+    <div class="tag">auto · any · tool · none — steering when and whether Claude uses tools</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Four settings on one dial</h2>
+    <p><code>tool_choice</code> is how the architect moves control between the model and their own code. It ranges from
+    "Claude decides" all the way to "Claude must call <em>this exact</em> tool." Picking the right setting is often the
+    difference between a reliable step and an unpredictable one.</p>
+
+    <table>
+        <tr><th>Setting</th><th>Meaning</th><th>Use when</th></tr>
+        <tr><td><code>{"type":"auto"}</code></td><td><strong>Default.</strong> Claude decides whether to use a tool, and which.</td><td>General agent loops — let the model judge.</td></tr>
+        <tr><td><code>{"type":"any"}</code></td><td>Claude <strong>must</strong> use some tool (any one), never a plain text answer.</td><td>You always want a structured/tool action this turn.</td></tr>
+        <tr><td><code>{"type":"tool","name":"X"}</code></td><td>Claude <strong>must</strong> call the named tool <code>X</code>.</td><td>Forcing a specific extraction / structured output.</td></tr>
+        <tr><td><code>{"type":"none"}</code></td><td>Claude may <strong>not</strong> use any tool this turn.</td><td>Force a natural-language turn even though tools exist.</td></tr>
+    </table>
+
+    <div class="note">🔑 <code>any</code> and <code>tool</code> <em>guarantee</em> a tool call this turn but say nothing
+    about which round it is — they don't stop the loop, so pair them with your own exit condition to avoid re-forcing a
+    tool forever.</div>
+
+    <div class="warn"><code>tool_choice</code> composes with <code>disable_parallel_tool_use</code>. Combining
+    <code>{"type":"any", "disable_parallel_tool_use": true}</code> means "call exactly one tool, no parallelism" — a common
+    pattern for forcing a single deterministic structured step.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Where the dial sits</h2>
+    <div class="mermaid">
+flowchart LR
+    N["none<br/>no tools this turn"] --> A["auto<br/>Claude decides"]
+    A --> Y["any<br/>must use SOME tool"]
+    Y --> T["tool: X<br/>must use tool X"]
+    N -. more model freedom .-> A
+    T -. more your control .-> Y
+    classDef free fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef mid fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef ctrl fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    class N free; class A,Y mid; class T ctrl;
+    </div>
+
+    <h2><span class="chip code">CODE</span> The four variants (plus the combo)</h2>
+<pre><span class="cm"># 1) auto — the default; omit tool_choice or set it explicitly.</span>
+client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=TOOLS, messages=msgs,
+    tool_choice={<span class="st">"type"</span>: <span class="st">"auto"</span>})
+
+<span class="cm"># 2) any — Claude MUST call some tool (no plain-text answer this turn).</span>
+client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=TOOLS, messages=msgs,
+    tool_choice={<span class="st">"type"</span>: <span class="st">"any"</span>})
+
+<span class="cm"># 3) tool — force ONE specific tool (e.g. structured extraction).</span>
+client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=TOOLS, messages=msgs,
+    tool_choice={<span class="st">"type"</span>: <span class="st">"tool"</span>, <span class="st">"name"</span>: <span class="st">"extract_invoice"</span>})
+
+<span class="cm"># 4) none — tools exist but Claude may NOT use them this turn.</span>
+client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=TOOLS, messages=msgs,
+    tool_choice={<span class="st">"type"</span>: <span class="st">"none"</span>})
+
+<span class="cm"># Combo: force exactly one tool, no parallel fan-out.</span>
+client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=TOOLS, messages=msgs,
+    tool_choice={<span class="st">"type"</span>: <span class="st">"any"</span>, <span class="st">"disable_parallel_tool_use"</span>: True})</pre>
+
+    <div class="good">Common architect pattern: use <code>{"type":"tool","name":…}</code> to turn a tool into a
+    <strong>structured-output contract</strong> — Claude is guaranteed to emit that tool's schema-shaped <code>input</code>,
+    which you parse instead of scraping free text.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Forcing a tool inside the agent loop and never releasing it. → <code>any</code> /
+    <code>tool</code> force a tool <b>every</b> turn they're set. If you leave them on across the whole loop, Claude can
+    never emit <code>end_turn</code> — an <b>infinite tool-call loop</b>. Force on the first turn, then drop back to
+    <code>auto</code>.</div>
+    <div class="trap"><b>Trap:</b> Confusing <code>any</code> with <code>tool</code>. → <code>any</code> = "some tool";
+    <code>tool</code> = "this named tool." Only <code>tool</code> takes a <code>name</code>.</div>
+    <div class="trap"><b>Trap:</b> Expecting a text answer under <code>any</code>. → Under <code>any</code>/<code>tool</code>
+    Claude <b>won't</b> produce a plain-text reply that turn; if you need prose, use <code>auto</code> or
+    <code>none</code>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You need every response to be a JSON object matching one schema. Which <code>tool_choice</code>?</summary>
+    <p class="answer"><code>{"type":"tool","name":"&lt;your_schema_tool&gt;"}</code>. Forcing that specific tool guarantees
+    Claude emits its schema-shaped <code>input</code>, which you use as structured output.</p></details>
+    <details><summary>Q2 · Your agent got stuck calling tools forever. You had set <code>tool_choice</code> to <code>any</code>. Fix?</summary>
+    <p class="answer">Stop forcing a tool on every turn. Use <code>any</code>/<code>tool</code> only where you truly need a
+    forced call (often just the first turn), then switch to <code>auto</code> so Claude can decide to finish with
+    <code>end_turn</code>.</p></details>
+    <details><summary>Q3 · You want Claude to summarize in prose this turn even though tools are attached. Which setting?</summary>
+    <p class="answer"><code>{"type":"none"}</code> — tools stay defined for later turns, but Claude may not call any this
+    turn, so it produces a text answer.</p></details>
+
+    <div class="pager">
+        <a href="3-3-parallel-tool-calls.html"><span class="k">← Prev</span>3.3 · Parallel Tool Calls</a>
+        <a class="next" href="3-5-tool-runner-vs-manual-loop.html"><span class="k">Next →</span>3.5 · Tool Runner vs. Manual Loop</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 3.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

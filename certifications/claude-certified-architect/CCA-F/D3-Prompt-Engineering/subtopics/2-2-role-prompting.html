@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.2 Giving Claude a Role (Persona) · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 2 · Roles &amp; System Prompts</div>
+    <h1>2.2 · Giving Claude a Role (Persona)</h1>
+    <div class="tag">Role prompting for accuracy &amp; tone</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> One sentence in <code>system</code> steers everything after it</h2>
+    <p><strong>Role prompting</strong> means putting a persona in the system prompt — "You are a senior tax
+    attorney", "You are a terse SRE", "You are a patient primary-school teacher". Per the official docs:
+    <em>"Setting a role in the system prompt focuses Claude's behavior and tone for your use case. Even a single
+    sentence makes a difference."</em></p>
+    <p>A role does <strong>two jobs at once</strong>:</p>
+    <ul>
+        <li><strong>Accuracy</strong> — it primes the right domain vocabulary, conventions, and depth. A "financial
+        analyst" reads a balance sheet differently than a generic assistant.</li>
+        <li><strong>Tone</strong> — it sets voice and register (formal vs. casual, terse vs. thorough) without you
+        re-specifying it on every turn.</li>
+    </ul>
+
+    <div class="good">Role in <code>system</code> is <strong>sticky</strong>: because you resend
+    <code>system</code> on every call, the persona persists across the whole conversation for free — you don't
+    repeat "act as a lawyer" in each user message.</div>
+
+    <div class="warn">A role sets a <em>perspective</em>, not a fact-checker. "You are an expert" doesn't make Claude
+    correct — it makes it answer <em>as an expert would</em>. Pair a role with real instructions, examples, and (for
+    high-stakes work) verification. Don't treat a persona as a substitute for grounding.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Specific beats generic</h2>
+    <p>The narrower and more concrete the role, the more leverage it has. "You are helpful" is nearly noise;
+    "You are a helpful coding assistant specializing in Python" measurably changes output. Add the
+    <strong>audience</strong> and <strong>goal</strong> when they matter: <em>"…writing for non-technical
+    executives; prioritize clarity over completeness."</em></p>
+
+    <table>
+        <tr><th>Weak role</th><th>Strong role</th><th>What the strong version buys</th></tr>
+        <tr><td>"You are helpful."</td><td>"You are a senior Kubernetes SRE."</td><td>Domain depth + correct jargon</td></tr>
+        <tr><td>"You are an assistant."</td><td>"You are a copy editor for a science magazine; keep the author's voice."</td><td>Register + constraints on tone</td></tr>
+        <tr><td>"Answer the question."</td><td>"You are a tutor for a nervous beginner; explain one step at a time."</td><td>Pacing + empathy in tone</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> How a role shapes the answer</h2>
+    <div class="mermaid">
+flowchart TD
+    ROLE["Role in system:<br/>'senior Python engineer'"] --> PRIME["Primes domain vocab,<br/>conventions, depth"]
+    ROLE --> VOICE["Sets tone &amp; register"]
+    PRIME --> OUT["More accurate,<br/>on-domain answer"]
+    VOICE --> OUT
+    TASK["User turn:<br/>the actual question"] --> OUT
+    OUT --> NOTE{"Still needs grounding?"}
+    NOTE -->|"yes"| ADD["Add instructions,<br/>examples, verification"]
+    classDef role fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef warn fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class ROLE,PRIME,VOICE,OUT role; class NOTE,ADD warn;
+    </div>
+
+    <h2><span class="chip code">CODE</span> BAD → GOOD: same task, sharper role</h2>
+    <p>The task is identical; only the <code>system</code> role changes. The GOOD role controls accuracy
+    <em>and</em> tone in one line.</p>
+<pre><span class="cm"># BAD — no role: generic depth, unpredictable tone</span>
+client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+               <span class="st">"content"</span>: <span class="st">"Review this SQL query for problems."</span>}],
+)
+
+<span class="cm"># GOOD — a specific persona focuses behavior AND voice</span>
+client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    system=(
+        <span class="st">"You are a senior database engineer reviewing production SQL. "</span>
+        <span class="st">"Flag correctness, performance, and injection risks. "</span>
+        <span class="st">"Be concise and cite the specific line for each issue."</span>
+    ),
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+               <span class="st">"content"</span>: <span class="st">"Review this SQL query for problems:\n"</span> + query}],
+)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Role in system vs. role in the user turn</h2>
+    <table>
+        <tr><th></th><th>Role in <code>system</code> (recommended)</th><th>Role restated each user turn</th></tr>
+        <tr><td>Persistence</td><td>Sticky across the whole conversation</td><td>Must repeat every turn</td></tr>
+        <tr><td>Token cost</td><td>Sent once per request, cacheable</td><td>Re-typed / re-sent each turn</td></tr>
+        <tr><td>Authority</td><td>Standing instruction — hard for user text to override</td><td>Mixed in with the task; easier to blur</td></tr>
+        <tr><td>Clarity</td><td>Clean separation: who I am vs. what to do</td><td>Persona and task tangled together</td></tr>
+    </table>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Give Claude a role" means adding a <code>role: "assistant"</code> message. → No.
+    <b>Role prompting = writing a persona into the <code>system</code> parameter.</b> The message <code>role</code>
+    field (<code>user</code>/<code>assistant</code>) is a different concept.</div>
+    <div class="trap"><b>Trap:</b> Believing "You are an expert" makes answers factually correct. → A role sets
+    <b>perspective and tone</b>, not truth. Ground high-stakes work with instructions, examples, and verification.</div>
+    <div class="trap"><b>Trap:</b> Vague roles ("be helpful"). → <b>Specific roles</b> (domain + audience + goal)
+    do the steering; generic ones barely move output.</div>
+    <div class="trap"><b>Trap:</b> Re-declaring the persona in every user message. → Put it in <code>system</code>
+    once; it's sticky and cacheable. Repeating it wastes tokens and can conflict with the task text.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What two things does a role in the system prompt control?</summary>
+    <p class="answer"><b>Accuracy</b> (it primes the right domain knowledge, conventions, and depth) and
+    <b>tone</b> (voice, register, verbosity). The docs note even a single sentence makes a difference.</p></details>
+    <details><summary>Q2 · Why is a specific role better than "you are helpful"?</summary>
+    <p class="answer">A specific role (domain + audience + goal) gives Claude a concrete perspective to reason from,
+    which sharpens both correctness and voice. "Helpful" is too generic to steer anything.</p></details>
+    <details><summary>Q3 · Does a role guarantee accuracy?</summary>
+    <p class="answer">No — it sets how Claude <i>answers</i>, not whether the answer is true. It's a steering tool,
+    not a grounding tool. Combine it with real instructions, examples, and verification for high-stakes tasks.</p></details>
+
+    <div class="pager">
+        <a href="2-1-system-parameter.html"><span class="k">← Back</span>2.1 · The System Parameter</a>
+        <a class="next" href="2-3-system-vs-user.html"><span class="k">Next →</span>2.3 · System vs User</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 2.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

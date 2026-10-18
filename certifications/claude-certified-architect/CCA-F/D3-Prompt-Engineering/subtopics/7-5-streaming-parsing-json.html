@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.5 Streaming &amp; Parsing Structured Output · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 7 · Structured Outputs &amp; JSON</div>
+    <h1>7.5 · Streaming &amp; Parsing Structured Output</h1>
+    <div class="tag">Incremental JSON safely</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Partial JSON is not parseable JSON</h2>
+    <p>When you stream a response, JSON arrives one fragment at a time. You cannot <code>json.loads()</code> a
+    half-finished object — you must <strong>accumulate every delta first</strong>, then parse once the block is
+    complete. Two delta types carry structured content:</p>
+    <table>
+        <tr><th>Source</th><th>Delta type</th><th>Field to concatenate</th></tr>
+        <tr><td>Structured output (7.4) — JSON in the text</td><td><code>text_delta</code></td><td><code>delta.text</code></td></tr>
+        <tr><td>Tool use (7.3) — args in a <code>tool_use</code> block</td><td><code>input_json_delta</code></td><td><code>delta.partial_json</code></td></tr>
+    </table>
+    <div class="note">🔑 The SSE order is <code>message_start</code> → <code>content_block_start</code> →
+    <code>content_block_delta</code>* → <code>content_block_stop</code> → <code>message_delta</code> →
+    <code>message_stop</code>. For a tool block, <code>content_block_start</code> carries an empty
+    <code>input: {}</code>; the real arguments stream as <code>input_json_delta.partial_json</code> string
+    fragments that concatenate to the full JSON.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Let the SDK helpers do the accumulation</h2>
+    <p>You rarely hand-assemble deltas. The SDK helpers accumulate for you and hand back a complete, parsed object:</p>
+    <ul>
+        <li><strong>Python:</strong> <code>with client.messages.stream(...) as stream:</code> then
+        <code>stream.get_final_message()</code> — the fully assembled message with parsed tool inputs.</li>
+        <li><strong>TypeScript:</strong> <code>await stream.finalMessage()</code>.</li>
+        <li><strong>Structured outputs:</strong> stream, accumulate, and call
+        <code>messages.parse()</code> semantics on the final text (Java exposes a <code>MessageAccumulator</code> →
+        <code>accumulator.message(Contact.class)</code>).</li>
+        <li><strong>Tool runner:</strong> the streaming tool runner yields a per-turn stream and a
+        <code>get_final_message()</code> for the accumulated message.</li>
+    </ul>
+    <div class="warn">⚠️ Streaming is <strong>required</strong> for large <code>max_tokens</code> (above ~16K) to
+    avoid SDK HTTP timeouts. Use <code>.get_final_message()</code> / <code>.finalMessage()</code> to get the
+    complete response even when you don't handle individual events — you get timeout protection for free.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Accumulate, then parse — never mid-stream</h2>
+    <div class="mermaid">
+flowchart TD
+    S["content_block_start (input: {})"] --> D["content_block_delta ×N"]
+    D -->|"tool_use → partial_json"| ACC["Concatenate fragments<br/>into a buffer"]
+    D -->|"structured output → text"| ACC
+    ACC --> MID{"Parse a fragment now?"}
+    MID -->|"❌ tempting"| BAD["🔴 json.loads() on partial<br/>→ JSONDecodeError"]
+    MID -->|"✅ wait"| STOP["content_block_stop"]
+    STOP --> PARSE["🟢 json.loads(buffer) once complete<br/>(or use get_final_message())"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class PARSE ok; class BAD bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Helper path vs. manual accumulation</h2>
+<pre><span class="cm"># ✅ Recommended — let the helper accumulate & parse the tool input for you</span>
+<span class="kw">with</span> client.messages.stream(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=[record_contact_tool], tool_choice={<span class="st">"type"</span>: <span class="st">"tool"</span>, <span class="st">"name"</span>: <span class="st">"record_contact"</span>},
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Jane Doe, jane@co.com, enterprise."</span>}],
+) <span class="kw">as</span> stream:
+    <span class="kw">for</span> text <span class="kw">in</span> stream.text_stream:
+        <span class="fn">render</span>(text)                       <span class="cm"># show progress live if you want</span>
+    final = stream.get_final_message()      <span class="cm"># fully assembled + parsed</span>
+
+block = next(b <span class="kw">for</span> b <span class="kw">in</span> final.content <span class="kw">if</span> b.type == <span class="st">"tool_use"</span>)
+data  = block.input                         <span class="cm"># already a dict — no manual parsing</span>
+
+<span class="cm"># ── Manual accumulation (low-level events): buffer, THEN parse ──</span>
+buf = []
+<span class="kw">for</span> event <span class="kw">in</span> client.messages.create(
+        model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>, stream=<span class="kw">True</span>,
+        tools=[record_contact_tool],
+        tool_choice={<span class="st">"type"</span>: <span class="st">"tool"</span>, <span class="st">"name"</span>: <span class="st">"record_contact"</span>},
+        messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Jane Doe, jane@co.com, enterprise."</span>}]):
+    <span class="kw">if</span> event.type == <span class="st">"content_block_delta"</span> <span class="kw">and</span> event.delta.type == <span class="st">"input_json_delta"</span>:
+        buf.append(event.delta.partial_json)   <span class="cm"># fragments of the JSON args</span>
+    <span class="kw">elif</span> event.type == <span class="st">"content_block_stop"</span>:
+        data = json.loads(<span class="st">""</span>.join(buf))       <span class="cm"># parse ONLY when the block is done</span></pre>
+    <div class="bad">Never call <code>json.loads()</code> on the running buffer mid-stream — a partial object raises
+    <code>JSONDecodeError</code>. Parse only after <code>content_block_stop</code> (or read the helper's final message).</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> SDK helper vs. raw event loop</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Helper (<code>stream()</code> + final message)</h4>
+            <ul><li>Accumulation, parsing, and timeout handling done for you</li>
+            <li>Tool inputs arrive as parsed dicts</li>
+            <li>Still lets you render partial text live</li></ul></div>
+        <div class="con"><h4>⚠️ Raw <code>stream=True</code> event loop</h4>
+            <ul><li>Lower memory, full control over each event</li>
+            <li>You must buffer <code>partial_json</code> / <code>text</code> yourself</li>
+            <li>Easy to mis-parse mid-stream — the classic bug</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Parsing JSON on each delta. → Deltas are <b>fragments</b>; a partial object won't
+    parse. Accumulate all of them, then <code>json.loads()</code> after <code>content_block_stop</code>.</div>
+    <div class="trap"><b>Trap:</b> Reading tool args from <code>content_block_start</code>. → Its
+    <code>input</code> is <code>{}</code>; the real arguments stream as <code>input_json_delta.partial_json</code>
+    fragments.</div>
+    <div class="trap"><b>Trap:</b> Confusing the delta types. → Structured-output JSON streams as
+    <code>text_delta</code> (<code>delta.text</code>); tool arguments stream as <code>input_json_delta</code>
+    (<code>delta.partial_json</code>).</div>
+    <div class="trap"><b>Trap:</b> Non-streaming request with a large <code>max_tokens</code>. → Above ~16K the SDK
+    can hit an HTTP timeout. <b>Stream</b> and use <code>get_final_message()</code> / <code>finalMessage()</code>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why can't you parse structured output while it's still streaming?</summary>
+    <p class="answer">Because each delta is a <b>fragment</b> of the JSON — a partial object isn't valid and
+    <code>json.loads()</code> raises. You must accumulate every <code>text_delta</code> /
+    <code>input_json_delta</code> and parse only after <code>content_block_stop</code>.</p></details>
+    <details><summary>Q2 · Which field carries streamed tool-call arguments, and which carries structured-output JSON?</summary>
+    <p class="answer">Tool arguments stream in <code>input_json_delta.partial_json</code> (concatenate the fragments);
+    structured-output JSON streams in <code>text_delta.text</code>. The tool block's initial
+    <code>content_block_start.input</code> is empty (<code>{}</code>).</p></details>
+    <details><summary>Q3 · What's the simplest safe way to get the parsed result when streaming?</summary>
+    <p class="answer">Use the SDK helper — <code>client.messages.stream(...)</code> then
+    <code>stream.get_final_message()</code> (Python) or <code>await stream.finalMessage()</code> (TypeScript). It
+    accumulates the deltas, hands back the complete message with tool inputs already parsed, and gives timeout
+    protection for free.</p></details>
+
+    <div class="pager">
+        <a href="7-4-structured-outputs-feature.html"><span class="k">← Back</span>7.4 · The Structured Outputs Feature</a>
+        <a class="next" href="8-1-reduce-hallucinations.html"><span class="k">Next →</span>8.1 · Reduce Hallucinations</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 7.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

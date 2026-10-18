@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.6 Idempotency &amp; Side-Effect Safety · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 6 · Reliability</div>
+    <h1>6.6 · Idempotency &amp; Side-Effect Safety</h1>
+    <div class="tag">Retries can double-execute — make tools safe to re-run</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Retries and side effects collide</h2>
+    <p>The whole reliability story so far — SDK auto-retry (6.3), fallback (6.4), even a client re-issuing a request
+    after a timeout — assumes re-running a call is <em>safe</em>. For a read, it is. For a <strong>write with side
+    effects</strong> (charge a card, send an email, create an order), a retry can <strong>double-execute</strong>:
+    the first call succeeded but the response was lost, so the retry charges the customer twice.</p>
+
+    <div class="warn">⚠️ The dangerous case isn't "the call failed." It's "the call <em>succeeded</em> but the
+    acknowledgement was lost." The caller can't tell the difference, retries, and the side effect happens again.</div>
+
+    <table>
+        <tr><th>Property</th><th>Meaning</th><th>Safe to retry?</th></tr>
+        <tr><td><strong>Idempotent</strong></td><td>Re-running yields the same end state (GET, PUT to a fixed key, deterministic upsert)</td><td>🟢 Yes — retry freely</td></tr>
+        <tr><td><strong>Non-idempotent</strong></td><td>Each run adds an effect (POST that creates, charge, increment, send)</td><td>🔴 No — needs an idempotency key first</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> How a lost ack causes a double charge</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant A as Agent
+    participant P as Payments API
+    A->>P: POST charge $50 (attempt 1)
+    P->>P: 💳 charge succeeds
+    P--xA: ✗ response lost (timeout)
+    Note over A: looks like a failure → retry
+    A->>P: POST charge $50 (attempt 2)
+    P->>P: 💳 charges AGAIN — double execute!
+    Note over A,P: Fix: send the SAME idempotency key<br/>→ server dedupes attempt 2
+    </div>
+
+    <h2><span class="chip code">CODE</span> The idempotency-key pattern</h2>
+    <p>Generate the key <em>once per logical operation</em> and send it on every retry of that operation. The server records the key and returns the original result instead of re-executing.</p>
+<pre><span class="kw">import</span> uuid
+
+<span class="cm"># One key PER LOGICAL OPERATION — reused across ALL retries of it.</span>
+<span class="kw">def</span> <span class="fn">charge_card</span>(customer, amount):
+    key = str(uuid.uuid4())                 <span class="cm"># generated ONCE, outside any retry loop</span>
+    <span class="kw">return</span> _post_with_retry(key, customer, amount)
+
+<span class="kw">def</span> <span class="fn">_post_with_retry</span>(key, customer, amount, attempts=<span class="st">3</span>):
+    <span class="kw">for</span> _ <span class="kw">in</span> range(attempts):
+        <span class="kw">try</span>:
+            <span class="kw">return</span> payments.post(
+                <span class="st">"/charges"</span>,
+                headers={<span class="st">"Idempotency-Key"</span>: key},   <span class="cm"># SAME key each attempt</span>
+                json={<span class="st">"customer"</span>: customer, <span class="st">"amount"</span>: amount},
+            )
+        <span class="kw">except</span> TransientError:
+            <span class="kw">continue</span>                            <span class="cm"># server dedupes on the key → no double charge</span>
+    <span class="kw">raise</span> RuntimeError(<span class="st">"charge failed after retries"</span>)</pre>
+    <div class="note">🔑 The magic is <strong>generate the key once, reuse it on every retry</strong>. A fresh UUID
+    per attempt defeats the whole mechanism — the server sees each attempt as a new charge.</div>
+
+    <h3>Design tools to be inherently safe</h3>
+    <p>Where you own the tool, prefer designs that are naturally re-runnable:</p>
+    <ul>
+        <li><strong>Upsert by natural key</strong> — "create order for cart <code>C123</code>" returns the existing
+        order if it already exists, instead of a new one.</li>
+        <li><strong>Check-then-act with a unique constraint</strong> — let the DB reject the duplicate.</li>
+        <li><strong>Reversible / two-phase</strong> — reserve, then commit; a lost ack leaves only a harmless reservation.</li>
+    </ul>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The SDK retries automatically, so all my tools are retry-safe." → The SDK retries
+    the <b>Anthropic API</b> call. Your <b>tool's</b> side effects (a POST that charges) are your responsibility to
+    make idempotent.</div>
+    <div class="trap"><b>Trap:</b> Blindly retrying a non-idempotent POST. → That's exactly how you double-charge.
+    Add an idempotency key <b>or</b> confirm the operation is idempotent before retrying.</div>
+    <div class="trap"><b>Trap:</b> Generating a new idempotency key on each retry. → Defeats deduplication — the server
+    treats each attempt as distinct. Generate <b>once</b> per operation, reuse across retries.</div>
+    <div class="trap"><b>Trap:</b> Assuming a failed response means the effect didn't happen. → A lost ack after a
+    successful write is the classic double-execute trap. Idempotency keys make this safe.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · An agent's "send_invoice_email" tool times out. Retry as-is?</summary>
+    <p class="answer">Not safely — sending email is non-idempotent (each retry sends another). Add an idempotency key
+    (or a per-invoice "already sent" guard) so a retry after a lost ack doesn't send twice.</p></details>
+    <details><summary>Q2 · Why is generating the idempotency key inside the retry loop a bug?</summary>
+    <p class="answer">Each attempt would carry a different key, so the server can't recognise attempt 2 as a retry of
+    attempt 1 — it executes both. The key must be generated <b>once per logical operation</b> and reused on every
+    retry.</p></details>
+    <details><summary>Q3 · Which of these are safe to retry without special handling: GET user, PUT profile to a fixed key, POST create-order?</summary>
+    <p class="answer"><b>GET</b> (read, no effect) and <b>PUT to a fixed key</b> (idempotent — same end state) are
+    safe. <b>POST create-order</b> is not — it creates a new record each time; make it idempotent (upsert by cart
+    key or an idempotency key) before retrying.</p></details>
+
+    <div class="pager">
+        <a href="6-5-escalation.html"><span class="k">← Prev</span>6.5 · Escalation to Human</a>
+        <a class="next" href="6-7-timeouts.html"><span class="k">Next →</span>6.7 · Timeouts (Per-Step &amp; Chain)</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 6.6</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

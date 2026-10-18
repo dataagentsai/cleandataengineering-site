@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.5 Enterprise Managed Policy · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 3 · Permissions &amp; Safety</div>
+    <h1>3.5 · Enterprise Managed Policy</h1>
+    <div class="tag">Admin-enforced settings</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Managed settings sit at the top and cannot be overridden</h2>
+    <p>Organizations enforce Claude Code configuration through <strong>managed settings</strong> — a
+    <code>managed-settings.json</code> file (same format as any settings file) deployed by an administrator. It is
+    the <strong>highest-priority</strong> layer in the precedence chain, above everything a developer can set,
+    <em>including CLI flags</em>:</p>
+    <table>
+        <tr><th>Priority</th><th>Scope</th></tr>
+        <tr><td>1 (highest)</td><td><b>Managed settings</b> — can't be overridden by any other level</td></tr>
+        <tr><td>2</td><td>Command-line arguments</td></tr>
+        <tr><td>3</td><td>Local project settings (<code>.claude/settings.local.json</code>)</td></tr>
+        <tr><td>4</td><td>Shared project settings (<code>.claude/settings.json</code>)</td></tr>
+        <tr><td>5 (lowest)</td><td>User settings (<code>~/.claude/settings.json</code>)</td></tr>
+    </table>
+    <div class="note">🔑 Permission rules are the exception to plain override: <code>allow</code>/<code>ask</code>/<code>deny</code>
+    arrays <strong>merge</strong> across scopes rather than replace. But the deny-first rule still holds — a managed
+    <code>deny</code> can't be re-allowed by <code>--allowedTools</code> or any lower scope.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Where the file lives, per OS</h2>
+    <p>The file-based managed policy lives at an OS-specific system location a normal user can't write:</p>
+    <table>
+        <tr><th>Platform</th><th>Managed settings path</th></tr>
+        <tr><td>macOS</td><td><code>/Library/Application Support/ClaudeCode/managed-settings.json</code></td></tr>
+        <tr><td>Linux / WSL</td><td><code>/etc/claude-code/managed-settings.json</code></td></tr>
+        <tr><td>Windows</td><td><code>C:\Program Files\ClaudeCode\managed-settings.json</code></td></tr>
+    </table>
+    <p>Managed policy can also arrive via MDM/OS-level mechanisms (a macOS <code>com.anthropic.claudecode</code>
+    managed-preferences plist, or the Windows <code>HKLM\SOFTWARE\Policies\ClaudeCode</code> registry key),
+    server-managed settings on Claude.ai, or a self-hosted Claude apps gateway.</p>
+
+    <h2><span class="chip concept">CONCEPT</span> Managed-only settings that lock users out</h2>
+    <p>Some keys only take effect from managed settings — placing them in user/project files does nothing:</p>
+    <ul>
+        <li><code>permissions.disableBypassPermissionsMode: "disable"</code> — blocks
+        <code>bypassPermissions</code> / <code>--dangerously-skip-permissions</code>. (This one actually works from
+        any scope, but is typically enforced here.)</li>
+        <li><code>permissions.disableAutoMode: "disable"</code> — blocks <code>auto</code> mode.</li>
+        <li><code>allowManagedPermissionRulesOnly: true</code> — user/project settings can't define any
+        <code>allow</code>/<code>ask</code>/<code>deny</code> rules; only managed rules apply.</li>
+        <li><code>allowManagedHooksOnly: true</code> / <code>allowManagedMcpServersOnly: true</code> — restrict
+        hooks and MCP servers to managed (and specifically-approved) sources.</li>
+        <li><code>sandbox.filesystem.allowManagedReadPathsOnly</code> / <code>sandbox.network.allowManagedDomainsOnly</code>
+        — lock sandbox read paths and network domains to the managed values.</li>
+    </ul>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Effective config = merge, with managed on top</h2>
+    <div class="mermaid">
+flowchart TD
+    U["User settings<br/>~/.claude/settings.json"] --> MERGE["Merge by precedence"]
+    P["Project settings<br/>.claude/settings.json"] --> MERGE
+    L["Local settings<br/>.claude/settings.local.json"] --> MERGE
+    C["CLI flags"] --> MERGE
+    M["🔒 Managed settings<br/>managed-settings.json"] --> MERGE
+    MERGE --> EFF{"Effective policy"}
+    EFF --> R1["Managed values win — even over CLI flags"]
+    EFF --> R2["deny rules from any scope block — merged, deny-first"]
+    classDef lock fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    class M lock; class R1 ok; class R2 ok;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A locked-down <code>managed-settings.json</code></h2>
+<pre><span class="cm">// macOS: /Library/Application Support/ClaudeCode/managed-settings.json</span>
+{
+  <span class="st">"permissions"</span>: {
+    <span class="st">"defaultMode"</span>: <span class="st">"default"</span>,
+    <span class="st">"disableBypassPermissionsMode"</span>: <span class="st">"disable"</span>,
+    <span class="st">"deny"</span>: [
+      <span class="st">"Read(./.env)"</span>,
+      <span class="st">"Read(./secrets/**)"</span>,
+      <span class="st">"Bash(curl *)"</span>,
+      <span class="st">"WebFetch"</span>
+    ]
+  },
+  <span class="st">"allowManagedPermissionRulesOnly"</span>: <span class="kw">true</span>,
+  <span class="st">"sandbox"</span>: {
+    <span class="st">"enabled"</span>: <span class="kw">true</span>,
+    <span class="st">"failIfUnavailable"</span>: <span class="kw">true</span>,
+    <span class="st">"allowUnsandboxedCommands"</span>: <span class="kw">false</span>
+  }
+}</pre>
+    <div class="good">This forces every developer into standard prompting, forbids bypass mode, hard-denies secret
+    reads and raw <code>curl</code>, and requires a working sandbox (refusing to start otherwise). None of it can be
+    loosened by a user's <code>~/.claude/settings.json</code> or a repo's checked-in settings.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Central enforcement vs. developer flexibility</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Managed policy</h4>
+            <ul><li>Organization-wide guardrails users cannot weaken</li>
+            <li>Deny rules and disabled modes hold even against CLI flags</li>
+            <li>Delivered by MDM/registry — consistent across the fleet</li></ul></div>
+        <div class="con"><h4>⚠️ Cost of locking down</h4>
+            <ul><li>Over-restriction (e.g. <code>allowManagedPermissionRulesOnly</code>) means every allowed command
+            must be centrally curated</li>
+            <li>Array keys like sandbox <code>excludedCommands</code> still merge, so keep the managed list narrow</li>
+            <li>Requires admin access to system paths on each machine</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "A CLI flag can override managed settings." → No. Managed settings are strictly the
+    highest priority — above command-line arguments. A managed <code>deny</code> can't be undone with
+    <code>--allowedTools</code>.</div>
+    <div class="trap"><b>Trap:</b> "<code>managed-settings.json</code> lives in <code>~/.claude/</code>." → It lives in
+    a system location: <code>/Library/Application Support/ClaudeCode/</code> (macOS),
+    <code>/etc/claude-code/</code> (Linux), <code>C:\Program Files\ClaudeCode\</code> (Windows).</div>
+    <div class="trap"><b>Trap:</b> "Managed permission rules replace lower-scope rules." → Permission rules
+    <em>merge</em> across scopes. What makes managed authoritative is deny-first precedence plus keys like
+    <code>allowManagedPermissionRulesOnly</code> that suppress lower-scope allow/ask/deny entirely.</div>
+    <div class="trap"><b>Trap:</b> "Users can always turn off the sandbox locally." → With
+    <code>sandbox.enabled</code> (a boolean) set in managed settings, Claude Code uses the managed value and ignores
+    a developer's local override; <code>allowManagedReadPathsOnly</code> further stops them widening read paths.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · An admin denies <code>Bash(curl *)</code> in managed settings. A developer adds <code>--allowedTools "Bash(curl *)"</code>. What happens?</summary>
+    <p class="answer">Still denied. Managed settings outrank CLI flags, and deny is evaluated before allow across all
+    scopes. If a tool is denied at any level, no other level can re-enable it.</p></details>
+    <details><summary>Q2 · Where does managed-settings.json live on Linux, and why there?</summary>
+    <p class="answer"><code>/etc/claude-code/managed-settings.json</code> — a root-owned system path a normal user can't
+    write, so the policy can't be tampered with from a user account.</p></details>
+    <details><summary>Q3 · How do you stop developers from defining their own permission rules at all?</summary>
+    <p class="answer">Set <code>allowManagedPermissionRulesOnly: true</code> in managed settings. Then only
+    <code>allow</code>/<code>ask</code>/<code>deny</code> rules from managed settings apply; user and project rules
+    are ignored.</p></details>
+
+    <div class="pager">
+        <a href="3-4-sandboxing.html"><span class="k">← Back</span>3.4 · Sandboxing &amp; Bypassing Prompts</a>
+        <a class="next" href="4-1-builtin-commands.html"><span class="k">Next →</span>4.1 · Built-in Commands</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 3.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

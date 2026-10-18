@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.4 The Structured Outputs Feature · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 7 · Structured Outputs &amp; JSON</div>
+    <h1>7.4 · The Structured Outputs Feature</h1>
+    <div class="tag">Guaranteed schema conformance</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Constrain the response to a JSON Schema</h2>
+    <p>Structured Outputs is the purpose-built feature for "always valid JSON." You supply a JSON Schema on
+    <strong><code>output_config.format</code></strong> and the model's text output is <strong>guaranteed</strong>
+    to conform — enforced by <strong>constrained decoding</strong>, not by prompting. The valid JSON lands in
+    <code>response.content[0].text</code>.</p>
+<pre>resp = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+               <span class="st">"content"</span>: <span class="st">"John Smith, john@example.com, enterprise plan."</span>}],
+    output_config={
+        <span class="st">"format"</span>: {
+            <span class="st">"type"</span>: <span class="st">"json_schema"</span>,          <span class="cm"># the only format type</span>
+            <span class="st">"schema"</span>: {
+                <span class="st">"type"</span>: <span class="st">"object"</span>,
+                <span class="st">"properties"</span>: {
+                    <span class="st">"name"</span>:  {<span class="st">"type"</span>: <span class="st">"string"</span>},
+                    <span class="st">"email"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>},
+                    <span class="st">"plan"</span>:  {<span class="st">"type"</span>: <span class="st">"string"</span>},
+                },
+                <span class="st">"required"</span>: [<span class="st">"name"</span>, <span class="st">"email"</span>, <span class="st">"plan"</span>],
+                <span class="st">"additionalProperties"</span>: <span class="kw">False</span>,
+            },
+        }
+    },
+)
+data = json.loads(resp.content[<span class="st">0</span>].text)   <span class="cm"># first text block IS valid JSON</span></pre>
+    <div class="warn">⚠️ <strong>Field names verified.</strong> The parameter is <code>output_config</code> with a
+    nested <code>format</code> of <code>{"type": "json_schema", "schema": …}</code>. The older top-level
+    <code>output_format</code> parameter (and the <code>structured-outputs-2025-11-13</code> beta header) is
+    <strong>deprecated</strong> — <code>output_config.format</code> is GA and needs <strong>no beta header</strong>.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> <code>messages.parse()</code>, models, and schema limits</h2>
+    <p>The recommended path is <strong><code>client.messages.parse()</code></strong>, which validates the response
+    against your schema automatically and hands back a typed object.</p>
+<pre><span class="kw">from</span> pydantic <span class="kw">import</span> BaseModel
+
+<span class="kw">class</span> <span class="fn">Contact</span>(BaseModel):
+    name: str
+    email: str
+    plan: str
+
+resp = client.messages.parse(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"John Smith, john@example.com, enterprise."</span>}],
+    output_format=Contact,          <span class="cm"># Python convenience; derives + validates the schema</span>
+)
+contact = resp.parsed_output        <span class="cm"># → a validated Contact instance</span></pre>
+    <div class="note">🔑 <strong>Supported models</strong> (Claude API, GA): Fable 5, Opus 4.8 / 4.7 / 4.6,
+    Sonnet 5 / 4.6 / 4.5, Opus 4.5, Haiku 4.5. TypeScript uses <code>output_config.format:
+    zodOutputFormat(schema)</code> on <code>messages.parse()</code>.</div>
+    <div class="warn">⚠️ <strong>JSON Schema is a subset.</strong> Supported: object/array/string/number/integer/
+    boolean/null, <code>enum</code>, <code>const</code>, <code>anyOf</code>, <code>allOf</code>,
+    <code>$ref</code>/<code>$def</code>, string <code>format</code>s (date-time, date, email, uri, uuid, …).
+    <strong>Not</strong> supported: recursive schemas, numeric bounds (<code>minimum</code>/<code>maximum</code>),
+    string length (<code>minLength</code>/<code>maxLength</code>), and <code>additionalProperties</code> other than
+    <code>false</code>. The Python/TS/Ruby/PHP SDKs strip unsupported constraints and re-validate client-side.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> What the feature guarantees — and what it doesn't</h2>
+    <div class="mermaid">
+flowchart TD
+    REQ["Request + output_config.format (json_schema)"] --> COMP["Compile grammar<br/>(1st call slower · 24h cache)"]
+    COMP --> GEN["Constrained decoding"]
+    GEN --> SR{"stop_reason?"}
+    SR -->|"end_turn"| OK["🟢 content[0].text is valid JSON<br/>matching the schema"]
+    SR -->|"refusal"| REF["🔴 Safety wins over schema —<br/>output may not conform"]
+    SR -->|"max_tokens"| CUT["🔴 Truncated — invalid JSON;<br/>raise max_tokens & retry"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class OK ok; class REF bad; class CUT bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Structured output + strict tool use together</h2>
+    <p>The two features compose: constrain the <em>final answer</em> with <code>output_config.format</code> while
+    a <code>strict</code> tool guarantees any tool arguments.</p>
+<pre>resp = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Plan a trip to Paris next month."</span>}],
+    output_config={<span class="st">"format"</span>: {<span class="st">"type"</span>: <span class="st">"json_schema"</span>, <span class="st">"schema"</span>: {
+        <span class="st">"type"</span>: <span class="st">"object"</span>,
+        <span class="st">"properties"</span>: {
+            <span class="st">"summary"</span>:    {<span class="st">"type"</span>: <span class="st">"string"</span>},
+            <span class="st">"next_steps"</span>: {<span class="st">"type"</span>: <span class="st">"array"</span>, <span class="st">"items"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>}},
+        },
+        <span class="st">"required"</span>: [<span class="st">"summary"</span>, <span class="st">"next_steps"</span>], <span class="st">"additionalProperties"</span>: <span class="kw">False</span>,
+    }}},
+    tools=[{
+        <span class="st">"name"</span>: <span class="st">"search_flights"</span>, <span class="st">"strict"</span>: <span class="kw">True</span>,
+        <span class="st">"input_schema"</span>: {<span class="st">"type"</span>: <span class="st">"object"</span>,
+            <span class="st">"properties"</span>: {<span class="st">"destination"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>},
+                           <span class="st">"date"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>, <span class="st">"format"</span>: <span class="st">"date"</span>}},
+            <span class="st">"required"</span>: [<span class="st">"destination"</span>, <span class="st">"date"</span>], <span class="st">"additionalProperties"</span>: <span class="kw">False</span>},
+    }],
+)</pre>
+    <div class="note">First call with a new schema pays a one-time <strong>grammar-compilation</strong> cost;
+    compiled grammars are <strong>cached for 24 h</strong>. Changing the schema (or the tool set) invalidates that
+    cache; changing only a tool's <code>name</code>/<code>description</code> does not.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Feature vs. the prompt/tool routes</h2>
+    <table>
+        <tr><th>Approach</th><th>Guarantee</th><th>Cost / caveat</th></tr>
+        <tr><td>Prompt techniques (7.1)</td><td>Best-effort</td><td>Zero setup; you validate &amp; retry</td></tr>
+        <tr><td>Prefill + stop (7.2)</td><td>Best-effort</td><td>Prefill dead on current models</td></tr>
+        <tr><td>Strict tool use (7.3)</td><td>Guaranteed (args)</td><td>Payload nested in a <code>tool_use</code> block</td></tr>
+        <tr><td><strong>Structured Outputs (7.4)</strong></td><td><strong>Guaranteed (answer)</strong></td><td>1st-call compile latency; JSON-Schema subset; ZDR-compatible</td></tr>
+    </table>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Using the deprecated top-level <code>output_format</code> parameter (or the
+    <code>structured-outputs-2025-11-13</code> beta header). → The current, GA field is
+    <b><code>output_config.format</code></b> with <code>{"type":"json_schema","schema":…}</code>, no beta header.</div>
+    <div class="trap"><b>Trap:</b> "Structured outputs guarantees valid JSON no matter what." → A
+    <code>refusal</code> or a <code>max_tokens</code> cutoff can still produce non-conforming output — check
+    <code>stop_reason</code> before trusting the text.</div>
+    <div class="trap"><b>Trap:</b> Putting <code>minLength</code>, <code>maximum</code>, or a recursive schema in
+    the format. → Those constraints are <b>not supported</b>; SDKs strip them and validate client-side. Don't rely
+    on the model to enforce them.</div>
+    <div class="trap"><b>Trap:</b> Expecting the enum's exact casing back. → Enum <b>capitalization is not
+    guaranteed</b> — compare case-insensitively when matching returned enum values.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What is the exact parameter shape for structured outputs, and is a beta header needed?</summary>
+    <p class="answer"><code>output_config={"format": {"type": "json_schema", "schema": {…}}}</code> on
+    <code>messages.create()</code>. It is GA and needs <b>no beta header</b> — the old top-level
+    <code>output_format</code> + <code>structured-outputs-2025-11-13</code> header is deprecated.</p></details>
+    <details><summary>Q2 · How does the feature guarantee conformance, and when can it still fail?</summary>
+    <p class="answer">Via <b>constrained decoding</b> — the model can only emit tokens that keep the JSON valid
+    against the schema. It can still fail to conform on <code>stop_reason: "refusal"</code> (safety overrides schema)
+    or <code>stop_reason: "max_tokens"</code> (truncated); guard on <code>stop_reason</code>.</p></details>
+    <details><summary>Q3 · Name two JSON-Schema constructs the feature does NOT enforce.</summary>
+    <p class="answer">Any two of: recursive schemas, numeric bounds (<code>minimum</code>/<code>maximum</code>/
+    <code>multipleOf</code>), string length (<code>minLength</code>/<code>maxLength</code>), array constraints beyond
+    limited <code>minItems</code>, and <code>additionalProperties</code> set to anything but <code>false</code>.</p></details>
+
+    <div class="pager">
+        <a href="7-3-tool-use-for-json.html"><span class="k">← Back</span>7.3 · Tool Use to Force a Schema</a>
+        <a class="next" href="7-5-streaming-parsing-json.html"><span class="k">Next →</span>7.5 · Streaming &amp; Parsing Structured Output</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 7.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

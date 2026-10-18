@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.5 Client Tools vs Server Tools · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 1 · Tool Use Fundamentals</div>
+    <h1>1.5 · Client Tools vs Server Tools</h1>
+    <div class="tag">Who executes the tool</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Tools differ by <em>where the code runs</em></h2>
+    <p>The single dividing line in the tool ecosystem is <strong>where execution happens</strong>.</p>
+    <table>
+        <tr><th></th><th>Client tools</th><th>Server tools</th></tr>
+        <tr><td>Runs on</td><td><strong>Your</strong> infrastructure</td><td><strong>Anthropic's</strong> infrastructure</td></tr>
+        <tr><td>You execute?</td><td>Yes — you run the code &amp; return a <code>tool_result</code></td><td>No — Anthropic runs it for you</td></tr>
+        <tr><td>Loop</td><td><code>stop_reason: "tool_use"</code> → you reply with <code>tool_result</code></td><td>Result arrives in the same response; no client round trip</td></tr>
+        <tr><td>Examples</td><td>Your <code>get_weather</code>; Anthropic-schema <code>bash</code>, <code>text_editor</code>, <code>memory</code>, <code>computer</code></td><td><code>web_search</code>, <code>web_fetch</code>, <code>code_execution</code>, <code>tool_search</code>, <code>advisor</code></td></tr>
+    </table>
+    <div class="note">🔑 <strong>Client tools</strong> include both your user-defined tools <em>and</em>
+    Anthropic-schema tools like <code>bash</code>/<code>text_editor</code> — Anthropic publishes the schema, but
+    <strong>you still execute the call</strong>. What makes a tool "server" isn't who wrote the schema; it's who
+    runs the code.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Server tools skip the round trip</h2>
+    <p>With a client tool you get <code>stop_reason: "tool_use"</code>, execute in your code, and reply with a
+    <code>tool_result</code> — the four-step loop from 1.1. A <strong>server tool</strong> collapses that: you
+    just declare it in <code>tools</code>, and Anthropic runs it (e.g. performs the web search, executes the
+    code) and returns the results <em>inside the same response</em>. There's no <code>tool_result</code> for you
+    to send.</p>
+    <div class="good">Declaring a server tool is just a <code>type</code> entry, e.g.
+    <code>{"type": "web_search_20260209", "name": "web_search"}</code> — no <code>input_schema</code>, because
+    Anthropic owns the schema and the execution.</div>
+    <div class="warn">⚠️ Long server-tool turns can pause with <code>stop_reason: "pause_turn"</code>; you resend
+    the conversation to resume. And a server tool called in the <em>same parallel batch</em> as a client tool
+    still surfaces the client tool for you to execute.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Two execution paths</h2>
+    <div class="mermaid">
+flowchart TD
+    Q["Claude wants to use a tool"] --> K{"Client or server?"}
+    K -->|"client<br/>(your tool, bash, text_editor)"| C1["stop_reason: tool_use"]
+    C1 --> C2["YOU execute in your app"]
+    C2 --> C3["Reply with tool_result<br/>(user turn)"]
+    C3 --> DONE["Claude continues"]
+    K -->|"server<br/>(web_search, code_execution)"| S1["ANTHROPIC executes it"]
+    S1 --> S2["Results returned in the<br/>same response — no round trip"]
+    S2 --> DONE
+    classDef client fill:#e7f1ff,stroke:#4a90d9,color:#1a3a5a;
+    classDef server fill:#d4edda,stroke:#28a745,color:#155724;
+    class C1 client; class C2 client; class C3 client;
+    class S1 server; class S2 server;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Declaring both kinds in one request</h2>
+    <p>A server tool (<code>web_search</code>, executed by Anthropic) and a client tool
+    (<code>get_weather</code>, executed by you) side by side. You only handle a <code>tool_result</code> for the
+    client tool.</p>
+<pre>tools = [
+    <span class="cm"># SERVER tool: Anthropic runs the search; results come back inline.</span>
+    {<span class="st">"type"</span>: <span class="st">"web_search_20260209"</span>, <span class="st">"name"</span>: <span class="st">"web_search"</span>},
+
+    <span class="cm"># CLIENT tool: YOU execute it and return a tool_result.</span>
+    {
+        <span class="st">"name"</span>: <span class="st">"get_weather"</span>,
+        <span class="st">"description"</span>: <span class="st">"Get the current weather for a location."</span>,
+        <span class="st">"input_schema"</span>: {
+            <span class="st">"type"</span>: <span class="st">"object"</span>,
+            <span class="st">"properties"</span>: {<span class="st">"location"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>}},
+            <span class="st">"required"</span>: [<span class="st">"location"</span>],
+        },
+    },
+]
+
+resp = client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+                               tools=tools,
+                               messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+                                          <span class="st">"content"</span>: <span class="st">"Latest Mars news, and weather in SF?"</span>}])
+
+<span class="kw">for</span> block <span class="kw">in</span> resp.content:
+    <span class="kw">if</span> block.type == <span class="st">"tool_use"</span>:            <span class="cm"># the CLIENT tool — you must run it</span>
+        run_and_return_tool_result(block)
+    <span class="cm"># web_search results are already in resp.content — nothing to execute.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Client tools vs. server tools</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Client tools</h4>
+            <ul><li>Full control — any code, any system, your data &amp; auth</li>
+            <li>You can gate, validate, and audit each call</li>
+            <li>Priced like a normal request</li></ul></div>
+        <div class="con"><h4>✅ Server tools (the other side)</h4>
+            <ul><li>Zero execution code — Anthropic runs &amp; hosts it</li>
+            <li>Results inline; simpler loop</li>
+            <li>But: fixed capabilities + usage-based charges (e.g. per web search)</li></ul></div>
+    </div>
+    <div class="note">Rule of thumb: reach for a <strong>server tool</strong> when Anthropic already offers the
+    capability (search, code sandbox) and you don't want to run it; write a <strong>client tool</strong> when the
+    action touches your systems, data, or security boundary.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Anthropic-schema tools like <code>bash</code> are server tools." → No — they
+    are <b>client</b> tools. Anthropic publishes the schema, but <b>you execute</b> the call and return the
+    <code>tool_result</code>. Server vs. client is about <em>who runs the code</em>.</div>
+    <div class="trap"><b>Trap:</b> Waiting to send a <code>tool_result</code> for a server tool. → Server tools
+    (web search, code execution) run on Anthropic's side and return results inline — there's <b>no</b>
+    <code>tool_result</code> for you to send.</div>
+    <div class="trap"><b>Trap:</b> Giving a server tool an <code>input_schema</code>. → You declare it by
+    <code>type</code> (e.g. <code>web_search_20260209</code>). Anthropic owns the schema and the
+    execution.</div>
+    <div class="trap"><b>Trap:</b> Ignoring <code>pause_turn</code>. → A long server-tool turn may stop with
+    <code>stop_reason: "pause_turn"</code>; resend the conversation to let Anthropic resume.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What single question separates a client tool from a server tool?</summary>
+    <p class="answer">"<b>Where does the code run?</b>" Client tools execute on your infrastructure (you return
+    a <code>tool_result</code>); server tools execute on Anthropic's infrastructure (results come back inline,
+    nothing to execute).</p></details>
+    <details><summary>Q2 · Is the Anthropic-defined <code>bash</code> tool a client or server tool?</summary>
+    <p class="answer">A <b>client</b> tool. Anthropic defines its schema and trains Claude on it, but your
+    application still runs the shell command and returns the <code>tool_result</code>. Anthropic-schema ≠
+    server-executed.</p></details>
+    <details><summary>Q3 · Name two server tools and describe how their results reach you.</summary>
+    <p class="answer">e.g. <code>web_search</code> and <code>code_execution</code> (also <code>web_fetch</code>,
+    <code>tool_search</code>). Anthropic runs them and returns the results as content blocks in the
+    <b>same response</b> — you don't execute anything or send a <code>tool_result</code>.</p></details>
+
+    <div class="pager">
+        <a href="1-4-tool-choice.html"><span class="k">← Back</span>1.4 · tool_choice</a>
+        <a class="next" href="2-1-writing-descriptions.html"><span class="k">Next →</span>2.1 · Writing Descriptions</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 1.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -21,3 +21,12 @@ Build with `python3 _writing/build.py`. Posts with `draft: true` are skipped; pr
 `python3 _writing/build.py --drafts` (writes `_writing/preview/`, git-ignored).
 The build writes each post page, `/writing/` (filterable), `/writing/feed.xml`, the home page's latest-three list,
 and `_writing/cross/<slug>/` with a LinkedIn text and a dev.to copy (canonical link set) for cross-posting.
+
+## /projects/
+
+One page per project, generated from `_projects/data_a.py` (open standards & builds), `data_b.py` (learning builds)
+and `data_c.py` (open to lead). Build with `python3 _projects/build.py`. Every page has the same ten sections:
+purpose, business benefits, status and how to join, requirements, a very high-level architecture (no tool names),
+tech stack per platform (✓ = built), what needs to be done, roles, what you'll learn, links.
+To update a project, edit its dict (status, work items, good_first) and rebuild. `FDE_READY` in build.py marks
+projects someone could take into a real customer setting (the forward-deployed practice label).

@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.5 Streaming for Reliability · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 6 · Reliability: Degradation &amp; Recovery</div>
+    <h1>6.5 · Streaming for Reliability</h1>
+    <div class="tag">Deliver as you generate</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Streaming isn't just for UX — it's a timeout defense</h2>
+    <p>Set <code>"stream": true</code> and the Messages API returns the response incrementally over
+    <strong>server-sent events (SSE)</strong> instead of one big blocking payload. The obvious win is UX (tokens
+    appear live). The <em>reliability</em> win is bigger: a long non-streaming request holds one idle connection open
+    for the whole generation, and some networks drop idle connections — so a long answer can fail or hit an HTTP
+    timeout with nothing to show. Streaming keeps bytes flowing, so the connection never sits idle.</p>
+
+    <div class="note">🔑 The docs are explicit: for large <code>max_tokens</code> or generations over ~10 minutes, use
+    <strong>streaming</strong> (or the Batches API). The SDKs even <em>refuse</em> a non-streaming request they
+    estimate will exceed the ~10-minute timeout — because idle-connection drops make it unreliable.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The event sequence, and how to recover from a drop</h2>
+    <p>An SSE stream has a fixed high-level shape. Handle unknown event types gracefully — new ones may be added.</p>
+
+    <table>
+        <tr><th>Event</th><th>Fires</th><th>Carries</th></tr>
+        <tr><td><code>message_start</code></td><td>Once, first</td><td>The <code>Message</code> shell (empty <code>content</code>)</td></tr>
+        <tr><td><code>content_block_start</code></td><td>Each block begins</td><td>Block type + <code>index</code></td></tr>
+        <tr><td><code>content_block_delta</code></td><td>Per token/chunk</td><td>Incremental text / JSON / thinking delta</td></tr>
+        <tr><td><code>content_block_stop</code></td><td>Each block ends</td><td>—</td></tr>
+        <tr><td><code>message_delta</code></td><td>Top-level updates</td><td><code>stop_reason</code> + <em>cumulative</em> <code>usage</code></td></tr>
+        <tr><td><code>message_stop</code></td><td>Once, last</td><td>Stream complete</td></tr>
+    </table>
+
+    <div class="warn">⚠️ <code>ping</code> events appear anywhere (ignore them). And an <strong><code>error</code>
+    event can arrive mid-stream after the initial 200</strong> — e.g. an <code>overloaded_error</code> (the streaming
+    analog of a 529). A mid-stream error does <em>not</em> follow normal HTTP error handling; you must catch it on the
+    event stream and fall back / retry (6.1) from the partial you have.</div>
+
+    <div class="good">On a disconnect you hold the tokens received so far — reconnect and <strong>continue</strong>
+    from the partial (6.4), or fall back (6.1). Let the SDK helper accumulate for you:
+    <code>.get_final_message()</code> / <code>.finalMessage()</code> gives you the complete <code>Message</code> with
+    streaming's timeout protection but without hand-handling every event.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The SSE lifecycle (with a mid-stream error)</h2>
+    <div class="mermaid">
+flowchart TD
+    MS["message_start<br/>(empty Message)"] --> CBS["content_block_start (index i)"]
+    CBS --> CBD["content_block_delta ×N<br/>(text / json / thinking)"]
+    CBD --> CBST["content_block_stop"]
+    CBST -->|"more blocks"| CBS
+    CBST -->|"done"| MD["message_delta<br/>(stop_reason + cumulative usage)"]
+    MD --> MST["🟢 message_stop"]
+    CBD -.->|"overloaded_error<br/>mid-stream"| ERR["🔴 error event<br/>→ keep partial, retry/fallback (6.1)"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class MST ok; class ERR bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Stream with progress, then recover on error</h2>
+    <p>Deltas render live (progress + no idle connection); a mid-stream error keeps the partial and hands off to the
+    fallback ladder from 6.1.</p>
+<pre><span class="kw">def</span> <span class="fn">stream_answer</span>(client, messages):
+    partial = <span class="st">""</span>
+    <span class="kw">try</span>:
+        <span class="kw">with</span> client.messages.<span class="fn">stream</span>(
+            model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">64000</span>,   <span class="cm"># large → streaming a must</span>
+            messages=messages) <span class="kw">as</span> stream:
+            <span class="kw">for</span> text <span class="kw">in</span> stream.text_stream:
+                partial += text
+                <span class="fn">render</span>(text)                          <span class="cm"># show progress live</span>
+            final = stream.<span class="fn">get_final_message</span>()          <span class="cm"># accumulated Message</span>
+            <span class="kw">if</span> final.stop_reason == <span class="st">"max_tokens"</span>:
+                <span class="kw">return</span> <span class="fn">continue_from</span>(partial, messages)  <span class="cm"># 6.4</span>
+            <span class="kw">return</span> partial
+    <span class="kw">except</span> (anthropic.APIStatusError,               <span class="cm"># incl. mid-stream overloaded</span>
+            anthropic.APIConnectionError):            <span class="cm"># dropped connection</span>
+        <span class="kw">return</span> <span class="fn">answer_with_fallback</span>(messages, seed=partial)  <span class="cm"># 6.1, reuse partial</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Streaming vs. one blocking call</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Streaming (SSE)</h4>
+            <ul><li>No idle connection → survives long generations</li>
+            <li>Live progress; partial output on disconnect</li>
+            <li>Required for large <code>max_tokens</code> / &gt;10-min work</li></ul></div>
+        <div class="con"><h4>⚠️ Non-streaming</h4>
+            <ul><li>Simpler: one request, one response object</li>
+            <li>But idle connection can be dropped mid-generation</li>
+            <li>Mid-stream errors &amp; timeouts surface as a hard failure</li></ul></div>
+    </div>
+    <div class="good">Default to streaming for anything long; use <code>.get_final_message()</code> when you only need
+    the finished <code>Message</code> — you get the timeout protection without event-by-event handling. For huge,
+    non-latency-sensitive jobs, the Batches API is the poll-based alternative.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Thinking streaming is only a UX nicety. → It's a <b>reliability</b> mechanism:
+    it prevents idle-connection drops and HTTP timeouts on long outputs. Large <code>max_tokens</code> essentially
+    requires it.</div>
+    <div class="trap"><b>Trap:</b> Assuming errors always come as an HTTP status. → After a 200, an
+    <code>error</code> event (e.g. <code>overloaded_error</code>) can arrive <b>mid-stream</b>. Handle it on the event
+    stream, keep the partial, retry/fallback (6.1).</div>
+    <div class="trap"><b>Trap:</b> Reading per-event <code>usage</code> as incremental. → The <code>usage</code> in
+    <code>message_delta</code> is <b>cumulative</b>, not per-delta. Don't sum it across events.</div>
+    <div class="trap"><b>Trap:</b> Crashing on an unknown event type. → New event types can be added; handle them
+    gracefully. Ignore <code>ping</code> events entirely.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why stream a long generation instead of making one blocking call?</summary>
+    <p class="answer">A blocking call holds one idle connection open for the whole generation; some networks drop idle
+    connections, so a long answer can fail or hit an HTTP timeout with nothing returned. Streaming keeps bytes flowing
+    (no idle drop), shows progress, and leaves you a usable partial on disconnect. For large <code>max_tokens</code>
+    the SDKs require it.</p></details>
+    <details><summary>Q2 · An <code>overloaded_error</code> arrives after you already got a 200. How?</summary>
+    <p class="answer">On a streaming response the initial HTTP status is 200, but an <b>error event can be emitted
+    mid-stream</b> (the SSE analog of a 529). It bypasses normal HTTP error handling — catch it on the event stream,
+    keep the tokens you have, and retry or fall back (6.1).</p></details>
+    <details><summary>Q3 · Name the streaming event sequence at a high level.</summary>
+    <p class="answer"><code>message_start</code> → for each block: <code>content_block_start</code>, one or more
+    <code>content_block_delta</code>, <code>content_block_stop</code> → one or more <code>message_delta</code> (carries
+    <code>stop_reason</code> + cumulative usage) → <code>message_stop</code>. <code>ping</code> and <code>error</code>
+    events may be interspersed.</p></details>
+
+    <div class="pager">
+        <a href="6-4-max-tokens-continuation.html"><span class="k">← Back</span>6.4 · max_tokens Continuation</a>
+        <a class="next" href="7-1-cost-levers.html"><span class="k">Next →</span>7.1 · Cost Levers</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 6.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

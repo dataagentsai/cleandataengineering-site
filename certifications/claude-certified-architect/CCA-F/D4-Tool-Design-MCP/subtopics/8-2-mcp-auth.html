@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.2 Authentication &amp; Authorization · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 8 · MCP Security &amp; Production</div>
+    <h1>8.2 · Authentication &amp; Authorization</h1>
+    <div class="tag">OAuth 2.1 &amp; scoped tokens</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Remote MCP servers use OAuth 2.1</h2>
+    <p>Authorization in MCP is defined at the <strong>transport level</strong> for HTTP-based transports, and it's
+    <em>optional</em> — but when a remote server protects its resources, the spec says it <strong>SHOULD</strong>
+    conform to the MCP authorization model, which is built on <strong>OAuth 2.1</strong>. (STDIO servers are the
+    exception: they <strong>SHOULD NOT</strong> use this flow and instead read credentials from the environment.)
+    The roles map cleanly onto OAuth:</p>
+
+    <table>
+        <tr><th>MCP role</th><th>OAuth 2.1 role</th><th>Responsibility</th></tr>
+        <tr><td>MCP server</td><td>Resource server</td><td>Accepts &amp; validates access tokens on each request</td></tr>
+        <tr><td>MCP client (your host)</td><td>Client</td><td>Obtains tokens, sends <code>Authorization: Bearer</code></td></tr>
+        <tr><td>Authorization server</td><td>Authorization server</td><td>Authenticates the user, issues tokens</td></tr>
+    </table>
+
+    <p>The client doesn't need the auth server configured up front. The server advertises it: an unauthenticated
+    request gets a <strong>401 with a <code>WWW-Authenticate</code> header</strong> pointing at Protected Resource
+    Metadata (RFC 9728), which names the authorization server. The client discovers the auth server's metadata
+    (RFC 8414), runs the OAuth 2.1 flow with <strong>PKCE</strong> (MUST), and returns with a token.</p>
+
+    <div class="note">🔑 Bearer tokens go in a header on <strong>every</strong> request:
+    <code>Authorization: Bearer &lt;token&gt;</code> — <strong>never in the URL query string</strong> (MUST NOT),
+    where they'd leak into logs and referrers. HTTPS is required for all auth endpoints.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Least privilege: scopes + audience binding</h2>
+    <p>Two mechanisms keep a token from becoming a skeleton key.</p>
+    <p><strong>Scoped, least-privilege access.</strong> The spec's own guidance warns against publishing every
+    scope in <code>scopes_supported</code> and requesting them all up front — a broad token (<code>files:*</code>,
+    <code>admin:*</code>) means a bigger blast radius if it leaks, noisier audit trails, and consent fatigue.
+    Prefer a <strong>minimal initial scope</strong> and <strong>incrementally elevate</strong> (the server issues
+    a <code>WWW-Authenticate</code> challenge naming the extra scope only when a privileged operation is first
+    attempted). Servers may issue a <em>subset</em> of what was requested.</p>
+
+    <p><strong>Token audience binding.</strong> This is the load-bearing rule. Clients <strong>MUST</strong>
+    include the <code>resource</code> parameter (RFC 8707 Resource Indicators) in both authorization and token
+    requests, naming the <em>specific</em> MCP server the token is for. Servers <strong>MUST</strong> validate
+    that a presented token was issued <em>for them</em> — and <strong>MUST reject</strong> tokens whose audience
+    doesn't include them. This stops a token minted for one service from being replayed against another.</p>
+
+    <div class="warn">⚠️ <strong>Token passthrough is explicitly forbidden.</strong> An MCP server that talks to
+    an upstream API is a separate OAuth client to that API and <strong>MUST NOT</strong> forward the token it
+    received from the MCP client. Passing tokens through breaks audience validation and enables the confused
+    deputy (8.4).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Discovery-driven OAuth 2.1 flow</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant C as MCP Client (host)
+    participant M as MCP Server (resource server)
+    participant A as Authorization Server
+    C->>M: MCP request (no token)
+    M-->>C: 401 + WWW-Authenticate → resource metadata
+    C->>M: GET /.well-known/oauth-protected-resource
+    M-->>C: metadata → authorization_servers
+    C->>A: GET auth-server metadata (RFC 8414)
+    Note over C,A: OAuth 2.1 + PKCE + resource=<this MCP server>
+    A-->>C: Access token (audience-bound)
+    C->>M: MCP request + Authorization: Bearer <token>
+    M-->>C: Validate audience & scope → MCP response
+    </div>
+
+    <h2><span class="chip code">CODE</span> Sending a scoped, audience-bound token</h2>
+    <p>The token request pins the <code>resource</code> (audience) and asks for the narrowest scope; every MCP
+    request then carries the bearer token in the header.</p>
+<pre><span class="cm"># Token request — resource param binds the token to THIS server;</span>
+<span class="cm"># scope is minimal, not the whole catalog.</span>
+POST /token HTTP/1.1
+grant_type=authorization_code
+code=<span class="st">"..."</span>
+code_verifier=<span class="st">"..."</span>          <span class="cm"># PKCE (required)</span>
+resource=<span class="st">"https://mcp.example.com/mcp"</span>   <span class="cm"># RFC 8707 audience</span>
+scope=<span class="st">"mcp:tools-basic"</span>       <span class="cm"># least privilege, elevate later</span>
+
+<span class="cm"># Every MCP request — bearer in the HEADER, never the URL.</span>
+GET /mcp HTTP/1.1
+Host: mcp.example.com
+Authorization: Bearer eyJhbGciOiJIUzI1NiIs...
+
+<span class="cm"># Server MUST: validate the token was issued for it (audience),</span>
+<span class="cm"># return 401 on invalid/expired, 403 on insufficient scope.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Broad token vs. scoped + audience-bound</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Minimal scope + audience binding</h4>
+            <ul><li>A leaked token unlocks little</li>
+            <li>Token can't be replayed across services</li>
+            <li>Cleaner audit trail per operation</li>
+            <li>Short-lived tokens + refresh rotation limit theft impact</li></ul></div>
+        <div class="con"><h4>⚠️ One broad, long-lived token</h4>
+            <ul><li>Fewer consent prompts up front</li>
+            <li>But: leak = full-scope compromise</li>
+            <li>Reusable across services if audience unchecked</li>
+            <li>Users decline dialogs listing excessive scopes</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "MCP invented its own auth scheme." → No — remote MCP authorization is
+    <b>OAuth 2.1</b> (with PKCE, dynamic client registration, protected-resource &amp; auth-server metadata). The
+    MCP server is an OAuth <b>resource server</b>.</div>
+    <div class="trap"><b>Trap:</b> "Put the token in the URL for convenience." → Access tokens <b>MUST NOT</b> be
+    in the query string — use <code>Authorization: Bearer</code>. URLs leak into logs and referrers.</div>
+    <div class="trap"><b>Trap:</b> "Any valid token the server receives is fine to accept." → Servers
+    <b>MUST validate the audience</b> — reject tokens not issued for them. Accepting foreign-audience tokens
+    breaks the OAuth trust boundary.</div>
+    <div class="trap"><b>Trap:</b> "An MCP server can reuse the client's token when calling an upstream API." →
+    <b>Token passthrough is forbidden.</b> The server acts as its own OAuth client upstream with a separate
+    token.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · How does a client discover how to authenticate to a remote MCP server?</summary>
+    <p class="answer">It makes a request; the server replies <b>401 with a <code>WWW-Authenticate</code> header</b>
+    pointing to its Protected Resource Metadata (RFC 9728), which names the authorization server. The client then
+    fetches the auth server's metadata (RFC 8414) and runs the OAuth 2.1 flow with PKCE. No pre-configuration
+    needed.</p></details>
+    <details><summary>Q2 · What does the <code>resource</code> parameter do and why is it mandatory?</summary>
+    <p class="answer">It's the RFC 8707 resource indicator that <b>binds the token to a specific MCP server</b>
+    (its audience). Clients MUST send it on authorization and token requests; servers MUST validate that presented
+    tokens were issued for them. This prevents a token minted for one service being replayed against another —
+    the core defense against cross-service token misuse.</p></details>
+    <details><summary>Q3 · Why prefer minimal scope over requesting everything up front?</summary>
+    <p class="answer">Broad tokens expand the blast radius of a leak, obscure per-operation audit trails, and
+    cause consent fatigue (users decline dialogs listing excessive scopes). Least-privilege scoping — a minimal
+    initial scope with incremental elevation via <code>WWW-Authenticate</code> scope challenges — constrains
+    compromise impact and keeps consent meaningful.</p></details>
+
+    <div class="pager">
+        <a href="8-1-mcp-security-risks.html"><span class="k">← Back</span>8.1 · Security Risks</a>
+        <a class="next" href="8-3-human-in-the-loop.html"><span class="k">Next →</span>8.3 · Human-in-the-Loop</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 8.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

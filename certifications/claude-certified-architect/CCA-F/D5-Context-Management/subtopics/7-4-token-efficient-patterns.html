@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.4 Token-Efficient Patterns · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 7 · Cost &amp; Performance Optimization</div>
+    <h1>7.4 · Token-Efficient Patterns</h1>
+    <div class="tag">Fewer tokens, same result</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Every token is billed and read — on both sides</h2>
+    <p>You pay for <strong>input</strong> and <strong>output</strong> tokens, and both slow the call (7.3). Token
+    efficiency is the one lever that helps <em>every</em> request regardless of model, cache, or batch: cut the
+    tokens and you cut cost <em>and</em> latency at once. The moves fall into two buckets — shrink what you
+    <strong>send</strong> (prompts, context, tool results) and shrink what you ask the model to
+    <strong>produce</strong> (concise, structured, capped output).</p>
+
+    <table>
+        <tr><th>Pattern</th><th>Side</th><th>What it cuts</th></tr>
+        <tr><td>Concise prompts — drop boilerplate &amp; repetition</td><td>Input</td><td>Wasted instruction tokens</td></tr>
+        <tr><td>Don't dump huge tool results</td><td>Input</td><td>Return only the fields needed; filter/summarize first</td></tr>
+        <tr><td>Ask for concise output</td><td>Output</td><td>Prose the caller never reads</td></tr>
+        <tr><td>Structure over prose (JSON / labels)</td><td>Output</td><td>Framing words around the actual answer</td></tr>
+        <tr><td>Cap <code>max_tokens</code></td><td>Output</td><td>Hard ceiling — model can't run long</td></tr>
+    </table>
+
+    <div class="note">🔑 Structured output is often the biggest output win: a JSON object or a single label carries
+    the answer with almost no surrounding words, and it's easier to parse downstream.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The biggest waste is uncontrolled context growth</h2>
+    <p>In agent loops the input grows every turn — old tool results, verbose observations, and re-sent history pile
+    up, and you pay for all of it on <em>every</em> subsequent call. Two habits keep it lean: <strong>don't dump
+    raw tool output</strong> into context (return the 3 fields the model needs, not a 5,000-token API blob), and
+    <strong>ask for structured, minimal responses</strong> so the assistant turns you re-send stay small. Pair
+    this with a capped <code>max_tokens</code> so a single call can't balloon, and with prompt caching (7.5) so the
+    stable part you <em>must</em> re-send is billed at ~0.1×.</p>
+
+    <div class="good">Design tools to return distilled results. A <code>search()</code> tool that returns titles +
+    IDs beats one that returns full documents — the model asks for the full doc only when it actually needs it.</div>
+    <div class="bad">Anti-pattern: piping a giant JSON API response straight back as a tool result. You pay for
+    those thousands of tokens on this turn <em>and</em> every turn after, since they stay in history.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Trim both sides of the call</h2>
+    <div class="mermaid">
+flowchart TD
+    IN["Input tokens"] --> CALL{{"Messages API call"}}
+    CALL --> OUT["Output tokens"]
+    P1["concise prompt<br/>(no boilerplate)"] -.-> IN
+    P2["filtered tool results<br/>(not raw dumps)"] -.-> IN
+    P3["cached stable prefix"] -.-> IN
+    P4["ask for concise output"] -.-> OUT
+    P5["structure over prose"] -.-> OUT
+    P6["cap max_tokens"] -.-> OUT
+    CALL --> WIN["🟢 Lower cost + lower latency"]
+    classDef lever fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef win fill:#d4edda,stroke:#28a745,color:#155724;
+    class P1 lever; class P2 lever; class P3 lever; class P4 lever; class P5 lever; class P6 lever; class WIN win;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Structure + cap beats free-form prose</h2>
+    <p>Ask for a small structured answer and cap the length — the model returns the data, not a paragraph.</p>
+<pre><span class="cm"># WASTEFUL: open-ended prose, no ceiling → pays for framing words.</span>
+<span class="cm"># messages=[{"role":"user","content":"Tell me everything about this ticket"}]</span>
+
+<span class="cm"># EFFICIENT: structured output + a hard cap.</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-haiku-4-5"</span>,
+    max_tokens=<span class="st">128</span>,                           <span class="cm"># ceiling — can't run long</span>
+    output_config={<span class="st">"format"</span>: {
+        <span class="st">"type"</span>: <span class="st">"json_schema"</span>,
+        <span class="st">"schema"</span>: {
+            <span class="st">"type"</span>: <span class="st">"object"</span>,
+            <span class="st">"properties"</span>: {
+                <span class="st">"category"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>},
+                <span class="st">"priority"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>, <span class="st">"enum"</span>: [<span class="st">"low"</span>, <span class="st">"high"</span>]},
+            },
+            <span class="st">"required"</span>: [<span class="st">"category"</span>, <span class="st">"priority"</span>],
+            <span class="st">"additionalProperties"</span>: <span class="kw">False</span>,
+        },
+    }},
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">f"Classify: {ticket}"</span>}],
+)  <span class="cm"># returns {"category": "...", "priority": "..."} — no prose to pay for</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Terse vs. useful</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Aggressive token trimming</h4>
+            <ul><li>Lower cost on every call, input and output</li>
+            <li>Faster (fewer tokens to read and generate)</li>
+            <li>Structured output is easy to parse</li>
+            <li>Keeps agent context from ballooning</li></ul></div>
+        <div class="con"><h4>⚠️ Cutting too far</h4>
+            <ul><li>Stripping needed context degrades answers</li>
+            <li>Over-tight <code>max_tokens</code> truncates output</li>
+            <li>Forcing structure on a genuinely open task can lose nuance</li></ul></div>
+    </div>
+    <div class="note">🔑 Cut framing and redundancy, not <em>signal</em>. The goal is the same result in fewer
+    tokens — not a worse result that happens to be shorter.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Token efficiency is only about a shorter prompt." → It's <b>both sides</b>. Output
+    tokens are billed too (and at a higher rate) — concise, structured, capped output often saves more than
+    trimming the prompt.</div>
+    <div class="trap"><b>Trap:</b> Dumping raw tool results back into context. → In a loop you re-pay for that bulk
+    every turn. Return only the fields needed; filter or summarize large results before they enter context.</div>
+    <div class="trap"><b>Trap:</b> Leaving <code>max_tokens</code> huge "so it never truncates." → An uncapped
+    output can run far longer than needed. Set a ceiling sized to the task; raise it only when genuinely
+    truncated.</div>
+    <div class="trap"><b>Trap:</b> Confusing "fewer tokens" with "a cheaper model." → They're different dials
+    (7.1). Token efficiency reduces the count you pay for at <em>any</em> model tier; they stack.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Name two input-side and two output-side token-efficiency patterns.</summary>
+    <p class="answer"><b>Input</b>: concise prompts (drop boilerplate) and not dumping raw tool results (filter to
+    needed fields). <b>Output</b>: ask for concise/structured answers (JSON or a label instead of prose) and cap
+    <code>max_tokens</code>.</p></details>
+    <details><summary>Q2 · Why does structured output usually save more than a "be brief" instruction?</summary>
+    <p class="answer">Structured output (JSON, an enum label) carries the answer with almost no surrounding framing
+    words, and output tokens are billed at the higher rate. It also parses reliably downstream, avoiding a re-ask.</p></details>
+    <details><summary>Q3 · In an agent loop, why is dumping a huge tool result especially costly?</summary>
+    <p class="answer">Because history is re-sent every turn — a 5,000-token blob is paid for on this call
+    <em>and</em> every subsequent one. Returning only the needed fields keeps the re-sent context small across the
+    whole run.</p></details>
+
+    <div class="pager">
+        <a href="7-3-reducing-latency.html"><span class="k">← Back</span>7.3 · Reducing Latency</a>
+        <a class="next" href="7-5-caching-batch-economics.html"><span class="k">Next →</span>7.5 · Caching + Batch Economics</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 7.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

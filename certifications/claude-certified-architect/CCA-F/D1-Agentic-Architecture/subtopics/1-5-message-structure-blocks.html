@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.5 Message Structure &amp; Content Blocks · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 1 · Foundations</div>
+    <h1>1.5 · Message Structure &amp; Content Blocks</h1>
+    <div class="tag">Roles, alternation, and the typed-block list inside content</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Messages: roles &amp; alternation</h2>
+    <p>A conversation is a list of <strong>messages</strong>, each <code>{role, content}</code>. Two rules
+    govern their shape:</p>
+    <ul>
+        <li><strong>Roles alternate</strong> user → assistant → user → …</li>
+        <li><strong>The first message is <code>user</code></strong>.</li>
+        <li><strong>Consecutive same-role messages are merged</strong> into one — you can't have two
+        <code>user</code> turns back-to-back as separate entries; they collapse.</li>
+    </ul>
+
+    <div class="note">🔑 Only two roles exist in <code>messages[]</code>: <code>user</code> and
+    <code>assistant</code>. The <code>system</code> prompt is a <em>separate top-level field</em>, not a role
+    (see 1.2). And tool outputs are fed back as <strong>user-role</strong> <code>tool_result</code> blocks.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> content is a list of typed blocks</h2>
+    <p><code>content</code> is <strong>not a string</strong> — it's a <strong>list of blocks</strong>, each with
+    a <code>type</code>. Four block types matter:</p>
+    <table>
+        <tr><th>Block type</th><th>Appears in</th><th>Key field(s)</th><th>What it carries</th></tr>
+        <tr><td><code>text</code></td><td>user &amp; assistant</td><td><code>.text</code></td><td>Plain natural-language text</td></tr>
+        <tr><td><code>thinking</code></td><td>assistant</td><td><code>.thinking</code></td><td>Extended reasoning (when enabled)</td></tr>
+        <tr><td><code>tool_use</code></td><td>assistant</td><td><code>.name</code>, <code>.input</code>, <code>.id</code></td><td>The model's request to call a tool</td></tr>
+        <tr><td><code>tool_result</code></td><td><strong>user</strong></td><td><code>.tool_use_id</code>, <code>.content</code></td><td>The tool's output you feed back</td></tr>
+    </table>
+
+    <div class="warn">⚠️ Because a turn can lead with a <code>thinking</code> or <code>tool_use</code> block,
+    <strong>never read <code>content[0].text</code> blindly</strong> — the first block may not be a
+    <code>text</code> block and may have no <code>.text</code> attribute at all. Always check
+    <code>block.type</code> first.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Message → blocks tree</h2>
+    <div class="mermaid">
+flowchart TD
+    M["messages[] (alternating user/assistant)"] --> U1["👤 user turn"]
+    M --> A1["🤖 assistant turn"]
+    M --> U2["👤 user turn (tool_result)"]
+    U1 --> UB1["block: text (.text)"]
+    A1 --> AB1["block: thinking (.thinking)"]
+    A1 --> AB2["block: text (.text)"]
+    A1 --> AB3["block: tool_use (.name/.input/.id)"]
+    U2 --> UB2["block: tool_result (.tool_use_id/.content)"]
+    classDef usr fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef asst fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    class U1,U2,UB1,UB2 usr; class A1,AB1,AB2,AB3 asst;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Iterate blocks safely by type</h2>
+<pre><span class="cm"># Never assume content[0] is text. Dispatch on block.type.</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">1024</span>,
+    tools=TOOLS,
+    messages=messages,
+)
+
+text_parts, tool_calls = [], []
+<span class="kw">for</span> block <span class="kw">in</span> resp.content:
+    <span class="kw">if</span> block.type == <span class="st">"text"</span>:
+        text_parts.<span class="fn">append</span>(block.text)
+    <span class="kw">elif</span> block.type == <span class="st">"thinking"</span>:
+        <span class="kw">pass</span>                              <span class="cm"># reasoning; keep it in history, don't show</span>
+    <span class="kw">elif</span> block.type == <span class="st">"tool_use"</span>:
+        tool_calls.<span class="fn">append</span>(block)          <span class="cm"># block.name, block.input, block.id</span>
+
+answer = <span class="st">""</span>.<span class="fn">join</span>(text_parts)      <span class="cm"># safely assembled visible text</span>
+
+<span class="cm"># Feeding a tool result back? It's a USER-role tool_result block.</span>
+messages.<span class="fn">append</span>({
+    <span class="st">"role"</span>: <span class="st">"user"</span>,
+    <span class="st">"content"</span>: [{
+        <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+        <span class="st">"tool_use_id"</span>: tool_calls[<span class="st">0</span>].id,
+        <span class="st">"content"</span>: <span class="st">"22°C, sunny"</span>,
+    }],
+})</pre>
+
+    <div class="good">This pattern is robust regardless of whether the model used thinking, tools, both, or
+    neither — the same loop handles every combination because it dispatches on <code>block.type</code>.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Typed blocks vs. a plain string</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Why a block list</h4>
+            <ul><li>One shape carries text, reasoning, tool calls &amp; results together</li>
+            <li>Ordering is preserved (thinking → text → tool_use)</li>
+            <li>Multimodal &amp; tool content extend cleanly as new block types</li></ul></div>
+        <div class="con"><h4>⚠️ What it demands of you</h4>
+            <ul><li>You must iterate and branch on <code>type</code> — no naive <code>[0].text</code></li>
+            <li>Feeding results back means constructing the right block shape &amp; role</li>
+            <li>More verbose than a single string field</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Reading <code>content[0].text</code> and assuming it's the answer. → With
+    thinking or tool use, the first block may be <code>thinking</code> or <code>tool_use</code> and have no
+    <code>.text</code>. Iterate and check <code>block.type</code>.</div>
+    <div class="trap"><b>Trap:</b> Putting <code>tool_result</code> in an <code>assistant</code> turn. →
+    <code>tool_result</code> is <b>user-role</b> content. Wrong role breaks alternation and the request fails.</div>
+    <div class="trap"><b>Trap:</b> Expecting two consecutive same-role messages to stay separate. → Consecutive
+    same-role messages are <b>merged</b>. If you need distinct turns, they must alternate roles.</div>
+    <div class="trap"><b>Trap:</b> Sending an assistant message first, or a non-user first message. → The
+    <b>first</b> message must be <code>user</code>, and roles alternate from there.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Your code crashes with "block has no attribute text" on some responses. Cause &amp; fix?</summary>
+    <p class="answer">You read <code>block.text</code> (or <code>content[0].text</code>) on a non-text block —
+    likely a <code>thinking</code> or <code>tool_use</code> block that leads the turn. Fix: iterate
+    <code>resp.content</code> and only touch <code>.text</code> when <code>block.type == "text"</code>.</p></details>
+    <details><summary>Q2 · What role does a <code>tool_result</code> block live in, and what links it to its call?</summary>
+    <p class="answer">It lives in a <b>user</b>-role message. It's linked to the originating
+    <code>tool_use</code> block by <code>tool_use_id</code> (which equals the <code>tool_use</code> block's
+    <code>id</code>).</p></details>
+    <details><summary>Q3 · You add two <code>user</code> messages in a row expecting two turns. What happens?</summary>
+    <p class="answer">They get <b>merged</b> into a single user turn — consecutive same-role messages collapse.
+    Roles must alternate user/assistant, and the first message must be <code>user</code>. To keep turns
+    distinct, interleave assistant turns.</p></details>
+
+    <div class="pager">
+        <a href="1-4-statelessness-conversation-state.html"><span class="k">← Prev</span>1.4 · Statelessness &amp; Conversation State</a>
+        <a class="next" href="1-6-appending-whole-turn.html"><span class="k">Next →</span>1.6 · Appending the Whole Assistant Turn</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 1.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

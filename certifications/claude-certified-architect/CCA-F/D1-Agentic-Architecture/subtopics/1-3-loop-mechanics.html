@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.3 The Loop Mechanics · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 1 · Foundations</div>
+    <h1>1.3 · The Loop Mechanics</h1>
+    <div class="tag">The canonical agent loop — call, branch on stop_reason, repeat</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> An agent is a loop, not a call</h2>
+    <p>The whole "agent" abstraction reduces to one control structure: <strong>call the model, inspect
+    <code>stop_reason</code>, and decide whether to run a tool and loop again or stop</strong>. There is no
+    magic — <em>you</em> write the loop; the model decides, at each turn, whether it needs a tool or is done.</p>
+
+    <div class="note">🔑 The loop's exit condition is <code>stop_reason == "end_turn"</code>. Its continue
+    condition is <code>stop_reason == "tool_use"</code>: run the requested tool, append the result as a
+    <code>user</code>-role <code>tool_result</code>, and call again.</div>
+
+    <p>The canonical cycle:</p>
+    <ol>
+        <li><strong>Call</strong> <code>messages.create(...)</code> with the full history and your tools.</li>
+        <li><strong>Append</strong> the whole <code>response.content</code> to <code>messages</code> as an
+        <code>assistant</code> turn (see 1.6 — <em>all</em> blocks, not just text).</li>
+        <li><strong>Branch on <code>stop_reason</code>:</strong>
+            <ul>
+                <li><code>end_turn</code> → the model is finished. <strong>Break.</strong></li>
+                <li><code>tool_use</code> → run the tool(s), append a <code>tool_result</code>, loop.</li>
+            </ul>
+        </li>
+    </ol>
+
+    <table>
+        <tr><th>stop_reason</th><th>Meaning in the loop</th><th>Loop action</th></tr>
+        <tr><td><code>end_turn</code></td><td>Model finished its answer naturally</td><td><strong>Exit</strong> the loop</td></tr>
+        <tr><td><code>tool_use</code></td><td>Model wants to call a tool</td><td>Run tool → append <code>tool_result</code> → loop</td></tr>
+        <tr><td><code>max_tokens</code></td><td>Output hit <code>max_tokens</code> (truncated)</td><td>Handle: raise cap or continue; don't treat as done</td></tr>
+        <tr><td><code>pause_turn</code></td><td>Server-tool loop paused</td><td>Re-send the assistant turn as-is (no "Continue." msg)</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The canonical while-loop</h2>
+    <div class="mermaid">
+flowchart TD
+    A([Seed messages with user turn]) --> B["🟣 messages.create(model, tools, messages)"]
+    B --> C["Append WHOLE response.content<br/>as assistant turn"]
+    C --> D{"stop_reason?"}
+    D -->|end_turn| E["🟢 Done — return final text"]
+    D -->|tool_use| F["🔵 Run the requested tool(s)"]
+    F --> G["Append tool_result<br/>(role: user)"]
+    G --> B
+    D -->|max_tokens| H["🟠 Truncated — raise cap / continue"]
+    classDef ep fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    classDef done fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef tool fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef warn fill:#fff3cd,stroke:#ffc107,color:#856404;
+    class B ep; class E done; class F,G tool; class H warn;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Minimal loop skeleton</h2>
+<pre><span class="cm"># The canonical agent loop: branch on stop_reason until end_turn.</span>
+<span class="kw">import</span> anthropic
+client = anthropic.<span class="fn">Anthropic</span>()
+
+messages = [{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"What's the weather in Paris?"</span>}]
+
+<span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(<span class="st">10</span>):                       <span class="cm"># bound the loop → no infinite spin</span>
+    resp = client.messages.<span class="fn">create</span>(
+        model=<span class="st">"claude-opus-4-8"</span>,
+        max_tokens=<span class="st">1024</span>,
+        tools=TOOLS,
+        messages=messages,
+    )
+
+    <span class="cm"># Append the WHOLE turn (text + tool_use + thinking). See 1.6.</span>
+    messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content})
+
+    <span class="kw">if</span> resp.stop_reason == <span class="st">"end_turn"</span>:
+        <span class="kw">break</span>                              <span class="cm"># model is done → exit</span>
+
+    <span class="kw">if</span> resp.stop_reason == <span class="st">"tool_use"</span>:
+        tool_results = []
+        <span class="kw">for</span> block <span class="kw">in</span> resp.content:
+            <span class="kw">if</span> block.type == <span class="st">"tool_use"</span>:
+                result = <span class="fn">run_tool</span>(block.name, block.input)   <span class="cm"># your dispatch</span>
+                tool_results.<span class="fn">append</span>({
+                    <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+                    <span class="st">"tool_use_id"</span>: block.id,
+                    <span class="st">"content"</span>: result,
+                })
+        <span class="cm"># tool_result blocks go back in a USER-role turn.</span>
+        messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: tool_results})
+        <span class="kw">continue</span>                           <span class="cm"># loop: model sees the results</span>
+<span class="kw">else</span>:
+    <span class="fn">raise</span> <span class="fn">RuntimeError</span>(<span class="st">"loop exceeded max iterations"</span>)</pre>
+
+    <div class="good">Note the two structural safeguards: a <strong>bounded</strong> <code>range(10)</code>
+    (not <code>while True</code> without a guard) and an explicit branch that only <code>break</code>s on
+    <code>end_turn</code>. Everything else is a variation on this skeleton.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> How to bound the loop</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Bounded iterations (recommended)</h4>
+            <ul><li>Guarantees termination even if the model keeps calling tools</li>
+            <li>Caps worst-case token spend &amp; latency</li>
+            <li>Fails loudly instead of silently spinning</li></ul></div>
+        <div class="con"><h4>⚠️ Unbounded <code>while True</code></h4>
+            <ul><li>A stuck model can loop forever → runaway cost</li>
+            <li>Hard to observe or interrupt in production</li>
+            <li>Only safe with a separate stop signal / budget guard</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Forgetting to loop — calling <code>create()</code> once, getting
+    <code>stop_reason="tool_use"</code>, and returning that as the answer. → A <code>tool_use</code> stop means
+    the model is <b>waiting on you</b> to run the tool and call again. Treating it as final leaves the task
+    unfinished.</div>
+    <div class="trap"><b>Trap:</b> An infinite loop with no termination guard. → <code>while True</code> without a
+    max-iteration bound (or budget/stop check) can spin forever if the model never emits <code>end_turn</code>.
+    Always cap it.</div>
+    <div class="trap"><b>Trap:</b> Putting <code>tool_result</code> in an <code>assistant</code> turn. →
+    <code>tool_result</code> blocks are <b>user-role</b> content. Wrong role breaks the alternation and the
+    next call fails.</div>
+    <div class="trap"><b>Trap:</b> Treating <code>max_tokens</code> or <code>pause_turn</code> like
+    <code>end_turn</code>. → Only <code>end_turn</code> means "done." <code>pause_turn</code> means re-send the
+    assistant turn as-is; <code>max_tokens</code> means the output was truncated.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Your agent returns immediately with "I'll check the weather" and never answers. Why?</summary>
+    <p class="answer">You almost certainly returned on the first <code>stop_reason="tool_use"</code> instead of
+    looping. The model emitted a <code>tool_use</code> block and is waiting for you to run the tool, append a
+    <code>tool_result</code>, and call again. Wrap the call in the canonical loop and only stop on
+    <code>end_turn</code>.</p></details>
+    <details><summary>Q2 · What role must the <code>tool_result</code> message use, and why?</summary>
+    <p class="answer"><b>user</b>. Tool outputs are fed back to the model as user-role content containing
+    <code>tool_result</code> blocks (each keyed by <code>tool_use_id</code>). This keeps roles alternating
+    assistant → user → assistant and lets the model consume the results on the next turn.</p></details>
+    <details><summary>Q3 · Why prefer a bounded loop over <code>while True</code>?</summary>
+    <p class="answer">To guarantee termination and cap cost. A model that keeps requesting tools (or gets stuck)
+    would loop forever under <code>while True</code>, running up tokens and latency. A max-iteration bound fails
+    loudly and predictably; you can still raise the bound where genuinely needed.</p></details>
+
+    <div class="pager">
+        <a href="1-2-messages-api-substrate.html"><span class="k">← Prev</span>1.2 · The Messages API as Substrate</a>
+        <a class="next" href="1-4-statelessness-conversation-state.html"><span class="k">Next →</span>1.4 · Statelessness &amp; Conversation State</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 1.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

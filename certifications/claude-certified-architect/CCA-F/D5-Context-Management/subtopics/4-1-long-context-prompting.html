@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.1 Long-Context Prompting (Placement) · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 4 · Long Context &amp; Retrieval</div>
+    <h1>4.1 · Long-Context Prompting (Placement)</h1>
+    <div class="tag">Docs top, query bottom, quote first</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Where you put the documents changes the answer</h2>
+    <p>When a prompt carries <strong>large documents or data-rich inputs (~20K+ tokens)</strong>, <em>placement</em> is a
+    first-class lever, not a formatting detail. Anthropic's long-context guidance is three concrete rules, and the exam
+    rewards knowing all three:</p>
+    <table>
+        <tr><th>Rule</th><th>What to do</th><th>Why it works</th></tr>
+        <tr><td><strong>Longform data at the top</strong></td><td>Place long documents and inputs <em>near the top</em> of the prompt, <em>above</em> the query, instructions, and examples.</td><td>"Improves performance across all models."</td></tr>
+        <tr><td><strong>Query at the end</strong></td><td>Put the question <em>after</em> the documents.</td><td>Can improve response quality by <strong>up to 30%</strong> in tests, especially with complex, multi-document inputs.</td></tr>
+        <tr><td><strong>Quote first</strong></td><td>Ask Claude to quote the relevant passages <em>before</em> doing the task.</td><td>Helps Claude "cut through the noise" of the rest of the document.</td></tr>
+    </table>
+    <div class="note">🔑 The ~30% quality lift is specifically the <em>query-at-the-end</em> effect — long docs on top, the
+    question underneath them. It is not a caching or retrieval trick; it is pure ordering.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Wrap each document in tags with metadata</h2>
+    <p>For multi-document prompts, <strong>wrap each document in <code>&lt;document&gt;</code> tags</strong> with
+    <code>&lt;document_content&gt;</code> and <code>&lt;source&gt;</code> (and any other metadata) subtags, nested inside
+    a <code>&lt;documents&gt;</code> container with an <code>index</code> attribute per document. Structure gives the model
+    clean boundaries — it can tell where one source ends and the next begins, and it can attribute quotes back to a
+    named <code>&lt;source&gt;</code>.</p>
+    <div class="good">The metadata subtags (<code>&lt;source&gt;</code>, index numbers, dates) cost almost nothing and pay
+    off in attribution: when you later ask Claude to "quote from <code>patient_records.txt</code>", the tag names give it
+    a handle to cite by.</div>
+    <div class="warn">Don't paste raw concatenated documents with no delimiters. Without tags the model has to <em>guess</em>
+    boundaries, which is exactly where mid-prompt content gets lost (4.2).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The canonical long-context prompt shape</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Prompt assembly"] --> T["🟢 TOP: long documents<br/>&lt;documents&gt; … &lt;/documents&gt;<br/>each in &lt;document&gt; + &lt;source&gt;"]
+    T --> M["Instructions / few-shot examples"]
+    M --> Q["🔵 BOTTOM: the query<br/>(+ 'quote relevant passages first')"]
+    Q --> R["Response quality<br/>up to +30% vs query-on-top"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class T ok; class Q gate; class R ok;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Assembling a long-context prompt</h2>
+    <p>Documents rendered at the top of the user turn, wrapped and tagged; the query and a quote-first instruction go
+    last. Note the <code>cache_control</code> breakpoint on the stable document block so repeat questions over the same
+    corpus read from cache.</p>
+<pre><span class="cm"># Docs on TOP, query on the BOTTOM — the +30% ordering.</span>
+docs = <span class="st">"""&lt;documents&gt;
+  &lt;document index="1"&gt;
+    &lt;source&gt;annual_report_2023.pdf&lt;/source&gt;
+    &lt;document_content&gt;{annual_report}&lt;/document_content&gt;
+  &lt;/document&gt;
+  &lt;document index="2"&gt;
+    &lt;source&gt;competitor_analysis_q2.xlsx&lt;/source&gt;
+    &lt;document_content&gt;{competitor}&lt;/document_content&gt;
+  &lt;/document&gt;
+&lt;/documents&gt;"""</span>.<span class="fn">format</span>(annual_report=rpt, competitor=comp)
+
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">4096</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: [
+        {<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: docs,       <span class="cm"># TOP: long data</span>
+         <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>}},  <span class="cm"># reuse across questions</span>
+        {<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>:            <span class="cm"># BOTTOM: query + quote-first</span>
+         <span class="st">"First, pull the passages relevant to Q3 strategy into "</span>
+         <span class="st">"&lt;quotes&gt; tags. Then recommend focus areas in &lt;plan&gt; tags."</span>},
+    ]}],
+)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Structured placement vs. dump-and-ask</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Docs-top, query-bottom, quote-first</h4>
+            <ul><li>Up to +30% quality on complex multi-doc inputs</li>
+            <li>Named sources → attributable quotes</li>
+            <li>Stable prefix caches cleanly for repeat queries</li></ul></div>
+        <div class="con"><h4>⚠️ Query-on-top, raw concatenation</h4>
+            <ul><li>Model reads the question before it has the evidence</li>
+            <li>No boundaries → mid-prompt content gets lost (4.2)</li>
+            <li>Harder to ground or cite specific passages</li></ul></div>
+    </div>
+    <div class="note">Placement is free. It changes token <em>order</em>, not token <em>count</em> — so you get the lift
+    without paying more input tokens.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Put the question first so the model knows what to look for." → Backwards. Long data goes
+    <b>on top</b>, the query <b>at the end</b> — query-at-the-end is the setting worth <b>up to 30%</b>.</div>
+    <div class="trap"><b>Trap:</b> Treating the 30% figure as a general prompting boost. → It is specifically the
+    <b>long-context, query-at-the-end</b> effect (~20K+ tokens, complex/multi-document), not a universal number.</div>
+    <div class="trap"><b>Trap:</b> Skipping the quote-first step. → Asking Claude to <b>quote relevant passages first</b>
+    is an explicit best practice; it helps the model cut through noise before it answers.</div>
+    <div class="trap"><b>Trap:</b> Concatenating documents with no tags. → Wrap each in <code>&lt;document&gt;</code> with
+    <code>&lt;document_content&gt;</code> and <code>&lt;source&gt;</code> subtags — boundaries and metadata matter.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Where do the long documents go, and where does the query go?</summary>
+    <p class="answer">Long documents go <b>near the top</b> of the prompt, above the query, instructions, and examples. The
+    <b>query goes at the end</b>. This query-at-the-end ordering can improve response quality by <b>up to 30%</b> on
+    complex, multi-document inputs.</p></details>
+    <details><summary>Q2 · What token threshold triggers this "long context" advice?</summary>
+    <p class="answer">Roughly <b>20K+ tokens</b> — "large documents or data-rich inputs." Below that, ordering matters less;
+    at 20K+ the placement rules and the quote-first technique start paying off meaningfully.</p></details>
+    <details><summary>Q3 · Why ask Claude to quote relevant passages before answering?</summary>
+    <p class="answer">It helps Claude <b>cut through the noise</b> of the rest of the document — the model surfaces the
+    load-bearing evidence first, then reasons over that focused set instead of the whole corpus. Pair it with tagged
+    <code>&lt;source&gt;</code> metadata so quotes are attributable.</p></details>
+
+    <div class="pager">
+        <a href="3-5-memory-tool.html"><span class="k">← Back</span>3.5 · Memory Tool</a>
+        <a class="next" href="4-2-lost-in-the-middle.html"><span class="k">Next →</span>4.2 · 'Lost in the Middle' &amp; Attention</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 4.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

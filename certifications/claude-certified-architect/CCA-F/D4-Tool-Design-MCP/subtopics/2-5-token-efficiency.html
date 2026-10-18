@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.5 Token Efficiency &amp; Tool-Set Size · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 2 · Designing Great Tools</div>
+    <h1>2.5 · Token Efficiency &amp; Tool-Set Size</h1>
+    <div class="tag">Every tool costs context</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Every tool definition is input tokens on every request</h2>
+    <p>Tools aren't free. The entire <code>tools</code> array — every <strong>name, description, and schema</strong>
+    — is serialized into the request as <strong>input tokens</strong>, and it's re-sent on <em>every</em> turn of a
+    conversation. On top of that, the API injects a hidden <strong>tool-use system prompt</strong> whenever
+    <code>tools</code> is present. So a large tool set costs context twice over: bigger prompts (money and latency)
+    <em>and</em> a harder selection problem for the model.</p>
+
+    <table>
+        <tr><th>What consumes tokens</th><th>Where</th></tr>
+        <tr><td>Tool names + descriptions + <code>input_schema</code></td><td>The <code>tools</code> parameter, every request</td></tr>
+        <tr><td>Auto-injected tool-use system prompt</td><td>Added whenever <code>tools</code> is set (hundreds of tokens; varies by model)</td></tr>
+        <tr><td><code>tool_use</code> blocks</td><td>Assistant output + resent in history</td></tr>
+        <tr><td><code>tool_result</code> blocks</td><td>Your follow-up request + resent in history</td></tr>
+        <tr><td><code>input_examples</code> (if used)</td><td>~20–50 tokens simple, ~100–200 complex</td></tr>
+    </table>
+
+    <div class="note">🔑 Two costs scale with tool-set size: <strong>token cost</strong> (bigger prompt) and
+    <strong>selection difficulty</strong> (more lookalike descriptions to disambiguate — see 2.3/2.4). Keeping the
+    <em>active</em> tool set small helps both at once.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Keep the active set small; cache the tools block</h2>
+    <p>Two levers manage the cost:</p>
+    <ul>
+        <li><strong>Prune to the active set.</strong> Expose only the tools relevant to the task. If you have a huge
+        library, use the <strong>tool search tool</strong> with <code>defer_loading</code> so schemas load on demand
+        instead of all sitting in context — this is where namespacing (2.4) pays off.</li>
+        <li><strong>Prompt-cache the tools block.</strong> The rendered order is <code>tools</code> → <code>system</code>
+        → <code>messages</code>, so a <code>cache_control</code> breakpoint on the last tool (or last system block)
+        caches the whole tool set. On cache reads you pay roughly a tenth of the input price for that prefix — the
+        big fixed token cost is paid once, not per turn.</li>
+    </ul>
+
+    <div class="warn">Caching only helps if the tools block is <strong>byte-stable</strong>. Adding, removing, or
+    reordering a tool invalidates the entire cache (tools render at position 0). Serialize tools deterministically
+    and don't churn the set mid-conversation. Note: changing <code>tool_choice</code> alone keeps the tools/system
+    cache — only the messages cache is invalidated.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Cost of a growing tool set — and the levers</h2>
+    <div class="mermaid">
+flowchart TD
+    N["N tools in context"] --> C1["↑ input tokens every turn"]
+    N --> C2["↑ selection difficulty"]
+    C1 --> FIX{"Manage the cost"}
+    C2 --> FIX
+    FIX -->|"expose only relevant tools"| PRUNE["🟢 Small active set"]
+    FIX -->|"huge library"| SEARCH["🔵 Tool search +<br/>defer_loading"]
+    FIX -->|"stable tools block"| CACHE["🟢 Prompt-cache tools:<br/>fixed cost paid once"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef info fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    class PRUNE ok; class CACHE ok; class SEARCH info;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Cache the tools block with cache_control</h2>
+    <p>Put a <code>cache_control</code> breakpoint on the last tool definition. Because render order is
+    <code>tools</code> → <code>system</code> → <code>messages</code>, this caches the full tool set; later requests
+    with the same tools read it back at ~0.1× input price instead of re-billing every definition.</p>
+<pre><span class="kw">import</span> anthropic
+client = anthropic.<span class="fn">Anthropic</span>()
+
+tools = [
+    <span class="cm"># ... earlier tools ...</span>
+    {
+        <span class="st">"name"</span>: <span class="st">"get_weather"</span>,
+        <span class="st">"description"</span>: <span class="st">"Get the current weather in a given location. ..."</span>,
+        <span class="st">"input_schema"</span>: { <span class="st">"type"</span>: <span class="st">"object"</span>,
+            <span class="st">"properties"</span>: { <span class="st">"location"</span>: { <span class="st">"type"</span>: <span class="st">"string"</span> } },
+            <span class="st">"required"</span>: [<span class="st">"location"</span>] },
+        <span class="cm"># Breakpoint on the LAST tool → caches the whole tools block.</span>
+        <span class="st">"cache_control"</span>: { <span class="st">"type"</span>: <span class="st">"ephemeral"</span> },
+    },
+]
+
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">1024</span>,
+    tools=tools,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Weather in Paris?"</span>}],
+)
+<span class="cm"># First call writes the cache (~1.25x). Repeat calls with the SAME tools</span>
+<span class="cm"># read it back cheaply:</span>
+<span class="fn">print</span>(resp.usage.cache_read_input_tokens)   <span class="cm"># &gt; 0 on a cache hit</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Small active set vs. everything loaded</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Small, cached active tool set</h4>
+            <ul><li>Lower per-turn token cost and latency</li>
+            <li>Easier selection — fewer lookalikes</li>
+            <li>Tools block cached: fixed cost paid once</li></ul></div>
+        <div class="con"><h4>⚠️ Every tool loaded, uncached</h4>
+            <ul><li>Whole library billed on every turn</li>
+            <li>More selection ambiguity as it grows</li>
+            <li>Any tool-set edit invalidates the cache entirely</li></ul></div>
+    </div>
+    <div class="good">For thousands of tools, reach for <strong>tool search + <code>defer_loading</code></strong>:
+    schemas are appended on demand rather than swapped in, which also preserves the prompt cache.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Tools are basically free — add all of them." → Every tool's name, description, and
+    schema are <b>input tokens on every request</b>, plus an auto-injected tool-use system prompt. Keep the active
+    set small.</div>
+    <div class="trap"><b>Trap:</b> Cost is <em>only</em> tokens. → A large tool set also raises <b>selection
+    difficulty</b>. Trimming it improves accuracy <em>and</em> cost together.</div>
+    <div class="trap"><b>Trap:</b> "I cached the tools, so I can freely add/remove tools." → <b>Any change to the
+    tools block invalidates the whole cache</b> (tools render at position 0). Keep it byte-stable; only
+    <code>tool_choice</code> can change without losing the tools/system cache.</div>
+    <div class="trap"><b>Trap:</b> Loading thousands of tools directly. → Use the <b>tool search tool with
+    <code>defer_loading</code></b> so schemas load on demand instead of all sitting in context.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What exactly does an unused tool cost you on each request?</summary>
+    <p class="answer">Its full <b>name + description + input_schema serialized as input tokens</b>, re-sent every
+    turn, plus a share of the auto-injected tool-use system prompt — and it adds to the selection difficulty. Unused
+    tools are pure overhead in both token cost and accuracy.</p></details>
+    <details><summary>Q2 · How do you make a large, stable tool set cheap to re-send?</summary>
+    <p class="answer"><b>Prompt-cache the tools block</b> — put <code>cache_control</code> on the last tool
+    definition. Since render order is tools → system → messages, this caches the whole set; repeat requests read it
+    at ~0.1× input price. The block must stay byte-stable or the cache is invalidated.</p></details>
+    <details><summary>Q3 · You have thousands of tools. What's the token-efficient approach?</summary>
+    <p class="answer">Use the <b>tool search tool with <code>defer_loading</code></b>: only relevant schemas load on
+    demand rather than all sitting in context. Namespaced names (2.4) make that on-demand matching reliable, and
+    appended schemas preserve the prompt cache.</p></details>
+
+    <div class="pager">
+        <a href="2-4-namespacing-overlap.html"><span class="k">← Back</span>2.4 · Namespacing &amp; Avoiding Tool Overlap</a>
+        <a class="next" href="3-1-returning-results.html"><span class="k">Next →</span>3.1 · Returning Results</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 2.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

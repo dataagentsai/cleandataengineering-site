@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.3 Human-in-the-Loop &amp; Permissioning · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 8 · MCP Security &amp; Production</div>
+    <h1>8.3 · Human-in-the-Loop &amp; Permissioning</h1>
+    <div class="tag">Approve before it acts</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A human gate is the backstop for everything else</h2>
+    <p>Auth (8.2) decides <em>what a server may do</em>. Human-in-the-loop decides <em>whether this specific
+    call runs right now</em>. It's the last line of defense when a poisoned description (8.1) or a confused
+    deputy (8.4) slips a malicious tool call past every static check. The MCP security guidance builds explicit
+    consent into the protocol's trust-and-safety principles: <strong>users must understand and approve the
+    actions taken on their behalf</strong>, especially any tool invocation that touches data or the outside
+    world.</p>
+
+    <p>This is exactly why real clients — <strong>Claude Desktop and Claude Code</strong> — show a
+    <strong>confirmation prompt before running an MCP tool</strong>: the tool name, the arguments, and an
+    Allow / Deny choice. The user is the one who sees, in plaintext, that <code>search_docs</code> is about to be
+    called with your AWS credentials in the <code>context</code> argument.</p>
+
+    <div class="note">🔑 In the Anthropic Managed Agents API this is a first-class permission policy:
+    <code>permission_policy: {"type": "always_ask"}</code>. The session goes <strong>idle</strong> on a tool call
+    and waits for a <code>user.tool_confirmation</code> event carrying <code>result: "allow"</code> or
+    <code>"deny"</code> before the tool runs.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Gate by risk — auto-approving everything is the failure mode</h2>
+    <p>Gating every read wastes human attention and trains users to click "Allow" reflexively — which defeats the
+    gate. The design lever is the same one from reversibility (D1 §5.4): <strong>gate by side-effect and
+    reversibility, not uniformly.</strong> Read-only lookups can auto-run; anything that mutates state, spends
+    money, sends data, or reads secrets should <strong>always ask</strong>.</p>
+
+    <table>
+        <tr><th>MCP tool</th><th>Side effect</th><th>Policy</th></tr>
+        <tr><td><code>list_issues</code> / <code>search</code></td><td>Read-only</td><td>🟢 always_allow (auto-run)</td></tr>
+        <tr><td><code>read_file</code> (non-secret paths)</td><td>Read-only</td><td>🟢 always_allow</td></tr>
+        <tr><td><code>create_pull_request</code></td><td>Mutates repo</td><td>🟠 always_ask</td></tr>
+        <tr><td><code>send_message</code> / <code>http_post</code></td><td>Leaves the boundary</td><td>🔴 always_ask + audit</td></tr>
+        <tr><td><code>delete_*</code> / <code>charge_*</code></td><td>Irreversible</td><td>🔴 always_ask + audit</td></tr>
+    </table>
+
+    <div class="bad">Anti-pattern: "auto-approve all tools" so the agent never pauses. One poisoned description
+    now runs a secret-read → public-send chain with zero human in the loop.</div>
+    <div class="good">Pattern: <code>default_config: {enabled: true}</code> with <code>always_ask</code> on the
+    side-effecting tools; auto-run the reversible reads. The human sees the dangerous calls, not the harmless
+    ones.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The confirmation round-trip</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant Model
+    participant Host as Host / Client
+    participant User
+    participant Server as MCP Server
+    Model->>Host: tool_use: send_message(args)
+    Host->>Host: policy = always_ask?
+    Host->>User: Confirm: send_message(args) — Allow / Deny
+    alt User allows
+        User-->>Host: allow
+        Host->>Server: invoke tool
+        Server-->>Host: tool_result
+    else User denies
+        User-->>Host: deny (+ reason)
+        Host-->>Model: "user declined" → model adapts
+    end
+    </div>
+
+    <h2><span class="chip code">CODE</span> Per-tool permission policy + confirmation reply</h2>
+    <p>Enable the toolset, force <code>always_ask</code> on the risky tool, and answer the pause with an explicit
+    allow/deny — a denial carries a message the model sees so it can change approach.</p>
+<pre><span class="cm"># Agent config: auto-run reads, gate the side effect.</span>
+tools=[{
+  <span class="st">"type"</span>: <span class="st">"agent_toolset_20260401"</span>,
+  <span class="st">"default_config"</span>: {<span class="st">"enabled"</span>: <span class="kw">True</span>,
+                     <span class="st">"permission_policy"</span>: {<span class="st">"type"</span>: <span class="st">"always_allow"</span>}},
+  <span class="st">"configs"</span>: [
+    {<span class="st">"name"</span>: <span class="st">"bash"</span>, <span class="st">"permission_policy"</span>: {<span class="st">"type"</span>: <span class="st">"always_ask"</span>}},
+  ],
+}]
+
+<span class="cm"># On an always_ask tool the session goes idle. Approve or refuse:</span>
+client.beta.sessions.events.send(session.id, events=[{
+    <span class="st">"type"</span>: <span class="st">"user.tool_confirmation"</span>,
+    <span class="st">"tool_use_id"</span>: event.id,        <span class="cm"># the sevt_ id from the ask</span>
+    <span class="st">"result"</span>: <span class="st">"deny"</span>,               <span class="cm"># or "allow"</span>
+    <span class="st">"deny_message"</span>: <span class="st">"That path holds secrets — read the example instead."</span>,
+}])</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Gate everything vs. gate by risk vs. auto-approve all</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Gate by risk (reads auto, side effects ask)</h4>
+            <ul><li>Human sees the calls that actually matter</li>
+            <li>Approval stays meaningful, not reflexive</li>
+            <li>Catches injected side-effect calls at the boundary</li></ul></div>
+        <div class="con"><h4>⚠️ Auto-approve everything</h4>
+            <ul><li>Fastest, zero friction</li>
+            <li>But: no backstop for poisoned / confused-deputy calls</li>
+            <li>Secret-read → public-send chains run unseen</li>
+            <li>Also risky: gate <em>everything</em> → click-fatigue defeats the gate</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Auth already restricts the server, so a human gate is redundant." → Auth caps
+    <b>what's possible</b>; the human gate catches a <b>specific bad call</b> that's within scope but wrong — the
+    backstop against injection.</div>
+    <div class="trap"><b>Trap:</b> "Auto-approving all tools is fine if the server is trusted." → A trusted
+    server can be <b>compromised</b> or serve a poisoned description; auto-approve removes the one layer that
+    would catch it.</div>
+    <div class="trap"><b>Trap:</b> "Gate every single tool call for safety." → Gating reversible reads causes
+    <b>click-fatigue</b> — users reflexively Allow. Gate by <b>side effect / reversibility</b>, not
+    uniformly.</div>
+    <div class="trap"><b>Trap:</b> "A denial just stops the agent." → A denial can carry a <b>message the model
+    reads</b>, so it can adapt (e.g. read a safe path instead) rather than dead-ending.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why is human-in-the-loop the backstop for injection and confused-deputy attacks?</summary>
+    <p class="answer">Static checks (auth, allow-lists) can't tell that a <em>particular</em> in-scope tool call
+    is malicious. A human confirmation surfaces the tool name and arguments in plaintext right before execution,
+    so a user can catch a secret being exfiltrated or a wrong destination even when every earlier check passed.
+    It's the last line of defense.</p></details>
+    <details><summary>Q2 · Why is "auto-approve everything" dangerous, and what's the better policy?</summary>
+    <p class="answer">Auto-approving removes the only runtime check on side-effecting calls, so a poisoned
+    description or confused deputy can run a secret-read → public-send chain unseen. Better: gate <b>by
+    risk</b> — auto-run reversible reads, <code>always_ask</code> on anything that mutates state, spends money,
+    sends data, or reads secrets. That keeps approvals meaningful instead of reflexive.</p></details>
+    <details><summary>Q3 · In the Managed Agents API, how does an always-ask tool get approved?</summary>
+    <p class="answer">A tool with <code>permission_policy: {"type": "always_ask"}</code> makes the session go
+    <b>idle</b> on the tool call. The client replies with a <code>user.tool_confirmation</code> event carrying
+    the triggering <code>tool_use_id</code> and <code>result: "allow"</code> or <code>"deny"</code> (a deny can
+    include a <code>deny_message</code> the model reads). Only then does the tool run.</p></details>
+
+    <div class="pager">
+        <a href="8-2-mcp-auth.html"><span class="k">← Back</span>8.2 · Authentication &amp; Authorization</a>
+        <a class="next" href="8-4-confused-deputy-exfiltration.html"><span class="k">Next →</span>8.4 · Confused Deputy &amp; Exfiltration</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 8.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.8 Sub-Agents as a Cost/Cache Tactic · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 4 · Multi-Agent</div>
+    <h1>4.8 · Sub-Agents as a Cost/Cache Tactic</h1>
+    <div class="tag">Spawn a cheap sub-agent — don't swap the main loop's model</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Cheap sub-tasks want a cheaper model — but where?</h2>
+    <p>Often a sub-task inside an agent loop is easy enough for a cheaper, faster model
+    (<code>claude-haiku-4-5</code> or <code>claude-sonnet-4-6</code>) while the main reasoning wants
+    <code>claude-opus-4-8</code>. The instinct is to <em>switch the main loop's model</em> for that one call. That's
+    the trap. The right move is to <strong>spawn a sub-agent on the cheaper model</strong> and keep the main loop's
+    model unchanged.</p>
+
+    <div class="note">🔑 To run a sub-task on a cheaper model, <strong>spawn a sub-agent on that model</strong> —
+    do <strong>not</strong> change the main conversation's model mid-loop.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Why not just switch the main loop's model?</h2>
+    <p>Because the <strong>prompt cache is model-scoped</strong>. The main loop builds up a large cached prefix
+    (system prompt, tool definitions, growing history). If you change the model on the next call, that cache no
+    longer applies — the new model can't reuse the other model's cached prefix, so the <strong>entire prefix is
+    re-processed at full price</strong>. You'd pay to re-ingest everything just to save on one sub-task: a net loss,
+    plus added latency.</p>
+    <p>A sub-agent sidesteps this entirely. It's a <em>separate</em> context (4.4), so running it on a cheaper model
+    doesn't touch the main loop's cached prefix at all. The main loop resumes on its original model with its cache
+    intact.</p>
+
+    <table>
+        <tr><th>Approach</th><th>Effect on main loop's cache</th><th>Verdict</th></tr>
+        <tr><td><strong>Switch main loop's model mid-conversation</strong></td><td>Invalidated — cache is model-scoped; whole prefix re-processed at full price</td><td>❌ Avoid</td></tr>
+        <tr><td><strong>Spawn a sub-agent on the cheaper model</strong></td><td>Untouched — separate context; main cache preserved</td><td>✅ Do this</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Two ways to run a cheap sub-task</h2>
+    <div class="mermaid">
+flowchart TB
+    subgraph BAD["❌ Switch the main loop's model"]
+        direction LR
+        O1["Opus loop<br/>cache warm"] -->|switch to Haiku| H1["Haiku call<br/>cache INVALID → reprocess prefix"]
+        H1 -->|switch back| O2["Opus loop<br/>cache cold again"]
+    end
+    subgraph GOOD["✅ Spawn a sub-agent"]
+        direction LR
+        O3["Opus main loop<br/>cache stays warm"] -->|delegate sub-task| SUB["🔵 Haiku sub-agent<br/>separate context"]
+        SUB -->|result| O3
+    end
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef good fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef b fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    class O1,H1,O2 bad; class O3 good; class SUB b;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Delegate the cheap sub-task to a sub-agent</h2>
+    <p>The main loop stays on Opus (cache intact). A cheap, isolated sub-agent handles the easy sub-task.</p>
+<pre><span class="cm"># Cheap sub-task (e.g. classify/extract) → its OWN sub-agent on a cheaper model.</span>
+<span class="kw">def</span> <span class="fn">classify_cheap</span>(text):
+    r = client.messages.create(
+        model=<span class="st">"claude-haiku-4-5"</span>, max_tokens=<span class="st">64</span>,      <span class="cm"># cheap + fast, separate context</span>
+        messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+                   <span class="st">"content"</span>: <span class="st">f"Classify as billing/tech/other:\n{text}"</span>}],
+    )
+    <span class="kw">return</span> <span class="st">""</span>.join(b.text <span class="kw">for</span> b <span class="kw">in</span> r.content <span class="kw">if</span> b.type == <span class="st">"text"</span>)
+
+<span class="cm"># Main loop stays on Opus — its model-scoped prompt cache is NEVER invalidated.</span>
+label = classify_cheap(user_msg)                       <span class="cm"># cheap sub-agent does the easy bit</span>
+
+resp = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">4096</span>,        <span class="cm"># SAME model → prefix cache reused</span>
+    system=BIG_CACHED_SYSTEM_PROMPT,                   <span class="cm"># large cached prefix, reused at cache price</span>
+    tools=TOOLS,
+    messages=main_messages + [{<span class="st">"role"</span>: <span class="st">"user"</span>,
+        <span class="st">"content"</span>: <span class="st">f"(category={label}) {user_msg}"</span>}],
+)
+
+<span class="cm"># ANTI-PATTERN — do NOT do this inside the main loop:</span>
+<span class="cm">#   client.messages.create(model="claude-haiku-4-5", messages=main_messages, ...)</span>
+<span class="cm">#   → different model ⇒ Opus's cached prefix can't be reused ⇒ full re-processing cost.</span></pre>
+
+    <div class="good">Net effect: you get the cheaper model's savings on the sub-task <em>and</em> keep the main
+    loop's warm cache — the sub-agent's separate context is what makes that possible.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Just switch the model for the cheap step." → Switching the main loop's model
+    <b>mid-conversation invalidates the model-scoped prompt cache</b>; you re-process the whole prefix at full price.
+    Spawn a sub-agent instead.</div>
+    <div class="trap"><b>Trap:</b> Thinking the prompt cache is model-agnostic. → It is <b>model-scoped</b>. A
+    different model cannot reuse another model's cached prefix.</div>
+    <div class="trap"><b>Trap:</b> Assuming a sub-agent's cheaper model hurts the main loop's cache. → It doesn't —
+    the sub-agent is a <b>separate context</b>, so the main loop's cache is untouched.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Mid-loop you want a quick, cheap classification. Best way to keep costs down?</summary>
+    <p class="answer">Spawn a sub-agent on <code>claude-haiku-4-5</code> for the classification and keep the main loop on
+    its model. Switching the main loop's model would invalidate its cache and re-bill the whole prefix.</p></details>
+    <details><summary>Q2 · Why exactly does switching the main loop's model cost so much?</summary>
+    <p class="answer">The prompt cache is <b>model-scoped</b>. Change the model and the previously cached prefix
+    (system, tools, history) can't be reused, so it's re-processed at full input price — often far more than the
+    sub-task saves.</p></details>
+    <details><summary>Q3 · Does running the sub-agent on Haiku cool down the main loop's Opus cache?</summary>
+    <p class="answer">No. The sub-agent runs in its own separate context, so the main loop's cached prefix is
+    untouched and stays warm for the next Opus call.</p></details>
+
+    <div class="pager">
+        <a href="4-7-result-merging.html"><span class="k">← Prev</span>4.7 · Result merging</a>
+        <a class="next" href="4-9-managed-agents-awareness.html"><span class="k">Next →</span>4.9 · Managed vs. self-orchestrated</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 4.8</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

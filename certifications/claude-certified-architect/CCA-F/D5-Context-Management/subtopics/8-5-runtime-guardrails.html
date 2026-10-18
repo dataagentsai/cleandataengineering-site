@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.5 Safety &amp; Guardrails at Runtime · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 8 · Observability &amp; Production Ops</div>
+    <h1>8.5 · Safety &amp; Guardrails at Runtime</h1>
+    <div class="tag">Bound what the agent can do</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Guardrails wrap the model on both sides</h2>
+    <p>Evals (8.4) catch problems <em>before</em> you ship; <strong>runtime guardrails</strong> catch them
+    <em>as they happen</em>. Think of a guardrail sandwich: <strong>validate the input</strong> going in, constrain
+    the model, then <strong>validate the output</strong> coming out — before it reaches a user or triggers a side
+    effect. Neither side alone is enough: input checks stop obvious abuse, output checks catch what the model
+    generated anyway.</p>
+
+    <table>
+        <tr><th>Stage</th><th>Guardrail</th><th>Example</th></tr>
+        <tr><td>Input</td><td>Validation + moderation pass</td><td>Reject oversized/malformed input; classify prompts for policy before they reach the model</td></tr>
+        <tr><td>Model</td><td>Ground &amp; constrain</td><td>Allow "I don't know"; restrict to provided context; require citations</td></tr>
+        <tr><td>Output</td><td>Validation + classification pass</td><td>Schema/format check; a moderation model screens the response before display</td></tr>
+        <tr><td>Actions</td><td>Allow-list tools · spend/rate caps · human-in-the-loop</td><td>Only whitelisted tools; per-tenant token cap; confirm irreversible actions</td></tr>
+    </table>
+
+    <div class="note">🔑 Reduce hallucinations at the model layer: explicitly <b>let Claude say "I don't
+    know,"</b> <b>restrict it to provided documents</b> (not general knowledge), and have it <b>cite quotes</b> so
+    each claim is auditable and unsupported ones get retracted.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Bound the blast radius of actions</h2>
+    <p>An agent that can call tools can cause real-world harm, so bound what it's <em>allowed</em> to do.
+    <strong>Allow-list tools</strong> — deny-by-default, expose only the tools this agent needs. Impose
+    <strong>spend and rate caps</strong> so a runaway loop can't burn the budget or blow past your OTPM limit (8.3).
+    And keep a <strong>human in the loop for risky, irreversible actions</strong> — the model proposes, a person
+    approves before <code>send_email</code>, <code>delete</code>, or a payment executes. These are the same
+    reversibility-and-gating instincts from D1, applied as production controls.</p>
+
+    <div class="good">Deny-by-default everywhere: unknown tool → refuse; missing schema field → reject; spend over
+    cap → halt. A guardrail that fails <em>open</em> isn't a guardrail.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The guardrail sandwich</h2>
+    <div class="mermaid">
+flowchart TD
+    IN["User / upstream input"] --> IV{"Input valid<br/>+ passes moderation?"}
+    IV -->|"no"| REJ["🔴 Reject early"]
+    IV -->|"yes"| M["Model call<br/>grounded · may say 'I don't know'"]
+    M --> OV{"Output valid<br/>+ passes classifier?"}
+    OV -->|"no"| BLOCK["🔴 Block / retract claim"]
+    OV -->|"yes"| ACT{"Action requested?"}
+    ACT -->|"tool not allow-listed<br/>or over spend cap"| DENY["🔴 Deny"]
+    ACT -->|"risky / irreversible"| HITL["🟠 Human-in-the-loop<br/>confirm"]
+    ACT -->|"safe + within caps"| RUN["🟢 Execute"]
+    HITL --> RUN
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class RUN ok; class HITL gate; class REJ bad; class BLOCK bad; class DENY bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Input check → model → output check → gated action</h2>
+    <p>Deny-by-default at every seam: moderate input, validate output, allow-list the tool, enforce a spend cap,
+    and gate irreversible actions behind a human.</p>
+<pre>ALLOWED_TOOLS = {<span class="st">"search"</span>, <span class="st">"read_file"</span>}          <span class="cm"># deny-by-default allow-list</span>
+IRREVERSIBLE  = {<span class="st">"send_email"</span>, <span class="st">"delete_file"</span>, <span class="st">"charge_card"</span>}
+
+<span class="kw">def</span> <span class="fn">handle</span>(user_input):
+    <span class="kw">if</span> <span class="kw">not</span> <span class="fn">moderate</span>(user_input):                  <span class="cm"># input moderation pass</span>
+        <span class="kw">return</span> <span class="st">"Refused: input violates policy."</span>
+    <span class="kw">if</span> spend.today &gt; SPEND_CAP:                    <span class="cm"># spend/rate cap</span>
+        <span class="kw">return</span> <span class="st">"Halted: daily budget reached."</span>
+
+    resp = client.messages.create(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+              system=GROUNDED_SYSTEM,               <span class="cm"># "use only the docs; you may say I don't know"</span>
+              messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: user_input}])
+
+    <span class="kw">if</span> <span class="kw">not</span> <span class="fn">validate_output</span>(resp) <span class="kw">or</span> <span class="kw">not</span> <span class="fn">classify_safe</span>(resp):
+        <span class="kw">return</span> <span class="st">"Blocked: output failed validation."</span>   <span class="cm"># output guardrail</span>
+
+    <span class="kw">for</span> tool <span class="kw">in</span> <span class="fn">tool_calls</span>(resp):
+        <span class="kw">if</span> tool.name <span class="kw">not</span> <span class="kw">in</span> ALLOWED_TOOLS:
+            <span class="kw">return</span> <span class="st">f"Denied: '{tool.name}' not allow-listed."</span>
+        <span class="kw">if</span> tool.name <span class="kw">in</span> IRREVERSIBLE <span class="kw">and</span> <span class="kw">not</span> <span class="fn">human_approves</span>(tool):
+            <span class="kw">return</span> <span class="st">f"Denied: '{tool.name}' needs human approval."</span>  <span class="cm"># HITL</span>
+        <span class="fn">run_tool</span>(tool)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Guardrail coverage vs. latency &amp; friction</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Layered guardrails</h4>
+            <ul><li>Input + output classification catches abuse both ways</li>
+            <li>Allow-lists + caps bound the blast radius</li>
+            <li>HITL stops irreversible mistakes cold</li></ul></div>
+        <div class="con"><h4>⚠️ The cost of layering</h4>
+            <ul><li>Extra moderation calls add latency &amp; token cost</li>
+            <li>HITL on everything defeats autonomy — gate by risk</li>
+            <li>Over-tight input filters reject legitimate users</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Validating input but not output. → The model can still emit unsafe or malformed
+    content. Guardrail <b>both sides</b> — an output classification/validation pass before anything is shown or
+    acted on.</div>
+    <div class="trap"><b>Trap:</b> Gating <em>every</em> action behind a human. → That kills the agent's value.
+    Gate by <b>risk / reversibility</b> — auto-run safe reversible tools, HITL only the irreversible ones.</div>
+    <div class="trap"><b>Trap:</b> No spend or rate cap. → A looping agent can exhaust your budget or OTPM (8.3) in
+    minutes. Caps that fail <b>closed</b> are a mandatory runtime control.</div>
+    <div class="trap"><b>Trap:</b> Relying on the prompt alone to prevent hallucination. → Prompt grounding (allow
+    "I don't know", restrict to provided docs, cite quotes) helps but doesn't eliminate it — pair it with an
+    <b>output verification/validation</b> layer for high-stakes claims.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why validate output when you already validate input?</summary>
+    <p class="answer">Input checks stop bad requests, but the model can still generate unsafe, hallucinated, or
+    malformed output from a perfectly benign prompt. A separate <b>output validation / classification pass</b>
+    screens the response before it reaches a user or triggers an action — you need both sides of the sandwich.</p></details>
+    <details><summary>Q2 · Three runtime controls that bound what an agent's tool calls can do?</summary>
+    <p class="answer"><b>Allow-list the tools</b> (deny-by-default, expose only what's needed); <b>spend/rate
+    caps</b> so a runaway loop can't drain budget or blow the OTPM limit; and <b>human-in-the-loop</b> approval for
+    risky, irreversible actions before they execute.</p></details>
+    <details><summary>Q3 · Which prompt-level techniques reduce hallucination at runtime?</summary>
+    <p class="answer">Explicitly <b>allow the model to say "I don't know,"</b> <b>restrict it to the provided
+    documents</b> rather than general knowledge, and require it to <b>cite quotes</b> so each claim is auditable
+    and unsupported ones are retracted. Back these with an output-verification layer for high-stakes use.</p></details>
+
+    <div class="pager">
+        <a href="8-4-production-evals.html"><span class="k">← Back</span>8.4 · Evaluations in Production</a>
+        <a class="next" href="../index.html"><span class="k">Next →</span>Domain 5 hub</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 8.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.5 Long-Context Structuring · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 4 · Structure with XML Tags</div>
+    <h1>4.5 · Long-Context Structuring</h1>
+    <div class="tag">Docs at top · query at bottom · quote first</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Three rules for large, data-rich prompts</h2>
+    <p>When you work with large documents or data-rich inputs — roughly <strong>20K+ tokens</strong> — the
+    official long-context guidance boils down to three moves that stack on everything in this cluster:</p>
+    <table>
+        <tr><th>Rule</th><th>What to do</th><th>Why</th></tr>
+        <tr><td><strong>Longform data at the TOP</strong></td><td>Place long documents near the top of the prompt, <em>above</em> your query, instructions, and examples.</td><td>Improves performance across all models; queries at the end can improve response quality by up to ~30% in tests, especially on complex multi-document inputs.</td></tr>
+        <tr><td><strong>Wrap each doc with metadata</strong></td><td>Put each document in <code>&lt;document&gt;</code> tags with <code>&lt;document_content&gt;</code> and <code>&lt;source&gt;</code> (and other metadata) subtags.</td><td>Gives structure Claude can navigate and cite (builds on 4.4 nesting).</td></tr>
+        <tr><td><strong>Quote first, then answer</strong></td><td>Ask Claude to pull relevant quotes into <code>&lt;quotes&gt;</code> before doing the task.</td><td>Helps Claude cut through the noise of the surrounding text and ground its answer.</td></tr>
+    </table>
+
+    <div class="note">🔑 Query-at-the-bottom is the headline: long docs on top, your actual question last. It's the
+    opposite of how people often paste ("here's my question… now here's a wall of text").</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Grounding responses in quotes</h2>
+    <p>For long-document tasks, instruct Claude to first <strong>find and quote the relevant passages</strong> —
+    placed in <code>&lt;quotes&gt;</code> tags — and only then produce its answer (e.g. in <code>&lt;info&gt;</code>
+    or <code>&lt;answer&gt;</code> tags). Quoting first forces Claude to locate its evidence in the noise before
+    reasoning over it, which improves accuracy and gives you a traceable link from claim back to source.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Long-context prompt order</h2>
+    <div class="mermaid">
+flowchart TD
+    T["TOP of prompt"] --> DOCS["🟢 &lt;documents&gt;<br/>each &lt;document&gt; with<br/>&lt;source&gt; + &lt;document_content&gt;<br/>(the 20K+ token bulk)"]
+    DOCS --> STEP["&lt;instructions&gt;<br/>1) put quotes in &lt;quotes&gt;<br/>2) then answer in &lt;info&gt;"]
+    STEP --> Q["🟢 &lt;query&gt;<br/>the actual question — LAST"]
+    Q --> B["BOTTOM of prompt"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef step fill:#e7f0ff,stroke:#4a90d9,color:#123;
+    class DOCS,Q ok; class STEP step;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Docs at top, query at bottom, quote-first</h2>
+    <p>Mirrors the official quote-extraction pattern: documents (with sources) first, then instructions that ask
+    for quotes in <code>&lt;quotes&gt;</code> before the diagnostic answer in <code>&lt;info&gt;</code>, with the
+    query at the end.</p>
+<pre>You are an AI physician's assistant that helps doctors diagnose illnesses.
+
+&lt;documents&gt;
+  &lt;document index="1"&gt;
+    &lt;source&gt;patient_symptoms.txt&lt;/source&gt;
+    &lt;document_content&gt;
+      {{PATIENT_SYMPTOMS}}
+    &lt;/document_content&gt;
+  &lt;/document&gt;
+  &lt;document index="2"&gt;
+    &lt;source&gt;patient_records.txt&lt;/source&gt;
+    &lt;document_content&gt;
+      {{PATIENT_RECORDS}}
+    &lt;/document_content&gt;
+  &lt;/document&gt;
+&lt;/documents&gt;
+
+&lt;instructions&gt;
+Find quotes from the patient records that are relevant to the reported symptoms
+and place them in &lt;quotes&gt; tags. Then, based on those quotes, list the
+information that would help the doctor diagnose, in &lt;info&gt; tags.
+&lt;/instructions&gt;
+
+&lt;query&gt;
+What are the most likely diagnoses to investigate first?
+&lt;/query&gt;</pre>
+
+    <p>Assembled in a Messages API call, the token-heavy documents lead the user turn and the query trails it:</p>
+<pre><span class="kw">import</span> anthropic
+client = anthropic.Anthropic()
+
+user_content = (
+    docs_block          <span class="cm"># &lt;documents&gt;…&lt;/documents&gt; — 20K+ tokens, goes FIRST</span>
+    + instructions_block
+    + query_block       <span class="cm"># the question — goes LAST</span>
+)
+msg = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">2048</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: user_content}],
+)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Query placement &amp; quote-first</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Docs-top / query-bottom / quote-first</h4>
+            <ul><li>Up to ~30% better quality on complex multi-doc inputs</li>
+            <li>Quotes give a traceable evidence trail</li>
+            <li>Metadata tags let Claude cite each source</li></ul></div>
+        <div class="con"><h4>⚠️ Costs to weigh</h4>
+            <ul><li>Quote-first adds output tokens and a little latency</li>
+            <li>Very large prompts cost more — pair with prompt caching for the static doc block</li>
+            <li>Order matters most at scale; short prompts see little difference</li></ul></div>
+    </div>
+    <div class="good">For repeated queries over the same big corpus, keep the document block stable at the top and
+    cache it — the query at the bottom changes while the cached prefix stays put.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Putting the question first and the long document after it. → For long context,
+    <b>documents go at the TOP, the query at the BOTTOM</b>. Query-at-the-end can lift quality up to ~30%.</div>
+    <div class="trap"><b>Trap:</b> "The 20K guidance means never exceed 20K tokens." → No — ~20K+ is the
+    <b>threshold at which this structuring matters</b>, not a limit. It's advice for <em>large</em> inputs.</div>
+    <div class="trap"><b>Trap:</b> Dumping raw documents with no tags or metadata. → Wrap each in
+    <code>&lt;document&gt;</code> with <code>&lt;source&gt;</code> and <code>&lt;document_content&gt;</code> so
+    Claude can navigate and cite them.</div>
+    <div class="trap"><b>Trap:</b> Skipping the quote-first step on a big corpus. → Asking Claude to <b>quote
+    relevant parts first</b> cuts through noise and grounds the answer; it's a core long-context technique.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Where do long documents go, and where does the query go?</summary>
+    <p class="answer">Long documents (~20K+ tokens) go near the <b>top</b> of the prompt, above the instructions and
+    examples; the <b>query goes at the bottom</b>. Query-at-the-end can improve response quality by up to ~30% on
+    complex multi-document inputs.</p></details>
+    <details><summary>Q2 · What is "quote-first" and why use it?</summary>
+    <p class="answer">Ask Claude to first extract the relevant passages into &lt;quotes&gt; tags <b>before</b>
+    answering. It helps Claude cut through the noise of long documents and grounds the final answer in specific
+    evidence.</p></details>
+    <details><summary>Q3 · How should each document be wrapped in a long-context prompt?</summary>
+    <p class="answer">In <b>&lt;document&gt;</b> tags (inside a &lt;documents&gt; container), each with a
+    <b>&lt;source&gt;</b> and a <b>&lt;document_content&gt;</b> subtag (plus an index/other metadata) — so the
+    structure is navigable and citable.</p></details>
+
+    <div class="pager">
+        <a href="4-4-nesting-referencing-tags.html"><span class="k">← Back</span>4.4 · Nesting &amp; Referencing Tags</a>
+        <a class="next" href="5-1-let-claude-think.html"><span class="k">Next →</span>5.1 · Let Claude Think</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 4.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

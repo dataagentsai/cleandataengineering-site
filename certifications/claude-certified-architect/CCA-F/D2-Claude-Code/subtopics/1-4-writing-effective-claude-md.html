@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.4 Writing an Effective CLAUDE.md · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 1 · Memory &amp; CLAUDE.md</div>
+    <h1>1.4 · Writing an Effective CLAUDE.md</h1>
+    <div class="tag">Concise, imperative, structured</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Adherence is a writing problem</h2>
+    <p>Because CLAUDE.md is <strong>context, not enforcement</strong> (1.1), how reliably Claude follows it depends
+    on <em>how you write it</em>. The docs name three levers: <strong>size</strong>, <strong>structure</strong>,
+    and <strong>specificity</strong>. Get these right and adherence climbs; get them wrong and Claude picks
+    arbitrarily among vague or conflicting rules.</p>
+
+    <table>
+        <tr><th>Lever</th><th>Do</th><th>Why</th></tr>
+        <tr><td><b>Size</b></td><td>Target <b>under 200 lines</b> per file</td>
+            <td>Loads in full every session; longer = more tokens, <b>lower</b> adherence</td></tr>
+        <tr><td><b>Structure</b></td><td>Markdown <b>headers + bullets</b>, grouped by topic</td>
+            <td>Claude scans structure like a reader; sections beat dense prose</td></tr>
+        <tr><td><b>Specificity</b></td><td>Concrete, <b>verifiable</b> instructions</td>
+            <td>"Use 2-space indent" is checkable; "format nicely" isn't</td></tr>
+    </table>
+
+    <div class="good">Specificity examples straight from the docs:<br>
+    • "Use 2-space indentation" &gt; "Format code properly"<br>
+    • "Run <code>npm test</code> before committing" &gt; "Test your changes"<br>
+    • "API handlers live in <code>src/api/handlers/</code>" &gt; "Keep files organized"</div>
+
+    <h2><span class="chip concept">CONCEPT</span> What belongs — and what doesn't</h2>
+    <p>CLAUDE.md is for the facts Claude should hold in <em>every</em> session. Add to it when you find yourself
+    re-explaining something: Claude repeats a mistake, a review catches something Claude should have known, you
+    retype the same correction, or a new teammate would need the same context.</p>
+
+    <div class="warn">⚠️ Not everything belongs in CLAUDE.md. If an entry is a <strong>multi-step procedure</strong>
+    or only matters for <strong>one part</strong> of the codebase, it doesn't belong in always-loaded memory:
+    <ul>
+        <li>Path-specific? → a <strong>path-scoped rule</strong> in <code>.claude/rules/</code> (loads only when
+        Claude touches matching files).</li>
+        <li>A repeatable workflow you invoke on demand? → a <strong>skill</strong> (loads only when relevant).</li>
+    </ul>
+    Keeping procedural / narrow content out of CLAUDE.md protects your context budget and adherence.</div>
+
+    <div class="note">🔑 Consistency matters: contradictory rules across your CLAUDE.md, nested files, and
+    <code>.claude/rules/</code> make Claude pick one arbitrarily. Review periodically and delete stale or
+    conflicting lines.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Where should this instruction go?</h2>
+    <div class="mermaid">
+flowchart TD
+    I["I keep re-explaining X"] --> Q1{"Needed in EVERY session?"}
+    Q1 -->|"no — invoke on demand"| SK["🔵 Skill"]
+    Q1 -->|"yes"| Q2{"Only for certain files/paths?"}
+    Q2 -->|"yes"| RU["🔵 Path-scoped rule<br/>.claude/rules/"]
+    Q2 -->|"no — global fact"| Q3{"Concrete &amp; verifiable?"}
+    Q3 -->|"no"| RW["✏️ Rewrite it specifically"]
+    Q3 -->|"yes"| CM["🟢 Add to CLAUDE.md<br/>(&lt; 200 lines, headers + bullets)"]
+    RW --> CM
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef alt fill:#e2e3f3,stroke:#6c63ff,color:#2a2a6a;
+    class CM ok; class SK alt; class RU alt;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A well-structured CLAUDE.md</h2>
+    <p>Short, grouped by headers, every line concrete and imperative.</p>
+<pre><span class="cm"># CLAUDE.md — keep under ~200 lines</span>
+
+<span class="kw">## Commands</span>
+- Build: `npm run build`
+- Test:  `npm test` — run before every commit
+- Lint:  `npm run lint -- --fix`
+
+<span class="kw">## Code style</span>
+- 2-space indentation, no tabs
+- Prefer named exports; no default exports
+- Errors use the `AppError` class in `src/errors.ts`
+
+<span class="kw">## Architecture</span>
+- API handlers: `src/api/handlers/`
+- DB access only through `src/db/repo.ts` (never raw SQL in handlers)
+
+<span class="cm"># Multi-step release steps? → a skill.</span>
+<span class="cm"># Rules only for src/api/**? → .claude/rules/api.md with `paths:` frontmatter.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Cram everything in vs. right-size the memory</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Lean, specific CLAUDE.md</h4>
+            <ul><li>Loads fast, cheap on tokens every turn</li>
+            <li>High adherence — nothing vague to misread</li>
+            <li>Procedures &amp; path rules live where they load lazily</li></ul></div>
+        <div class="con"><h4>⚠️ Kitchen-sink CLAUDE.md</h4>
+            <ul><li>Big file → more context cost every session</li>
+            <li>Vague/duplicated lines → arbitrary behavior</li>
+            <li>Buries the rules that actually matter</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Bigger CLAUDE.md = better instructed Claude." → The opposite. Files over
+    <b>~200 lines</b> cost more context and <b>reduce adherence</b>. Move narrow/procedural content out.</div>
+    <div class="trap"><b>Trap:</b> "Put multi-step procedures in CLAUDE.md." → Multi-step workflows belong in a
+    <b>skill</b> (on-demand); path-specific guidance belongs in a <b>path-scoped rule</b>.</div>
+    <div class="trap"><b>Trap:</b> "Vague guidance is fine, Claude will figure it out." → Write <b>concrete,
+    verifiable</b> rules. "Use 2-space indentation" beats "format code properly."</div>
+    <div class="trap"><b>Trap:</b> "Splitting into <code>@imports</code> shrinks a too-big CLAUDE.md's context." →
+    Imports still load at launch. To trim context, use path-scoped rules or delete content — not imports.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Name the three levers that drive CLAUDE.md adherence.</summary>
+    <p class="answer"><b>Size</b> (target &lt; 200 lines), <b>structure</b> (Markdown headers + bullets), and
+    <b>specificity</b> (concrete, verifiable instructions). They matter because CLAUDE.md is context, not enforced
+    config.</p></details>
+    <details><summary>Q2 · A 12-step deployment runbook keeps coming up. Does it go in CLAUDE.md?</summary>
+    <p class="answer">No. A multi-step procedure invoked on demand belongs in a <b>skill</b>, which loads only when
+    relevant — keeping it out of every-session context.</p></details>
+    <details><summary>Q3 · Rewrite "keep the code clean" so Claude can actually follow it.</summary>
+    <p class="answer">Make it concrete and verifiable, e.g. "Use 2-space indentation, named exports only, and run
+    <code>npm run lint -- --fix</code> before committing." Specific rules can be checked; vague ones get ignored.</p></details>
+
+    <div class="pager">
+        <a href="1-3-imports-and-recursion.html"><span class="k">← Back</span>1.3 · Imports (@path) &amp; Tree Lookup</a>
+        <a class="next" href="1-5-quick-add-and-memory-command.html"><span class="k">Next →</span>1.5 · Quick-Add (#) &amp; the /memory Command</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 1.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

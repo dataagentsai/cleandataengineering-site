@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.2 Circuit Breakers · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 6 · Reliability: Degradation &amp; Recovery</div>
+    <h1>6.2 · Circuit Breakers</h1>
+    <div class="tag">Stop hammering a dead dependency</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Stop calling something that's clearly down</h2>
+    <p>Retries and fallbacks (6.1) handle a <em>single</em> failed call. But when a dependency — the Messages API, a
+    tool backend, an MCP server — is <strong>sustained</strong>-down, retrying every request just piles load onto a
+    struggling service, burns your latency budget waiting for timeouts, and makes recovery slower. A
+    <strong>circuit breaker</strong> watches the failure rate and, once it crosses a threshold, <strong>trips
+    open</strong>: subsequent calls fail <em>immediately</em> (or route straight to a fallback) without touching the
+    sick dependency.</p>
+
+    <div class="note">🔑 Retry says "try again." A circuit breaker says "stop trying for a while." It's the pattern
+    that keeps a struggling dependency from being pushed all the way over — and gives it room to recover.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Three states: closed → open → half-open</h2>
+    <p>The breaker is a tiny state machine wrapped around the call site.</p>
+
+    <table>
+        <tr><th>State</th><th>Behavior</th><th>Transition out</th></tr>
+        <tr><td>🟢 <b>Closed</b> (normal)</td><td>Calls pass through; count failures</td><td>Failures cross the threshold → <b>Open</b></td></tr>
+        <tr><td>🔴 <b>Open</b> (tripped)</td><td>Calls fail fast / route to fallback — dependency is <em>not</em> touched</td><td>After a cooldown timer → <b>Half-open</b></td></tr>
+        <tr><td>🟠 <b>Half-open</b> (probing)</td><td>Let <em>one</em> trial request through</td><td>Success → <b>Closed</b> (recovered); failure → back to <b>Open</b></td></tr>
+    </table>
+
+    <div class="good">The <strong>half-open probe</strong> is the recovery mechanism: after the cooldown you send a
+    single test call. If it succeeds, close the breaker and resume normal traffic; if it fails, re-open and wait
+    again — so you never dump full load onto a dependency that's still sick.</div>
+
+    <div class="warn">⚠️ A breaker complements the SDK's per-call retries — it doesn't replace them. Retries smooth
+    over blips; the breaker reacts to a <em>pattern</em> of failures across many calls.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The breaker state machine</h2>
+    <div class="mermaid">
+stateDiagram-v2
+    [*] --> Closed
+    Closed --> Open: failures ≥ threshold
+    Open --> HalfOpen: cooldown elapsed
+    HalfOpen --> Closed: probe succeeds
+    HalfOpen --> Open: probe fails
+    note right of Closed
+        🟢 calls pass through
+        count failures
+    end note
+    note right of Open
+        🔴 fail fast /
+        use fallback (6.1)
+    end note
+    note right of HalfOpen
+        🟠 one trial request
+    end note
+    </div>
+
+    <h2><span class="chip code">CODE</span> A minimal circuit breaker for a model client</h2>
+    <p>When open, calls short-circuit to the fallback from 6.1 instead of hitting the overloaded dependency.</p>
+<pre><span class="kw">class</span> <span class="fn">CircuitBreaker</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, threshold=<span class="st">5</span>, cooldown=<span class="st">30</span>):
+        self.threshold, self.cooldown = threshold, cooldown
+        self.failures, self.opened_at = <span class="st">0</span>, <span class="kw">None</span>
+
+    <span class="kw">def</span> <span class="fn">call</span>(self, fn, *args):
+        <span class="kw">if</span> self.opened_at:                                <span class="cm"># OPEN</span>
+            <span class="kw">if</span> <span class="fn">time</span>() - self.opened_at &lt; self.cooldown:
+                <span class="kw">raise</span> <span class="fn">CircuitOpen</span>()                     <span class="cm"># fail fast → 6.1 fallback</span>
+            self.opened_at = <span class="kw">None</span>                        <span class="cm"># cooldown done → HALF-OPEN probe</span>
+        <span class="kw">try</span>:
+            result = <span class="fn">fn</span>(*args)                          <span class="cm"># trial (half-open) or normal</span>
+            self.failures = <span class="st">0</span>                          <span class="cm"># success → CLOSED, reset</span>
+            <span class="kw">return</span> result
+        <span class="kw">except</span> (anthropic.APIStatusError,
+                anthropic.APIConnectionError):
+            self.failures += <span class="st">1</span>
+            <span class="kw">if</span> self.failures &gt;= self.threshold:
+                self.opened_at = <span class="fn">time</span>()               <span class="cm"># trip OPEN</span>
+            <span class="kw">raise</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Breaker vs. retry-forever</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Circuit breaker</h4>
+            <ul><li>Fails fast instead of waiting on timeouts</li>
+            <li>Sheds load so the dependency can recover</li>
+            <li>Half-open probe auto-recovers without a deploy</li></ul></div>
+        <div class="con"><h4>⚠️ Retry every request forever</h4>
+            <ul><li>Piles load onto an already-struggling service</li>
+            <li>Every caller eats the full timeout → cascading slowness</li>
+            <li>No automatic "is it back yet?" signal</li></ul></div>
+    </div>
+    <div class="good">Tune two knobs: the <b>failure threshold</b> (how many failures trip it) and the
+    <b>cooldown</b> (how long to stay open). Too twitchy = false trips; too sluggish = wasted calls into a dead
+    dependency.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Confusing a circuit breaker with a retry. → Retry re-attempts <b>one</b> call; the
+    breaker reacts to a <b>pattern</b> of failures and stops calling entirely for a cooldown. They're layered, not
+    interchangeable.</div>
+    <div class="trap"><b>Trap:</b> Forgetting the half-open state. → Without a probe, an open breaker never learns the
+    dependency recovered and stays open forever (or needs a manual reset). Half-open is the auto-recovery path.</div>
+    <div class="trap"><b>Trap:</b> Flooding a half-open breaker. → Half-open lets through <b>one</b> trial request, not
+    full traffic. Dumping all callers on the first sign of life re-overloads the recovering service.</div>
+    <div class="trap"><b>Trap:</b> Breaker with no fallback behind it. → An open breaker fails fast — pair it with a
+    fallback (6.1) or graceful degradation (6.3) so "fail fast" still returns something useful.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What does the breaker do while it's <em>open</em>, and why?</summary>
+    <p class="answer">It <b>fails fast</b> — rejecting calls immediately (or routing to a fallback) without touching the
+    sick dependency. This sheds load so the struggling service can recover, and stops callers from blocking on
+    timeouts.</p></details>
+    <details><summary>Q2 · How does an open breaker ever close again?</summary>
+    <p class="answer">After a cooldown timer it moves to <b>half-open</b> and allows a single trial request. If that
+    probe succeeds, it closes (recovered); if it fails, it re-opens and waits another cooldown. That's the automatic
+    recovery loop.</p></details>
+    <details><summary>Q3 · How do breakers, retries, and fallbacks fit together?</summary>
+    <p class="answer">Layered: the SDK <b>retries</b> individual 429/5xx blips; a <b>circuit breaker</b> trips when
+    failures form a sustained pattern and stops hammering the dependency; while open it hands off to a
+    <b>fallback</b> (6.1) or degraded mode (6.3) so the user still gets a response.</p></details>
+
+    <div class="pager">
+        <a href="6-1-fallbacks.html"><span class="k">← Back</span>6.1 · Fallbacks</a>
+        <a class="next" href="6-3-graceful-degradation.html"><span class="k">Next →</span>6.3 · Graceful Degradation</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 6.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

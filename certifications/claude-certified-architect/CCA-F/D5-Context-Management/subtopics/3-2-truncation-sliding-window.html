@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.2 Truncation / Sliding Window · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 3 · Managing Long Conversations</div>
+    <h1>3.2 · Truncation / Sliding Window</h1>
+    <div class="tag">Drop the oldest turns</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Keep the last N turns, drop the oldest</h2>
+    <p>The simplest way to keep a growing transcript inside the context window is a <strong>sliding window</strong>:
+    keep the most recent turns and <strong>discard the oldest ones</strong>. You choose the bound — either a
+    <strong>turn count</strong> ("keep the last N exchanges") or, better, a <strong>token budget</strong> ("keep as
+    many recent turns as fit under X tokens"). Because you own the history (3.1), truncation is just slicing
+    <em>your</em> <code>messages</code> list before you send it.</p>
+
+    <div class="note">🔑 A token budget beats a turn count: turns vary wildly in size (a one-line reply vs. a huge
+    tool result), so counting <em>tokens</em> keeps you reliably under the limit where counting <em>turns</em> can
+    still overflow on one fat message.</div>
+
+    <p>Two invariants you must preserve when you slice:</p>
+    <ul>
+        <li><strong>Keep the system prompt.</strong> It's not part of the sliding window — pin it and slide only
+        the <code>messages</code>.</li>
+        <li><strong>Don't split a tool-use pair.</strong> A <code>tool_use</code> block must keep its matching
+        <code>tool_result</code>; dropping one without the other produces a malformed request (400). Slide at
+        <em>turn</em> boundaries, and start the window on a <code>user</code> turn.</li>
+    </ul>
+
+    <h2><span class="chip concept">CONCEPT</span> Simple, but it forgets — and it breaks caching</h2>
+    <p>Truncation's virtue is its cost: <strong>zero extra API calls, trivial to implement</strong>. Its flaw is
+    equally blunt — <strong>anything you drop is gone forever</strong>. If the user said "my name is Alice" on turn 1
+    and that turn slides out of the window, the model can no longer answer "what's my name?" Truncation preserves
+    <em>recency</em> at the cost of <em>early context</em>: names, decisions, constraints, and goals stated up front
+    silently vanish.</p>
+
+    <div class="bad">Two failure signatures to recognize: (1) the model "forgets" facts established early in a long
+    session; (2) a malformed request because you sliced through a <code>tool_use</code>/<code>tool_result</code>
+    pair or left the first message as an <code>assistant</code> turn.</div>
+
+    <div class="warn">⚠️ <strong>Truncation breaks prompt caching if you trim the cached prefix.</strong> Caching is a
+    <em>prefix</em> match — the cache key is the exact bytes from the front up to your breakpoint. Dropping the
+    oldest turns changes the front of the prompt, so the cached prefix no longer matches and every request pays a
+    full cache-<em>write</em> instead of a cheap cache-read. A sliding window and a stable cached prefix are in
+    direct tension: you can't slide the front and keep it cached.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The window slides forward, early turns fall off</h2>
+    <div class="mermaid">
+flowchart TD
+    SYS["System prompt<br/>(pinned — never slides)"] --> WIN
+    subgraph WIN["Sliding window: keep recent under token budget"]
+      T3["Turn n-2"] --> T4["Turn n-1"] --> T5["Turn n (newest)"]
+    end
+    OLD["Turn 1 · Turn 2<br/>(oldest)"] -.->|"exceed budget →<br/>DROP, gone forever"| X["🗑️ Discarded<br/>early context lost"]
+    WIN --> SEND["Send: system + windowed turns"]
+    X -.->|"also invalidates<br/>the cached prefix"| CACHE["🔴 Cache miss<br/>front bytes changed"]
+    classDef keep fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef drop fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef pin fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class SYS,SEND pin; class T3,T4,T5 keep; class OLD,X,CACHE drop;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Token-budgeted sliding window</h2>
+    <p>Pin the system prompt, then keep the newest turns that fit a token budget — sliding only at turn boundaries
+    and starting on a <code>user</code> turn so no tool pair is split.</p>
+<pre><span class="cm"># Keep system prompt pinned; slide messages under a token budget.</span>
+<span class="kw">def</span> <span class="fn">truncate</span>(system, messages, budget=<span class="cm">120_000</span>):
+    <span class="cm"># Walk from the NEWEST message backward, keeping turns that fit.</span>
+    kept, used = [], client.messages.<span class="fn">count_tokens</span>(
+        model=<span class="st">"claude-opus-4-8"</span>, system=system,
+        messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"x"</span>}]).input_tokens
+
+    <span class="kw">for</span> msg <span class="kw">in</span> <span class="fn">reversed</span>(messages):
+        cost = client.messages.<span class="fn">count_tokens</span>(
+            model=<span class="st">"claude-opus-4-8"</span>, messages=[msg]).input_tokens
+        <span class="kw">if</span> used + cost &gt; budget:
+            <span class="kw">break</span>                              <span class="cm"># drop this and everything older</span>
+        kept.<span class="fn">append</span>(msg); used += cost
+
+    kept.<span class="fn">reverse</span>()
+    <span class="cm"># Invariant: window must start on a user turn (don't lead with assistant,</span>
+    <span class="cm"># and never split a tool_use / tool_result pair).</span>
+    <span class="kw">while</span> kept <span class="kw">and</span> kept[<span class="cm">0</span>][<span class="st">"role"</span>] != <span class="st">"user"</span>:
+        kept.<span class="fn">pop</span>(<span class="cm">0</span>)
+    <span class="kw">return</span> kept   <span class="cm"># ⚠️ trimming the front = cached prefix no longer matches</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Truncation vs. keeping everything</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Sliding window</h4>
+            <ul><li>Dead simple, zero extra API calls, deterministic cost bound</li>
+            <li>Great when only recent context matters (support chat, live coding)</li>
+            <li>Never overflows if the budget is set below the window</li></ul></div>
+        <div class="con"><h4>⚠️ What it costs you</h4>
+            <ul><li>Dropped turns are lost — early facts/goals silently forgotten</li>
+            <li>Breaks prompt caching when the trimmed prefix changes</li>
+            <li>No "gist" preserved — it's a hard cut, not a compression</li></ul></div>
+    </div>
+    <div class="good">If losing early context is unacceptable, don't truncate — <b>compress</b> it into a summary
+    (3.3) so the gist survives, or clear only stale tool output (3.4) instead of whole turns.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "A sliding window keeps a summary of the old turns." → No — truncation
+    <b>drops</b> them entirely. Preserving the gist is <b>summarization</b> (3.3), a different strategy.</div>
+    <div class="trap"><b>Trap:</b> "Truncation is free of downsides because it's cheap." → It <b>loses early
+    context</b> and it <b>breaks prompt caching</b> whenever you trim the cached prefix (a prefix change forces a
+    fresh cache write).</div>
+    <div class="trap"><b>Trap:</b> Slicing mid-tool-pair or leaving an <code>assistant</code> message first. → The
+    request 400s. Slide at turn boundaries; keep each <code>tool_use</code> with its <code>tool_result</code>; start
+    the window on a <code>user</code> turn.</div>
+    <div class="trap"><b>Trap:</b> Counting turns instead of tokens. → One giant tool result can blow the window
+    even with "only 10 turns." Bound the window by a <b>token budget</b>, not a turn count.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What is a sliding window and what does it sacrifice?</summary>
+    <p class="answer">Keep the most recent turns (bounded by a token budget or turn count) and drop the oldest. It
+    sacrifices <b>early context</b> — dropped turns are gone forever, so facts, goals, or decisions stated up front
+    are silently forgotten. It preserves recency, not the full history.</p></details>
+    <details><summary>Q2 · Why can truncation hurt your prompt-cache hit rate?</summary>
+    <p class="answer">Caching is a prefix match keyed on the exact leading bytes. Dropping the oldest turns changes
+    the front of the prompt, so the cached prefix no longer matches — you pay a full cache <b>write</b> instead of a
+    cheap read. Sliding the front and keeping it cached are mutually exclusive.</p></details>
+    <details><summary>Q3 · When is a plain sliding window the right choice — and when isn't it?</summary>
+    <p class="answer"><b>Right</b> when only recent context matters and simplicity/cost win (support tickets, live
+    coding sessions). <b>Wrong</b> when early context is load-bearing (long research or planning sessions) — there,
+    summarize/compact (3.3) or use external memory (3.5) so the gist survives instead of being cut.</p></details>
+
+    <div class="pager">
+        <a href="3-1-conversation-state.html"><span class="k">← Back</span>3.1 · Conversation State &amp; Statelessness</a>
+        <a class="next" href="3-3-summarization-compaction.html"><span class="k">Next →</span>3.3 · Summarization / Compaction</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 3.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

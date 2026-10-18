@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.5 tool_choice Control &amp; Parallel Toggle · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 4 · Advanced Tool Use</div>
+    <h1>4.5 · tool_choice Control &amp; Parallel Toggle</h1>
+    <div class="tag">Steer selection precisely</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Four values of <code>tool_choice</code></h2>
+    <p><code>tool_choice</code> decides <em>whether and which</em> tool Claude calls. There are exactly four values:</p>
+    <table>
+        <tr><th>Value</th><th>Behavior</th><th>Default when…</th></tr>
+        <tr><td><code>{"type":"auto"}</code></td><td>Claude decides whether to call any tool</td><td><code>tools</code> are provided</td></tr>
+        <tr><td><code>{"type":"any"}</code></td><td>Claude <strong>must</strong> use one of the tools (its pick)</td><td>—</td></tr>
+        <tr><td><code>{"type":"tool","name":"x"}</code></td><td>Claude <strong>must</strong> use tool <code>x</code></td><td>—</td></tr>
+        <tr><td><code>{"type":"none"}</code></td><td>Claude <strong>cannot</strong> use any tool</td><td>no <code>tools</code> provided</td></tr>
+    </table>
+    <p>With <code>any</code> or <code>tool</code>, the API <strong>prefills the assistant turn</strong> — Claude emits
+    no natural-language text before the <code>tool_use</code> block, even if asked to. To keep a spoken explanation,
+    use <code>auto</code> and put "use the X tool" in a <code>user</code> message.</p>
+    <div class="warn">⚠️ Two constraints from earlier clusters: with <strong>extended thinking</strong> (4.1) only
+    <code>auto</code> and <code>none</code> are allowed — <code>any</code>/<code>tool</code> error. And forced choice
+    is incompatible with <strong>programmatic tool calling</strong> (4.4).</div>
+
+    <h2><span class="chip concept">CONCEPT</span> <code>disable_parallel_tool_use</code> — force exactly one call</h2>
+    <p>By default, a single assistant turn can contain <strong>multiple <code>tool_use</code> blocks</strong> (Claude
+    calls several tools at once). To force <strong>at most one tool call per turn</strong>, add
+    <code>"disable_parallel_tool_use": true</code> <em>inside</em> the <code>tool_choice</code> object — it's a flag on
+    <code>tool_choice</code>, valid with any of the four values.</p>
+    <p>Combine it with a forced choice to get a precise guarantee:</p>
+    <ul>
+      <li><code>{"type":"any", "disable_parallel_tool_use": true}</code> → <strong>exactly one</strong> tool call,
+      Claude picks which.</li>
+      <li><code>{"type":"tool","name":"x","disable_parallel_tool_use": true}</code> → exactly one call, and it's
+      <code>x</code>.</li>
+      <li><code>{"type":"auto","disable_parallel_tool_use": true}</code> → Claude may still choose <em>zero</em>
+      tools, but never more than one.</li>
+    </ul>
+    <div class="note">🔑 "Force exactly one tool call" = a forcing choice (<code>any</code>/<code>tool</code>)
+    <strong>plus</strong> <code>disable_parallel_tool_use: true</code>. <code>any</code> alone still permits multiple
+    parallel calls; the flag alone still permits zero.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Choosing the right control</h2>
+    <div class="mermaid">
+flowchart TD
+    Q{"Do you need a tool called?"} -->|"maybe — let Claude decide"| AUTO["auto (default)"]
+    Q -->|"yes, but Claude picks which"| ANY["any"]
+    Q -->|"yes, this specific tool"| TOOL["tool + name"]
+    Q -->|"no tools this turn"| NONE["none"]
+    ANY --> P{"Exactly ONE call?"}
+    TOOL --> P
+    P -->|"yes"| ONE["🟢 add disable_parallel_tool_use: true"]
+    P -->|"parallel ok"| MANY["🔵 leave default (multiple allowed)"]
+    AUTO --> TH{"Thinking on?"}
+    NONE --> TH
+    TH -->|"auto / none only"| OKT["🟢 compatible with thinking"]
+    ANY -.->|"errors with thinking"| BADT["🔴 any/tool + thinking = error"]
+    TOOL -.-> BADT
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef mid fill:#cce5ff,stroke:#4a90d9,color:#0a3a6a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class ONE ok; class OKT ok; class MANY mid; class BADT bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Force exactly one tool call</h2>
+    <p>The flag lives inside <code>tool_choice</code>. Here <code>any</code> + the flag guarantees a single tool call
+    of Claude's choosing; swap in <code>{"type":"tool","name":…}</code> to also pin which tool.</p>
+<pre>resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=[weather_tool, time_tool],
+    tool_choice={
+        <span class="st">"type"</span>: <span class="st">"any"</span>,                      <span class="cm"># must call a tool...</span>
+        <span class="st">"disable_parallel_tool_use"</span>: <span class="kw">True</span>,   <span class="cm"># ...and only ONE per turn</span>
+    },
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"What's it like in Paris right now?"</span>}],
+)
+
+calls = [b <span class="kw">for</span> b <span class="kw">in</span> resp.content <span class="kw">if</span> b.type == <span class="st">"tool_use"</span>]
+<span class="kw">assert</span> <span class="fn">len</span>(calls) == <span class="st">1</span>            <span class="cm"># exactly one, guaranteed</span>
+
+<span class="cm"># For guaranteed shape too, pair with strict tools (4.2):</span>
+<span class="cm">#   tool_choice={"type":"any","disable_parallel_tool_use":True}</span>
+<span class="cm">#   + "strict": True on each tool  → one call AND valid input.</span>
+<span class="cm"># NOTE: 'any'/'tool' are NOT allowed with extended thinking — auto/none only.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Parallel calls vs. one-at-a-time</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Default (parallel allowed)</h4>
+            <ul><li>Claude batches independent calls in one turn → fewer round trips</li>
+            <li>Faster for read-only fan-out (several <code>grep</code>/<code>read</code>)</li></ul></div>
+        <div class="con"><h4>⚠️ <code>disable_parallel_tool_use: true</code></h4>
+            <ul><li>Serializes — needed when calls have ordering or side-effect dependencies</li>
+            <li>One gate/confirm at a time; predictable single-call turns</li>
+            <li>Slower when calls are actually independent</li></ul></div>
+    </div>
+    <div class="good">Leave parallel on for independent reads; disable it when a turn must produce exactly one
+    action (e.g. a single gated, irreversible call, or a structured-extraction turn).</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Thinking <code>any</code> means "one tool." → <code>any</code> means "at least one,"
+    and it may still emit <b>multiple parallel</b> calls. Add
+    <code>disable_parallel_tool_use: true</code> to force <b>exactly one</b>.</div>
+    <div class="trap"><b>Trap:</b> Putting <code>disable_parallel_tool_use</code> at the top level of the request. →
+    It's a field <b>inside <code>tool_choice</code></b>, not a top-level parameter.</div>
+    <div class="trap"><b>Trap:</b> Using <code>tool_choice: any</code> or <code>tool</code> while extended thinking is
+    on. → Errors — thinking permits only <code>auto</code> and <code>none</code> (see 4.1).</div>
+    <div class="trap"><b>Trap:</b> Expecting spoken text before a forced tool call. → <code>any</code> and
+    <code>tool</code> prefill the assistant turn, so no natural-language precedes the <code>tool_use</code> block.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · How do you force Claude to make exactly one tool call?</summary>
+    <p class="answer">Combine a forcing <code>tool_choice</code> (<code>{"type":"any"}</code> or
+    <code>{"type":"tool","name":…}</code>) with <code>"disable_parallel_tool_use": true</code> inside the same
+    <code>tool_choice</code> object. <code>any</code> alone can still emit multiple calls; the flag alone still allows
+    zero.</p></details>
+    <details><summary>Q2 · Which <code>tool_choice</code> values are legal with extended thinking, and why?</summary>
+    <p class="answer">Only <code>auto</code> and <code>none</code>. <code>any</code> and <code>tool</code> require
+    prefilling the assistant turn to force a tool, which conflicts with a leading thinking block — so they error when
+    thinking is on.</p></details>
+    <details><summary>Q3 · Give one case for disabling parallel tool use and one for leaving it on.</summary>
+    <p class="answer"><b>Disable</b> when calls are dependent or have side effects that must be ordered/gated
+    (one action per turn). <b>Leave on</b> for independent read-only fan-out (several <code>read</code>/<code>grep</code>)
+    where batching cuts round trips.</p></details>
+
+    <div class="pager">
+        <a href="4-4-programmatic-code-execution.html"><span class="k">← Back</span>4.4 · Programmatic Tool Calling &amp; Code Execution</a>
+        <a class="next" href="5-1-what-is-mcp.html"><span class="k">Next →</span>5.1 · What MCP Is</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 4.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

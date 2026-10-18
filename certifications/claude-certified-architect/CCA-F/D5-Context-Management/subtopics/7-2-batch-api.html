@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.2 The Batch API (async, ~50% off) · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 7 · Cost &amp; Performance Optimization</div>
+    <h1>7.2 · The Batch API (async, ~50% off)</h1>
+    <div class="tag">Half price for non-urgent work</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Trade immediacy for a 50% discount</h2>
+    <p>The <strong>Message Batches API</strong> (<code>POST /v1/messages/batches</code>) processes many Messages
+    requests <strong>asynchronously</strong> at <strong>50% of standard token prices</strong> — input, output,
+    and cache usage all halved. You submit a bundle of requests, poll for completion, then retrieve results later.
+    You are trading <em>immediacy</em> (results come back within a window, not in a few seconds) for <em>cost</em>.
+    It is the right tool for evals, bulk classification, offline enrichment, dataset generation — anything where
+    "in the next hour or so" is soon enough.</p>
+
+    <table>
+        <tr><th>Property</th><th>Value</th></tr>
+        <tr><td>Discount</td><td><strong>50% off</strong> standard pricing (all token types)</td></tr>
+        <tr><td>Processing</td><td>Asynchronous; most batches finish in <strong>&lt; 1 hour</strong></td></tr>
+        <tr><td>Window</td><td>Results ready when all requests finish <strong>or after 24 hours</strong>, whichever comes first; unfinished requests <strong>expire</strong> at 24h</td></tr>
+        <tr><td>Result retention</td><td>Downloadable for <strong>29 days</strong> after creation</td></tr>
+        <tr><td>Batch size</td><td>Up to <strong>100,000 requests</strong> or <strong>256 MB</strong>, whichever comes first</td></tr>
+        <tr><td>Status</td><td><code>processing_status</code>: <code>in_progress</code> → <code>ended</code></td></tr>
+        <tr><td>Per-request result</td><td><code>succeeded</code> · <code>errored</code> · <code>canceled</code> · <code>expired</code></td></tr>
+    </table>
+
+    <div class="note">🔑 Two clocks: the <strong>24-hour processing window</strong> (past it, unfinished requests
+    expire and aren't billed) and the <strong>29-day result window</strong> (after that you can still see the
+    batch, but not download results).</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Async by design — results arrive in any order</h2>
+    <p>The batch is not a stream. You get back a batch <code>id</code>, poll <code>processing_status</code> until it
+    reads <code>ended</code>, then pull results from the <code>results_url</code>. <strong>Results come back in any
+    order</strong>, so every request carries a <code>custom_id</code> you set — <em>key results by
+    <code>custom_id</code>, never by position</em>. Each per-request result has its own type
+    (<code>succeeded</code> / <code>errored</code> / <code>canceled</code> / <code>expired</code>): one bad request
+    doesn't sink the batch, and <code>expired</code> requests aren't billed. Nearly all Messages features work
+    inside a batch — vision, tools, prompt caching — with two exceptions: <code>stream: true</code> is meaningless
+    (results are one file), and <code>max_tokens: 0</code> cache pre-warming isn't supported.</p>
+
+    <div class="bad">Not for interactive paths. A chat reply, a voice turn, a "generate this now" button — none of
+    these can wait a batch window. Batch is for work that has no user watching the clock.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Submit → poll → retrieve</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Bundle N requests<br/>each with a custom_id"] --> B["POST /v1/messages/batches"]
+    B --> C{"processing_status?"}
+    C -->|"in_progress"| C
+    C -->|"ended (≤24h)"| D["GET results_url<br/>(.jsonl, any order)"]
+    D --> E{"per-request result"}
+    E -->|"succeeded"| OK["🟢 read message, key by custom_id"]
+    E -->|"errored"| ERR["🟠 inspect error; maybe resubmit"]
+    E -->|"expired"| EXP["🔴 24h window passed<br/>not billed → resubmit"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef warn fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class OK ok; class ERR warn; class EXP bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Create, poll, retrieve — keyed by custom_id</h2>
+    <p>Submit a bundle, wait for <code>ended</code>, then match results back by <code>custom_id</code> (not order).</p>
+<pre><span class="kw">import</span> time
+<span class="kw">from</span> anthropic.types.message_create_params <span class="kw">import</span> MessageCreateParamsNonStreaming
+<span class="kw">from</span> anthropic.types.messages.batch_create_params <span class="kw">import</span> Request
+
+batch = client.messages.batches.create(requests=[
+    <span class="fn">Request</span>(
+        custom_id=<span class="st">f"ticket-{i}"</span>,                <span class="cm"># YOUR key — results come back unordered</span>
+        params=<span class="fn">MessageCreateParamsNonStreaming</span>(
+            model=<span class="st">"claude-haiku-4-5"</span>,
+            max_tokens=<span class="st">16</span>,
+            messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">f"Category: {t}"</span>}],
+        ),
+    )
+    <span class="kw">for</span> i, t <span class="kw">in</span> <span class="fn">enumerate</span>(tickets)
+])
+
+<span class="cm"># Poll until the whole batch has ended (async — can take up to 24h).</span>
+<span class="kw">while</span> client.messages.batches.<span class="fn">retrieve</span>(batch.id).processing_status != <span class="st">"ended"</span>:
+    time.<span class="fn">sleep</span>(<span class="st">30</span>)
+
+results = {}
+<span class="kw">for</span> r <span class="kw">in</span> client.messages.batches.<span class="fn">results</span>(batch.id):
+    <span class="kw">if</span> r.result.type == <span class="st">"succeeded"</span>:
+        results[r.custom_id] = r.result.message.content[<span class="st">0</span>].text  <span class="cm"># key by custom_id</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Batch vs. live request</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Batch API</h4>
+            <ul><li>50% off every token — the single biggest flat discount</li>
+            <li>High throughput; up to 100k requests per submission</li>
+            <li>Full feature set (tools, vision, caching)</li>
+            <li>Per-request failures are isolated</li></ul></div>
+        <div class="con"><h4>⚠️ Live request</h4>
+            <ul><li>Immediate response — required for anything interactive</li>
+            <li>Streaming for low time-to-first-token</li>
+            <li>Full price, but no waiting</li>
+            <li>Use for chat, agents, user-facing calls</li></ul></div>
+    </div>
+    <div class="note">🔑 Decision rule: <strong>Can this wait up to 24 hours?</strong> Yes → batch (half price).
+    No → live request (7.3 for making it feel fast).</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Batch results stream back as they finish." → No. You <b>poll</b>
+    <code>processing_status</code> until <code>ended</code>, then retrieve a results file. Nearly all finish under
+    an hour, but the window is up to <b>24 hours</b>.</div>
+    <div class="trap"><b>Trap:</b> Matching results to inputs by position. → Results return in <b>any order</b>. Set
+    a <code>custom_id</code> on every request and key results by it.</div>
+    <div class="trap"><b>Trap:</b> "Batch is a different, weaker API." → It runs the same Messages requests with the
+    same features (tools, vision, caching). The differences: async delivery, 50% price, no live streaming, no
+    <code>max_tokens: 0</code> pre-warming.</div>
+    <div class="trap"><b>Trap:</b> Confusing the two clocks. → <b>24 hours</b> is the processing window (unfinished
+    requests expire, unbilled). <b>29 days</b> is how long finished results stay downloadable.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What discount does the Batch API give, and on what?</summary>
+    <p class="answer"><b>50% off</b> standard token pricing — applied to input, output, and cache token usage — in
+    exchange for asynchronous processing instead of an immediate response.</p></details>
+    <details><summary>Q2 · A batch request is still processing at the 24-hour mark. What happens, and are you billed?</summary>
+    <p class="answer">It <b>expires</b> (result type <code>expired</code>) — the processing window closed. You are
+    <b>not billed</b> for expired requests; resubmit them if you still need them.</p></details>
+    <details><summary>Q3 · Why must you set a <code>custom_id</code> on every batched request?</summary>
+    <p class="answer">Because results come back in <b>any order</b>. The <code>custom_id</code> is how you map each
+    result to the input it answers — keying by array position would misalign them.</p></details>
+
+    <div class="pager">
+        <a href="7-1-cost-levers.html"><span class="k">← Back</span>7.1 · Cost Levers (Model, Cache, Batch)</a>
+        <a class="next" href="7-3-reducing-latency.html"><span class="k">Next →</span>7.3 · Reducing Latency</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 7.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

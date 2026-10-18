@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.3 Environment Variables · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 2 · Settings &amp; Configuration</div>
+    <h1>2.3 · Environment Variables</h1>
+    <div class="tag">Configuring Claude Code via env</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Two ways to set an env var — and where they matter</h2>
+    <p>Environment variables configure authentication, provider routing, model choice, timeouts, and telemetry.
+    You can set them <strong>two ways</strong>, and both feed the same variables:</p>
+    <ul>
+        <li>In your shell, before launching — <code>export ANTHROPIC_MODEL=...; claude</code></li>
+        <li>Inside <code>settings.json</code> under the <code>env</code> key — applied to <em>every</em> session
+        automatically (see 2.2)</li>
+    </ul>
+    <div class="note">🔑 The <code>env</code> block in settings.json is the durable, shareable way; a shell
+    <code>export</code> is the ad-hoc, one-terminal way. Managed policy can also pin env vars org-wide.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The variables worth memorising</h2>
+    <p>Grouped by what they control:</p>
+    <table>
+        <tr><th>Variable</th><th>Group</th><th>Purpose</th></tr>
+        <tr><td><code>ANTHROPIC_API_KEY</code></td><td>Auth</td><td>API key used when authenticating to the Anthropic API</td></tr>
+        <tr><td><code>ANTHROPIC_AUTH_TOKEN</code></td><td>Auth</td><td>Bearer auth token (sent as <code>Authorization</code>)</td></tr>
+        <tr><td><code>ANTHROPIC_MODEL</code></td><td>Model</td><td>Overrides the model Claude Code uses</td></tr>
+        <tr><td><code>CLAUDE_CODE_USE_BEDROCK</code></td><td>Provider</td><td>Route through Amazon Bedrock instead of the Anthropic API</td></tr>
+        <tr><td><code>CLAUDE_CODE_USE_VERTEX</code></td><td>Provider</td><td>Route through Google Vertex AI</td></tr>
+        <tr><td><code>MAX_THINKING_TOKENS</code></td><td>Reasoning</td><td>Cap on extended-thinking tokens (<code>0</code> disables thinking)</td></tr>
+        <tr><td><code>BASH_DEFAULT_TIMEOUT_MS</code></td><td>Tools</td><td>Default timeout for Bash tool commands</td></tr>
+        <tr><td><code>DISABLE_TELEMETRY</code></td><td>Privacy</td><td>Turn off telemetry reporting</td></tr>
+        <tr><td><code>DISABLE_AUTOUPDATER</code></td><td>Updates</td><td>Stop Claude Code from auto-updating</td></tr>
+        <tr><td><code>CLAUDE_CODE_API_KEY_HELPER_TTL_MS</code></td><td>Auth</td><td>How often the <code>apiKeyHelper</code> value is refreshed</td></tr>
+        <tr><td><code>NO_COLOR</code> / <code>FORCE_COLOR</code></td><td>Display</td><td>Disable / force ANSI color output</td></tr>
+    </table>
+    <div class="warn">⚠️ <code>CLAUDE_CODE_USE_BEDROCK</code> and <code>CLAUDE_CODE_USE_VERTEX</code> are the provider
+    switches. When set, Claude Code authenticates to that cloud (AWS / GCP) instead of the Anthropic API directly,
+    so credentials come from that provider, not <code>ANTHROPIC_API_KEY</code>.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Which provider does a request hit?</h2>
+    <div class="mermaid">
+flowchart TD
+    A["claude launches"] --> B{"CLAUDE_CODE_USE_BEDROCK=1?"}
+    B -->|"yes"| BR["Amazon Bedrock<br/>(AWS credentials)"]
+    B -->|"no"| C{"CLAUDE_CODE_USE_VERTEX=1?"}
+    C -->|"yes"| VX["Google Vertex AI<br/>(GCP credentials)"]
+    C -->|"no"| D{"ANTHROPIC_API_KEY set?"}
+    D -->|"yes"| API["Anthropic API<br/>(direct)"]
+    D -->|"no"| LOGIN["Interactive login /<br/>apiKeyHelper output"]
+    classDef prov fill:#cfe2ff,stroke:#3d7bfe,color:#0a3a9a;
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    class BR,VX prov; class API,LOGIN ok;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Two ways to set the same variables</h2>
+    <p>Shell exports for a one-off session vs. the durable <code>env</code> block that applies to every launch.</p>
+<pre><span class="cm"># --- Option A: shell, one session only ---</span>
+<span class="kw">export</span> ANTHROPIC_MODEL=claude-opus-4-5
+<span class="kw">export</span> MAX_THINKING_TOKENS=<span class="st">31999</span>
+<span class="kw">export</span> BASH_DEFAULT_TIMEOUT_MS=<span class="st">120000</span>
+claude
+
+<span class="cm"># --- Option B: route through Amazon Bedrock instead ---</span>
+<span class="kw">export</span> CLAUDE_CODE_USE_BEDROCK=<span class="st">1</span>
+<span class="kw">export</span> AWS_REGION=us-east-1
+claude
+</pre>
+<pre><span class="cm">// --- Option C: durable, every session (settings.json) ---</span>
+{
+  <span class="st">"env"</span>: {
+    <span class="st">"ANTHROPIC_MODEL"</span>: <span class="st">"claude-opus-4-5"</span>,
+    <span class="st">"MAX_THINKING_TOKENS"</span>: <span class="st">"31999"</span>,
+    <span class="st">"DISABLE_TELEMETRY"</span>: <span class="st">"1"</span>
+  }
+}</pre>
+    <div class="note">🔑 In the <code>env</code> block every value is a <b>string</b> — even numeric ones like
+    <code>"31999"</code> and boolean-ish flags like <code>"1"</code>.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Shell export vs. settings.json <code>env</code></h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ settings.json <code>env</code></h4>
+            <ul><li>Applies to every session automatically</li>
+            <li>Committed &amp; shared (project scope) or org-pinned (managed)</li>
+            <li>Reviewable in version control</li></ul></div>
+        <div class="con"><h4>⚠️ Shell <code>export</code></h4>
+            <ul><li>Fast, no file edit — great for one-off experiments</li>
+            <li>But: vanishes with the terminal; easy to forget</li>
+            <li>Not shared, so teammates don't get it</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "<code>ANTHROPIC_MODEL</code> is a settings.json key." → It's an <b>environment
+    variable</b>. The settings.json key for the model is just <code>model</code> (2.2).</div>
+    <div class="trap"><b>Trap:</b> "Set <code>CLAUDE_CODE_USE_BEDROCK</code> <em>and</em> supply
+    <code>ANTHROPIC_API_KEY</code> to use Bedrock." → On Bedrock, auth comes from <b>AWS credentials</b>, not the
+    Anthropic API key. The two provider switches redirect where requests go.</div>
+    <div class="trap"><b>Trap:</b> "<code>MAX_THINKING_TOKENS=0</code> gives unlimited thinking." → <code>0</code>
+    <b>disables</b> extended thinking. A higher number raises the cap.</div>
+    <div class="trap"><b>Trap:</b> "Env values in settings.json can be raw numbers." → They must be
+    <b>quoted strings</b> in JSON.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You want every session in this repo to route through Vertex AI. What do you set, and
+    where's the durable place?</summary>
+    <p class="answer">Set <code>CLAUDE_CODE_USE_VERTEX</code> (to <code>"1"</code>). Durably, put it in the
+    <code>env</code> block of <code>.claude/settings.json</code> so it applies on every launch; ad-hoc, you'd
+    <code>export</code> it in your shell.</p></details>
+    <details><summary>Q2 · Which variable, set to <code>0</code>, turns off extended thinking?</summary>
+    <p class="answer"><code>MAX_THINKING_TOKENS</code>. Setting it to <code>0</code> disables thinking; any positive
+    value caps the thinking-token budget.</p></details>
+    <details><summary>Q3 · Name the variable that stops Claude Code from phoning home with telemetry.</summary>
+    <p class="answer"><code>DISABLE_TELEMETRY</code> (set to <code>1</code>). You can put it in the shell or in the
+    settings.json <code>env</code> block.</p></details>
+
+    <div class="pager">
+        <a href="2-2-key-settings.html"><span class="k">← Back</span>2.2 · Key Settings</a>
+        <a class="next" href="2-4-claude-dir-layout.html"><span class="k">Next →</span>2.4 · The .claude Directory</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 2.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

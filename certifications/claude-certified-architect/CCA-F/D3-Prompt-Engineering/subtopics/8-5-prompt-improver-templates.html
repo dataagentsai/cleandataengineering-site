@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.5 The Prompt Improver &amp; Templates · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 8 · Reliability, Hallucination &amp; Iteration</div>
+    <h1>8.5 · The Prompt Improver &amp; Templates</h1>
+    <div class="tag">Console tools for better prompts</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Three Console tools, used in order</h2>
+    <p>The Claude Console ships a suite of prompt-building tools you typically use in sequence: the
+    <strong>prompt generator</strong> to draft, <strong>prompt templates &amp; variables</strong> to parameterize,
+    and the <strong>prompt improver</strong> to refine.</p>
+    <table>
+        <tr><th>Tool</th><th>What it does</th><th>When</th></tr>
+        <tr><td>Prompt generator</td><td>Generates a first-draft prompt template tailored to your task, following best practices</td><td>Solving the "blank page problem"</td></tr>
+        <tr><td>Templates &amp; variables</td><td>Separates fixed content from dynamic <code>{{variables}}</code></td><td>Any prompt reused across calls</td></tr>
+        <tr><td>Prompt improver</td><td>Analyzes and enhances an existing template (adds CoT, XML, examples)</td><td>Making a prompt more robust for complex, accuracy-critical tasks</td></tr>
+    </table>
+    <div class="note">🔑 The prompt generator also <em>decides what variables your prompt needs</em> and emits them
+    in the template; the improver <em>preserves</em> your existing variables in its output.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Templates &amp; variables, and how the improver works</h2>
+    <p>A <strong>prompt template</strong> combines <strong>fixed content</strong> (static instructions) with
+    <strong>variable content</strong> (user input, RAG-retrieved context, conversation history, tool results).
+    In the Console, placeholders use <strong><code>{{double brackets}}</code></strong>. The payoff is consistency,
+    efficiency (swap variables without rewriting), testability, scalability, and version control — you track the
+    stable core separately from the dynamic inputs.</p>
+    <div class="good">Tip: wrap variables in <strong>XML tags</strong> for clearer structure, e.g.
+    <code>&lt;text&gt;{{text}}&lt;/text&gt;</code>. (Note: claude.ai does not support templates/variables — this is
+    a Console/API capability.)</div>
+
+    <p>The <strong>prompt improver</strong> takes your template (plus optional feedback and example
+    input/output pairs) and enhances it in <strong>four steps</strong>:</p>
+    <ol>
+        <li><strong>Example identification</strong> — locates and extracts examples from your template.</li>
+        <li><strong>Initial draft</strong> — builds a structured template with clear sections and XML tags.</li>
+        <li><strong>Chain-of-thought refinement</strong> — adds and refines detailed reasoning instructions.</li>
+        <li><strong>Example enhancement</strong> — updates examples to demonstrate the new reasoning process.</li>
+    </ol>
+    <p>The result is a template with detailed CoT instructions, XML-organized sections, standardized step-by-step
+    examples, and strategic prefills.</p>
+    <div class="note">⚠️ The improver is built for <strong>complex, accuracy-over-speed</strong> tasks — it produces
+    longer, more thorough, but <strong>slower</strong> responses. For latency- or cost-sensitive apps, prefer a
+    simpler prompt.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Console workflow: draft → template → improve</h2>
+    <div class="mermaid">
+flowchart TD
+    B["Blank page"] --> GEN["Prompt generator<br/>drafts a template + variables"]
+    GEN --> TPL["Template with {{variables}}<br/>fixed vs. variable content split"]
+    TPL --> IMP{"Complex, accuracy-<br/>critical task?"}
+    IMP -->|"yes"| PI["Prompt improver (4 steps):<br/>find examples → draft →<br/>CoT → enhance examples"]
+    IMP -->|"no / latency-sensitive"| SIMPLE["🟠 Keep the simpler prompt"]
+    PI --> OUT["🟢 Robust template:<br/>CoT + XML + step-by-step examples"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class OUT ok; class SIMPLE gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A template, and what the improver adds</h2>
+    <p>A minimal template is just fixed text plus a <code>{{variable}}</code>:</p>
+<pre><span class="cm"># Prompt template — {{double brackets}} mark variable content</span>
+Translate this text from English to Spanish: {{text}}
+
+<span class="cm"># Better: wrap the variable in XML tags for clearer structure</span>
+Translate the text below from English to Spanish.
+&lt;text&gt;{{text}}&lt;/text&gt;</pre>
+    <p>Feeding a bare classification prompt to the improver adds CoT reasoning, XML organization, and explicit
+    output formatting — while <strong>keeping the original <code>{{variables}}</code></strong>:</p>
+<pre><span class="cm"># BEFORE — the improver's input</span>
+From the list of Wikipedia titles, identify which article this sentence
+came from. Respond with just the title.
+Article titles: {{titles}}
+Sentence to classify: {{sentence}}
+
+<span class="cm"># AFTER — the improver's output (abridged)</span>
+You are a text classification system matching sentences to Wikipedia titles.
+&lt;article_titles&gt;{{titles}}&lt;/article_titles&gt;
+&lt;sentence_to_classify&gt;{{sentence}}&lt;/sentence_to_classify&gt;
+
+Follow these steps:
+1. List the key concepts from the sentence
+2. Compare each concept with the article titles
+3. Rank the top 3 most relevant titles and explain why
+4. Select the best-matching title
+
+Wrap your analysis in &lt;analysis&gt; tags. Then output ONLY the chosen title.</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Improved prompt vs. simple prompt</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Prompt-improver output</h4>
+            <ul><li>Higher accuracy on complex, reasoning-heavy tasks</li>
+            <li>Structured CoT + XML + step-by-step examples</li>
+            <li>Preserves your variables; standardized formatting</li></ul></div>
+        <div class="con"><h4>⚠️ Simple prompt</h4>
+            <ul><li>Faster, cheaper — better for latency/cost-sensitive apps</li>
+            <li>Improver output is longer &amp; slower by design</li>
+            <li>Overkill when the current prompt already works</li></ul></div>
+    </div>
+    <div class="good">Use the improver where accuracy beats speed; keep prompts simple where latency or cost is the
+    binding constraint.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Reaching for the prompt improver on a latency-sensitive endpoint. → The
+    improver deliberately makes prompts <b>longer, more thorough, and slower</b>. For latency/cost-sensitive apps,
+    prefer a simpler prompt.</div>
+    <div class="trap"><b>Trap:</b> Confusing the <b>prompt generator</b> (drafts a new prompt from scratch — the
+    blank-page tool) with the <b>prompt improver</b> (refines an <em>existing</em> template).</div>
+    <div class="trap"><b>Trap:</b> Expecting template variables to work in claude.ai. → Templates and
+    <code>{{variables}}</code> are a <b>Console/API</b> feature; claude.ai does not support them.</div>
+    <div class="trap"><b>Trap:</b> Naming the improver's four steps as "just formatting." → They are
+    <b>example identification → initial draft → chain-of-thought refinement → example enhancement</b> — the CoT and
+    reasoning-example work is the substance, not cosmetics.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What are the four steps of the prompt improver, in order?</summary>
+    <p class="answer">(1) <b>Example identification</b> — extract examples from your template; (2) <b>initial
+    draft</b> — structured template with sections and XML tags; (3) <b>chain-of-thought refinement</b> — add and
+    refine reasoning instructions; (4) <b>example enhancement</b> — update examples to show the new reasoning
+    process.</p></details>
+    <details><summary>Q2 · When should you <em>not</em> use the prompt improver?</summary>
+    <p class="answer">On <b>latency- or cost-sensitive</b> applications. The improver produces longer, more thorough,
+    slower responses — great when accuracy matters more than speed, wrong when speed/cost is the constraint. Use a
+    simpler prompt there.</p></details>
+    <details><summary>Q3 · Why separate fixed content from <code>{{variable}}</code> content in a template?</summary>
+    <p class="answer">It gives you consistency, efficiency (swap inputs without rewriting), testability (change only
+    the variable to probe edge cases), scalability, and version control (track the stable core apart from dynamic
+    inputs). It's also what powers the Console's generator, improver, and evaluation tooling.</p></details>
+
+    <div class="pager">
+        <a href="8-4-evaluating-iterating.html"><span class="k">← Back</span>8.4 · Evaluating &amp; Iterating</a>
+        <a class="next" href="../index.html"><span class="k">Next →</span>Domain 3 hub</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 8.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

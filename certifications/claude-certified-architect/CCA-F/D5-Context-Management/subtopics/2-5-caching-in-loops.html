@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.5 Caching in Multi-Turn / Agent Loops · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 2 · Prompt Caching</div>
+    <h1>2.5 · Caching in Multi-Turn / Agent Loops</h1>
+    <div class="tag">The moving breakpoint</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Let the conversation grow past a moving breakpoint</h2>
+    <p>In an agent loop or chat, the conversation history keeps growing — and each turn's history is the
+    <em>next</em> turn's stable prefix. The caching pattern: place a breakpoint <strong>after the stable prefix</strong>
+    (system + tools + settled history) and let new turns accumulate <em>after</em> it. On the next request, that
+    now-larger history is a byte-identical prefix, so it reads from cache; only the newest turn is written. As
+    history settles, you <strong>move the breakpoint forward</strong> to keep capturing the growing stable region.</p>
+
+    <div class="note">🔑 The breakpoint isn't fixed to one spot — it <strong>advances</strong> as stable content
+    accumulates. Each turn: the prior turn's suffix becomes this turn's cached prefix.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> What invalidates it — and the 20-block window</h2>
+    <p>Because caching is a prefix match (2.3), anything that alters the front of the prompt mid-run wipes the
+    cache and forces a cold re-write:</p>
+    <ul>
+        <li><strong>Switching models</strong> — caches are model-scoped. Moving from Opus to Haiku mid-loop can't
+        read the other model's cache. Keep one model per loop; spawn a subagent for a cheaper side-task instead.</li>
+        <li><strong>Editing cached bytes</strong> — mutating the system prompt, adding/removing/reordering tools,
+        or rewriting settled history changes the prefix and invalidates everything downstream.</li>
+        <li><strong>The 20-block lookback</strong> — a breakpoint walks back at most <strong>20 content blocks</strong>
+        to find a prior entry. A single turn that adds &gt;20 blocks (common in tool-heavy loops) can outrun the
+        window and silently miss. Place an intermediate breakpoint every ~15 blocks in long turns.</li>
+    </ul>
+
+    <div class="good">Agent-safe moves: keep the model fixed; append a <code>{"role":"system"}</code> message
+    instead of editing the top-level system prompt (preserves the cached prefix on supporting models); use tool
+    <em>search</em> to append tool schemas rather than swapping the tool list.</div>
+
+    <div class="bad">Cache-wiping moves: swapping the model, editing the system prompt in place, reordering tools,
+    or rewriting old turns. Each rebuilds the prefix from that point and pays a fresh write.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The breakpoint advances each turn</h2>
+    <div class="mermaid">
+flowchart TD
+    subgraph R1["Request 1"]
+      A1["system + tools"] --> B1["User(1)"]
+      B1 --> BP1["🟢 breakpoint"]
+    end
+    subgraph R2["Request 2 — prior prefix now reads from cache"]
+      A2["system + tools + User(1) + Asst(1)"] --> B2["User(2)"]
+      B2 --> BP2["🟢 breakpoint moved forward"]
+    end
+    subgraph R3["Request 3"]
+      A3["... + User(2) + Asst(2)"] --> B3["User(3)"]
+      B3 --> BP3["🟢 breakpoint moved forward"]
+    end
+    BP1 -.->|"grows"| BP2 -.->|"grows"| BP3
+    MODELSWAP["switch model / edit system / reorder tools"] -.->|"invalidates<br/>whole prefix"| A2
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef neutral fill:#e7f1ff,stroke:#4a90d9,color:#1a4971;
+    class BP1 ok; class BP2 ok; class BP3 ok; class MODELSWAP bad;
+    class A1 neutral; class A2 neutral; class A3 neutral;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A growing conversation with a moving breakpoint</h2>
+    <p>Append each turn, and put the breakpoint on the last block of the newest settled turn. The ever-larger
+    history reads from cache; only the new tail is written.</p>
+<pre>messages = []
+
+<span class="kw">def</span> <span class="fn">turn</span>(user_text):
+    messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: user_text})
+    <span class="cm"># Move the breakpoint to the last block of the newest turn</span>
+    messages[-<span class="st">1</span>][<span class="st">"content"</span>] = [
+        {<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: user_text,
+         <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>}},   <span class="cm"># advances each turn</span>
+    ]
+    resp = client.messages.<span class="fn">create</span>(
+        model=<span class="st">"claude-opus-4-8"</span>,           <span class="cm"># SAME model every turn — never swap mid-loop</span>
+        max_tokens=<span class="st">1024</span>,
+        system=[{<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: FROZEN_SYSTEM,  <span class="cm"># never edited in place</span>
+                 <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>}}],
+        messages=messages,
+    )
+    messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content})
+    <span class="kw">return</span> resp
+
+<span class="cm"># Turn 2+ reads the whole prior history from cache (~0.1×);</span>
+<span class="cm"># only the newest turn is written.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Fixed model &amp; prompt vs. mid-loop flexibility</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ One model, frozen prefix</h4>
+            <ul><li>History reads from cache every turn — huge savings in long loops</li>
+            <li>Latency stays low as context grows</li>
+            <li>Breakpoint simply advances with the conversation</li></ul></div>
+        <div class="con"><h4>⚠️ Changing things mid-loop</h4>
+            <ul><li>Switching models → cold cache (model-scoped)</li>
+            <li>Editing system / reordering tools → full prefix rebuild</li>
+            <li>&gt;20 blocks in one turn → lookback window overrun, silent miss</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The breakpoint stays put at the system prompt." → In a loop it <b>moves
+    forward</b> onto the newest settled turn, so the growing history keeps reading from cache.</div>
+    <div class="trap"><b>Trap:</b> Switching models mid-conversation to "save money." → Caches are
+    <b>model-scoped</b>; the new model starts cold and pays a full write. Keep one model per loop (use a subagent
+    for cheap side-tasks).</div>
+    <div class="trap"><b>Trap:</b> Editing the system prompt or reordering tools between turns. → Both change the
+    prefix bytes and <b>invalidate the whole cache</b>. Append a <code>role:"system"</code> message or use tool
+    search instead.</div>
+    <div class="trap"><b>Trap:</b> Forgetting the 20-block lookback. → A single turn adding &gt;20 blocks (many
+    tool_use/tool_result pairs) can overrun the window and <b>silently miss</b>. Add an intermediate breakpoint
+    every ~15 blocks.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · In a multi-turn loop, where does the breakpoint go, and does it move?</summary>
+    <p class="answer">On the <b>last block of the newest settled turn</b>. It <b>moves forward</b> each turn — the
+    prior turn's suffix becomes the next turn's cached prefix, so the growing history reads from cache while only
+    the new tail is written.</p></details>
+    <details><summary>Q2 · Why does switching models mid-loop kill caching?</summary>
+    <p class="answer">Caches are <b>model-scoped</b> — the entry written under one model can't be read by another.
+    The new model starts cold and pays a full write. Keep one model per loop; delegate cheap side-tasks to a
+    subagent instead.</p></details>
+    <details><summary>Q3 · A tool-heavy turn adds 25 content blocks and the next request misses. Why?</summary>
+    <p class="answer">The breakpoint's <b>20-block lookback window</b> was overrun — it couldn't reach the prior
+    cache entry 25 blocks back. Add an <b>intermediate breakpoint</b> (~every 15 blocks) so each stays within 20
+    of the previous cached block.</p></details>
+
+    <div class="pager">
+        <a href="2-4-cache-ttl-hits.html"><span class="k">← Back</span>2.4 · Cache TTL &amp; Hits/Misses</a>
+        <a class="next" href="3-1-conversation-state.html"><span class="k">Next →</span>3.1 · Conversation State</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 2.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.4 max_tokens Truncation &amp; Continuation · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 6 · Reliability: Degradation &amp; Recovery</div>
+    <h1>6.4 · max_tokens Truncation &amp; Continuation</h1>
+    <div class="tag">Finish a cut-off response</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> <code>stop_reason: "max_tokens"</code> means the answer is cut off, not done</h2>
+    <p>Every response carries a <code>stop_reason</code>. When Claude finishes naturally it's <code>end_turn</code>;
+    when it wants a tool it's <code>tool_use</code>. But <strong><code>stop_reason: "max_tokens"</code></strong> means
+    the model hit your <code>max_tokens</code> ceiling <em>mid-generation</em> — the text is <strong>truncated</strong>,
+    possibly mid-sentence or mid-JSON. The single biggest reliability bug here is treating that partial output as a
+    complete answer.</p>
+
+    <div class="note">🔑 Always branch on <code>stop_reason</code> before consuming <code>content</code>. If it's
+    <code>max_tokens</code>, the response is incomplete — you either raise the ceiling and retry, or
+    <strong>continue</strong> generation from where it stopped.</div>
+
+    <div class="warn">⚠️ Truncated JSON / structured output is the nastiest case: <code>json.loads()</code> throws on
+    a half-written object. Check <code>stop_reason</code> first; don't parse a <code>max_tokens</code> body as if it
+    were whole.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Continue: feed the partial back, ask it to keep going</h2>
+    <p>To recover a cut-off answer, append the model's <strong>partial output as an assistant turn</strong>, then add
+    a short <strong>user</strong> message asking it to continue. The model sees its own prior text as context and
+    picks up where it left off; you concatenate the two halves.</p>
+
+    <div class="good">Keep the last message a <strong>user</strong> turn. On current models (Opus&nbsp;4.8/4.7/4.6,
+    Sonnet&nbsp;5/4.6, Fable&nbsp;5) an assistant message as the <em>last</em> entry is a <strong>prefill</strong> and
+    returns a <strong>400</strong>. So append <code>{assistant: partial}</code> <em>then</em>
+    <code>{user: "Continue from where you left off."}</code> — the assistant block is history, not a prefill.</p>
+
+    <div class="note">🔑 The other lever is prevention: <strong>right-size <code>max_tokens</code></strong>. Too low →
+    routine truncation and continuation round-trips. Too high without streaming → the SDK refuses / risks an HTTP
+    timeout on long generations (see 5.5 / 6.5). Size it to the expected output, and stream when it's large.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Detect truncation, then continue</h2>
+    <div class="mermaid">
+flowchart TD
+    R["Response"] --> S{"stop_reason?"}
+    S -->|"end_turn"| DONE["🟢 Complete — use content"]
+    S -->|"tool_use"| TOOL["Run tool, loop"]
+    S -->|"max_tokens"| CUT["🟠 Truncated — output incomplete"]
+    CUT --> APP["Append partial as ASSISTANT turn"]
+    APP --> ASK["Add USER msg:<br/>'Continue where you left off'"]
+    ASK --> R2["Re-call → concatenate halves"]
+    R2 --> S
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class DONE ok; class CUT gate; class APP gate; class ASK gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Detect max_tokens and continue to completion</h2>
+    <p>Loop until <code>end_turn</code>, stitching each partial together. A capped retry count guards against a runaway
+    continuation loop.</p>
+<pre><span class="kw">def</span> <span class="fn">complete</span>(client, messages, max_tokens=<span class="st">2048</span>, max_conts=<span class="st">4</span>):
+    full = <span class="st">""</span>
+    <span class="kw">for</span> _ <span class="kw">in</span> <span class="fn">range</span>(max_conts + <span class="st">1</span>):
+        resp = client.messages.<span class="fn">create</span>(
+            model=<span class="st">"claude-opus-4-8"</span>, max_tokens=max_tokens, messages=messages)
+        part = <span class="fn">next</span>(b.text <span class="kw">for</span> b <span class="kw">in</span> resp.content <span class="kw">if</span> b.type == <span class="st">"text"</span>)
+        full += part
+
+        <span class="kw">if</span> resp.stop_reason != <span class="st">"max_tokens"</span>:            <span class="cm"># end_turn → done</span>
+            <span class="kw">return</span> full
+
+        <span class="cm"># Truncated: feed the partial back as history, then a user nudge.</span>
+        <span class="cm"># NOT a trailing assistant turn (that's a prefill → 400 on 4.x models).</span>
+        messages = messages + [
+            {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: part},
+            {<span class="st">"role"</span>: <span class="st">"user"</span>,
+             <span class="st">"content"</span>: <span class="st">"Continue exactly where you left off; do not repeat."</span>},
+        ]
+    <span class="kw">return</span> full                                        <span class="cm"># hit continuation cap</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Continue vs. just raise max_tokens</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Continue from the partial</h4>
+            <ul><li>Recovers work already generated — no wasted tokens</li>
+            <li>Handles outputs longer than any single ceiling</li>
+            <li>Keeps <code>max_tokens</code> modest per call</li></ul></div>
+        <div class="con"><h4>⚠️ Just crank max_tokens high</h4>
+            <ul><li>Simpler — one call, no stitching</li>
+            <li>But wastes budget when most answers are short</li>
+            <li>Very high values need streaming or hit HTTP timeouts</li></ul></div>
+    </div>
+    <div class="good">Right-size <code>max_tokens</code> to the <em>typical</em> output; keep continuation as the safety
+    net for the occasional long answer. Stream (6.5) whenever the ceiling is large.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Treating a <code>max_tokens</code> response as complete. → It's <b>truncated</b>.
+    Always check <code>stop_reason</code>; continue or raise the ceiling before using the content.</div>
+    <div class="trap"><b>Trap:</b> Continuing by putting the partial as the <em>last</em> assistant message. → That's a
+    <b>prefill</b> and returns a <b>400</b> on Opus&nbsp;4.8/4.7/4.6, Sonnet&nbsp;5/4.6, and Fable&nbsp;5. Append the
+    partial as history, then end with a <b>user</b> "continue" turn.</div>
+    <div class="trap"><b>Trap:</b> Parsing truncated JSON. → A <code>max_tokens</code> cut-off can slice a structured
+    output mid-object; <code>json.loads()</code> throws. Detect truncation first, then continue or increase
+    <code>max_tokens</code>.</div>
+    <div class="trap"><b>Trap:</b> Fixing truncation by setting <code>max_tokens</code> enormous with no streaming. →
+    Large ceilings without streaming risk idle-connection HTTP timeouts (the SDK even refuses them). Stream, or
+    continue in modest chunks.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A response comes back with <code>stop_reason: "max_tokens"</code>. Is it done?</summary>
+    <p class="answer">No — it was <b>cut off</b> at the token ceiling and is incomplete (maybe mid-sentence or
+    mid-JSON). Continue generation (feed the partial back + a user "continue" nudge) or raise <code>max_tokens</code>
+    and retry. Never consume it as a finished answer.</p></details>
+    <details><summary>Q2 · Why not just append the partial as a trailing assistant message and re-call?</summary>
+    <p class="answer">A trailing assistant message is a <b>prefill</b>, which returns a 400 on current models
+    (Opus 4.8/4.7/4.6, Sonnet 5/4.6, Fable 5). Keep the assistant partial as history and make the <b>last</b> message
+    a user turn asking it to continue.</p></details>
+    <details><summary>Q3 · How do you decide the right <code>max_tokens</code>?</summary>
+    <p class="answer">Size it to the <b>expected</b> output length: too low forces frequent truncation and
+    continuation round-trips; too high wastes budget and, without streaming, risks HTTP timeouts. Set a sensible
+    default, keep continuation as the safety net, and stream for large ceilings.</p></details>
+
+    <div class="pager">
+        <a href="6-3-graceful-degradation.html"><span class="k">← Back</span>6.3 · Graceful Degradation</a>
+        <a class="next" href="6-5-streaming-reliability.html"><span class="k">Next →</span>6.5 · Streaming for Reliability</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 6.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

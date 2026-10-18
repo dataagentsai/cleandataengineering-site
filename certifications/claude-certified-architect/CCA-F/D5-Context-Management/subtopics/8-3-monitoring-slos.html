@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.3 Monitoring Reliability &amp; SLOs · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 8 · Observability &amp; Production Ops</div>
+    <h1>8.3 · Monitoring Reliability &amp; SLOs</h1>
+    <div class="tag">Error rate · latency · saturation</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Pick SLIs, set SLOs, alert on them</h2>
+    <p>An <strong>SLI</strong> is a measured signal; an <strong>SLO</strong> is the target you hold it to; an
+    <strong>alert</strong> fires when the SLI breaches the SLO. For an LLM integration the signals map cleanly onto
+    the classic reliability triad — <em>errors, latency, saturation</em> — plus a cost-efficiency signal unique to
+    caching.</p>
+
+    <table>
+        <tr><th>SLI</th><th>What it measures</th><th>Typical SLO</th></tr>
+        <tr><td>Error rate by status code</td><td>% of calls failing, split by 4xx vs 5xx/429</td><td>e.g. &lt;0.5% 5xx over 5 min</td></tr>
+        <tr><td>Latency p50 / p95 / p99</td><td>Tail response time, not just the average</td><td>e.g. p95 &lt; 8s</td></tr>
+        <tr><td>Token throughput vs rate limits</td><td>ITPM / OTPM consumed against your ceiling</td><td>e.g. &lt;80% of OTPM</td></tr>
+        <tr><td>Cache hit-rate</td><td>Reads ÷ total prompt tokens (8.1)</td><td>e.g. &gt;70% on stable prefixes</td></tr>
+    </table>
+
+    <div class="warn">⚠️ Split error rate <b>by status code</b>. A 400 is your bug (bad request, non-retryable);
+    a 429 means you hit a rate limit; a 500/529 is Anthropic-side and retryable. Alerting on a single "error %"
+    hides which of three very different problems you have.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Saturation = rate limits and the headers that warn you</h2>
+    <p>The LLM-specific saturation signal is <strong>rate-limit headroom</strong>. Limits are enforced as
+    requests-per-minute (<strong>RPM</strong>), input-tokens-per-minute (<strong>ITPM</strong>), and
+    output-tokens-per-minute (<strong>OTPM</strong>). A 429 tells you you've hit one; the
+    <code>anthropic-ratelimit-*</code> response headers tell you <em>how close you are before</em> you hit it, and
+    a 429 carries a <code>retry-after</code> header saying how long to wait. Watch the remaining-quota headers so
+    you alert on approaching saturation rather than on the outage itself.</p>
+
+    <div class="good">🔑 Measure the <b>tail</b> (p95/p99), not the mean. LLM latency is highly variable — a healthy
+    average can hide a p99 that's timing users out. Tail latency is where reliability actually lives.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> SLI → SLO → alert</h2>
+    <div class="mermaid">
+flowchart TD
+    LOG["Per-call logs (8.2):<br/>status · latency · tokens · cache"] --> AGG["Aggregate into SLIs"]
+    AGG --> E["Error rate<br/>by status code"]
+    AGG --> L["Latency<br/>p50/p95/p99"]
+    AGG --> S["Saturation<br/>ITPM/OTPM vs limit"]
+    AGG --> H["Cache hit-rate"]
+    E --> B{"Breach SLO?"}
+    L --> B
+    S --> B
+    H --> B
+    B -->|"yes"| AL["🔴 Alert + page<br/>429→back off · 5xx→retry · 400→fix"]
+    B -->|"no"| OK["🟢 Within budget"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class OK ok; class AGG gate; class AL bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Emit SLIs and watch rate-limit headroom</h2>
+    <p>Record status, latency, and tokens per call; read the remaining-quota headers so a dashboard can alert
+    before you saturate. On a 429, honor <code>retry-after</code>.</p>
+<pre><span class="cm"># Use the raw-response accessor to see the rate-limit headers.</span>
+raw = client.messages.with_raw_response.create(model=<span class="st">"claude-opus-4-8"</span>,
+          max_tokens=<span class="st">1024</span>, messages=msgs)
+h = raw.headers
+<span class="fn">emit</span>(<span class="st">"llm.otpm_remaining"</span>, <span class="fn">int</span>(h.get(<span class="st">"anthropic-ratelimit-output-tokens-remaining"</span>, <span class="st">0</span>)))
+<span class="fn">emit</span>(<span class="st">"llm.rpm_remaining"</span>,   <span class="fn">int</span>(h.get(<span class="st">"anthropic-ratelimit-requests-remaining"</span>, <span class="st">0</span>)))
+
+<span class="kw">try</span>:
+    msg = raw.parse()
+    <span class="fn">emit</span>(<span class="st">"llm.status"</span>, <span class="st">200</span>); <span class="fn">emit</span>(<span class="st">"llm.output_tokens"</span>, msg.usage.output_tokens)
+<span class="kw">except</span> anthropic.RateLimitError <span class="kw">as</span> e:
+    <span class="fn">emit</span>(<span class="st">"llm.status"</span>, <span class="st">429</span>)                       <span class="cm"># saturation SLI</span>
+    wait = <span class="fn">int</span>(e.response.headers.get(<span class="st">"retry-after"</span>, <span class="st">60</span>))
+    <span class="fn">sleep</span>(wait)                                  <span class="cm"># back off, then retry (429 is retryable)</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Alert on 5xx only vs. alert on every status</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Per-status-code SLIs + tail latency</h4>
+            <ul><li>429 → back off; 5xx → retry; 4xx → fix your code</li>
+            <li>Rate-limit headers warn <em>before</em> saturation</li>
+            <li>p99 catches the timeouts a mean hides</li></ul></div>
+        <div class="con"><h4>⚠️ One blended "error %" + average latency</h4>
+            <ul><li>Simple single dashboard number</li>
+            <li>But: can't tell a client bug from an overload</li>
+            <li>Average latency masks a failing tail</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Monitoring average latency only. → LLM latency has a long tail. Track
+    <b>p50/p95/p99</b>; the p99 is what times users out.</div>
+    <div class="trap"><b>Trap:</b> Blending all errors into one rate. → Split <b>by status code</b>: 400 (your bug,
+    non-retryable), 429 (rate limit — back off), 500/529 (Anthropic-side — retryable). They demand different
+    responses.</div>
+    <div class="trap"><b>Trap:</b> Only reacting to 429s after they happen. → The
+    <code>anthropic-ratelimit-*</code> headers report remaining RPM/ITPM/OTPM every call — alert on <b>approaching</b>
+    the limit, not on the resulting outage.</div>
+    <div class="trap"><b>Trap:</b> Ignoring the <code>retry-after</code> header on a 429. → It tells you exactly how
+    long to wait. Backing off blindly (or not at all) either wastes capacity or hammers a limited endpoint.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why split error rate by status code instead of one blended figure?</summary>
+    <p class="answer">Because the fix differs: <b>400</b> is a non-retryable client bug, <b>429</b> means back off
+    (honor <code>retry-after</code>), and <b>500/529</b> are retryable Anthropic-side errors. A single "error %"
+    tells you something's wrong but not what to do.</p></details>
+    <details><summary>Q2 · Which latency statistic should the SLO target, and why not the mean?</summary>
+    <p class="answer">Target the <b>tail — p95 and p99</b>. LLM response time is highly variable, so a healthy
+    average can hide a p99 that's blowing past user timeouts. Reliability lives in the tail.</p></details>
+    <details><summary>Q3 · Which signals tell you you're approaching rate-limit saturation?</summary>
+    <p class="answer">The <code>anthropic-ratelimit-*</code> remaining headers (RPM / ITPM / OTPM) on every
+    response, tracked as a saturation SLI. Alert when remaining quota drops (e.g. below 20%) so you throttle
+    <em>before</em> the 429 outage rather than after.</p></details>
+
+    <div class="pager">
+        <a href="8-2-logging-tracing.html"><span class="k">← Back</span>8.2 · Logging &amp; Tracing</a>
+        <a class="next" href="8-4-production-evals.html"><span class="k">Next →</span>8.4 · Evaluations in Production</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 8.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

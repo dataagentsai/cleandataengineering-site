@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.4 Context Editing (Clearing Tool Results) · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 3 · Managing Long Conversations</div>
+    <h1>3.4 · Context Editing (Clearing Tool Results)</h1>
+    <div class="tag">Prune stale tool output</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A first-class feature that clears old tool results</h2>
+    <p><strong>Context editing</strong> is a built-in API capability (beta header
+    <code>context-management-2025-06-27</code>) that <strong>automatically clears older tool results — and
+    optionally thinking blocks — from the window once a token threshold is hit</strong>, keeping the most recent
+    context intact. In heavy agentic loops, stale tool output (a big file dump, an old search result) piles up and
+    crowds the window; context editing prunes exactly that noise while leaving the conversation structure in place.</p>
+
+    <p>You configure it with <code>context_management.edits</code>, a list of strategies:</p>
+    <ul>
+        <li><code>clear_tool_uses_20250919</code> — clears old tool results. Default <code>trigger</code>: 100,000
+        input tokens. Default <code>keep</code>: the 3 most recent tool use/result pairs. Options include
+        <code>clear_at_least</code> (minimum tokens to clear), <code>exclude_tools</code> (never clear these), and
+        <code>clear_tool_inputs</code> (default <code>false</code> — also clear the tool-call parameters).</li>
+        <li><code>clear_thinking_20251015</code> — clears older extended-thinking blocks beyond a <code>keep</code>
+        threshold.</li>
+    </ul>
+
+    <div class="note">🔑 It's a <strong>prune, not a summary</strong>. Cleared tool results are replaced with a
+    placeholder — the model no longer sees the payload, but the turn scaffolding stays valid. Contrast 3.3, which
+    <em>summarizes</em> old content into a block.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Server-side clearing — you keep the full history</h2>
+    <p>Clearing happens <strong>server-side, before Claude sees the prompt</strong>. Crucially, <strong>your client
+    still keeps the full, unedited history</strong> — the API doesn't mutate your <code>messages</code> list; it
+    just doesn't show the model the cleared portions this turn. The response reports what was removed in
+    <code>context_management.applied_edits</code> (e.g. <code>cleared_tool_uses</code>,
+    <code>cleared_input_tokens</code>), so you can observe the savings. This differs from client-side truncation
+    (3.2), where you actually delete turns you own.</p>
+
+    <div class="warn">⚠️ Cache impact: clearing tool results <strong>invalidates the prompt cache</strong> (the
+    prefix changed). Use <code>clear_at_least</code> so each clear removes enough tokens to be worth the cache
+    write. Clearing thinking blocks only invalidates the cache when blocks are actually cleared. If you combine both
+    strategies, <code>clear_thinking_20251015</code> must be listed <em>first</em>.</div>
+
+    <div class="good">Where it fits vs. its neighbors: <strong>truncate</strong> (3.2) drops whole turns you own;
+    <strong>compact</strong> (3.3) summarizes; <strong>context editing</strong> surgically clears stale
+    <em>tool output</em> while keeping recent turns and the conversation shape — ideal for tool-heavy agents.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Threshold trips → oldest tool results cleared</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Agentic loop: tool results<br/>pile up in context"] --> Q{"input tokens ≥<br/>trigger (default 100k)?"}
+    Q -->|"no"| PASS["Send unchanged"]
+    Q -->|"yes"| CLEAR["Server clears OLDEST tool results<br/>(keep last 3 · exclude_tools honored)"]
+    CLEAR --> KEEP["Recent tool uses + all turns kept;<br/>cleared payloads → placeholder"]
+    KEEP --> RPT["Response: applied_edits<br/>cleared_input_tokens"]
+    CLEAR -.->|"your client keeps<br/>the FULL history"| LOCAL["messages[] unchanged locally"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef info fill:#d4edda,stroke:#28a745,color:#155724;
+    class PASS,KEEP,RPT,LOCAL ok; class Q,CLEAR gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Enable tool-result clearing on the beta endpoint</h2>
+    <p>Turn on context editing with the beta header and a <code>clear_tool_uses</code> strategy; the server prunes
+    old tool output past the trigger and reports what it cleared.</p>
+<pre><span class="cm"># Beta: server clears old tool results past a token threshold.</span>
+resp = client.beta.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="cm">4096</span>,
+    betas=[<span class="st">"context-management-2025-06-27"</span>],
+    context_management={
+        <span class="st">"edits"</span>: [{
+            <span class="st">"type"</span>: <span class="st">"clear_tool_uses_20250919"</span>,
+            <span class="st">"trigger"</span>: {<span class="st">"type"</span>: <span class="st">"input_tokens"</span>, <span class="st">"value"</span>: <span class="cm">100_000</span>},  <span class="cm"># default</span>
+            <span class="st">"keep"</span>: {<span class="st">"type"</span>: <span class="st">"tool_uses"</span>, <span class="st">"value"</span>: <span class="cm">3</span>},           <span class="cm"># keep 3 recent pairs</span>
+            <span class="st">"clear_at_least"</span>: {<span class="st">"type"</span>: <span class="st">"input_tokens"</span>, <span class="st">"value"</span>: <span class="cm">5_000</span>}, <span class="cm"># worth the cache write</span>
+            <span class="st">"exclude_tools"</span>: [<span class="st">"web_search"</span>],                        <span class="cm"># never clear these</span>
+            <span class="cm"># "clear_tool_inputs": True,  # also drop tool-call params</span>
+        }],
+    },
+    tools=tools,
+    messages=messages,        <span class="cm"># ← still your FULL history; server clears server-side</span>
+)
+
+<span class="cm"># Observe what was actually removed this turn.</span>
+<span class="kw">for</span> edit <span class="kw">in</span> resp.context_management.applied_edits:
+    <span class="fn">print</span>(edit.type, edit.cleared_input_tokens)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Context editing vs. compaction</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Context editing (clear)</h4>
+            <ul><li>Surgical: removes stale tool payloads, keeps conversation shape</li>
+            <li>Server-side + configurable; you keep full history locally</li>
+            <li>Reports <code>applied_edits</code> so savings are observable</li></ul></div>
+        <div class="con"><h4>⚠️ Where it falls short</h4>
+            <ul><li>Cleared payloads are <b>gone from context</b> — no gist retained (unlike compaction)</li>
+            <li>Clearing invalidates the cache; needs <code>clear_at_least</code> to pay off</li>
+            <li>Beta; strategy ordering matters (thinking-clear first)</li></ul></div>
+    </div>
+    <div class="good">Pair context editing with the <strong>memory tool</strong> (3.5): clear stale tool output from
+    the window, but let Claude write anything worth keeping to a memory file first so it survives the clear.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Context editing summarizes old context." → No — it <b>clears</b> (prunes) old tool
+    results/thinking and replaces them with a placeholder. Summarizing is <b>compaction</b> (3.3).</div>
+    <div class="trap"><b>Trap:</b> "Context editing deletes turns from my message list." → It runs
+    <b>server-side</b>; your client keeps the full history. The model just doesn't see the cleared parts this
+    turn.</div>
+    <div class="trap"><b>Trap:</b> Forgetting the cache cost. → Clearing tool results invalidates the prompt cache.
+    Set <code>clear_at_least</code> so each clear removes enough tokens to justify the re-write.</div>
+    <div class="trap"><b>Trap:</b> Guessing parameter names/values. → It's <code>context_management.edits</code> with
+    <code>clear_tool_uses_20250919</code> (default trigger 100k tokens, keep 3) and
+    <code>clear_thinking_20251015</code>, behind beta <code>context-management-2025-06-27</code>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What does context editing do, and how is it different from compaction?</summary>
+    <p class="answer">It automatically <b>clears</b> older tool results (and optionally thinking blocks) once a token
+    trigger is hit, keeping recent context — a prune, replaced by a placeholder. Compaction instead
+    <b>summarizes</b> old content into a block. Editing removes; compaction compresses.</p></details>
+    <details><summary>Q2 · Where does the clearing happen, and what does your client still hold?</summary>
+    <p class="answer">Clearing is <b>server-side</b>, before Claude sees the prompt. Your client keeps the
+    <b>full, unedited history</b> — the API doesn't mutate your <code>messages</code>. The response's
+    <code>applied_edits</code> reports what was cleared this turn.</p></details>
+    <details><summary>Q3 · Why set <code>clear_at_least</code>, and what does <code>keep</code> control?</summary>
+    <p class="answer"><code>clear_at_least</code> ensures each clear removes enough tokens to be worth the prompt-cache
+    invalidation the clear causes. <code>keep</code> sets how many recent tool use/result pairs to preserve (default
+    3) so the agent's immediate working context stays intact.</p></details>
+
+    <div class="pager">
+        <a href="3-3-summarization-compaction.html"><span class="k">← Back</span>3.3 · Summarization / Compaction</a>
+        <a class="next" href="3-5-memory-tool.html"><span class="k">Next →</span>3.5 · The Memory Tool / External Memory</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 3.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

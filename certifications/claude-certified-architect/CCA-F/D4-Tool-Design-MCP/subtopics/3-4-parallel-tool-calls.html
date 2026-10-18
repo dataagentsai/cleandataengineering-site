@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.4 Parallel Tool Calls &amp; Result Ordering · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 3 · Tool Results &amp; Error Handling</div>
+    <h1>3.4 · Parallel Tool Calls &amp; Result Ordering</h1>
+    <div class="tag">Many tools, one user turn</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> One assistant turn can hold several tool_use blocks</h2>
+    <p>By default (on by default for Claude 4 models), Claude can emit <strong>multiple <code>tool_use</code> blocks in
+    a single assistant turn</strong> — "check weather in SF <em>and</em> NYC and the time in both" becomes several
+    calls at once, with <code>stop_reason: "tool_use"</code>. You decide <em>how</em> to run them: concurrently
+    (<code>asyncio.gather</code>, <code>Promise.all</code>), sequentially, or a mix — the API doesn't prescribe an
+    execution order. What the API <strong>does</strong> require is how you return the results.</p>
+
+    <h2><span class="chip concept">CONCEPT</span> The one hard rule: all results, one user message</h2>
+    <p>Return <strong>one <code>tool_result</code> for every <code>tool_use</code> block, all together in the single
+    next <code>user</code> message.</strong> Each result is matched to its call by <code>tool_use_id</code>, so the
+    order of the results inside that message is <em>flexible</em> — but every call must have a result, and they must
+    all be in the same user turn.</p>
+    <div class="good">✅ Correct — one user message with all results:
+    <br><code>[ {assistant: [tool_use_1, tool_use_2]}, {user: [tool_result_1, tool_result_2]} ]</code></div>
+    <div class="bad">⚠️ Wrong — a separate user message per result:
+    <br><code>[ {assistant: [tool_use_1, tool_use_2]}, {user: [tool_result_1]}, {user: [tool_result_2]} ]</code>
+    <br>This isn't just untidy — splitting results across messages <strong>silently trains Claude to stop making
+    parallel calls</strong> in future turns.</div>
+    <div class="note">🔑 Order among results is by <code>tool_use_id</code>, not position — but <em>completeness</em>
+    and <em>single message</em> are mandatory. Miss a result and the request 400s (see 3.5).</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Ran them sequentially and one failed? Still return a result for the rest</h2>
+    <p>Execution strategy is yours, but the result contract is fixed. If you batch sequentially and stop on the first
+    failure — or a parallel call fails because its prerequisite hadn't finished — <strong>still return a
+    <code>tool_result</code> for every unrun call</strong>, marked <code>is_error: true</code> with a brief reason. Don't
+    drop it; a missing result breaks the turn.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Fan out, then converge into one user turn</h2>
+    <div class="mermaid">
+flowchart TD
+    A["assistant turn:<br/>tool_use A · tool_use B · tool_use C"] --> RUN{"Run them (your choice)"}
+    RUN -->|"concurrent / sequential / mixed"| EX["Execute A, B, C"]
+    EX --> ONE["ONE user message:<br/>tool_result A + B + C<br/>(matched by tool_use_id)"]
+    ONE --> NEXT["Claude continues"]
+    EX -.->|"a call failed / not run"| ERRR["Still include its result<br/>is_error: true"]
+    ERRR --> ONE
+    SPLIT["❌ separate user msg per result"] -.->|"trains Claude to<br/>stop parallelizing"| BAD["🔴 parallel use decays"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class ONE ok; class BAD bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Collect every result into a single user message</h2>
+<pre><span class="cm"># Claude's turn held several tool_use blocks.</span>
+tool_uses = [b <span class="kw">for</span> b <span class="kw">in</span> response.content <span class="kw">if</span> b.type == <span class="st">"tool_use"</span>]
+
+tool_results = []
+<span class="kw">for</span> tu <span class="kw">in</span> tool_uses:
+    <span class="kw">try</span>:
+        out = <span class="fn">run_tool</span>(tu.name, tu.input)   <span class="cm"># run concurrently if you prefer</span>
+        tool_results.append({ <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+                              <span class="st">"tool_use_id"</span>: tu.id, <span class="st">"content"</span>: out })
+    <span class="kw">except</span> ToolError <span class="kw">as</span> e:
+        <span class="cm"># Still return a result for the failed/unrun call.</span>
+        tool_results.append({ <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+                              <span class="st">"tool_use_id"</span>: tu.id,
+                              <span class="st">"content"</span>: <span class="fn">str</span>(e), <span class="st">"is_error"</span>: <span class="kw">True</span> })
+
+messages.append({ <span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: response.content })
+messages.append({ <span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: tool_results })   <span class="cm"># ALL results, ONE message</span></pre>
+
+    <p>The parallel-results user message on the wire:</p>
+<pre>{ <span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: [
+    { <span class="st">"type"</span>: <span class="st">"tool_result"</span>, <span class="st">"tool_use_id"</span>: <span class="st">"toolu_01"</span>, <span class="st">"content"</span>: <span class="st">"SF: 68F, partly cloudy"</span> },
+    { <span class="st">"type"</span>: <span class="st">"tool_result"</span>, <span class="st">"tool_use_id"</span>: <span class="st">"toolu_02"</span>, <span class="st">"content"</span>: <span class="st">"NYC: 45F, clear"</span> },
+    { <span class="st">"type"</span>: <span class="st">"tool_result"</span>, <span class="st">"tool_use_id"</span>: <span class="st">"toolu_03"</span>,
+      <span class="st">"is_error"</span>: <span class="kw">true</span>, <span class="st">"content"</span>: <span class="st">"Not executed: get_time timed out."</span> }
+] }</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Parallel vs. serial execution (your side)</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Run in parallel</h4>
+            <ul><li>Lowest latency for independent, read-only calls</li>
+            <li>Fewer round trips to Claude</li></ul></div>
+        <div class="con"><h4>⚙️ Run sequentially</h4>
+            <ul><li>Right when calls share state or have ordering deps</li>
+            <li>Stop-on-first-failure is a valid strategy…</li>
+            <li>…but you still return a result for every call</li></ul></div>
+    </div>
+    <div class="good">Either way, the <em>result</em> contract is identical: one result per call, all in one user
+    message. Execution order is a performance choice; the message shape is not.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Sending each result in its own user message. → Split results
+    <b>silently train Claude to stop parallelizing</b>, and can 400. Put <b>all</b> results in <b>one</b> user message.</div>
+    <div class="trap"><b>Trap:</b> Dropping the result for a call you didn't run. → Every <code>tool_use</code> needs a
+    matching <code>tool_result</code>; return <code>is_error: true</code> for skipped/failed calls, don't omit them.</div>
+    <div class="trap"><b>Trap:</b> Thinking result order must mirror call order. → Results are matched by
+    <code>tool_use_id</code>, so ordering is flexible — completeness and single-message are what matter.</div>
+    <div class="trap"><b>Trap:</b> Reaching for a top-level "no parallel" flag. → It's
+    <code>disable_parallel_tool_use: true</code> <b>inside <code>tool_choice</code></b>, not a top-level request
+    parameter.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Claude emits three <code>tool_use</code> blocks in one turn. How many user messages do you send back, and how many results?</summary>
+    <p class="answer"><b>One</b> user message containing <b>three</b> <code>tool_result</code> blocks — one per call,
+    matched by <code>tool_use_id</code>. Splitting them across messages degrades future parallel tool use and risks a
+    400.</p></details>
+    <details><summary>Q2 · You ran the batch sequentially and call #2 failed, so you skipped #3. What goes in the reply?</summary>
+    <p class="answer">Results for <b>all three</b>: the real output for #1, an <code>is_error: true</code> result for
+    #2, and an <code>is_error: true</code> result for #3 (<code>"Not executed: preceding call failed."</code>). Never
+    omit a call's result.</p></details>
+    <details><summary>Q3 · How do you turn parallel tool use off, and where does the flag live?</summary>
+    <p class="answer">Set <code>disable_parallel_tool_use: true</code> <b>inside the <code>tool_choice</code> object</b>.
+    With <code>type: "auto"</code> it caps Claude at one tool call per turn; with <code>any</code>/<code>tool</code> it
+    forces exactly one.</p></details>
+
+    <div class="pager">
+        <a href="3-3-large-results-truncation.html"><span class="k">← Back</span>3.3 · Large / Structured Results &amp; Truncation</a>
+        <a class="next" href="3-5-contract-failures.html"><span class="k">Next →</span>3.5 · Tool-Result Contract Failures (400s)</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 3.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

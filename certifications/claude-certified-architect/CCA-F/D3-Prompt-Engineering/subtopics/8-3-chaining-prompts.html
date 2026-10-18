@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.3 Chaining Complex Prompts · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 8 · Reliability, Hallucination &amp; Iteration</div>
+    <h1>8.3 · Chaining Complex Prompts</h1>
+    <div class="tag">Decompose into linked steps</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> One hard prompt → a sequence of simple ones</h2>
+    <p><strong>Prompt chaining</strong> is breaking a complex task into a sequence of simpler subtasks, where each
+    prompt is a <em>separate API call</em> and <strong>each step's output feeds the next step's input</strong>.
+    The alternative — cramming everything into one giant prompt ("summarize, then fact-check, then translate, then
+    format") — forces the model to juggle every requirement at once, and quality degrades as instructions compete
+    for attention.</p>
+
+    <div class="bad">❌ One-shot mega-prompt: "Read these 12 reports, extract risks, rank them, draft an email,
+    and translate it to French." → Errors compound silently; you can't tell which sub-step failed.</div>
+    <div class="good">✅ Chain: extract risks → rank risks → draft email from the ranked list → translate the draft.
+    Each step is small, inspectable, and independently fixable.</div>
+
+    <p>Anthropic's guidance is nuanced for current models: with adaptive thinking and subagent orchestration,
+    Claude handles much multi-step reasoning <em>internally</em>. <strong>Explicit</strong> chaining (separate API
+    calls) is still valuable when you need to <strong>inspect intermediate outputs</strong> or
+    <strong>enforce a specific pipeline structure</strong> — logging, evaluating, or branching at each hop.</p>
+
+    <h2><span class="chip concept">CONCEPT</span> Why chains are more reliable and debuggable</h2>
+    <table>
+        <tr><th>Property</th><th>One mega-prompt</th><th>Chained prompts</th></tr>
+        <tr><td>Accuracy</td><td>Requirements compete; each is done "okay"</td><td>Full attention per subtask → higher quality</td></tr>
+        <tr><td>Debuggability</td><td>A wrong final answer — but <em>which</em> step?</td><td>Inspect each step's output; isolate the failing hop</td></tr>
+        <tr><td>Traceability</td><td>One opaque call</td><td>Log / evaluate / branch at any point</td></tr>
+        <tr><td>Reuse</td><td>Monolithic, hard to repurpose</td><td>Steps recombine into new pipelines</td></tr>
+    </table>
+    <p>The most common chaining pattern is <strong>self-correction</strong>: <em>generate a draft → have Claude
+    review it against criteria → have Claude refine based on the review.</em> Because each step is a separate call,
+    you can capture and gate on the review before spending tokens on the refinement.</p>
+    <div class="note">🔑 Hand results between steps with <strong>XML tags</strong> — pass the previous output back
+    as, e.g., <code>&lt;draft&gt;…&lt;/draft&gt;</code> so the next prompt knows exactly what it's operating on.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The self-correction chain</h2>
+    <div class="mermaid">
+flowchart LR
+    IN["Task + input"] --> S1["Step 1: DRAFT<br/>generate first pass"]
+    S1 -->|"&lt;draft&gt; … &lt;/draft&gt;"| S2["Step 2: REVIEW<br/>check draft vs. criteria"]
+    S2 -->|"&lt;feedback&gt; … &lt;/feedback&gt;"| S3["Step 3: REFINE<br/>apply the review"]
+    S3 --> OUT["🟢 Final output"]
+    S2 -.->|"inspect / log /<br/>branch here"| DBG["🟠 Human or eval gate"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class OUT ok; class DBG gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A three-step chain in code</h2>
+    <p>Each step is its own <code>messages.create</code> call; the output of one is interpolated into the next,
+    wrapped in XML tags. You can inspect, log, or gate between any two hops.</p>
+<pre><span class="kw">import</span> anthropic
+client = anthropic.<span class="fn">Anthropic</span>()
+
+<span class="kw">def</span> <span class="fn">step</span>(prompt):
+    r = client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>,
+        max_tokens=<span class="cm">2048</span>, messages=[{<span class="st">"role"</span>:<span class="st">"user"</span>,<span class="st">"content"</span>:prompt}])
+    <span class="kw">return</span> <span class="fn">next</span>(b.text <span class="kw">for</span> b <span class="kw">in</span> r.content <span class="kw">if</span> b.type == <span class="st">"text"</span>)
+
+<span class="cm"># Step 1 — DRAFT</span>
+draft = <span class="fn">step</span>(<span class="st">f"Draft a product-launch email from these notes:\n{notes}"</span>)
+
+<span class="cm"># Step 2 — REVIEW (feeds on step 1's output, wrapped in XML)</span>
+feedback = <span class="fn">step</span>(<span class="st">f"Review this draft for tone, clarity, and factual accuracy. "</span>
+                <span class="st">f"List concrete fixes.\n&lt;draft&gt;{draft}&lt;/draft&gt;"</span>)
+
+<span class="cm"># --- inspect / log / gate here before spending tokens on step 3 ---</span>
+
+<span class="cm"># Step 3 — REFINE (feeds on both prior outputs)</span>
+final = <span class="fn">step</span>(<span class="st">f"Rewrite the draft applying every fix.\n"</span>
+             <span class="st">f"&lt;draft&gt;{draft}&lt;/draft&gt;\n&lt;feedback&gt;{feedback}&lt;/feedback&gt;"</span>)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Explicit chain vs. one call (or internal reasoning)</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Explicit prompt chain</h4>
+            <ul><li>Inspectable intermediate outputs — easy to debug</li>
+            <li>Enforces a fixed pipeline; gate/branch per step</li>
+            <li>Higher accuracy on genuinely multi-stage tasks</li></ul></div>
+        <div class="con"><h4>⚠️ Cost of chaining</h4>
+            <ul><li>More API calls → more latency and tokens</li>
+            <li>Orchestration code to write and maintain</li>
+            <li>Often unnecessary — adaptive thinking handles many multi-step tasks in one call</li></ul></div>
+    </div>
+    <div class="good">Chain explicitly when you need to <em>see</em> or <em>gate</em> the middle; let a single call
+    with adaptive thinking handle internal multi-step reasoning when you don't.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Always chain multi-step tasks into separate calls." → Not always — with
+    adaptive thinking Claude does much multi-step reasoning internally. Chain <b>when you need to inspect
+    intermediate outputs or enforce a pipeline</b>, not reflexively.</div>
+    <div class="trap"><b>Trap:</b> Confusing prompt chaining with tool use / agents. → Chaining is
+    <b>you</b> orchestrating a fixed sequence of prompts where each output feeds the next. Agentic loops let the
+    <em>model</em> decide the next action. Different control locus.</div>
+    <div class="trap"><b>Trap:</b> Passing prior output as a raw blob. → Wrap hand-offs in <b>XML tags</b>
+    (<code>&lt;draft&gt;</code>, <code>&lt;feedback&gt;</code>) so the next step cleanly separates the carried
+    content from its new instruction.</div>
+    <div class="trap"><b>Trap:</b> Thinking chaining's only benefit is accuracy. → Its biggest practical win is
+    <b>debuggability</b> — a monolithic prompt fails opaquely; a chain tells you exactly which step broke.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A single prompt that summarizes, fact-checks, and translates produces mediocre results. Why does splitting it into three calls help?</summary>
+    <p class="answer">Each subtask gets Claude's full attention instead of competing with the others, so quality per
+    step rises. Just as important, you can <b>inspect each intermediate output</b> and see exactly which step
+    (summary, check, or translation) is failing — impossible with one opaque call.</p></details>
+    <details><summary>Q2 · Describe the self-correction chain and why each step is a separate API call.</summary>
+    <p class="answer"><b>Draft → review against criteria → refine from the review.</b> Keeping the steps as separate
+    calls lets you log, evaluate, or branch at any point — e.g. gate on the review before paying for the refine
+    step, or loop the review until it passes.</p></details>
+    <details><summary>Q3 · When is explicit chaining <em>not</em> worth it on current models?</summary>
+    <p class="answer">When the multi-step reasoning is internal and you don't need to see or enforce the
+    intermediate structure — adaptive thinking and subagent orchestration handle it in one call, saving the extra
+    latency, tokens, and orchestration code that explicit chaining adds.</p></details>
+
+    <div class="pager">
+        <a href="8-2-grounding-citations.html"><span class="k">← Back</span>8.2 · Grounding &amp; Citations</a>
+        <a class="next" href="8-4-evaluating-iterating.html"><span class="k">Next →</span>8.4 · Evaluating &amp; Iterating</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 8.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

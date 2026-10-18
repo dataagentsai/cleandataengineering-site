@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.4 Rate Limits &amp; Handling 429 · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 5 · Reliability: Errors &amp; Retries</div>
+    <h1>5.4 · Rate Limits &amp; Handling 429</h1>
+    <div class="tag">RPM · ITPM · OTPM</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Three limits, measured per minute, per model</h2>
+    <p>The Messages API meters your organization on <strong>three independent limits</strong>, each measured per
+    minute and enforced <strong>separately for each model class</strong>:</p>
+    <table>
+        <tr><th>Limit</th><th>Counts</th><th>Exceed it →</th></tr>
+        <tr><td><strong>RPM</strong> — requests per minute</td><td>Number of API calls</td><td rowspan="3">429 <code>rate_limit_error</code> naming which limit tripped, with a <code>retry-after</code> header</td></tr>
+        <tr><td><strong>ITPM</strong> — input tokens per minute</td><td>Uncached input tokens (<code>input_tokens</code> + <code>cache_creation_input_tokens</code>)</td></tr>
+        <tr><td><strong>OTPM</strong> — output tokens per minute</td><td>Actual generated output tokens, counted in real time</td></tr>
+    </table>
+    <p>You hit a 429 the moment <em>any one</em> of the three trips. Because limits are per model, you can run
+    different models up to their respective ceilings at the same time.</p>
+
+    <div class="note">🔑 On most models, <code>cache_read_input_tokens</code> do <strong>NOT</strong> count toward
+    ITPM — cached prefix tokens are effectively free against your rate limit. A high cache-hit rate raises your
+    effective input throughput far above the raw ITPM number. And <code>max_tokens</code> does not factor into
+    OTPM — only tokens actually generated count, so a generous <code>max_tokens</code> carries no rate-limit penalty.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Token bucket — continuous, not a fixed reset</h2>
+    <p>Limits use a <strong>token-bucket algorithm</strong>: your capacity is <em>continuously replenished</em> up
+    toward your maximum, rather than resetting all at once on a clock boundary. So you don't get a full budget at
+    the top of each minute — capacity trickles back steadily. This is why short bursts can trip a 429 even when your
+    per-minute average is under the limit (a 60 RPM ceiling behaves roughly like 1 request/second). Your
+    <strong>usage tier</strong> — Start, Build, Scale, or Custom — sets the actual numbers; organizations start on a
+    tier and can move up over time.</p>
+
+    <div class="warn">⚠️ A sharp usage spike can also trigger 429s from <em>acceleration limits</em>, separate from
+    your steady-state ceiling. Ramp traffic up gradually and keep usage patterns consistent.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Read the <code>anthropic-ratelimit-*</code> headers</h2>
+    <p>Every response carries headers so you can steer <em>before</em> hitting a wall. Watch the
+    <code>*-remaining</code> values and slow down as they approach zero; read <code>*-reset</code> (RFC 3339
+    timestamps) to know when capacity returns.</p>
+    <table>
+        <tr><th>Header</th><th>Tells you</th></tr>
+        <tr><td><code>retry-after</code></td><td>Seconds to wait after a 429 before retrying</td></tr>
+        <tr><td><code>anthropic-ratelimit-requests-limit</code> / <code>-remaining</code> / <code>-reset</code></td><td>Your RPM ceiling, requests left, and reset time</td></tr>
+        <tr><td><code>anthropic-ratelimit-input-tokens-limit</code> / <code>-remaining</code> / <code>-reset</code></td><td>ITPM ceiling, input tokens left, reset time</td></tr>
+        <tr><td><code>anthropic-ratelimit-output-tokens-limit</code> / <code>-remaining</code> / <code>-reset</code></td><td>OTPM ceiling, output tokens left, reset time</td></tr>
+        <tr><td><code>anthropic-ratelimit-tokens-limit</code> / <code>-remaining</code> / <code>-reset</code></td><td>Combined view of the most restrictive token limit in effect</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Which ceiling did I hit?</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Send request"] --> B{"429 rate_limit_error?"}
+    B -->|"no"| OK["🟢 Proceed"]
+    B -->|"yes"| W["Read retry-after"]
+    W --> R{"Which limit? (error msg)"}
+    R -->|"RPM"| F["🟠 Fewer calls:<br/>batch / dedupe"]
+    R -->|"ITPM"| I["🟠 Fewer input tokens:<br/>prompt caching"]
+    R -->|"OTPM"| O["🟠 Fewer output tokens:<br/>trim max_tokens / responses"]
+    F --> RETRY["Wait retry-after,<br/>retry w/ backoff"]
+    I --> RETRY
+    O --> RETRY
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class OK ok; class RETRY ok; class F gate; class I gate; class O gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> React to a 429 using the headers</h2>
+    <p>Honor <code>retry-after</code>, and proactively throttle when <code>remaining</code> gets low.</p>
+<pre><span class="kw">import</span> anthropic
+
+<span class="kw">try</span>:
+    resp = client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+                                   messages=[{<span class="st">"role"</span>:<span class="st">"user"</span>,<span class="st">"content"</span>:<span class="st">"…"</span>}])
+    h = resp.<span class="fn">_request_id</span>  <span class="cm"># (headers via with_raw_response)</span>
+<span class="kw">except</span> anthropic.RateLimitError <span class="kw">as</span> e:
+    hdrs = e.response.headers
+    wait = <span class="fn">int</span>(hdrs.get(<span class="st">"retry-after"</span>, <span class="st">"60"</span>))       <span class="cm"># server-told wait</span>
+    <span class="fn">print</span>(hdrs.get(<span class="st">"anthropic-ratelimit-input-tokens-remaining"</span>))
+    <span class="fn">backoff_and_retry</span>(wait)                       <span class="cm"># wait, then retry (5.3)</span>
+
+<span class="cm"># Proactive: read remaining from a good response and slow down early</span>
+raw = client.messages.with_raw_response.<span class="fn">create</span>(...)
+rem = <span class="fn">int</span>(raw.headers.get(<span class="st">"anthropic-ratelimit-requests-remaining"</span>, <span class="st">"999"</span>))
+<span class="kw">if</span> rem &lt; <span class="st">5</span>:
+    <span class="fn">throttle</span>()                                    <span class="cm"># ease off before the 429</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> React to 429 vs. steer by headers</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Read headers + honor retry-after</h4>
+            <ul><li>Throttle before the 429 using <code>*-remaining</code></li>
+            <li><code>retry-after</code> gives the exact recovery wait</li>
+            <li>Prompt caching cuts ITPM — cached reads don't count</li></ul></div>
+        <div class="con"><h4>⚠️ Only react after the 429 fires</h4>
+            <ul><li>Simpler — no header bookkeeping</li>
+            <li>But: you always take the failure first</li>
+            <li>Bursts against a token bucket trip limits you could have avoided</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "There's one tokens-per-minute limit." → There are <b>two</b> token limits — ITPM
+    (input) and OTPM (output) — plus RPM. Any one tripping returns a 429.</div>
+    <div class="trap"><b>Trap:</b> Thinking cached tokens count against ITPM. → On most models
+    <code>cache_read_input_tokens</code> do <b>not</b> count toward ITPM — prompt caching raises effective input throughput.</div>
+    <div class="trap"><b>Trap:</b> "Limits reset at the top of each minute." → They use a <b>token bucket</b> —
+    continuous replenishment, not a fixed reset. A burst can 429 even when your minute average is under the limit.</div>
+    <div class="trap"><b>Trap:</b> Setting a huge <code>max_tokens</code> and expecting an OTPM hit. → OTPM counts
+    <b>only tokens actually generated</b>; <code>max_tokens</code> doesn't factor in. No rate-limit penalty for headroom.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Name the three Messages API rate limits and what each counts.</summary>
+    <p class="answer"><b>RPM</b> = requests per minute; <b>ITPM</b> = uncached input tokens per minute; <b>OTPM</b> =
+    output tokens generated per minute. They're enforced separately per model; any one tripping returns a 429.</p></details>
+    <details><summary>Q2 · You keep getting 429s tagged ITPM. Cheapest fix without a tier bump?</summary>
+    <p class="answer"><b>Prompt caching.</b> Cached-read tokens don't count toward ITPM on most models, so caching a
+    large stable prefix (system prompt, docs, tool defs) sharply raises effective input throughput.</p></details>
+    <details><summary>Q3 · Which header tells you how long to wait after a 429, and which tells you when to throttle early?</summary>
+    <p class="answer"><code>retry-after</code> gives the seconds to wait after a 429. The
+    <code>anthropic-ratelimit-*-remaining</code> headers on good responses let you <b>throttle proactively</b>
+    before you hit the wall.</p></details>
+
+    <div class="pager">
+        <a href="5-3-backoff-jitter.html"><span class="k">← Back</span>5.3 · Exponential Backoff + Jitter</a>
+        <a class="next" href="5-5-timeouts-streaming.html"><span class="k">Next →</span>5.5 · Timeouts &amp; Long Requests</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 5.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

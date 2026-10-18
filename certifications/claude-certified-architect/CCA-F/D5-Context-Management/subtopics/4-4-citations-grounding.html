@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.4 Citations &amp; Grounding at Scale · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 4 · Long Context &amp; Retrieval</div>
+    <h1>4.4 · Citations &amp; Grounding at Scale</h1>
+    <div class="tag">Answers tied to sources</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The Citations feature ties claims to exact source spans</h2>
+    <p>Rather than <em>prompting</em> Claude to cite, the <strong>Citations feature</strong> makes the API return claims
+    already bound to their sources. You pass documents as <code>document</code> content blocks with
+    <code>"citations": {"enabled": true}</code>; the response splits into multiple <code>text</code> blocks, and each block
+    that makes a claim carries a <code>citations</code> array. Every citation includes the exact
+    <strong><code>cited_text</code></strong>, a <strong><code>document_index</code></strong>, a
+    <code>document_title</code>, and a location whose <strong>shape depends on the document type</strong>.</p>
+    <table>
+        <tr><th>Document type</th><th>Chunking</th><th>Citation <code>type</code></th><th>Location fields</th></tr>
+        <tr><td>Plain text</td><td>Sentence</td><td><code>char_location</code></td><td><code>start_char_index</code> / <code>end_char_index</code> (0-indexed, end exclusive)</td></tr>
+        <tr><td>PDF</td><td>Sentence</td><td><code>page_location</code></td><td><code>start_page_number</code> / <code>end_page_number</code> (1-indexed, end exclusive)</td></tr>
+        <tr><td>Custom content</td><td>None (blocks as-is)</td><td><code>content_block_location</code></td><td><code>start_block_index</code> / <code>end_block_index</code> (0-indexed, end exclusive)</td></tr>
+    </table>
+    <div class="note">🔑 <strong><code>cited_text</code> does not count toward output tokens</strong> — the model emits a
+    compact citation and the API fills in the quoted text. When passed back in later turns, it's also not counted toward
+    <em>input</em> tokens. All active models support citations <em>except Claude Haiku 3</em>.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The all-documents-or-none rule &amp; what's citable</h2>
+    <p>Two rules the exam loves:</p>
+    <ul>
+        <li><strong>All-or-none:</strong> "citations must be enabled on <em>all or none</em> of the documents within a
+        request." You can't cite one document and leave another uncited in the same call.</li>
+        <li><strong>Only <code>source</code> text is citable:</strong> the optional <code>title</code> and
+        <code>context</code> fields are passed to the model but are <em>never</em> cited from. Use <code>context</code> to
+        stash metadata (text or stringified JSON), since <code>title</code> is length-limited.</li>
+    </ul>
+    <div class="good">Custom content documents give you citation granularity control: your content blocks are used
+    <em>as-is</em> with no further chunking — ideal for bullet lists, transcripts, or citing whole RAG chunks. Plain text
+    and PDF are auto-chunked into sentences.</div>
+    <div class="bad"><b>Incompatible with structured outputs.</b> If you enable citations on any <code>document</code> (or
+    <code>search_result</code>) block <em>and</em> also pass <code>output_config.format</code> (or the deprecated
+    <code>output_format</code>), the API returns a <strong>400</strong>. Citations interleave citation blocks with text,
+    which the strict JSON-schema constraint of structured outputs cannot accommodate.</div>
+    <div class="note">Citations <em>do</em> work with prompt caching, token counting, and batch processing. Cache the
+    source documents with <code>cache_control</code> on the document block — the citation blocks themselves can't be cached.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Enable → chunk → cited response</h2>
+    <div class="mermaid">
+flowchart TD
+    A["document blocks<br/>citations.enabled = true<br/>(ALL or NONE)"] --> C{"Document type?"}
+    C -->|"plain text / PDF"| S["Auto-chunk into sentences"]
+    C -->|"custom content"| B["Blocks used as-is<br/>(no chunking)"]
+    S --> R["Response: text blocks;<br/>claim blocks carry a<br/>citations[ ] array"]
+    B --> R
+    R --> X["🔴 + output_config.format<br/>→ 400 error"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class S ok; class B ok; class R ok; class X bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Enabling citations and reading the spans</h2>
+    <p>Enable on each document, cache the source, then walk the response for cited text and locations.</p>
+<pre>resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: [
+        {<span class="st">"type"</span>: <span class="st">"document"</span>,
+         <span class="st">"source"</span>: {<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"media_type"</span>: <span class="st">"text/plain"</span>,
+                    <span class="st">"data"</span>: <span class="st">"The grass is green. The sky is blue."</span>},
+         <span class="st">"title"</span>: <span class="st">"My Doc"</span>, <span class="st">"context"</span>: <span class="st">"trustworthy source"</span>,  <span class="cm"># not cited from</span>
+         <span class="st">"citations"</span>: {<span class="st">"enabled"</span>: <span class="kw">True</span>},                <span class="cm"># ALL-or-none per request</span>
+         <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>}},          <span class="cm"># cache the source doc</span>
+        {<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: <span class="st">"What color is the grass and sky?"</span>},
+    ]}],
+    <span class="cm"># NOTE: do NOT add output_config.format here → citations + structured output = 400</span>
+)
+
+<span class="kw">for</span> block <span class="kw">in</span> resp.content:
+    <span class="kw">if</span> block.type == <span class="st">"text"</span> <span class="kw">and</span> <span class="fn">getattr</span>(block, <span class="st">"citations"</span>, <span class="kw">None</span>):
+        <span class="kw">for</span> c <span class="kw">in</span> block.citations:
+            <span class="cm"># c.type: char_location | page_location | content_block_location</span>
+            <span class="fn">print</span>(c.cited_text, <span class="st">"←"</span>, c.document_title, c.document_index)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Citations feature vs. prompting for quotes</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Citations feature</h4>
+            <ul><li>Spans are guaranteed valid pointers into your docs</li>
+            <li><code>cited_text</code> is free on output tokens</li>
+            <li>More likely to cite the most relevant quotes</li>
+            <li>Works with caching, token counting, batches</li></ul></div>
+        <div class="con"><h4>⚠️ Just prompting "please cite"</h4>
+            <ul><li>Quotes count as output tokens</li>
+            <li>No guarantee the quote actually exists in the source</li>
+            <li>No structured index back to char/page/block</li>
+            <li>But: composes with <code>output_config.format</code> (citations don't)</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Enable citations on the important documents only." → No — <b>all or none</b> per request.
+    Mixed enablement isn't allowed.</div>
+    <div class="trap"><b>Trap:</b> Combining citations with <code>output_config.format</code>. → Returns a <b>400</b>.
+    Citations and structured outputs are incompatible; pick one.</div>
+    <div class="trap"><b>Trap:</b> Expecting <code>cited_text</code> to inflate output-token cost, or citing from
+    <code>title</code>/<code>context</code>. → <code>cited_text</code> is <b>not</b> billed as output; and only the
+    document <code>source</code> is citable — <code>title</code>/<code>context</code> are never cited from.</div>
+    <div class="trap"><b>Trap:</b> Assuming one location shape for everything. → Plain text →
+    <code>char_location</code> (0-indexed chars), PDF → <code>page_location</code> (1-indexed pages), custom content →
+    <code>content_block_location</code> (0-indexed blocks). All end indices are exclusive.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A request cites one of three documents and leaves two uncited. Valid?</summary>
+    <p class="answer">No. Citations must be enabled on <b>all or none</b> of the documents within a request. Enable it on
+    all three, or none.</p></details>
+    <details><summary>Q2 · Why does adding <code>output_config.format</code> to a citations request fail?</summary>
+    <p class="answer">Citations and <b>structured outputs are incompatible</b> — the API returns a <b>400</b>. Citations
+    interleave citation blocks with the text output, which can't coexist with the strict JSON-schema constraint of
+    <code>output_config.format</code> (or the deprecated <code>output_format</code>).</p></details>
+    <details><summary>Q3 · What location fields come back for a PDF vs. plain text citation?</summary>
+    <p class="answer">PDF → <code>page_location</code> with <code>start_page_number</code>/<code>end_page_number</code>
+    (1-indexed, exclusive end). Plain text → <code>char_location</code> with
+    <code>start_char_index</code>/<code>end_char_index</code> (0-indexed, exclusive end). Custom content →
+    <code>content_block_location</code> with block indices. Every citation also carries <code>cited_text</code>,
+    <code>document_index</code>, and <code>document_title</code>.</p></details>
+
+    <div class="pager">
+        <a href="4-3-rag-vs-long-context.html"><span class="k">← Back</span>4.3 · RAG vs Long Context</a>
+        <a class="next" href="4-5-chunking-assembly.html"><span class="k">Next →</span>4.5 · Chunking &amp; Context Assembly</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 4.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

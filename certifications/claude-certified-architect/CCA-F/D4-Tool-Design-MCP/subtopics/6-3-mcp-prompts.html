@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.3 Prompts (Reusable Templates) · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design & MCP</a> › Cluster 6 · MCP Primitives</div>
+    <h1>6.3 · Prompts (Reusable Templates)</h1>
+    <div class="tag">User-controlled workflows</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Prompts are the <em>user-controlled</em> primitive</h2>
+    <p>An MCP server can expose <strong>prompt templates</strong> — pre-authored, structured message sequences that
+    a user deliberately invokes to kick off a workflow. The defining property: prompts are
+    <strong>user-controlled</strong>. The spec: prompts "are designed to be <strong>user-controlled</strong>,
+    meaning they are exposed from servers to clients with the intention of the user being able to explicitly select
+    them for use." Typically they surface as <strong>slash commands</strong> or menu items in the client UI.</p>
+
+    <p>A prompt can declare <code>arguments</code> to customize it. The client discovers prompts with
+    <code>prompts/list</code> and, when the user picks one and fills in arguments, fetches the filled-in messages
+    with <code>prompts/get</code>.</p>
+
+    <table>
+        <tr><th>Primitive</th><th>Who controls it</th><th>Typical trigger</th></tr>
+        <tr><td><strong>Prompt (6.3)</strong></td><td><strong>User</strong> — explicitly selects</td><td>Slash command / menu item</td></tr>
+        <tr><td>Tool (6.1)</td><td>Model — decides from context</td><td>Model emits a <code>tools/call</code></td></tr>
+        <tr><td>Resource (6.2)</td><td>Application — curates context</td><td>Picker / heuristic inclusion</td></tr>
+    </table>
+
+    <div class="note">🔑 The three primitives split cleanly by <b>who is in control</b>: Tools = model, Resources =
+    application, Prompts = user. This "who-controls-what" triad is the single most tested idea in this cluster.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Arguments and returned messages</h2>
+    <p><code>prompts/list</code> returns each prompt's <code>name</code>, optional <code>title</code>/
+    <code>description</code>, and an <code>arguments</code> list (each with <code>name</code>,
+    <code>description</code>, <code>required</code>). <code>prompts/get</code> then returns a
+    <code>messages</code> array — each message has a <code>role</code> (<code>user</code>/<code>assistant</code>)
+    and a <code>content</code> block (text, image, audio, or an <em>embedded resource</em>). So a prompt can weave
+    server-side resources directly into the conversation it seeds.</p>
+
+    <div class="good">A prompt is a <em>reusable template</em>: author it once, let users trigger it by name, and
+    parameterize it with arguments — e.g. <code>/code_review code=…</code>.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> List → user picks → get filled messages</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant User
+    participant Client
+    participant Server
+    Note over Client,Server: Discovery
+    Client->>Server: prompts/list
+    Server-->>Client: [code_review {arguments}, ...]
+    Note over User,Client: User-controlled selection
+    User->>Client: /code_review (fills arguments)
+    Note over Client,Server: Retrieval
+    Client->>Server: prompts/get {name, arguments}
+    Server-->>Client: {messages:[{role, content}]}
+    Note over Client,Server: (optional) list changes
+    Server--)Client: notifications/prompts/list_changed
+    classDef srv fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef usr fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class Server srv; class User usr;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A prompt definition and a get</h2>
+    <p>The server advertises <code>code_review</code> with one required argument; when the user runs it, the client
+    sends <code>prompts/get</code> and receives ready-to-send <code>messages</code>.</p>
+<pre><span class="cm">// prompts/list  → server advertises a reusable template</span>
+{
+  <span class="st">"name"</span>: <span class="st">"code_review"</span>,
+  <span class="st">"title"</span>: <span class="st">"Request Code Review"</span>,
+  <span class="st">"description"</span>: <span class="st">"Analyze code quality and suggest improvements"</span>,
+  <span class="st">"arguments"</span>: [
+    { <span class="st">"name"</span>: <span class="st">"code"</span>, <span class="st">"description"</span>: <span class="st">"The code to review"</span>, <span class="st">"required"</span>: <span class="kw">true</span> }
+  ]
+}
+
+<span class="cm">// prompts/get  → user selected it (e.g. a slash command) + gave arguments</span>
+{ <span class="st">"method"</span>: <span class="st">"prompts/get"</span>,
+  <span class="st">"params"</span>: { <span class="st">"name"</span>: <span class="st">"code_review"</span>,
+              <span class="st">"arguments"</span>: { <span class="st">"code"</span>: <span class="st">"def hello(): print('world')"</span> } } }
+
+<span class="cm">// result  → ready-to-send messages (role + content)</span>
+{ <span class="st">"messages"</span>: [ {
+    <span class="st">"role"</span>: <span class="st">"user"</span>,
+    <span class="st">"content"</span>: { <span class="st">"type"</span>: <span class="st">"text"</span>,
+                 <span class="st">"text"</span>: <span class="st">"Please review this Python code:\ndef hello(): print('world')"</span> }
+} ] }</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Prompt vs. baking the workflow into a tool</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Prompt (user-controlled template)</h4>
+            <ul><li>User explicitly triggers — clear intent, discoverable as a command</li>
+            <li>Reusable, parameterized, can embed resources</li>
+            <li>Great for standardized, repeatable workflows</li></ul></div>
+        <div class="con"><h4>⚠️ Forcing it into a tool</h4>
+            <ul><li>Model decides when to run — user loses the explicit trigger</li>
+            <li>Harder to surface as a menu/slash command</li>
+            <li>Tools are for <b>actions</b>, not for seeding a conversation template</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Prompts are model-controlled." → No. Prompts are <b>user-controlled</b> — the
+    user explicitly selects them, usually via a slash command or menu item.</div>
+    <div class="trap"><b>Trap:</b> Mixing up the methods. → Discover with <code>prompts/list</code>; fetch the
+    filled-in template with <code>prompts/get</code>. There is no "prompts/call."</div>
+    <div class="trap"><b>Trap:</b> "Prompts can't take input." → They can declare <code>arguments</code> (with
+    <code>required</code>), which the user supplies and <code>prompts/get</code> substitutes into the messages.</div>
+    <div class="trap"><b>Trap:</b> Assuming a prompt returns plain text only. → <code>prompts/get</code> returns a
+    <code>messages</code> array with roles, and content can include <b>embedded resources</b>, images, or audio.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Who controls prompts, and how do they usually appear in the UI?</summary>
+    <p class="answer">The <b>user</b> controls them — they explicitly select a prompt, most commonly surfaced as a
+    <b>slash command</b> or menu item. This contrasts with model-controlled tools and application-controlled
+    resources.</p></details>
+    <details><summary>Q2 · What does <code>prompts/get</code> return, and how is it parameterized?</summary>
+    <p class="answer">It returns a <code>messages</code> array (each with a <code>role</code> and
+    <code>content</code>). It's parameterized by the <code>arguments</code> the prompt declared; the user supplies
+    them and the server substitutes them into the messages.</p></details>
+    <details><summary>Q3 · Give the who-controls-what triad for the three primitives.</summary>
+    <p class="answer"><b>Tools → model-controlled</b> (LLM decides to call), <b>Resources → application-controlled</b>
+    (host app curates context), <b>Prompts → user-controlled</b> (user explicitly selects a template).</p></details>
+
+    <div class="pager">
+        <a href="6-2-mcp-resources.html"><span class="k">← Back</span>6.2 · Resources</a>
+        <a class="next" href="6-4-mcp-sampling.html"><span class="k">Next →</span>6.4 · Sampling</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 6.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

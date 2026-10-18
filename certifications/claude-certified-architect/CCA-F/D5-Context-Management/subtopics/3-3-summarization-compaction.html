@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.3 Summarization / Compaction · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 3 · Managing Long Conversations</div>
+    <h1>3.3 · Summarization / Compaction</h1>
+    <div class="tag">Compress instead of drop</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Replace old turns with an LLM-generated summary</h2>
+    <p>Truncation (3.2) throws early turns away. <strong>Summarization</strong> — also called
+    <strong>compaction</strong> — keeps their <em>meaning</em>: you feed the old turns to the model, ask it to write
+    a compact summary, then <strong>replace those turns with the summary</strong> in your <code>messages</code> list.
+    The transcript shrinks, but the <strong>gist survives</strong>: decisions made, facts established, the user's
+    goal, where the work stands.</p>
+
+    <div class="note">🔑 The trade at the heart of the technique: you spend an <em>extra LLM call</em> (and some
+    fidelity) to buy back <em>context that truncation would have lost</em>. Compression, not deletion.</div>
+
+    <p>A typical pattern: keep the last few turns verbatim (recency matters), summarize everything older into a
+    single block, and prepend that block so the model still "remembers" the arc of the conversation. You can do this
+    <strong>client-side</strong> (your own summarize-then-splice loop) or lean on Anthropic's <strong>server-side
+    compaction</strong>, a beta feature that automatically summarizes earlier context on the server as the
+    conversation approaches the context-window limit.</p>
+
+    <div class="good">Server-side compaction (beta header <code>compact-2026-01-12</code>, on Fable 5 / Opus 4.8 /
+    4.7 / 4.6 / Sonnet 5 / 4.6) returns a <strong>compaction block</strong> in the response. Critical: append the
+    full <code>response.content</code> — not just the text — back to <code>messages</code>. The API uses that block
+    to replace the compacted history on the next request; keep only the text and you silently lose the compaction
+    state.</p>
+
+    <h2><span class="chip concept">CONCEPT</span> The trade-off vs. raw truncation</h2>
+    <p>Summarization sits between "keep everything" (accurate but overflows) and "drop the oldest" (cheap but
+    forgets). Versus raw truncation:</p>
+    <table>
+        <tr><th></th><th>Truncation (3.2)</th><th>Summarization / Compaction (3.3)</th></tr>
+        <tr><td>Old context</td><td>Deleted — gone</td><td>Compressed — gist retained</td></tr>
+        <tr><td>Extra cost</td><td>None</td><td>An extra LLM call to summarize</td></tr>
+        <tr><td>Fidelity</td><td>Perfect for kept turns, zero for dropped</td><td>Lossy: details/exact wording can blur</td></tr>
+        <tr><td>Best when</td><td>Only recency matters</td><td>Early goals/decisions must survive</td></tr>
+    </table>
+
+    <div class="warn">⚠️ Summaries are <strong>lossy and can drift</strong>: exact numbers, names, or verbatim
+    requirements may get smoothed over or, worse, hallucinated. Anything that must be recalled <em>exactly</em> is
+    better written to durable external memory (3.5) than trusted to a prose summary. Summarizing also, like
+    truncation, rewrites the prompt prefix — so it invalidates prompt caching from the point where content changed.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Old turns collapse into one summary block</h2>
+    <div class="mermaid">
+flowchart TD
+    OLD["Turns 1…k<br/>(old history)"] -->|"feed to model:<br/>'summarize this'"| SUM["📝 Summary block<br/>decisions · facts · goal · state"]
+    SUM --> NEW["messages = [ summary ] + recent turns"]
+    RECENT["Turns k+1…n<br/>(kept verbatim)"] --> NEW
+    NEW --> SEND["Send: smaller transcript,<br/>gist preserved"]
+    OLD -.->|"contrast: truncation would<br/>DELETE turns 1…k"| DROP["🗑️ gist lost"]
+    classDef old fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef good fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class OLD old; class SUM,NEW,SEND,RECENT good; class DROP bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Client-side summarize-and-splice</h2>
+    <p>When the transcript gets big, summarize the old turns with a cheap call, then replace them with the summary
+    and keep the recent tail verbatim.</p>
+<pre><span class="cm"># Compress old turns into a summary; keep recent turns verbatim.</span>
+KEEP_RECENT = <span class="cm">6</span>
+
+<span class="kw">def</span> <span class="fn">compact</span>(messages):
+    <span class="kw">if</span> <span class="fn">len</span>(messages) &lt;= KEEP_RECENT:
+        <span class="kw">return</span> messages
+    old, recent = messages[:-KEEP_RECENT], messages[-KEEP_RECENT:]
+
+    summary = client.messages.<span class="fn">create</span>(
+        model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="cm">1024</span>,
+        system=<span class="st">"Summarize this conversation. Preserve decisions, facts, "</span>
+               <span class="st">"the user's goal, and open tasks. Be faithful; do not invent."</span>,
+        messages=old,
+    ).content[<span class="cm">0</span>].text
+
+    <span class="cm"># Replace the old turns with ONE summary block, keep the recent tail.</span>
+    <span class="kw">return</span> [
+        {<span class="st">"role"</span>: <span class="st">"user"</span>,
+         <span class="st">"content"</span>: <span class="st">f"[Summary of earlier conversation]\n{summary}"</span>},
+        *recent,
+    ]
+
+<span class="cm"># Server-side alternative (beta): let the API compact for you.</span>
+<span class="cm"># resp = client.beta.messages.create(</span>
+<span class="cm">#     betas=["compact-2026-01-12"], model="claude-opus-4-8", max_tokens=1024,</span>
+<span class="cm">#     context_management={"edits": [{"type": "compact_20260112"}]}, messages=messages)</span>
+<span class="cm"># messages.append({"role": "assistant", "content": resp.content})  # keep the compaction block!</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Compress vs. drop vs. keep</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Summarization / compaction</h4>
+            <ul><li>Keeps the gist of the whole conversation, not just the tail</li>
+            <li>Lets a session run far past the raw window limit</li>
+            <li>Server-side compaction automates it — no client bookkeeping</li></ul></div>
+        <div class="con"><h4>⚠️ What it costs</h4>
+            <ul><li>An extra model call (latency + tokens) to produce the summary</li>
+            <li>Lossy: exact details can blur or be hallucinated</li>
+            <li>Rewrites the prefix → invalidates prompt cache from that point</li></ul></div>
+    </div>
+    <div class="good">Pair it with external memory (3.5): compaction keeps the active context small, while memory
+    files hold the exact facts that must survive summarization intact.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Summarization and truncation are the same thing." → Truncation
+    <b>deletes</b> old turns; summarization <b>compresses</b> them into a block. One loses the gist, the other
+    preserves it at the cost of an extra call and some fidelity.</div>
+    <div class="trap"><b>Trap:</b> With server-side compaction, appending only the summary <em>text</em>. → You must
+    append the full <code>response.content</code> including the <b>compaction block</b>; the API needs it to replace
+    the compacted history next turn. Keep only the text and you lose the compaction state.</div>
+    <div class="trap"><b>Trap:</b> Trusting a summary for exact recall. → Summaries are lossy and can drift or
+    hallucinate. Store numbers, IDs, and verbatim requirements in <b>external memory</b> (3.5), not prose.</div>
+    <div class="trap"><b>Trap:</b> Assuming compaction is free of cache impact. → It rewrites the prefix, so it
+    <b>invalidates prompt caching</b> from the changed point onward — same as truncation.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · How does summarization differ from truncation, and what's the core trade-off?</summary>
+    <p class="answer">Truncation drops old turns; summarization replaces them with an LLM-generated summary that
+    preserves the gist (decisions, facts, goal, state). The trade-off: you spend an <b>extra model call</b> and
+    accept some <b>fidelity loss</b> in exchange for not forgetting early context.</p></details>
+    <details><summary>Q2 · With Anthropic's server-side compaction, what must you preserve on each turn?</summary>
+    <p class="answer">The full <code>response.content</code> — including the <b>compaction block</b> — must be
+    appended back to <code>messages</code>. The API uses that block to replace the compacted history on the next
+    request. Appending only the text string silently loses the compaction state.</p></details>
+    <details><summary>Q3 · Why isn't a summary a safe place for exact facts, and what fixes that?</summary>
+    <p class="answer">Summaries are lossy: exact numbers, names, and verbatim requirements can be smoothed over or
+    hallucinated. Write those to durable <b>external memory</b> (3.5) — files Claude reads back exactly — while
+    using compaction to keep the active transcript small.</p></details>
+
+    <div class="pager">
+        <a href="3-2-truncation-sliding-window.html"><span class="k">← Back</span>3.2 · Truncation / Sliding Window</a>
+        <a class="next" href="3-4-context-editing.html"><span class="k">Next →</span>3.4 · Context Editing (Clearing Tool Results)</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 3.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

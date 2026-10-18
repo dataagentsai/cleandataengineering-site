@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.6 Human-in-the-Loop / Approval Gates · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 3 · Tool Use</div>
+    <h1>3.6 · Human-in-the-Loop / Approval Gates</h1>
+    <div class="tag">Intercept the tool_use before it runs — approve, deny, adapt</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The gate lives between request and execution</h2>
+    <p>Claude only <em>requests</em> a tool; <strong>your code decides whether to run it</strong>. That gap — after the
+    <code>tool_use</code> block, before you execute — is exactly where a human-in-the-loop gate belongs. For
+    side-effecting or irreversible actions (payments, deletes, emails, deploys), you pause, ask a human, and only then run
+    the tool or refuse it.</p>
+
+    <table>
+        <tr><th>Outcome</th><th>What your code does</th><th>What Claude sees back</th></tr>
+        <tr><td><strong>Approve</strong></td><td>Run the tool, capture output</td><td>A normal <code>tool_result</code> with the output</td></tr>
+        <tr><td><strong>Deny</strong></td><td>Skip execution</td><td>A <code>tool_result</code> explaining the denial (optionally <code>is_error: true</code>) so Claude adapts</td></tr>
+        <tr><td><strong>Auto-allow</strong></td><td>Read-only / safe tool → run without asking</td><td>Normal <code>tool_result</code></td></tr>
+    </table>
+
+    <div class="note">🔑 A gate requires the <strong>manual loop</strong> (3.5), not the Tool Runner — you must sit
+    <em>between</em> the <code>tool_use</code> and its execution. On denial, you still return a
+    <code>tool_result</code> for that <code>tool_use_id</code> (the 3.2 contract doesn't relax): a message like "denied by
+    operator" lets Claude choose another path instead of hanging.</div>
+
+    <div class="warn">Gate on the <strong>action's blast radius</strong>, not on model confidence. Side-effecting /
+    irreversible tools (write, delete, pay, send, deploy) get a gate; pure reads can auto-allow. This is the operational
+    half of tool safety — cross-reference <strong>5.4 (least-privilege / dangerous tools)</strong>.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The approval gate flow</h2>
+    <div class="mermaid">
+flowchart TD
+    A([tool_use block]) --> B{Side-effecting /<br/>irreversible?}
+    B -->|No · read-only| R[run tool]
+    B -->|Yes| G{Human approves?}
+    G -->|Approve| R
+    G -->|Deny| D["tool_result:<br/>'denied' (is_error)"]
+    R --> RES["tool_result: output"]
+    RES --> L([append · loop])
+    D --> L
+    classDef safe fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#fff3cd,stroke:#ffc107,color:#856404;
+    classDef deny fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class R,RES safe; class G gate; class D deny;
+    </div>
+
+    <h2><span class="chip code">CODE</span> An approval gate around tool execution</h2>
+    <p>Manual loop: classify each <code>tool_use</code>, require approval for dangerous ones, and always return a matching
+    <code>tool_result</code> — even on denial.</p>
+<pre>DANGEROUS = {<span class="st">"send_payment"</span>, <span class="st">"delete_record"</span>, <span class="st">"send_email"</span>}
+
+messages = [{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: user_request}]
+<span class="kw">while</span> True:
+    resp = client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+                                  tools=TOOLS, messages=messages)
+    <span class="kw">if</span> resp.stop_reason != <span class="st">"tool_use"</span>:
+        <span class="kw">break</span>
+    messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content})
+
+    results = []
+    <span class="kw">for</span> tu <span class="kw">in</span> [b <span class="kw">for</span> b <span class="kw">in</span> resp.content <span class="kw">if</span> b.type == <span class="st">"tool_use"</span>]:
+        <span class="cm"># --- THE GATE: intercept BEFORE executing ---</span>
+        <span class="kw">if</span> tu.name <span class="kw">in</span> DANGEROUS <span class="kw">and</span> <span class="kw">not</span> <span class="fn">human_approves</span>(tu.name, tu.input):
+            results.<span class="fn">append</span>({
+                <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+                <span class="st">"tool_use_id"</span>: tu.id,        <span class="cm"># still MUST answer the id</span>
+                <span class="st">"content"</span>: <span class="st">"Denied by operator: action not approved. "</span>
+                           <span class="st">"Propose a safer alternative or ask the user."</span>,
+                <span class="st">"is_error"</span>: True,           <span class="cm"># Claude adapts instead of assuming success</span>
+            })
+            <span class="kw">continue</span>
+        <span class="cm"># approved (or safe/read-only) → actually run it</span>
+        out = <span class="fn">run_tool</span>(tu.name, tu.input)
+        results.<span class="fn">append</span>({<span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+                        <span class="st">"tool_use_id"</span>: tu.id, <span class="st">"content"</span>: out})
+
+    messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: results})</pre>
+
+    <div class="good">Because denial returns a real <code>tool_result</code> (not silence), Claude stays in a valid
+    conversation and can re-plan — e.g. ask the user for confirmation or pick a non-destructive tool.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> On denial, sending nothing back. → You <b>must</b> still return a
+    <code>tool_result</code> for that <code>tool_use_id</code> (an explanatory message, often
+    <code>is_error: true</code>). Silence breaks the 3.2 contract and Claude can't adapt.</div>
+    <div class="trap"><b>Trap:</b> Trying to gate with the Tool Runner. → The Runner executes tools for you; approval
+    gates need the <b>manual loop</b> so you can intercept before execution (3.5).</div>
+    <div class="trap"><b>Trap:</b> Relying on prompt instructions ("don't delete without asking") as the safety control.
+    → Prompts are advisory; the enforceable gate is <b>in your code</b>, at the execution boundary.</div>
+    <div class="trap"><b>Trap:</b> Gating everything, including reads. → Auto-allow safe read-only tools; reserve gates
+    for side-effecting / irreversible actions or you add latency and approval fatigue for no safety gain.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Where in the loop does the approval check go, and why there?</summary>
+    <p class="answer">Between receiving the <code>tool_use</code> block and calling <code>run_tool</code>. That's the only
+    point where you can still refuse before the side effect happens — Claude has only <em>requested</em> the action, not
+    performed it.</p></details>
+    <details><summary>Q2 · A human denies a <code>send_payment</code> call. What exactly goes back to Claude?</summary>
+    <p class="answer">A <code>tool_result</code> with the matching <code>tool_use_id</code>, an explanatory
+    <code>content</code> ("denied…"), and typically <code>"is_error": true</code>. That keeps the contract valid and lets
+    Claude propose an alternative instead of assuming the payment succeeded.</p></details>
+    <details><summary>Q3 · Which tools deserve a gate, and which should auto-allow?</summary>
+    <p class="answer">Gate <b>side-effecting / irreversible</b> tools (pay, delete, send, deploy). Auto-allow pure
+    <b>read-only</b> tools. Gate by blast radius, not by model confidence — this pairs with least-privilege design in
+    5.4.</p></details>
+
+    <div class="pager">
+        <a href="3-5-tool-runner-vs-manual-loop.html"><span class="k">← Prev</span>3.5 · Tool Runner vs. Manual Loop</a>
+        <a class="next" href="4-1-single-vs-multi-agent.html"><span class="k">Next →</span>4.1 · Single vs. Multi-Agent</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 3.6</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

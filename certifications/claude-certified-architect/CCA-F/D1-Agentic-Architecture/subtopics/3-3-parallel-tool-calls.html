@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.3 Parallel Tool Calls · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 3 · Tool Use</div>
+    <h1>3.3 · Parallel Tool Calls</h1>
+    <div class="tag">Multiple tool_use blocks in one turn — run all, return all</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> One assistant turn can request many tools at once</h2>
+    <p>When several independent tools are needed, Claude doesn't have to serialize them across round-trips. It can emit
+    <strong>multiple <code>tool_use</code> blocks in a single response</strong> — a fan-out. Your job is to run them all
+    (ideally concurrently) and return <strong>every</strong> result in <strong>one</strong> user turn, as required by the
+    <code>tool_result</code> contract (3.2).</p>
+
+    <table>
+        <tr><th>Aspect</th><th>Sequential (default per round-trip)</th><th>Parallel (fan-out)</th></tr>
+        <tr><td>tool_use blocks per turn</td><td>One at a time</td><td>Many in one response</td></tr>
+        <tr><td>Round-trips for N independent calls</td><td>N</td><td>1</td></tr>
+        <tr><td>Latency</td><td>Sum of all calls</td><td>Max of the calls (if run concurrently)</td></tr>
+        <tr><td>Ordering guarantee</td><td>Strict, deterministic</td><td>No inter-call ordering</td></tr>
+    </table>
+
+    <div class="note">🔑 To force <strong>at most one</strong> tool per response, add
+    <code>"disable_parallel_tool_use": true</code> to <code>tool_choice</code>. That trades throughput for strict,
+    one-at-a-time determinism.</div>
+
+    <div class="warn">All results still go back in <strong>one user message</strong> with matching
+    <code>tool_use_id</code>s. Parallel execution changes <em>how you run</em> the tools, not the contract for
+    <em>returning</em> them.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Fan-out, then converge</h2>
+    <div class="mermaid">
+flowchart TD
+    A([One assistant turn]) --> B["tool_use #1<br/>get_weather(Paris)"]
+    A --> C["tool_use #2<br/>get_weather(Tokyo)"]
+    A --> D["tool_use #3<br/>get_flights(...)"]
+    B --> R1["tool_result id#1"]
+    C --> R2["tool_result id#2"]
+    D --> R3["tool_result id#3"]
+    R1 --> U["🔵 ONE user turn<br/>all 3 tool_result blocks"]
+    R2 --> U
+    R3 --> U
+    U --> N([Next API call])
+    classDef fan fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    classDef conv fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    class B,C,D fan; class U conv;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Loop over every tool_use block</h2>
+    <p>Collect all <code>tool_use</code> blocks, run them (here concurrently), and return all results in one user turn.</p>
+<pre><span class="kw">from</span> concurrent.futures <span class="kw">import</span> ThreadPoolExecutor
+
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=TOOLS, messages=messages,
+)
+messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content})
+
+<span class="cm"># Claude may return MANY tool_use blocks in this one turn.</span>
+tool_uses = [b <span class="kw">for</span> b <span class="kw">in</span> resp.content <span class="kw">if</span> b.type == <span class="st">"tool_use"</span>]
+
+<span class="cm"># Run them concurrently — independent calls need not be serialized.</span>
+<span class="kw">with</span> ThreadPoolExecutor() <span class="kw">as</span> pool:
+    outs = <span class="fn">list</span>(pool.<span class="fn">map</span>(<span class="kw">lambda</span> tu: <span class="fn">run_tool</span>(tu.name, tu.input), tool_uses))
+
+<span class="cm"># Return ALL results in ONE user turn, ids matched to each tool_use.</span>
+results = [{
+    <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+    <span class="st">"tool_use_id"</span>: tu.id,
+    <span class="st">"content"</span>: out,
+} <span class="kw">for</span> tu, out <span class="kw">in</span> <span class="fn">zip</span>(tool_uses, outs)]
+
+messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: results})
+
+<span class="cm"># --- Force sequential (≤1 tool per response) when ordering matters ---</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>, tools=TOOLS, messages=messages,
+    tool_choice={<span class="st">"type"</span>: <span class="st">"auto"</span>, <span class="st">"disable_parallel_tool_use"</span>: True},
+)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Parallel speed vs. deterministic ordering</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Parallel fan-out</h4>
+            <ul><li>Fewer round-trips → lower wall-clock latency</li>
+            <li>Great for independent reads (multiple lookups, searches)</li>
+            <li>Model batches naturally when calls don't depend on each other</li></ul></div>
+        <div class="con"><h4>⚠️ Costs / when to disable</h4>
+            <ul><li>No ordering between calls — bad if one write must precede another</li>
+            <li>Harder to reason about for side-effecting / stateful tools</li>
+            <li>Set <code>disable_parallel_tool_use: true</code> for strict, one-at-a-time steps</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb: allow parallel for <strong>independent reads</strong>; disable it when tools have
+    <strong>ordering or side-effect dependencies</strong> (do X, then decide Y based on X's result).</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Assuming one <code>tool_use</code> block per response. → Claude can return
+    <b>several</b> in one turn; loop over <em>all</em> of them or you'll drop a call and 400 on the next request.</div>
+    <div class="trap"><b>Trap:</b> Returning parallel results in multiple user messages. → Still <b>one</b> user turn with
+    all <code>tool_result</code> blocks; the 3.2 contract doesn't relax for parallel calls.</div>
+    <div class="trap"><b>Trap:</b> Relying on inter-call order under parallel use. → There is no ordering guarantee
+    between parallel tool_use blocks. If order matters, use <code>disable_parallel_tool_use: true</code>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Claude returns 3 tool_use blocks but you only handle <code>content[0]</code>. What happens next call?</summary>
+    <p class="answer">HTTP 400 — the next user turn is missing <code>tool_result</code>s for two of the three
+    <code>tool_use</code> ids. Every tool_use in an assistant turn must be answered in the following single user turn.</p></details>
+    <details><summary>Q2 · You need "book the flight, then charge the card in that order." Parallel or not?</summary>
+    <p class="answer">Not parallel — those have an ordering/side-effect dependency. Set
+    <code>tool_choice={"type":"auto","disable_parallel_tool_use": true}</code> so Claude issues at most one tool per
+    response and you keep strict sequencing.</p></details>
+    <details><summary>Q3 · Three independent city-weather lookups. Best pattern for latency?</summary>
+    <p class="answer">Let Claude fan out three <code>tool_use</code> blocks in one turn, run them concurrently
+    (e.g. a thread pool), and return all three results in one user turn — one round-trip instead of three.</p></details>
+
+    <div class="pager">
+        <a href="3-2-tool-result-contract.html"><span class="k">← Prev</span>3.2 · The tool_result Contract</a>
+        <a class="next" href="3-4-tool-choice-control.html"><span class="k">Next →</span>3.4 · tool_choice as a Control Lever</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 3.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

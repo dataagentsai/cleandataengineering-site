@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.5 Testing & Debugging (MCP Inspector) · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design & MCP</a> › Cluster 7 · Building &amp; Consuming MCP Servers</div>
+    <h1>7.5 · Testing &amp; Debugging (MCP Inspector)</h1>
+    <div class="tag">Exercise a server directly</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Test the server in isolation before wiring it to a model</h2>
+    <p>The <strong>MCP Inspector</strong> is an interactive tool that connects straight to your server and lets you
+    exercise it without any LLM in the loop — list and call tools, browse resources, run prompts, and inspect the raw
+    JSON-RPC. Run it with <code>npx @modelcontextprotocol/inspector</code> (Node.js required). This is the fastest way
+    to answer "is it my <em>server</em> or my <em>integration</em>?" — if a tool works in the Inspector but fails
+    through Claude, the bug is in wiring/schema/description, not the server logic.</p>
+    <div class="good">In the Inspector: pick the <strong>Transport type</strong> (SSE / Streamable HTTP for remote,
+    or stdio for a local command), enter the URL or command, connect, then invoke each capability by hand and read the
+    exact request/response.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The Inspector also mints an OAuth token for testing</h2>
+    <p>For an OAuth-protected remote server, the Inspector walks you through obtaining an access token — the same one
+    the Messages API connector needs (7.3). Open <em>Auth Settings</em> → <strong>Quick OAuth Flow</strong> →
+    authorize in the browser → step through <em>OAuth Flow Progress</em> → copy the <code>access_token</code>. Drop it
+    into the connector's <code>authorization_token</code> or Claude Code and you're connected.</p>
+    <div class="note">🔑 General debugging beyond the Inspector: check the host's view with <code>/mcp</code> in
+    Claude Code (tool counts, connection status, re-auth), and read the <strong>server's own stderr logs</strong>.</div>
+    <div class="warn">⚠️ <strong>stdio logging trap:</strong> on a stdio server, <code>stdout</code> <em>is</em> the
+    JSON-RPC transport (7.1). Logging to stdout corrupts the stream and the host reports a broken/parse error. Always
+    log to <strong>stderr</strong>.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Isolate the layer that's failing</h2>
+    <div class="mermaid">
+flowchart TD
+    START["Tool fails through Claude"] --> INS{"Works in MCP Inspector?"}
+    INS -->|"no"| SERVER["🔴 Server bug<br/>logic / crash / bad schema<br/>→ read stderr logs"]
+    INS -->|"yes"| WIRE{"Server connected in host?"}
+    WIRE -->|"no / pending"| CONN["🟠 Connection or auth<br/>→ /mcp, OAuth, scope, type field"]
+    WIRE -->|"yes"| DESC["🔵 Model not calling it<br/>→ weak description / wrong primitive"]
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef net fill:#cce5ff,stroke:#4a90d9,color:#0b3d66;
+    class SERVER bad; class CONN gate; class DESC net;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Launch the Inspector and check host-side status</h2>
+    <p>Exercise the server directly, then confirm the host sees it.</p>
+<pre><span class="cm"># 1. Run the Inspector against your server</span>
+<span class="fn">npx</span> @modelcontextprotocol/inspector
+<span class="cm">#   Transport: stdio | SSE | Streamable HTTP</span>
+<span class="cm">#   stdio  → enter command, e.g.  uv run weather.py</span>
+<span class="cm">#   remote → enter URL,     e.g.  https://mcp.example.com/mcp</span>
+<span class="cm">#   Then: list tools/resources/prompts, call a tool, read raw JSON-RPC</span>
+
+<span class="cm"># 2. For an OAuth server: Auth Settings → Quick OAuth Flow</span>
+<span class="cm">#    → authorize → copy access_token → use as authorization_token (7.3)</span></pre>
+<pre><span class="cm"># 3. Confirm the HOST connected to it</span>
+claude mcp list          <span class="cm"># ✓ connected  /  ⏸ Pending approval  /  ✗ Rejected</span>
+claude mcp get weather   <span class="cm"># per-server config + status</span>
+<span class="cm"># inside a Claude Code session:</span>
+/mcp                     <span class="cm"># tool count per server, re-auth, health</span></pre>
+<pre><span class="cm"># stdio server logging — stderr ONLY (stdout is the transport)</span>
+<span class="cm"># Python</span>
+<span class="kw">import</span> sys
+<span class="fn">print</span>(<span class="st">"debug: forecast request received"</span>, file=sys.stderr)
+<span class="cm"># TypeScript</span>
+console.<span class="fn">error</span>(<span class="st">"debug: forecast request received"</span>);  <span class="cm">// console.log would corrupt stdio</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Inspector vs. testing through the model</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ MCP Inspector</h4>
+            <ul><li>No LLM cost or nondeterminism — you drive the calls</li>
+            <li>Sees raw JSON-RPC, exact schemas, exact errors</li>
+            <li>Isolates server bugs from integration/description bugs</li></ul></div>
+        <div class="con"><h4>⚠️ Only testing end-to-end via Claude</h4>
+            <ul><li>Confounds three failure layers (server, connection, model choice)</li>
+            <li>Model may not call the tool — masking a working server</li>
+            <li>Slower, costs tokens, harder to reproduce</li></ul></div>
+    </div>
+    <div class="good">Use the Inspector to prove the server is correct, then test through Claude to tune
+    <em>descriptions</em> (2.1) so the model calls the tool when it should.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Debugging only through Claude. → A working server can look broken if the model never
+    calls it, or a broken server can look like a "prompt problem." The <b>MCP Inspector</b> exercises the server
+    directly and isolates the failing layer.</div>
+    <div class="trap"><b>Trap:</b> Logging to stdout on a stdio server. → stdout is the JSON-RPC channel; log to
+    <b>stderr</b> (<code>console.error</code> / <code>print(..., file=sys.stderr)</code>) or you corrupt the transport.</div>
+    <div class="trap"><b>Trap:</b> Forgetting the Inspector can obtain an OAuth token. → Its <b>Quick OAuth Flow</b>
+    produces an <code>access_token</code> you can paste into the connector's <code>authorization_token</code> for
+    testing (7.3).</div>
+    <div class="trap"><b>Trap:</b> Ignoring host-side status. → <code>claude mcp list</code> / <code>claude mcp get</code>
+    and <code>/mcp</code> show whether a server is connected, pending approval, rejected, or needs re-auth — often the
+    real problem when a tool "doesn't exist."</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A tool fails through Claude. How do you tell whether the server or the integration is broken?</summary>
+    <p class="answer">Run the server in the <b>MCP Inspector</b> and call the tool directly. If it works there, the
+    server is fine and the problem is connection/auth or a weak description keeping the model from calling it; if it
+    fails there, it's a server bug — read the stderr logs.</p></details>
+    <details><summary>Q2 · Why must a stdio server log to stderr, not stdout?</summary>
+    <p class="answer">On stdio, <b>stdout is the JSON-RPC transport</b>. Any write to stdout that isn't a protocol
+    message corrupts the stream and breaks the connection. Logs go to stderr.</p></details>
+    <details><summary>Q3 · How can the MCP Inspector help you set up the connector's <code>authorization_token</code>?</summary>
+    <p class="answer">Its <b>Quick OAuth Flow</b> runs the browser authorization and yields an <code>access_token</code>.
+    Copy that into <code>authorization_token</code> in the Messages API connector (7.3) to test an authenticated remote
+    server.</p></details>
+
+    <div class="pager">
+        <a href="7-4-mcp-in-claude-code.html"><span class="k">← Back</span>7.4 · MCP in Claude Code / Desktop</a>
+        <a class="next" href="8-1-mcp-security-risks.html"><span class="k">Next →</span>8.1 · Security Risks</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 7.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

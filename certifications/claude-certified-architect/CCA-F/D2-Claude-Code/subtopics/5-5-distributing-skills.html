@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.5 Distributing Skills (Plugins) · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 5 · Skills</div>
+    <h1>5.5 · Distributing Skills (Plugins)</h1>
+    <div class="tag">Package &amp; share</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Where a skill lives decides who gets it</h2>
+    <p>Skills are discovered by <strong>location</strong>. The same <code>SKILL.md</code> reaches a different
+    audience depending on which folder it's in:</p>
+
+    <table>
+        <tr><th>Scope</th><th>Path</th><th>Applies to</th></tr>
+        <tr><td><b>Personal</b></td><td><code>~/.claude/skills/&lt;name&gt;/SKILL.md</code></td><td>All <em>your</em> projects, on your machine</td></tr>
+        <tr><td><b>Project</b></td><td><code>.claude/skills/&lt;name&gt;/SKILL.md</code></td><td>This project — commit it and the team gets it</td></tr>
+        <tr><td><b>Plugin</b></td><td><code>&lt;plugin&gt;/skills/&lt;name&gt;/SKILL.md</code></td><td>Wherever the plugin is enabled (namespaced <code>plugin:skill</code>)</td></tr>
+        <tr><td><b>Enterprise / managed</b></td><td>Managed-settings location</td><td>All users in the organization</td></tr>
+    </table>
+
+    <p>On a name clash across levels, <strong>enterprise overrides personal, and personal overrides project</strong>;
+    any of these also overrides a bundled skill of the same name. Plugin skills are namespaced
+    (<code>plugin-name:skill-name</code>), so they never collide with the other levels.</p>
+
+    <div class="note">🔑 The three distribution channels, from lightest to most managed:
+    <b>commit <code>.claude/skills/</code></b> to version control (project),
+    <b>bundle a <code>skills/</code> directory in a plugin</b> (shareable install),
+    and <b>deploy via managed settings</b> (org-wide).</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Plugins &amp; marketplaces</h2>
+    <p>A <strong>plugin</strong> is the packaging unit for sharing skills (plus optional agents, hooks, and MCP
+    servers). Put a <code>skills/</code> directory in the plugin and each subfolder becomes a namespaced skill.
+    Plugins are distributed through <strong>marketplaces</strong> — a marketplace is a source you add once, then
+    install plugins from:</p>
+
+<pre><span class="cm"># Add a marketplace (a source of plugins), then install one.</span>
+<span class="fn">/plugin marketplace add</span> anthropics/claude-plugins-official
+<span class="fn">/plugin install</span> skill-creator@claude-plugins-official
+
+<span class="cm"># Refresh a stale marketplace if an install can't be found.</span>
+<span class="fn">/plugin marketplace update</span> claude-plugins-official
+
+<span class="cm"># Make a newly installed plugin's skills active this session.</span>
+<span class="fn">/reload-plugins</span></pre>
+
+    <p>Unlike personal or project skills, <strong>plugin skills are managed through <code>/plugin</code></strong>,
+    not through the per-skill visibility settings covered below.</p>
+
+    <h2><span class="chip concept">CONCEPT</span> The <code>/skills</code> view &amp; visibility control</h2>
+    <p>The <strong><code>/skills</code> menu</strong> lists the skills available in your session. It's also how you
+    tune per-skill <em>visibility</em> without editing anyone's <code>SKILL.md</code>: highlight a skill, press
+    <kbd>Space</kbd> to cycle its state, then <kbd>Enter</kbd> to save. The menu writes a
+    <code>skillOverrides</code> entry into <code>.claude/settings.local.json</code>:</p>
+
+    <table>
+        <tr><th><code>skillOverrides</code> value</th><th>Listed to Claude</th><th>In <code>/</code> menu</th></tr>
+        <tr><td><code>"on"</code> (default when absent)</td><td>Name + description</td><td>Yes</td></tr>
+        <tr><td><code>"name-only"</code></td><td>Name only (frees description budget)</td><td>Yes</td></tr>
+        <tr><td><code>"user-invocable-only"</code></td><td>Hidden</td><td>Yes</td></tr>
+        <tr><td><code>"off"</code></td><td>Hidden</td><td>Hidden</td></tr>
+    </table>
+
+    <div class="good">Use <code>skillOverrides</code> for skills you don't own — ones checked into a shared repo or
+    provided by an MCP server — where editing the <code>SKILL.md</code> frontmatter isn't yours to do. Plugin skills
+    are <em>not</em> affected by <code>skillOverrides</code>; manage those via <code>/plugin</code>.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Distribution channels</h2>
+    <div class="mermaid">
+flowchart TD
+    SK["A skill folder (SKILL.md + files)"] --> Q{"Who should get it?"}
+    Q -->|"just me, everywhere"| P["🟢 Personal<br/>~/.claude/skills/"]
+    Q -->|"this repo's team"| PR["🟢 Project<br/>commit .claude/skills/"]
+    Q -->|"anyone who installs"| PL["🟠 Plugin<br/>skills/ dir → marketplace"]
+    Q -->|"whole org, enforced"| EN["🔴 Managed settings<br/>enterprise scope"]
+    PL --> MP["/plugin marketplace add …<br/>/plugin install …@marketplace"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class P ok; class PR ok; class PL gate; class EN bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A plugin that ships skills</h2>
+    <p>Drop a <code>skills/</code> directory into the plugin; each subfolder is one namespaced skill. Publish the
+    plugin through a marketplace and users install it with <code>/plugin install</code>.</p>
+<pre>my-plugin/
+├── .claude-plugin/
+│   └── plugin.json        <span class="cm"># plugin manifest</span>
+├── skills/
+│   ├── review/
+│   │   └── SKILL.md        <span class="cm"># becomes /my-plugin:review</span>
+│   └── deploy/
+│       └── SKILL.md        <span class="cm"># becomes /my-plugin:deploy</span>
+├── agents/                 <span class="cm"># optional: bundled subagents</span>
+└── hooks/                  <span class="cm"># optional: bundled hooks</span>
+
+<span class="cm"># settings.local.json — collapse a noisy skill, disable another.</span>
+{
+  <span class="st">"skillOverrides"</span>: {
+    <span class="st">"legacy-context"</span>: <span class="st">"name-only"</span>,
+    <span class="st">"deploy"</span>: <span class="st">"off"</span>
+  }
+}</pre>
+
+    <div class="warn">⚠️ Treat installing a skill like installing software. Use skills only from <strong>trusted
+    sources</strong> — ones you wrote or got from Anthropic. A malicious skill can direct Claude to run code or call
+    tools against its stated purpose, so audit every bundled file (<code>SKILL.md</code>, scripts, assets) before
+    trusting a repo or marketplace.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Project commit vs. plugin vs. managed</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Commit to <code>.claude/skills/</code></h4>
+            <ul><li>Zero install — clone the repo, get the skills</li>
+            <li>Versioned and reviewed with the code</li>
+            <li>Scoped to exactly the project that needs them</li></ul></div>
+        <div class="con"><h4>✅ Plugin / marketplace / managed</h4>
+            <ul><li>Plugin: reusable across many repos, bundles agents/hooks/MCP</li>
+            <li>Managed settings: pushed org-wide, centrally enforced</li>
+            <li>But: more setup than a plain committed folder</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "To share a project skill you must publish a plugin." → The simplest share is just
+    <b>committing <code>.claude/skills/</code></b> to version control. Plugins are for reuse across repos and
+    bundling other extensions.</div>
+    <div class="trap"><b>Trap:</b> "Personal beats project on a name clash." → Precedence is <b>enterprise &gt;
+    personal &gt; project</b>. And any of them overrides a same-named bundled skill.</div>
+    <div class="trap"><b>Trap:</b> "<code>skillOverrides</code> manages plugin skills too." → It does <b>not</b> —
+    plugin skills are managed through <code>/plugin</code>. <code>skillOverrides</code> covers personal/project/MCP
+    skills.</div>
+    <div class="trap"><b>Trap:</b> "The <code>/skills</code> menu only lists skills." → It also <b>edits
+    visibility</b>: <kbd>Space</kbd> cycles a skill's state and <kbd>Enter</kbd> writes a
+    <code>skillOverrides</code> entry to <code>.claude/settings.local.json</code>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What's the lightest way to give your whole team a project-specific skill?</summary>
+    <p class="answer">Put it in the project's <code>.claude/skills/&lt;name&gt;/SKILL.md</code> and <b>commit it to
+    version control</b>. Everyone who clones the repo gets the skill with no install step. Plugins and managed
+    settings are for broader reuse or org-wide enforcement.</p></details>
+    <details><summary>Q2 · A skill named <code>deploy</code> exists at personal, project, and plugin scope. Which runs on <code>/deploy</code>?</summary>
+    <p class="answer">Across the non-plugin levels, <b>personal overrides project</b> (and enterprise would override
+    both). The plugin's version is <b>namespaced</b> as <code>plugin-name:deploy</code>, so it never conflicts —
+    you'd invoke it with its qualified name.</p></details>
+    <details><summary>Q3 · How do you install a shared skill packaged as a plugin?</summary>
+    <p class="answer">Add the marketplace once with <code>/plugin marketplace add &lt;source&gt;</code>, then
+    <code>/plugin install &lt;plugin&gt;@&lt;marketplace&gt;</code>, and run <code>/reload-plugins</code> to activate
+    it in the current session. Manage plugin skills afterward via <code>/plugin</code> (not <code>skillOverrides</code>).</p></details>
+
+    <div class="pager">
+        <a href="5-4-skills-vs-others.html"><span class="k">← Back</span>5.4 · Skills vs Commands vs Subagents vs MCP</a>
+        <a class="next" href="6-1-hook-events.html"><span class="k">Next →</span>6.1 · Hook Events</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 5.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

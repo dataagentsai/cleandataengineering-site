@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guardrails — the full catalog to build · CCA-F</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .rulebox { background:#faf9ff; border:1px solid #e6e1f7; border-left:4px solid #764ba2; border-radius:0 6px 6px 0; padding:8px 14px; margin:7px 0; font-size:.92em; }
+  .rulebox b { color:#5a4a8a; }
+  .lyr { font-size:.72em; font-weight:700; padding:2px 8px; border-radius:12px; margin-left:4px; }
+  .lyr.infra  { background:#e7ecff; color:#3b5bdb; }
+  .lyr.tool   { background:#e6fcf5; color:#0ca678; }
+  .lyr.app    { background:#fff4e0; color:#b5691a; }
+  .lyr.model  { background:#f3e8ff; color:#7048e8; }
+  .lyr.prompt { background:#ffe8cc; color:#d9480f; }
+  .cat { scroll-margin-top:16px; }
+  .quick a { display:inline-block; margin:3px 6px 3px 0; color:#764ba2; text-decoration:none; border:1px solid #e0dcf5; border-radius:16px; padding:3px 12px; font-size:.86em; }
+  .quick a:hover { background:#f7f5ff; }
+</style>
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../CCA-F_Study_Guide.html">CCA-F</a> › <a href="index.html">Domain 5</a> › Guardrails</div>
+    <h1>🛡️ Guardrails — the full catalog to build</h1>
+    <div class="tag">Every guardrail an agent needs · cost · security · injection · hallucination · reliability · privacy · safety · HITL · observability</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <div class="note">🎯 A single catalog of <b>every guardrail worth building</b>, grouped by risk. Each
+    <span class="rulebox" style="display:inline;padding:2px 8px">GR</span> line is written as a <em>thing to develop</em> with the
+    <b>layer it must be enforced at</b>. <b>Cost</b> links to its own page; the rest are here.</div>
+
+    <div class="warn"><b>The one principle behind all of them:</b> a guardrail that <em>must</em> hold belongs in
+    <b>deterministic code / permissions / infra — never in the prompt</b>. A prompt can be jailbroken or drift; a read-only
+    grant, an approval gate, or a schema check cannot. Layer them (defense-in-depth): the model is one layer, not the fence.</div>
+
+    <h3>Layer legend</h3>
+    <p><span class="lyr infra">INFRA</span> network/identity/sandbox · <span class="lyr tool">TOOL</span> tool &amp; permission layer ·
+    <span class="lyr app">APP</span> your orchestration code · <span class="lyr model">MODEL</span> model/API feature ·
+    <span class="lyr prompt">PROMPT</span> instructions (weakest — never rely on alone).</p>
+
+    <p class="quick">
+        <a href="#cost">💰 Cost</a><a href="#security">🔐 Security &amp; Access</a><a href="#injection">💉 Prompt Injection</a>
+        <a href="#halluc">🌫️ Hallucination</a><a href="#reliab">🛡️ Reliability</a><a href="#privacy">🕵️ Privacy / GxP</a>
+        <a href="#safety">🚫 Content Safety</a><a href="#hitl">🧑‍⚖️ Human-in-the-Loop</a><a href="#obs">📊 Observability</a>
+    </p>
+
+    <h2 class="cat" id="cost"><span class="chip trade">💰 COST &amp; BUDGET</span> → dedicated page</h2>
+    <p>The full cost-guardrail set (R1–R10: uncached prefix, cache-miss detection, oversized model, output ceiling, effort
+    mismatch, history bloat, prose-vs-schema, unbatched bulk, unbounded loop, deprecated params) lives on the
+    <a href="cost-optimization.html"><b>Cost — Anti-Patterns, Best Practices &amp; Guardrails</b></a> page. In short: enforce a
+    <b>per-request &amp; per-session token budget</b> <span class="lyr app">APP</span>, a hard <b>spend cap / kill-switch</b>
+    <span class="lyr infra">INFRA</span>, and <b>alert on cache-hit-rate collapse</b> <span class="lyr app">APP</span>.</p>
+
+    <h2 class="cat" id="security"><span class="chip concept">🔐 SECURITY &amp; ACCESS</span> least privilege, always</h2>
+    <p><b>Risk:</b> an agent (or a tricked agent) does something it was never meant to — read, write, or reach a system it
+    shouldn't. Safety here is <em>structural</em>, not persuasive.</p>
+    <div class="rulebox"><b>GR-SEC-1 · Read-only by default</b> — every data tool uses a read-only grant / role; writes are a separate, explicitly-granted tool. <span class="lyr tool">TOOL</span></div>
+    <div class="rulebox"><b>GR-SEC-2 · Least-privilege service principal</b> — scope credentials to exactly the tables/resources needed; no broad admin tokens. <span class="lyr infra">INFRA</span></div>
+    <div class="rulebox"><b>GR-SEC-3 · Tool allow-list</b> — the agent can only call an explicit set of tools; deny-by-default. <span class="lyr tool">TOOL</span></div>
+    <div class="rulebox"><b>GR-SEC-4 · Query/action constraints</b> — statement timeouts, row/byte caps, no DDL/DML, allow-listed schemas. <span class="lyr tool">TOOL</span></div>
+    <div class="rulebox"><b>GR-SEC-5 · Secret hygiene</b> — secrets from a vault/scope, never in prompts, code, or logs; redact before the model. <span class="lyr infra">INFRA</span></div>
+    <div class="rulebox"><b>GR-SEC-6 · Egress control</b> — restrict outbound network from tool sandboxes; no arbitrary URLs. <span class="lyr infra">INFRA</span></div>
+    <div class="rulebox"><b>GR-SEC-7 · Sandbox untrusted execution</b> — code/bash tools run isolated, ephemeral, resource-capped. <span class="lyr infra">INFRA</span></div>
+    <div class="rulebox"><b>GR-SEC-8 · Confused-deputy prevention</b> — carry the <em>user's</em> permissions into tool calls; don't let a low-priv user act through a high-priv agent identity. <span class="lyr tool">TOOL</span></div>
+    <div class="bad">Anti-pattern: "only read data, never delete" written in the <b>system prompt</b>. That's not a control — a read-only grant is. <b>Security lives in the permission layer.</b></div>
+
+    <h2 class="cat" id="injection"><span class="chip exam">💉 PROMPT INJECTION &amp; UNTRUSTED CONTENT</span></h2>
+    <p><b>Risk:</b> tool results, retrieved docs, emails, logs, or web pages carry instructions ("ignore your rules and…") and
+    the model follows them. The request was valid; the <em>data</em> hijacked it.</p>
+    <div class="rulebox"><b>GR-INJ-1 · Treat all tool/retrieved content as DATA, never instructions</b> — isolate it (e.g. XML-delimited) from the instruction channel. <span class="lyr prompt">PROMPT</span> <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-INJ-2 · Least-privilege tools</b> — even a fully-hijacked agent can't do damage it has no tool/permission for. <span class="lyr tool">TOOL</span></div>
+    <div class="rulebox"><b>GR-INJ-3 · Sanitize / spotlight inputs</b> — mark provenance ("the following is untrusted content"); strip/flag embedded instructions. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-INJ-4 · Human approval on sensitive actions triggered from untrusted data</b> — a tool call that originated from retrieved content needs a gate. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-INJ-5 · Output filtering</b> — scan responses for exfiltration attempts (leaked secrets, unexpected URLs/emails) before acting on them. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-INJ-6 · Don't echo untrusted content into a privileged context</b> — avoid feeding raw tool output straight into a step with write powers. <span class="lyr app">APP</span></div>
+
+    <h2 class="cat" id="halluc"><span class="chip concept">🌫️ HALLUCINATION &amp; GROUNDING</span></h2>
+    <p><b>Risk:</b> a fluent, confident, <em>wrong</em> answer returned as a normal <code>200</code>/<code>end_turn</code> — the
+    <a href="silent-failures-wrong-but-valid.html">silent-failure class</a> nothing in the API flags.</p>
+    <div class="rulebox"><b>GR-HAL-1 · Ground on provided context</b> — "answer only from the supplied sources; if absent, say not found." <span class="lyr prompt">PROMPT</span></div>
+    <div class="rulebox"><b>GR-HAL-2 · Require citations</b> — every claim cites a source/evidence id; reject uncited claims. <span class="lyr app">APP</span> <span class="lyr model">MODEL</span></div>
+    <div class="rulebox"><b>GR-HAL-3 · Verifier pass (fresh context)</b> — an independent check that every claim is supported before the output is trusted. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-HAL-4 · Structured output + VALUE validation</b> — schema guarantees shape, not truth; validate ranges, enums, referential integrity, and that cited ids are real. <span class="lyr model">MODEL</span> <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-HAL-5 · Deterministic checks where they exist</b> — <code>EXPLAIN</code>/dry-run a query, recompute a number, cross-check against a source of truth. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-HAL-6 · Allow "I don't know"</b> — an explicit low-confidence / abstain path beats a confident guess. <span class="lyr prompt">PROMPT</span></div>
+    <div class="rulebox"><b>GR-HAL-7 · Confidence + self-consistency</b> — report confidence; sample N and take the majority on high-stakes answers. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-HAL-8 · Golden-set evals</b> — assert field values / faithfulness on a fixed set, run on every prompt/model change. <span class="lyr app">APP</span></div>
+
+    <h2 class="cat" id="reliab"><span class="chip trade">🛡️ RELIABILITY &amp; RESILIENCE</span></h2>
+    <p><b>Risk:</b> transient errors, timeouts, truncation, or runaway loops turn into outages, double-billing, or corrupted state.</p>
+    <div class="rulebox"><b>GR-REL-1 · Retry only the retryable</b> — 429 &amp; 5xx with exponential backoff + jitter (honor <code>Retry-After</code>); never retry a 400. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-REL-2 · Idempotency</b> — side-effecting tools use idempotency keys / dedup so a retry can't double-execute. <span class="lyr tool">TOOL</span></div>
+    <div class="rulebox"><b>GR-REL-3 · Timeouts on every tool &amp; call</b> — nothing hangs indefinitely. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-REL-4 · Handle every <code>stop_reason</code></b> — route <code>tool_use</code>; treat <code>max_tokens</code> as truncated (continue, don't accept); handle <code>refusal</code>; catch-all for the rest. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-REL-5 · Bound the loop</b> — <code>max_turns</code> + graceful "couldn't complete" (no runaway cost/actions). <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-REL-6 · Circuit breakers &amp; fallbacks</b> — trip on repeated failures; fall back to a smaller model / cached / degraded answer. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-REL-7 · Graceful degradation</b> — partial results beat a hard failure; always return <em>something</em> actionable. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-REL-8 · Stream long outputs</b> — avoid request timeouts (and the retry double-bill). <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-REL-9 · Fail-open on non-critical AI</b> — if narration/triage errors, still emit the deterministic result; never let the AI layer swallow a real signal. <span class="lyr app">APP</span></div>
+
+    <h2 class="cat" id="privacy"><span class="chip concept">🕵️ PRIVACY, PII &amp; COMPLIANCE (GxP)</span></h2>
+    <p><b>Risk:</b> sensitive data reaches the model, the logs, or an output where it shouldn't — a regulatory and trust failure.</p>
+    <div class="rulebox"><b>GR-PRV-1 · PII redaction before the model</b> — detect &amp; mask PII/PHI in inputs, tool results, and logs. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-PRV-2 · Data minimization</b> — send only the fields the task needs; don't dump whole rows/records. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-PRV-3 · Retention / ZDR</b> — configure zero-data-retention or short retention where required; know the region. <span class="lyr infra">INFRA</span></div>
+    <div class="rulebox"><b>GR-PRV-4 · Immutable audit trail</b> — append-only log of inputs (hashed), outputs, model+prompt version, and the approver — reproducible &amp; provable. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-PRV-5 · Access-scope the corpus</b> — RAG/memory only surfaces what the requesting user is allowed to see. <span class="lyr tool">TOOL</span></div>
+    <div class="rulebox"><b>GR-PRV-6 · No PII in the agent's own logs/traces</b> — scrub before persisting telemetry. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-PRV-7 · Nothing makes a regulated decision autonomously</b> — GxP-affecting outcomes require a human of record. <span class="lyr app">APP</span></div>
+
+    <h2 class="cat" id="safety"><span class="chip exam">🚫 CONTENT SAFETY &amp; OUTPUT</span></h2>
+    <p><b>Risk:</b> harmful, off-policy, or malformed output reaches users or downstream systems.</p>
+    <div class="rulebox"><b>GR-SAF-1 · Handle <code>refusal</code> gracefully</b> — a safety-declined response is a 200; branch on it, show a clean message. <span class="lyr model">MODEL</span> <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-SAF-2 · Input/output moderation</b> — screen user input and model output against your content policy (add a classifier if needed). <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-SAF-3 · Output schema validation</b> — validate/parse before anything consumes the output; reject malformed. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-SAF-4 · Topic / scope boundaries</b> — keep the agent within its remit; refuse out-of-scope asks. <span class="lyr prompt">PROMPT</span> <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-SAF-5 · No sensitive data in outputs</b> — filter secrets/PII from what's returned to the user. <span class="lyr app">APP</span></div>
+
+    <h2 class="cat" id="hitl"><span class="chip trade">🧑‍⚖️ HUMAN-IN-THE-LOOP &amp; AUTONOMY</span></h2>
+    <p><b>Risk:</b> the agent takes an irreversible or high-impact action it shouldn't have taken alone.</p>
+    <div class="rulebox"><b>GR-HITL-1 · Approval gate on high-stakes / irreversible actions</b> — writes, deletes, spend, access changes require explicit human sign-off. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-HITL-2 · Autonomy ladder</b> — start Observe→Explain→Recommend; graduate to Act only for mature, low-risk actions. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-HITL-3 · Action allow-list + dry-run</b> — actionable tools are enumerated; preview the effect before executing. <span class="lyr tool">TOOL</span></div>
+    <div class="rulebox"><b>GR-HITL-4 · Rollback / undo</b> — every write path has a reversal; prefer reversible actions. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-HITL-5 · Approver of record + reason</b> — log who approved what and why (feeds the audit trail). <span class="lyr app">APP</span></div>
+
+    <h2 class="cat" id="obs"><span class="chip concept">📊 OBSERVABILITY &amp; GOVERNANCE</span> the meta-guardrail</h2>
+    <p><b>Risk:</b> you can't guardrail what you can't see. Observability is what makes every other guardrail measurable and every
+    silent failure catchable.</p>
+    <div class="rulebox"><b>GR-OBS-1 · Trace every step</b> — per-request run-id, each tool call, tokens, latency, <code>stop_reason</code>, cost. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-OBS-2 · Evals in production</b> — sampled quality/faithfulness checks; alert on regression &amp; drift. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-OBS-3 · SLOs &amp; alerting</b> — success rate, p95 latency, error/refusal rate, cost/req; page on breach. <span class="lyr app">APP</span></div>
+    <div class="rulebox"><b>GR-OBS-4 · Rate limiting &amp; quotas</b> — per-user/tenant caps to contain abuse and cost. <span class="lyr infra">INFRA</span></div>
+    <div class="rulebox"><b>GR-OBS-5 · Kill switch</b> — one control to disable an agent/tool instantly. <span class="lyr infra">INFRA</span></div>
+    <div class="rulebox"><b>GR-OBS-6 · Version pinning</b> — pin model + prompt + tool versions; log them so any output is reproducible. <span class="lyr app">APP</span></div>
+
+    <h2 class="cat" id="matrix"><span class="chip trade">COVERAGE MATRIX</span> category → where enforced → CCA domain</h2>
+    <div style="overflow-x:auto">
+    <table>
+        <tr><th>Guardrail category</th><th>Primary layer</th><th>Maps to CCA</th></tr>
+        <tr><td>💰 Cost &amp; budget</td><td>App + Infra</td><td><b>D5</b></td></tr>
+        <tr><td>🔐 Security &amp; access</td><td>Tool + Infra</td><td>D1 · <b>D4</b></td></tr>
+        <tr><td>💉 Prompt injection</td><td>App + Tool (never prompt alone)</td><td><b>D4</b> · D2</td></tr>
+        <tr><td>🌫️ Hallucination / grounding</td><td>App + Model</td><td><b>D3</b> · <b>D5</b></td></tr>
+        <tr><td>🛡️ Reliability</td><td>App</td><td><b>D5</b> · D1</td></tr>
+        <tr><td>🕵️ Privacy / GxP</td><td>App + Infra</td><td>D5 · D4</td></tr>
+        <tr><td>🚫 Content safety</td><td>Model + App</td><td>D5 · D3</td></tr>
+        <tr><td>🧑‍⚖️ Human-in-the-loop</td><td>App</td><td><b>D1</b></td></tr>
+        <tr><td>📊 Observability</td><td>App + Infra</td><td><b>D5</b></td></tr>
+    </table>
+    </div>
+
+    <div class="note"><b>Build order suggestion:</b> Security &amp; Reliability first (they prevent the worst outcomes),
+    then Grounding + HITL (correctness &amp; safe action), then Privacy/GxP (for regulated work), with Observability wired in
+    from day one because it's what proves the rest are working.</div>
+
+    <div class="good">Related: <a href="cost-optimization.html">Cost guardrails</a> ·
+    <a href="silent-failures-wrong-but-valid.html">Silent failures (hallucination)</a> ·
+    <a href="error-handling-who-catches-what.html">Errors — who catches what</a> ·
+    <a href="cheatsheet-context-bloat.html">Context-bloat</a> ·
+    <a href="../D4-Tool-Design-MCP/index.html">D4 · Tool design</a> ·
+    <a href="https://basantchoudhary.github.io/ClaudeCertifiedArchitect/AIEngineeringProjects/index.html#gskops">Ops portfolio (guardrails in practice)</a>.</div>
+
+    <div class="pager">
+        <a href="index.html"><span class="k">← Back</span>Domain 5 hub</a>
+        <a class="next" href="cost-optimization.html"><span class="k">Next →</span>Cost guardrails</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Guardrails — the full catalog to build</footer>
+</body>
+</html>

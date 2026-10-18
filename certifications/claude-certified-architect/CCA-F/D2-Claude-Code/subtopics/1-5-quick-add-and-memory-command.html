@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.5 Quick-Add (#) & the /memory Command · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 1 · Memory &amp; CLAUDE.md</div>
+    <h1>1.5 · Quick-Add (#) &amp; the /memory Command</h1>
+    <div class="tag">Capture memory mid-session</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Capture a rule without leaving the session</h2>
+    <p>You don't have to stop and hand-edit a file every time you want Claude to remember something. Two in-session
+    mechanisms let you capture and manage memory on the fly:</p>
+    <ul>
+        <li><strong>The <code>#</code> quick-add shortcut</strong> — begin your input with <code>#</code> and the
+        text that follows is captured as a memory. Claude prompts you for <em>which</em> memory file to store it in
+        (project CLAUDE.md, user CLAUDE.md, local, etc.), then writes it for you.</li>
+        <li><strong>The <code>/memory</code> command</strong> — opens the memory manager: it lists every
+        CLAUDE.md, CLAUDE.local.md, and rules file <em>loaded in the current session</em>, lets you toggle auto
+        memory on/off, links to the auto-memory folder, and opens any file in your editor for editing.</li>
+    </ul>
+
+    <div class="note">🔑 <code>#</code> is for <em>capturing</em> a new memory fast; <code>/memory</code> is for
+    <em>reviewing and editing</em> what's already loaded. Use <code>/memory</code> first when debugging — if a file
+    isn't listed there, Claude can't see it.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Natural-language capture &amp; where things land</h2>
+    <p>You can also just ask in plain language. Saying <em>"always use pnpm, not npm"</em> or <em>"remember the API
+    tests need a local Redis instance"</em> makes Claude save it to <strong>auto memory</strong> (the notes Claude
+    keeps for itself, stored under <code>~/.claude/projects/&lt;project&gt;/memory/</code>). To land something in
+    <strong>CLAUDE.md</strong> specifically, be explicit — say <em>"add this to CLAUDE.md"</em> — or edit the file
+    yourself via <code>/memory</code>.</p>
+
+    <table>
+        <tr><th>You do…</th><th>Goes to…</th><th>Best for</th></tr>
+        <tr><td><code>#</code> + text, then pick a file</td><td>The CLAUDE.md scope you choose</td>
+            <td>A rule you want to persist as an instruction</td></tr>
+        <tr><td>"add this to CLAUDE.md"</td><td>CLAUDE.md</td><td>Standing team/project instruction</td></tr>
+        <tr><td>"remember that…" (plain ask)</td><td>Auto memory (<code>MEMORY.md</code> + topic files)</td>
+            <td>A learning/preference Claude should recall</td></tr>
+        <tr><td><code>/memory</code></td><td>Opens files to edit directly</td><td>Review, fix, or delete memory</td></tr>
+    </table>
+
+    <div class="warn">⚠️ Don't conflate the two systems. <code>#</code> / "add to CLAUDE.md" write
+    <strong>instructions you author</strong>. Auto memory is written by <strong>Claude</strong> from your
+    corrections. Both load at session start, but only <code>MEMORY.md</code> is truncated (first 200 lines / 25KB);
+    CLAUDE.md loads in full.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Capture and manage mid-session</h2>
+    <div class="mermaid">
+flowchart TD
+    START["Mid-session insight"] --> HOW{"How do you capture it?"}
+    HOW -->|"# + text"| PICK["Claude asks: which memory file?"]
+    PICK --> WRITE["🟢 Written to chosen CLAUDE.md scope"]
+    HOW -->|"'add this to CLAUDE.md'"| WRITE
+    HOW -->|"'remember that…'"| AUTO["🔵 Saved to auto memory<br/>~/.claude/projects/&lt;project&gt;/memory/"]
+    START --> MGR["/memory"]
+    MGR --> LIST["Lists loaded CLAUDE.md / .local / rules<br/>toggle auto memory · open in editor"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef alt fill:#e2e3f3,stroke:#6c63ff,color:#2a2a6a;
+    class WRITE ok; class AUTO alt; class LIST alt;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Using # and /memory at the prompt</h2>
+    <p>Both are typed straight into the Claude Code input.</p>
+<pre><span class="cm"># Quick-add: start the line with # — Claude asks which file to save it to</span>
+# Always run `make lint` before committing
+
+<span class="cm"># Open the memory manager to review / edit loaded files</span>
+/memory
+
+<span class="cm"># Natural-language capture → lands in AUTO memory, not CLAUDE.md</span>
+remember that the integration tests need a local Redis instance
+
+<span class="cm"># Force it into CLAUDE.md instead by being explicit</span>
+add this to CLAUDE.md: use pnpm, never npm</pre>
+
+    <div class="good">Debugging "Claude ignored my rule"? Run <code>/memory</code> first to confirm the file is
+    actually loaded in this session. A rule Claude can't see is a location problem, not an adherence problem.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Quick-add (#) vs. hand-editing the file</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ <code>#</code> quick-add</h4>
+            <ul><li>Zero context switch — capture the moment you notice</li>
+            <li>Prompts you to pick the right scope</li>
+            <li>Great for one-liners you'd otherwise forget</li></ul></div>
+        <div class="con"><h4>⚠️ Editing via <code>/memory</code> / an editor</h4>
+            <ul><li>Full control over structure &amp; placement</li>
+            <li>Needed to reorganize, group, or remove stale rules</li>
+            <li>Slower — you leave the flow of the task</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Starting a prompt with <code>#</code> runs a shell comment / does nothing." → In
+    Claude Code, a leading <code>#</code> is the <b>quick-add memory</b> shortcut; Claude asks which memory file to
+    save the text to.</div>
+    <div class="trap"><b>Trap:</b> "<code>/memory</code> only shows the project CLAUDE.md." → It lists <b>all</b>
+    loaded memory for the session — CLAUDE.md, CLAUDE.local.md, and rules files — plus the auto-memory toggle.</div>
+    <div class="trap"><b>Trap:</b> "Saying 'remember X' edits CLAUDE.md." → A plain "remember…" saves to <b>auto
+    memory</b>. To target CLAUDE.md, say "add this to CLAUDE.md" or edit via <code>/memory</code>.</div>
+    <div class="trap"><b>Trap:</b> "<code>#</code> and auto memory are the same feature." → <code>#</code> writes an
+    instruction <b>you</b> author into a CLAUDE.md; auto memory is written by <b>Claude</b> and stored under
+    <code>~/.claude/projects/&lt;project&gt;/memory/</code>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You type <code>#</code> then "prefer pnpm over npm". What happens?</summary>
+    <p class="answer">It's captured as a memory and Claude <b>prompts you to choose which memory file</b> (project,
+    user, local, …) to save it to, then writes it there.</p></details>
+    <details><summary>Q2 · Claude keeps ignoring a rule you added last week. First diagnostic step?</summary>
+    <p class="answer">Run <code>/memory</code> to confirm the file is actually <b>loaded</b> this session. If it
+    isn't listed, it's in a location that doesn't load for your cwd — fix placement before touching wording.</p></details>
+    <details><summary>Q3 · How do you make sure a captured rule lands in CLAUDE.md, not auto memory?</summary>
+    <p class="answer">Be explicit: use <code>#</code> and pick a CLAUDE.md scope, say "add this to CLAUDE.md," or edit
+    the file directly via <code>/memory</code>. A plain "remember…" goes to auto memory instead.</p></details>
+
+    <div class="pager">
+        <a href="1-4-writing-effective-claude-md.html"><span class="k">← Back</span>1.4 · Writing an Effective CLAUDE.md</a>
+        <a class="next" href="1-6-nested-scoping.html"><span class="k">Next →</span>1.6 · Nested / Sub-directory CLAUDE.md</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 1.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

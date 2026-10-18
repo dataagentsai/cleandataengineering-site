@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.2 Custom Slash Commands · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 4 · Slash Commands</div>
+    <h1>4.2 · Custom Slash Commands</h1>
+    <div class="tag">.claude/commands/*.md</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A Markdown file becomes a <code>/command</code></h2>
+    <p>A <strong>custom slash command</strong> is just a Markdown file whose <em>body is a prompt template</em>.
+    Drop <code>deploy.md</code> into <code>.claude/commands/</code> and Claude Code exposes <code>/deploy</code>.
+    The <strong>filename without its extension is the command name</strong>. When you invoke it, the file's body
+    (after argument and injection substitution — see 4.4) is sent to the model as your message.</p>
+
+    <div class="note">🔑 In current Claude Code, <strong>custom commands have been merged into skills</strong>. A file
+    at <code>.claude/commands/deploy.md</code> and a skill at <code>.claude/skills/deploy/SKILL.md</code> both
+    create <code>/deploy</code> and behave the same way. Existing <code>.claude/commands/</code> files keep
+    working and support the same frontmatter; skills add extras (a folder for supporting files, auto-invocation).
+    If a skill and a command share a name, <b>the skill takes precedence</b>.</p></div>
+
+    <table>
+        <tr><th>Location</th><th>Path</th><th>Scope</th></tr>
+        <tr><td>Project</td><td><code>.claude/commands/&lt;name&gt;.md</code></td><td>This repo only (commit it to share)</td></tr>
+        <tr><td>Personal</td><td><code>~/.claude/commands/&lt;name&gt;.md</code></td><td>All of your projects</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> Subdirectories create namespaces</h2>
+    <p>Put a command in a subfolder and the folder becomes a <strong>namespace</strong> shown in the command's
+    listing. A file at <code>.claude/commands/frontend/component.md</code> is still invoked as
+    <code>/component</code>, but the menu shows it grouped under <em>frontend</em> so you can tell
+    same-named commands apart. Namespacing is organizational; it does not change how you type the command.</p>
+
+    <div class="good">Give a project command a clear, task-shaped name — <code>/fix-issue</code>,
+    <code>/write-tests</code>, <code>/review-pr</code> — and one job. A custom command is your team's reusable,
+    version-controlled prompt.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> From file on disk to a running prompt</h2>
+    <div class="mermaid">
+flowchart TD
+    F[".claude/commands/fix-issue.md"] --> D["Claude Code discovers it at startup"]
+    D --> M["Appears in the / menu as /fix-issue"]
+    M --> I["You type: /fix-issue 123"]
+    I --> S["Body is expanded:<br/>args, !bash, @file substituted"]
+    S --> P["🟢 Rendered prompt sent to the model"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef step fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    class P ok; class S step;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Create a project command and invoke it</h2>
+    <p>Two files, two scopes. The body is plain Markdown; <code>$ARGUMENTS</code> is replaced with whatever you
+    type after the command name (covered in 4.4).</p>
+<pre><span class="cm"># A project command — lives with the repo, shared with the team</span>
+$ mkdir -p .claude/commands
+$ cat &gt; .claude/commands/fix-issue.md &lt;&lt;'EOF'
+Fix GitHub issue $ARGUMENTS following our coding standards.
+
+1. Read the issue description
+2. Implement the fix
+3. Write tests
+4. Create a commit
+EOF
+
+<span class="cm"># A namespaced command — menu groups it under "frontend"</span>
+$ mkdir -p .claude/commands/frontend
+$ echo <span class="st">"Create a React component named $ARGUMENTS."</span> \
+    &gt; .claude/commands/frontend/component.md
+
+<span class="cm"># Then, inside Claude Code:</span>
+<span class="cm">#   /fix-issue 123     → runs the project template with 123</span>
+<span class="cm">#   /component Button  → runs the namespaced command</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Project command vs. personal command</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Project — <code>.claude/commands/</code></h4>
+            <ul><li>Committed to the repo, shared with everyone</li>
+            <li>Encodes team workflows and conventions</li>
+            <li>Travels with a clone; consistent for all contributors</li>
+            <li>Subject to workspace trust before its tools run</li></ul></div>
+        <div class="con"><h4>✅ Personal — <code>~/.claude/commands/</code></h4>
+            <ul><li>Available across <em>all</em> your projects</li>
+            <li>Private to you — not committed anywhere</li>
+            <li>Great for personal shortcuts and habits</li>
+            <li>Not shared, so teammates won't have it</li></ul></div>
+    </div>
+    <div class="note">🔑 Both are the <em>same mechanism</em> — a <code>.md</code> file invoked as <code>/name</code>.
+    Only the <b>directory</b> (project vs home) decides the scope. See 4.5 for the full scope story.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The command name comes from frontmatter." → For a
+    <code>.claude/commands/</code> file the name is the <b>filename without extension</b>. (Skill directories take
+    their name from the directory.)</div>
+    <div class="trap"><b>Trap:</b> "A subdirectory changes how I invoke the command." → No. A subfolder only adds a
+    <b>namespace label</b> in the menu. <code>frontend/component.md</code> is still <code>/component</code>.</div>
+    <div class="trap"><b>Trap:</b> "Custom commands are a separate feature from skills." → They have been
+    <b>merged</b>. A command file and a same-named skill both create the same <code>/name</code>; if both exist,
+    the <b>skill wins</b>.</div>
+    <div class="trap"><b>Trap:</b> "Project commands need to be under <code>src/</code> or the repo root only." → They
+    are discovered from <code>.claude/commands/</code> at (and up to) the repo root. Personal ones live in
+    <code>~/.claude/commands/</code>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What file creates the command <code>/deploy</code>, and where for team-wide use?</summary>
+    <p class="answer">A Markdown file named <code>deploy.md</code>. For team-wide use put it at
+    <b><code>.claude/commands/deploy.md</code></b> and commit it. For personal-only use,
+    <code>~/.claude/commands/deploy.md</code>.</p></details>
+    <details><summary>Q2 · How do you invoke <code>.claude/commands/git/commit.md</code>?</summary>
+    <p class="answer">As <b><code>/commit</code></b>. The <code>git/</code> subdirectory only adds a namespace label
+    in the menu; it does not become part of what you type.</p></details>
+    <details><summary>Q3 · A skill <code>deploy</code> and a command <code>deploy.md</code> both exist. What runs on <code>/deploy</code>?</summary>
+    <p class="answer">The <b>skill</b> — when a skill and a command share a name, the skill takes precedence.
+    Both still map to the same <code>/deploy</code> command name.</p></details>
+
+    <div class="pager">
+        <a href="4-1-builtin-commands.html"><span class="k">← Back</span>4.1 · Built-in Slash Commands</a>
+        <a class="next" href="4-3-command-frontmatter.html"><span class="k">Next →</span>4.3 · Command Frontmatter</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 4.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

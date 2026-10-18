@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.2 Orchestration Patterns · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 4 · Multi-Agent</div>
+    <h1>4.2 · Orchestration Patterns</h1>
+    <div class="tag">The six shapes of multi-agent systems</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Six patterns, one spectrum</h2>
+    <p>Once you've chosen to go beyond a single agent, the <em>shape</em> of the system is one of six named
+    patterns. They range from "barely multi-agent" (hub-and-spoke) to fully parallel and iterative. Start at the
+    top of this list and only move down when the task forces it.</p>
+
+    <table>
+        <tr><th>Pattern</th><th>Shape</th><th>When to use</th></tr>
+        <tr><td><strong>Hub-and-spoke</strong></td><td>One agent, many tools</td><td><strong>Start here.</strong> Most agent tasks — a single loop calling tools.</td></tr>
+        <tr><td><strong>Coordinator / sub-agent</strong></td><td>A coordinator routes to specialists and merges</td><td>Distinct specialised roles that a central agent delegates to and combines.</td></tr>
+        <tr><td><strong>Sequential pipeline</strong></td><td>Stage → stage → stage</td><td>Dependent stages, e.g. research → outline → draft → edit.</td></tr>
+        <tr><td><strong>Parallel fan-out</strong></td><td>Independent sub-agents run at once</td><td>Genuinely independent sub-tasks — cut wall-clock by running together.</td></tr>
+        <tr><td><strong>Router</strong></td><td>Classify, then dispatch to the right specialist</td><td>Heterogeneous inputs where one specialist per class handles the request.</td></tr>
+        <tr><td><strong>Evaluator–optimizer</strong></td><td>Producer + critic in a loop</td><td>Quality matters and can be judged — one agent produces, another critiques/improves.</td></tr>
+    </table>
+
+    <div class="note">🔑 Hub-and-spoke is where you <strong>start</strong>. It's technically a single agent + tools
+    (from 4.1) — the "many tools" case. The other five are true multi-agent escalations.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Hub-and-spoke &amp; Coordinator/sub-agent</h2>
+    <div class="mermaid">
+flowchart LR
+    subgraph HS["Hub-and-spoke (start here)"]
+        H["🟢 Agent"] --> T1["🔧 tool A"]
+        H --> T2["🔧 tool B"]
+        H --> T3["🔧 tool C"]
+    end
+    subgraph CS["Coordinator / sub-agent"]
+        C["🟣 Coordinator"] --> S1["🔵 Specialist 1"]
+        C --> S2["🔵 Specialist 2"]
+        S1 --> C
+        S2 --> C
+    end
+    classDef g fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef b fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef p fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    class H g; class C p; class S1 b; class S2 b;
+    </div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Pipeline, Fan-out, Router, Evaluator–optimizer</h2>
+    <div class="mermaid">
+flowchart TB
+    subgraph SEQ["Sequential pipeline"]
+        direction LR
+        R["Research"] --> O["Outline"] --> D["Draft"] --> E["Edit"]
+    end
+    subgraph FAN["Parallel fan-out"]
+        direction TB
+        CO["Coordinator"] --> A1["Sub-agent 1"]
+        CO --> A2["Sub-agent 2"]
+        CO --> A3["Sub-agent 3"]
+    end
+    subgraph ROU["Router"]
+        direction LR
+        CL{"Classify"} -->|billing| SB["Billing specialist"]
+        CL -->|tech| ST["Tech specialist"]
+    end
+    subgraph EVO["Evaluator–optimizer"]
+        direction LR
+        P["Producer"] --> V{"Critic"}
+        V -->|revise| P
+        V -->|accept| DONE(["✔"])
+    end
+    classDef n fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    class R,O,D,E,CO,A1,A2,A3,SB,ST,P n;
+    </div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Simplicity vs. capability</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Simpler patterns (hub-and-spoke, pipeline)</h4>
+            <ul><li>Fewer agents, lower cost</li>
+            <li>Easy to trace and test</li>
+            <li>Deterministic-ish control flow</li></ul></div>
+        <div class="con"><h4>⚠️ Richer patterns (fan-out, evaluator–optimizer)</h4>
+            <ul><li>Parallelism &amp; quality gains — but more tokens</li>
+            <li>Evaluator loops can run many rounds</li>
+            <li>More coordination + merging complexity</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Confusing <b>router</b> with <b>parallel fan-out</b>. → A router <b>classifies then
+    dispatches to one</b> specialist; fan-out runs <b>many</b> sub-agents at once. Router = pick one; fan-out = do all.</div>
+    <div class="trap"><b>Trap:</b> Using a <b>sequential pipeline</b> for independent work. → If stages don't depend on
+    each other, a pipeline needlessly serializes them; fan-out cuts wall-clock (see 4.6).</div>
+    <div class="trap"><b>Trap:</b> Forgetting hub-and-spoke is the <b>starting point</b>. → Many "which pattern?"
+    questions want the simplest answer: one agent, many tools.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Incoming tickets are billing, technical, or account questions; each has a dedicated specialist. Which pattern?</summary>
+    <p class="answer"><b>Router.</b> Classify the ticket, then dispatch to exactly one specialist. It's not fan-out —
+    you don't run all three specialists on every ticket.</p></details>
+    <details><summary>Q2 · A blog post must go research → outline → draft → edit, each stage depending on the last. Which pattern?</summary>
+    <p class="answer"><b>Sequential pipeline.</b> Stages are dependent, so they run in order. Latency is additive, which
+    is inherent to the dependency — you can't parallelize what depends on prior output.</p></details>
+    <details><summary>Q3 · You need to raise the quality of generated SQL until it passes a critic. Which pattern?</summary>
+    <p class="answer"><b>Evaluator–optimizer.</b> One agent produces the SQL, another critiques it, and the producer
+    revises in a loop until the critic accepts. Best when quality is judgeable.</p></details>
+
+    <div class="pager">
+        <a href="4-1-single-vs-multi-agent.html"><span class="k">← Prev</span>4.1 · Single vs. multi-agent</a>
+        <a class="next" href="4-3-coordinator-design.html"><span class="k">Next →</span>4.3 · Coordinator design</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 4.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

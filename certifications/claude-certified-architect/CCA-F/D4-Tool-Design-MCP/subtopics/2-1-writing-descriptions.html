@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.1 Writing Tool Descriptions · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 2 · Designing Great Tools</div>
+    <h1>2.1 · Writing Tool Descriptions (the #1 Lever)</h1>
+    <div class="tag">The description is what Claude reads</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The description is the tool's user manual — for Claude</h2>
+    <p>Claude never sees your implementation. It sees three fields per tool — <code>name</code>,
+    <code>description</code>, <code>input_schema</code> — and of these, Anthropic's guidance is blunt: the
+    <strong>description is "by far the most important factor in tool performance."</strong> The model decides
+    <em>whether</em>, <em>when</em>, and <em>how</em> to call a tool almost entirely from its description. A vague
+    description is the single most common reason Claude picks the wrong tool, hallucinates arguments, or fails to
+    call a tool it should have.</p>
+
+    <p>Write it as documentation for a smart colleague who has never seen the system. The docs say to be
+    <strong>extremely detailed</strong> and cover four things explicitly:</p>
+
+    <table>
+        <tr><th>Put in the description…</th><th>Why Claude needs it</th></tr>
+        <tr><td><strong>What the tool does</strong></td><td>Maps the user's intent to this capability</td></tr>
+        <tr><td><strong>When to use it — and when NOT to</strong></td><td>Prevents over- and under-triggering</td></tr>
+        <tr><td><strong>What each parameter means</strong> &amp; how it affects behavior</td><td>Fills arguments correctly instead of guessing</td></tr>
+        <tr><td><strong>Caveats / limitations</strong> — what it does <em>not</em> return</td><td>Stops Claude expecting data the tool can't give</td></tr>
+    </table>
+
+    <div class="note">🔑 Anthropic's rule of thumb: <strong>aim for at least 3–4 sentences per description</strong>,
+    more if the tool is complex. Terseness here is a false economy — a few extra tokens of description save many
+    tokens of wrong tool calls.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Prescriptive triggers beat "what it does"</h2>
+    <p>Newer Opus models reach for tools more conservatively, so a description that only says <em>what</em> the tool
+    does under-triggers. Make the <strong>trigger condition</strong> explicit: "Call this when the user asks about
+    current prices or recent events." State the negative case too ("Do not use this for historical prices"). The
+    description is not just a definition — it is the routing instruction that decides selection.</p>
+
+    <div class="good">Good descriptions are <em>self-contained</em>: Claude should be able to choose correctly from
+    the description alone, without inferring anything from the tool's name or your system prompt.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> How a description drives selection</h2>
+    <div class="mermaid">
+flowchart TD
+    U["User request"] --> M["Claude reads every tool's description"]
+    M --> Q{"Does a description match<br/>the intent + trigger?"}
+    Q -->|"detailed: what / when / params / caveats"| PICK["🟢 Correct tool,<br/>well-formed args"]
+    Q -->|"vague: 'Gets the price.'"| GUESS["🔴 Wrong tool or<br/>guessed / missing args"]
+    GUESS -.->|"rewrite: add when-to-use,<br/>param meaning, caveats"| PICK
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class PICK ok; class GUESS bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> BAD vs GOOD tool description</h2>
+    <p>Same tool, same schema. Only the prose changes — and that prose is what Claude selects on. This is
+    Anthropic's own <code>get_stock_price</code> example.</p>
+<pre><span class="cm">// ❌ BAD — too brief; leaves Claude guessing when to call it and what it returns</span>
+{
+  <span class="st">"name"</span>: <span class="st">"get_stock_price"</span>,
+  <span class="st">"description"</span>: <span class="st">"Gets the stock price for a ticker."</span>,
+  <span class="st">"input_schema"</span>: {
+    <span class="st">"type"</span>: <span class="st">"object"</span>,
+    <span class="st">"properties"</span>: { <span class="st">"ticker"</span>: { <span class="st">"type"</span>: <span class="st">"string"</span> } },
+    <span class="st">"required"</span>: [<span class="st">"ticker"</span>]
+  }
+}
+
+<span class="cm">// ✅ GOOD — what it does, when to use it, param meaning, and a caveat</span>
+{
+  <span class="st">"name"</span>: <span class="st">"get_stock_price"</span>,
+  <span class="st">"description"</span>: <span class="st">"Retrieves the current stock price for a given ticker symbol. "</span>
+    <span class="st">"The ticker must be a valid symbol for a publicly traded company on a "</span>
+    <span class="st">"major US exchange like NYSE or NASDAQ. Returns the latest trade price "</span>
+    <span class="st">"in USD. Use it when the user asks about the current or most recent "</span>
+    <span class="st">"price of a specific stock. It will NOT provide any other information "</span>
+    <span class="st">"about the stock or company."</span>,
+  <span class="st">"input_schema"</span>: {
+    <span class="st">"type"</span>: <span class="st">"object"</span>,
+    <span class="st">"properties"</span>: {
+      <span class="st">"ticker"</span>: {
+        <span class="st">"type"</span>: <span class="st">"string"</span>,
+        <span class="st">"description"</span>: <span class="st">"The stock ticker symbol, e.g. AAPL for Apple Inc."</span>
+      }
+    },
+    <span class="st">"required"</span>: [<span class="st">"ticker"</span>]
+  }
+}</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Rich description vs. terse description</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Extremely detailed description</h4>
+            <ul><li>Correct tool selection, correct arguments</li>
+            <li>Fewer wasted turns and retries</li>
+            <li>Encodes when-NOT-to-use, so no over-triggering</li>
+            <li>Caches with the tools block — the token cost is paid once (2.5)</li></ul></div>
+        <div class="con"><h4>⚠️ "Gets the price."</h4>
+            <ul><li>Saves a handful of input tokens</li>
+            <li>But: ambiguous selection, guessed args, expects data it can't return</li>
+            <li>Every wrong call costs far more than the description would have</li></ul></div>
+    </div>
+    <div class="warn">There's a ceiling: don't pad with irrelevant prose. Detail must be <em>load-bearing</em>
+    (behavior, triggers, caveats) — filler dilutes signal and burns context on every request.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Better model = shorter descriptions are fine." → No. The description is the
+    <b>#1 performance lever regardless of model</b>. Anthropic's guidance to write extremely detailed descriptions
+    is model-independent.</div>
+    <div class="trap"><b>Trap:</b> Describing only <em>what</em> the tool does. → Omit "when to use / when NOT to
+    use" and Claude over- or under-triggers. Make the <b>trigger condition explicit</b> in the description.</div>
+    <div class="trap"><b>Trap:</b> Relying on the tool <em>name</em> to convey behavior. → The name is a short
+    identifier; the <b>description</b> carries meaning. A great name with a one-line description still selects
+    poorly.</div>
+    <div class="trap"><b>Trap:</b> Forgetting caveats. → If you don't state what the tool does <em>not</em> return,
+    Claude may call it expecting data it can't provide, then fail downstream.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Of name, description, and input_schema, which most determines tool performance, and why?</summary>
+    <p class="answer">The <b>description</b> — Anthropic calls it "by far the most important factor." Claude selects
+    and fills a tool almost entirely from its description, since it can't see your implementation. Aim for at least
+    3–4 sentences covering what it does, when to use/not use it, each parameter's meaning, and caveats.</p></details>
+    <details><summary>Q2 · Name four things a good description must include.</summary>
+    <p class="answer">(1) What the tool does; (2) when it should be used and when it shouldn't; (3) what each
+    parameter means and how it affects behavior; (4) important caveats/limitations, especially what the tool does
+    <b>not</b> return.</p></details>
+    <details><summary>Q3 · Claude keeps skipping a tool you expect it to call. What's the description-level fix?</summary>
+    <p class="answer">Add an explicit <b>trigger condition</b> ("Call this when the user asks about X") and, if
+    needed, a stronger system-prompt nudge. Under-triggering is usually a description that says what the tool does
+    but not <em>when</em> to reach for it.</p></details>
+
+    <div class="pager">
+        <a href="1-5-client-vs-server-tools.html"><span class="k">← Back</span>1.5 · Client vs Server Tools</a>
+        <a class="next" href="2-2-input-schema-design.html"><span class="k">Next →</span>2.2 · Input Schema Design</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 2.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

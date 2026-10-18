@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.4 Covering Edge Cases with Examples · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 3 · Examples (Multishot)</div>
+    <h1>3.4 · Covering Edge Cases with Examples</h1>
+    <div class="tag">Examples steer the hard cases</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Demonstrate the tricky inputs, don't just describe them</h2>
+    <p>Diversity (3.2) isn't only about spreading examples across the common categories — its stated purpose is
+    to <strong>cover edge cases</strong>. The hard, ambiguous, or malformed inputs are exactly where a
+    zero-shot prompt drifts: how should Claude handle an empty field, a mixed signal, an out-of-scope request,
+    a message in the wrong language? Instead of writing a paragraph of rules for each, <strong>show one example
+    that demonstrates the desired handling</strong>. An example that resolves a tricky case is worth more than
+    the prose trying to describe the same behavior.</p>
+
+    <div class="note">🔑 Every edge case you can name is a candidate for one demonstrating example. The example
+    encodes the rule <em>and</em> its exact output shape in one shot.</div>
+
+    <p>This is the same "show, don't tell" leverage from 3.1, aimed at the parts of the input space that are
+    hardest to specify. Common edge cases worth an example:</p>
+
+    <table>
+        <tr><th>Edge case</th><th>What the example demonstrates</th></tr>
+        <tr><td>Missing / empty field</td><td>Exactly what to output when data is absent (e.g. <code>null</code>, "N/A")</td></tr>
+        <tr><td>Ambiguous / mixed signal</td><td>Which label wins, or how to flag the ambiguity</td></tr>
+        <tr><td>Out-of-scope / refusal</td><td>The precise decline or "cannot classify" response</td></tr>
+        <tr><td>Malformed / noisy input</td><td>How to still produce a clean, valid output</td></tr>
+        <tr><td>Boundary values</td><td>Where the line between two categories actually falls</td></tr>
+    </table>
+
+    <div class="good">Pair edge-case examples with your ordinary ones. The everyday examples lock the format;
+    the edge-case examples teach the exceptions — together they cover the range Claude will actually see.</div>
+
+    <div class="warn">You still can't demonstrate <em>every</em> possible input. Examples steer the hard cases
+    you anticipate; combine them with a clear instruction for the general rule so Claude can generalize to
+    edge cases you didn't show.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Examples cover the input space</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Anticipate the input space"] --> C["Common cases"]
+    A --> E["Edge cases:<br/>empty · ambiguous · out-of-scope"]
+    C --> EX1["🟢 Ordinary examples<br/>lock the format"]
+    E --> EX2["🟢 Edge-case examples<br/>teach the exceptions"]
+    EX1 --> SET["Combined example set"]
+    EX2 --> SET
+    SET --> GEN["Claude generalizes to<br/>unseen inputs too"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class EX1 ok; class EX2 ok; class E gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Ordinary + edge-case examples together</h2>
+    <p>An extraction task where the edge cases — a missing price and an out-of-scope message — are
+    <em>demonstrated</em>, not described. Claude learns to emit <code>null</code> for absent data and a fixed
+    marker for irrelevant input, then applies both to the real request.</p>
+<pre>system = <span class="st">"""Extract product and price from each message as JSON: {"product": ..., "price": ...}.
+Handle the edge cases exactly as shown in the examples."""</span>
+
+user = <span class="st">"""&lt;examples&gt;
+  &lt;example&gt;
+    &lt;msg&gt;Grabbed the Aero headphones for $199.&lt;/msg&gt;
+    &lt;json&gt;{"product": "Aero headphones", "price": 199}&lt;/json&gt;
+  &lt;/example&gt;
+  &lt;example&gt;   &lt;!-- edge: price missing --&gt;
+    &lt;msg&gt;The Aero headphones look great but I forgot the price.&lt;/msg&gt;
+    &lt;json&gt;{"product": "Aero headphones", "price": null}&lt;/json&gt;
+  &lt;/example&gt;
+  &lt;example&gt;   &lt;!-- edge: out of scope --&gt;
+    &lt;msg&gt;What time do you close on Sundays?&lt;/msg&gt;
+    &lt;json&gt;{"product": null, "price": null}&lt;/json&gt;
+  &lt;/example&gt;
+&lt;/examples&gt;
+
+&lt;msg&gt;Thinking about the Nova speaker, no idea what it costs.&lt;/msg&gt;"""</span>
+
+message = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">16000</span>,
+    system=system,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: user}],
+)
+<span class="cm"># → {"product": "Nova speaker", "price": null}  — the demonstrated edge-case rule applied.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Demonstrate vs. describe the exceptions</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Edge-case examples</h4>
+            <ul><li>Encode the rule <em>and</em> its output shape at once</li>
+            <li>Unambiguous — no room to misread a prose rule</li>
+            <li>Handle empty/ambiguous/out-of-scope consistently</li></ul></div>
+        <div class="con"><h4>⚠️ Prose rules only</h4>
+            <ul><li>Each rule is open to interpretation</li>
+            <li>Output shape for the exception still unspecified</li>
+            <li>Rules pile up and start to conflict</li>
+            <li>But: needed for cases you can't enumerate</li></ul></div>
+    </div>
+    <div class="good">Best of both: a short instruction for the general rule + demonstrating examples for the
+    specific hard cases you know you'll hit.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Examples are only for the typical case." → A core reason to keep examples
+    <b>diverse</b> is to <b>cover edge cases</b>. Demonstrating tricky inputs is one of their most valuable
+    uses.</div>
+    <div class="trap"><b>Trap:</b> "Just describe the edge-case rules in the instructions." → Prose rules are
+    open to misreading and leave the output shape unspecified. An <b>example demonstrating the exception</b> is
+    tighter and steers more reliably.</div>
+    <div class="trap"><b>Trap:</b> "Edge-case examples replace ordinary ones." → No — pair them. Ordinary
+    examples lock the format; edge-case examples teach the exceptions. You need both for coverage.</div>
+    <div class="trap"><b>Trap:</b> "If I show enough edge cases I've covered everything." → You can't enumerate
+    the whole input space. Combine examples with a clear general instruction so Claude generalizes to unseen
+    cases.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why demonstrate an edge case instead of describing it?</summary>
+    <p class="answer">A demonstrating example encodes both the <b>rule</b> and the exact <b>output shape</b> for
+    the exception in one unambiguous artifact, whereas a prose rule can be misread and leaves the output format
+    unspecified. Examples steer the hard cases more reliably than descriptions.</p></details>
+    <details><summary>Q2 · How do edge-case examples relate to the diversity guidance from 3.2?</summary>
+    <p class="answer">Diversity's stated purpose is partly to <b>cover edge cases</b>. Adding examples for
+    empty, ambiguous, or out-of-scope inputs is exactly how you make the set diverse in a way that improves
+    real-world robustness, not just cosmetic variety.</p></details>
+    <details><summary>Q3 · Do edge-case examples let you drop the general instruction?</summary>
+    <p class="answer">No. You can't demonstrate every possible input, so keep a clear instruction for the
+    general rule. The examples steer the specific hard cases; the instruction lets Claude generalize to edge
+    cases you didn't show.</p></details>
+
+    <div class="pager">
+        <a href="3-3-formatting-examples.html"><span class="k">← Back</span>3.3 · Formatting Examples</a>
+        <a class="next" href="3-5-example-pitfalls.html"><span class="k">Next →</span>3.5 · Example Pitfalls</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 3.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

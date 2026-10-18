@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.2 Adaptive Thinking &amp; Effort · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 7 · Performance</div>
+    <h1>7.2 · Adaptive Thinking &amp; Effort as Knobs</h1>
+    <div class="tag">Two dials that trade cost for quality</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Two independent knobs</h2>
+    <p>Current models expose two separate controls that shape how much compute a request spends.
+    <strong>Adaptive thinking</strong> governs internal reasoning; <strong>effort</strong> governs how
+    consolidated the visible output and tool-calling behavior is. Both trade cost/latency against
+    thoroughness.</p>
+
+    <table>
+        <tr><th>Knob</th><th>Parameter</th><th>What it controls</th></tr>
+        <tr><td><strong>Adaptive thinking</strong></td>
+            <td><code>thinking={"type":"adaptive"}</code></td>
+            <td><em>Claude decides</em> the reasoning depth and interleaves thinking between tool calls
+            automatically — no manual budget.</td></tr>
+        <tr><td><strong>Effort</strong></td>
+            <td><code>output_config={"effort": ...}</code></td>
+            <td>How hard the model works on the visible response: <code>"low"</code> · <code>"medium"</code>
+            · <code>"high"</code> (default) · <code>"max"</code>. Some models add <code>"xhigh"</code>.</td></tr>
+    </table>
+
+    <div class="bad">⛔ The old fixed <code>budget_tokens</code> under <code>thinking</code> is
+    <strong>removed</strong> on current models. Sending it returns a <strong>400</strong>. Use
+    <code>{"type":"adaptive"}</code> instead — Claude picks the depth for you.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> How effort trades cost vs. quality</h2>
+    <p>Lower effort tells the model to be terser and to <strong>consolidate tool calls</strong> — fewer,
+    bigger steps and shorter output, so fewer tokens and lower latency. Higher effort spends more compute
+    for more thorough exploration and output.</p>
+    <table>
+        <tr><th>Effort</th><th>Behavior</th><th>Reach for it when…</th></tr>
+        <tr><td><code>"low"</code></td><td>Fewest, most-consolidated tool calls; terse output</td>
+            <td>Simple tasks; cost/latency-sensitive high-volume paths</td></tr>
+        <tr><td><code>"medium"</code></td><td>Balanced</td>
+            <td>Everyday production work</td></tr>
+        <tr><td><code>"high"</code> <em>(default)</em></td><td>Thorough exploration &amp; output</td>
+            <td>Hard tasks; when quality matters more than a few tokens</td></tr>
+        <tr><td><code>"max"</code></td><td>Maximum effort</td>
+            <td>The hardest reasoning where you want every bit of headroom</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Where the knobs sit</h2>
+    <div class="mermaid">
+flowchart LR
+    R([Request]) --> T{"thinking:<br/>adaptive?"}
+    T -->|yes| TD["🟣 Claude picks reasoning depth<br/>interleaved between tool calls"]
+    T -->|no| TP["🔵 no interleaved thinking"]
+    TD --> E{"output_config<br/>effort"}
+    TP --> E
+    E -->|low| L["🟢 fewer tool calls · terser<br/>cheaper · faster"]
+    E -->|high / max| H["🟠 thorough · more tokens<br/>higher quality · costlier"]
+    classDef think fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    classDef none fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef cheap fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef dear fill:#ffe8cc,stroke:#d9480f,color:#7a2e08;
+    class TD think; class TP none; class L cheap; class H dear;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Adaptive thinking + effort together</h2>
+    <p>The two knobs compose. Here a hard agentic task uses adaptive thinking with <code>"high"</code>
+    effort; a cheap fan-out worker turns thinking off and drops to <code>"low"</code>.</p>
+<pre><span class="cm"># Hard task: let Claude reason as deep as it needs, work thoroughly.</span>
+resp = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">8192</span>,
+    thinking={<span class="st">"type"</span>: <span class="st">"adaptive"</span>},      <span class="cm"># Claude decides depth; interleaves</span>
+    output_config={<span class="st">"effort"</span>: <span class="st">"high"</span>},   <span class="cm"># default; thorough</span>
+    tools=TOOLS,
+    messages=messages,
+)
+
+<span class="cm"># Cheap, simple sub-task: no thinking, low effort → fewer calls, terser.</span>
+worker = client.messages.create(
+    model=<span class="st">"claude-haiku-4-5"</span>,
+    max_tokens=<span class="st">512</span>,
+    output_config={<span class="st">"effort"</span>: <span class="st">"low"</span>},
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">f"Extract the total from: {line}"</span>}],
+)
+
+<span class="cm"># ⛔ WRONG on current models — budget_tokens is removed → HTTP 400:</span>
+<span class="cm"># thinking={"type": "enabled", "budget_tokens": 4000}</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Turning the dials</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Lower effort / no thinking</h4>
+            <ul><li>Fewer, consolidated tool calls → lower latency</li>
+            <li>Terser output → fewer output tokens (the pricey ones)</li>
+            <li>Great for simple, high-volume, parallel sub-tasks</li></ul></div>
+        <div class="con"><h4>⚠️ Higher effort / adaptive thinking</h4>
+            <ul><li>More tokens &amp; latency per request</li>
+            <li>But better on ambiguous, multi-step reasoning</li>
+            <li>Adaptive thinking removes the guesswork of a manual budget</li></ul></div>
+    </div>
+    <div class="good">Default is <code>effort:"high"</code>. Down-tier effort on roles that measurably
+    tolerate it, exactly like you down-tier the model (7.1).</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Setting <code>thinking={"budget_tokens": N}</code> to "control cost." → That
+    param is <b>removed</b> on current models and returns a <b>400</b>. Use
+    <code>{"type":"adaptive"}</code> and let Claude pick depth.</div>
+    <div class="trap"><b>Trap:</b> Confusing the two knobs. → <b>Thinking</b> = reasoning depth (adaptive);
+    <b>effort</b> = how consolidated the output/tool-calling is. They're separate params.</div>
+    <div class="trap"><b>Trap:</b> Assuming a numeric effort. → Effort is a <b>named level</b>
+    (<code>low/medium/high/max</code>), not a token count. Default is <code>"high"</code>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You want to cut latency on a high-volume routing step without changing the model. Which knob?</summary>
+    <p class="answer">Set <code>output_config={"effort":"low"}</code>. Low effort yields fewer, more-consolidated
+    tool calls and terser output → faster and cheaper, no model change needed.</p></details>
+    <details><summary>Q2 · A request that previously set budget_tokens now 400s. Fix it.</summary>
+    <p class="answer">Remove <code>budget_tokens</code> and use <code>thinking={"type":"adaptive"}</code>.
+    The fixed budget was removed on current models; adaptive lets Claude choose depth and interleave thinking
+    between tool calls.</p></details>
+    <details><summary>Q3 · How does adaptive thinking behave across a multi-tool agent turn?</summary>
+    <p class="answer">Claude decides the depth <b>and interleaves thinking between tool calls
+    automatically</b> — you don't schedule it. Combine with an appropriate effort level to tune overall
+    cost vs. quality.</p></details>
+
+    <div class="pager">
+        <a href="7-1-model-selection.html"><span class="k">← Prev</span>7.1 · Model Selection</a>
+        <a class="next" href="7-3-prompt-caching-loops.html"><span class="k">Next →</span>7.3 · Prompt Caching in Loops</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 7.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

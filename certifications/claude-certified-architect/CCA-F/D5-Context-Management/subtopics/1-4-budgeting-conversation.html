@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.4 Budgeting a Growing Conversation · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 1 · Context Windows &amp; Token Budgeting</div>
+    <h1>1.4 · Budgeting a Growing Conversation</h1>
+    <div class="tag">History grows every turn</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The API is stateless — you resend the whole history</h2>
+    <p>The Messages API has <strong>no server-side memory</strong>. Each turn, your input phase is
+    <em>all previous conversation history plus the current user message</em>, and previous turns are
+    <strong>preserved completely</strong>. So the input side <strong>grows monotonically</strong>: every user
+    message and assistant reply accumulates in the window, and you re-send that entire transcript on the next call.
+    The output of one turn becomes part of the input for the next.</p>
+
+    <div class="warn">⚠️ The cost consequence: because you re-send the full history each turn, those
+    <strong>input tokens are re-sent and re-billed every turn</strong>. A 50-turn chat pays for the early turns
+    50 times over. Cost per turn rises as the conversation grows, even if each new message is short.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Watch the input side climb toward the window</h2>
+    <p>The danger isn't a single giant message — it's <em>accumulation</em>. Each turn the input grows, the room
+    left for the reply shrinks (1.3), and eventually <code>input + max_tokens</code> presses against the window.
+    Two things help you stay ahead of it:</p>
+    <ul>
+        <li><strong>Track it:</strong> <code>usage</code> on every response reports the input consumed; or
+        <code>count_tokens</code> before sending (1.2).</li>
+        <li><strong>Context awareness (some models):</strong> Sonnet 5, Sonnet 4.6, Sonnet 4.5, and Haiku 4.5
+        automatically track their remaining budget via injected tags (you never send them). Newer models
+        (Opus 4.7+, Fable 5, Mythos 5) don't get these — give them an explicit budget via <em>task budgets</em>
+        (beta) instead.</li>
+    </ul>
+
+    <div class="note">🔑 Prompt caching changes what you <em>pay</em> for re-sent tokens (cache reads are far
+    cheaper), but cached tokens <strong>still occupy the window</strong>. Caching is a cost lever, not a
+    context-window lever — the history still counts toward the limit.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Each turn re-sends everything before it</h2>
+    <div class="mermaid">
+flowchart TD
+    T1["Turn 1 input<br/>sys + U1"] --> A1["+ A1"]
+    A1 --> T2["Turn 2 input<br/>sys + U1 + A1 + U2"]
+    T2 --> A2["+ A2"]
+    A2 --> T3["Turn 3 input<br/>sys + U1 + A1 + U2 + A2 + U3"]
+    T3 --> GROW{"Approaching<br/>the window?"}
+    GROW -->|"no"| KEEP["🟢 Keep appending"]
+    GROW -->|"yes"| MANAGE["🟠 Compact / trim<br/>the history (1.5)"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class KEEP ok; class MANAGE gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Budget check each turn as history accumulates</h2>
+<pre>WINDOW, MAX_OUT, SAFETY = <span class="st">1_000_000</span>, <span class="st">4096</span>, <span class="st">2_000</span>
+history = []   <span class="cm"># you own the transcript — the API stores nothing</span>
+
+<span class="kw">def</span> <span class="fn">turn</span>(user_msg):
+    history.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: user_msg})
+
+    <span class="cm"># Input grows every turn — re-check before each send.</span>
+    n_in = client.messages.<span class="fn">count_tokens</span>(
+        model=<span class="st">"claude-opus-4-8"</span>, messages=history,
+    ).input_tokens
+
+    <span class="kw">if</span> n_in + MAX_OUT + SAFETY &gt; WINDOW:
+        <span class="fn">compact</span>(history)          <span class="cm"># summarize/trim oldest turns (1.5)</span>
+
+    resp = client.messages.<span class="fn">create</span>(
+        model=<span class="st">"claude-opus-4-8"</span>, max_tokens=MAX_OUT, messages=history,
+    )
+    <span class="cm"># Re-sent history is re-billed: this input was paid for last turn too.</span>
+    history.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content})
+    <span class="kw">return</span> resp</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Keep full history vs. manage it</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Append everything</h4>
+            <ul><li>Perfect recall of the whole conversation</li>
+            <li>Simplest possible loop</li>
+            <li>Cache reads soften the re-billing cost</li></ul></div>
+        <div class="con"><h4>⚠️ Unbounded growth</h4>
+            <ul><li>Per-turn cost climbs (re-sent, re-billed)</li>
+            <li>Latency and context rot rise with size</li>
+            <li>Eventually overflows the window (1.5)</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The API remembers the conversation, so I only send the new message." → It's
+    <b>stateless</b>. You resend the <b>entire history</b> every turn; the model has no memory of prior calls.</div>
+    <div class="trap"><b>Trap:</b> "Early turns are paid for once." → Re-sent history is <b>re-billed each turn</b>.
+    The longer the chat, the more times early tokens are charged.</div>
+    <div class="trap"><b>Trap:</b> "Prompt caching shrinks my context usage." → Caching cuts the <em>price</em> of
+    re-sent tokens; those tokens <b>still occupy the window</b>. It's a cost lever, not a window lever.</div>
+    <div class="trap"><b>Trap:</b> "Context awareness is on for every model." → Only Sonnet 5 / 4.6 / 4.5 and
+    Haiku 4.5 get the injected budget tags. Opus 4.7+, Fable 5, Mythos 5 don't — use <b>task budgets</b> (beta).</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why does per-turn cost rise as a conversation grows?</summary>
+    <p class="answer">The API is stateless, so each turn you re-send the full history. Those input tokens are
+    <b>re-sent and re-billed every turn</b> — early turns get paid for again and again — so cost climbs with length
+    even when new messages are short.</p></details>
+    <details><summary>Q2 · Does prompt caching reduce how much of the context window the history uses?</summary>
+    <p class="answer">No. Caching reduces the <b>cost</b> of re-sent tokens (cheap cache reads), but cached tokens
+    <b>still occupy the context window</b>. To reduce window usage you must trim or compact (1.5).</p></details>
+    <details><summary>Q3 · How can you tell you're approaching the window mid-conversation?</summary>
+    <p class="answer">Read <code>usage</code> on each response, or <code>count_tokens</code> before sending. On
+    context-aware models (Sonnet 5/4.6/4.5, Haiku 4.5) the model itself tracks remaining budget via injected tags;
+    on Opus 4.7+/Fable 5/Mythos 5, give it a task budget instead.</p></details>
+
+    <div class="pager">
+        <a href="1-3-input-output-max-tokens.html"><span class="k">← Back</span>1.3 · Input vs Output Tokens &amp; max_tokens</a>
+        <a class="next" href="1-5-context-exceeded-errors.html"><span class="k">Next →</span>1.5 · Context-Window-Exceeded Handling</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 1.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

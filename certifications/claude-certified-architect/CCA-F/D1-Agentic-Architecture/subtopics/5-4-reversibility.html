@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.4 Reversibility as a Design Axis · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 5 · Autonomy</div>
+    <h1>5.4 · Reversibility as a Design Axis</h1>
+    <div class="tag">Auto-run the reversible · gate the irreversible</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Sort actions by "can I undo this?"</h2>
+    <p><strong>Reversibility is a first-class design axis</strong> for agent tools. Before wiring a tool into the
+    loop, ask one question: <em>if the agent does this wrong, can I cheaply undo it?</em> The answer decides how
+    much autonomy the tool gets. Reversible actions — <code>read</code>, <code>glob</code>, <code>grep</code> —
+    can <strong>auto-run</strong>, because a mistake costs nothing but a wasted turn. Hard-to-reverse actions —
+    <code>send_email</code>, <code>delete</code>, external <code>POST</code>, payments — should be
+    <strong>gated</strong> behind confirmation (5.2), because a mistake is expensive or permanent.</p>
+
+    <table>
+        <tr><th>Action</th><th>Reversible?</th><th>Blast radius on error</th><th>Design decision</th></tr>
+        <tr><td><code>read_file</code> / <code>glob</code> / <code>grep</code></td><td>Yes — no state change</td><td>~None</td><td>🟢 Auto-run (fully autonomous)</td></tr>
+        <tr><td><code>list_dir</code> / query (SELECT)</td><td>Yes — read-only</td><td>~None</td><td>🟢 Auto-run</td></tr>
+        <tr><td><code>write_file</code> (versioned)</td><td>Mostly — undo via VCS</td><td>Low–medium</td><td>🔵 Auto with audit, or light gate</td></tr>
+        <tr><td><code>send_email</code></td><td>No — it's out the door</td><td>High (reputational)</td><td>🟠 Gate — human confirms</td></tr>
+        <tr><td><code>delete</code> / <code>DROP</code></td><td>No — data gone</td><td>High</td><td>🟠 Gate — human confirms</td></tr>
+        <tr><td>external <code>POST</code> / <code>charge_card</code></td><td>No — side effect on others</td><td>Highest (money, third parties)</td><td>🔴 Gate — strong confirm + audit</td></tr>
+    </table>
+
+    <div class="note">🔑 Reversibility maps directly onto autonomy (5.1) and gating (5.2): the more
+    irreversible an action, the more it should be gated and the less autonomy it earns.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Promote to a dedicated tool to gain a hook</h2>
+    <p>Here's the architectural lever the exam loves: <strong>a generic <code>bash</code> tool hides
+    everything</strong>. If the agent runs <code>bash("rm -rf …")</code>, your harness sees only "a bash call" —
+    it can't tell a reversible <code>ls</code> from an irreversible <code>rm</code>. By
+    <strong>promoting a dangerous action from a generic <code>bash</code> call to a <em>dedicated</em>
+    tool</strong> (say <code>delete_file(path)</code>), you give your harness a <strong>typed hook</strong> it can
+    individually gate, validate, and audit. The dedicated tool <em>is</em> the seam that makes fine-grained
+    permission control possible.</p>
+
+    <div class="good">Design move: don't expose raw <code>bash</code> for irreversible operations. Give each one
+    a named, typed tool so the gate (5.2) can target it precisely and the audit log can name it.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Reversibility routes the action</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Model requests an action"] --> Q{"Reversible?"}
+    Q -->|"yes: read / glob / grep"| AUTO["🟢 Auto-run<br/>cheap to undo"]
+    Q -->|"no: send / delete / POST / pay"| DED{"Dedicated typed tool?"}
+    DED -->|"yes"| GATE["🟠 Gate: confirm + audit<br/>(typed hook)"]
+    DED -->|"no — hidden in bash"| BLIND["🔴 Blind spot:<br/>harness can't gate it"]
+    BLIND -.->|"promote to a<br/>dedicated tool"| GATE
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class AUTO ok; class GATE gate; class BLIND bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Routing by reversibility</h2>
+    <p>Classify each tool by reversibility, auto-run the reversible, gate the rest — and note how the
+    <em>dedicated</em> <code>delete_file</code> tool gives the harness a named hook a raw <code>bash</code> call
+    never would.</p>
+<pre><span class="cm"># Reversible actions get a typed, dedicated tool AND auto-run.</span>
+REVERSIBLE = {<span class="st">"read_file"</span>, <span class="st">"glob"</span>, <span class="st">"grep"</span>, <span class="st">"list_dir"</span>}
+
+<span class="cm"># Irreversible actions are ALSO promoted to dedicated tools — so the</span>
+<span class="cm"># harness has a typed hook to gate &amp; audit, instead of hiding them in bash.</span>
+IRREVERSIBLE = {<span class="st">"send_email"</span>, <span class="st">"delete_file"</span>, <span class="st">"http_post"</span>, <span class="st">"charge_card"</span>}
+
+<span class="kw">def</span> <span class="fn">dispatch</span>(block):
+    name, args = block.name, block.input
+    <span class="kw">if</span> name <span class="kw">in</span> REVERSIBLE:
+        <span class="kw">return</span> <span class="fn">run_tool</span>(name, args)                 <span class="cm"># auto — cheap to undo</span>
+    <span class="kw">if</span> name <span class="kw">in</span> IRREVERSIBLE:
+        <span class="fn">audit_log</span>(name, args)                        <span class="cm"># typed hook → record it</span>
+        <span class="kw">if</span> <span class="kw">not</span> <span class="fn">confirm</span>(<span class="st">f"Irreversible: {name}({args}). Approve?"</span>):
+            <span class="kw">return</span> <span class="st">f"DENIED: '{name}' is irreversible; approval refused."</span>
+        <span class="kw">return</span> <span class="fn">run_tool</span>(name, args)
+    <span class="kw">return</span> <span class="st">f"DENIED: unknown tool '{name}' (deny-by-default)."</span>  <span class="cm"># safest default</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Generic bash vs. dedicated tools</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Dedicated typed tools</h4>
+            <ul><li>Per-action gating, validation, and audit</li>
+            <li>Harness can see &amp; name what's happening</li>
+            <li>Reversibility can be enforced at the seam</li></ul></div>
+        <div class="con"><h4>⚠️ Generic bash for everything</h4>
+            <ul><li>Flexible, fewer tools to define</li>
+            <li>But: harness can't distinguish safe from destructive</li>
+            <li>No hook to gate <code>rm</code> vs. <code>ls</code> → blind spot</li></ul></div>
+    </div>
+    <div class="good">Keep <code>bash</code> for open-ended reversible exploration; carve <em>irreversible</em>
+    operations out into dedicated tools so each gets its own gate and audit entry.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Gate every tool." → Gating reversible reads wastes human time. Gate by
+    <b>reversibility</b>: auto-run read/glob/grep, gate send/delete/POST/pay.</div>
+    <div class="trap"><b>Trap:</b> Running irreversible actions through a generic <code>bash</code> tool. → The
+    harness can't gate what it can't distinguish. <b>Promote to a dedicated tool</b> to get a typed, gate-able,
+    auditable hook.</div>
+    <div class="trap"><b>Trap:</b> Confusing "reversible" with "low-stakes." → Reversibility is about
+    <em>undo cost</em>, not importance. A read of secret data may be sensitive yet reversible; a tiny payment is
+    irreversible. Route by undo-ability.</div>
+    <div class="trap"><b>Trap:</b> Forgetting the audit trail. → Even when a human approves an irreversible
+    action, the dedicated tool should <b>log</b> it — approval without a record isn't accountable.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Which of read_file, delete_file, grep, charge_card can auto-run, and why?</summary>
+    <p class="answer"><b>read_file</b> and <b>grep</b> — they're reversible (no state change), so a wrong call costs
+    only a turn. <b>delete_file</b> and <b>charge_card</b> are irreversible and must be gated behind human
+    confirmation.</p></details>
+    <details><summary>Q2 · Why promote a dangerous <code>bash</code> call into a dedicated tool?</summary>
+    <p class="answer">It gives the harness a <b>typed hook</b>: the harness sees a named <code>delete_file(path)</code>
+    instead of an opaque bash string, so it can gate, validate, and audit that specific action. A generic
+    <code>bash</code> tool is a blind spot the gate can't target.</p></details>
+    <details><summary>Q3 · How does reversibility connect to autonomy (5.1) and gating (5.2)?</summary>
+    <p class="answer">It's the classifier that drives both: <b>reversible → high autonomy, auto-run</b>;
+    <b>irreversible → low autonomy, gated behind a confirmation</b>. Reversibility is the underlying axis that
+    tells you which actions deserve a human in the loop.</p></details>
+
+    <div class="pager">
+        <a href="5-3-loop-termination.html"><span class="k">← Back</span>5.3 · Loop Termination</a>
+        <a class="next" href="6-1-failure-modes.html"><span class="k">Next →</span>6.1 · Failure Modes</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 5.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

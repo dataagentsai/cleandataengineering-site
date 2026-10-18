@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.4 Sub-Agent Design &amp; Context Isolation · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 4 · Multi-Agent</div>
+    <h1>4.4 · Sub-Agent Design &amp; Context Isolation</h1>
+    <div class="tag">Every sub-agent has its own context window</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Isolation is the whole point</h2>
+    <p>A sub-agent is <strong>context-isolated</strong>: it runs its own model loop with its <em>own</em> context
+    window and does <strong>not</strong> see the coordinator's conversation history. It knows only what you put in
+    the message you send it, plus its own system prompt. This is a feature — it keeps each sub-task focused and
+    keeps the coordinator's growing context out of the specialist — but it's also the single most common source of
+    bugs: people assume the sub-agent "just knows" things it was never told.</p>
+
+    <div class="note">🔑 <strong>The API is stateless</strong> (POST /v1/messages carries no server memory), and a
+    sub-agent is a <em>separate</em> stateless conversation. Nothing crosses over unless you copy it into the
+    delegated message.</div>
+
+    <table>
+        <tr><th>What crosses into a sub-agent?</th><th>Visible to sub-agent?</th></tr>
+        <tr><td>The delegated task message you send it</td><td>✅ Yes — this is all it gets</td></tr>
+        <tr><td>The sub-agent's own system prompt</td><td>✅ Yes</td></tr>
+        <tr><td>The coordinator's conversation history</td><td>❌ No — isolated</td></tr>
+        <tr><td>Other sub-agents' contexts / results</td><td>❌ No — unless you pass them in</td></tr>
+        <tr><td>Facts the user told the coordinator earlier</td><td>❌ No — unless restated</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> Why isolate at all?</h2>
+    <ul>
+        <li><strong>Focus:</strong> a specialist reasoning over only its task avoids distraction and drift.</li>
+        <li><strong>Context budget:</strong> the coordinator's history can be huge; not replaying it into every
+        sub-agent saves tokens and keeps each window clean.</li>
+        <li><strong>Independence:</strong> isolated sub-agents can run in parallel without interfering (see 4.6).</li>
+    </ul>
+    <div class="warn">⚠️ The flip side: isolation means <strong>you</strong> are responsible for handing over the
+    state each sub-agent needs — explicitly, and minimally (that's 4.5).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Separate context windows</h2>
+    <div class="mermaid">
+flowchart TB
+    subgraph COORD["🟣 Coordinator context"]
+        H["full history:<br/>user msgs · prior tool results · plan"]
+    end
+    subgraph SUB1["🔵 Sub-agent A context (isolated)"]
+        TA["only: system prompt +<br/>the task you sent"]
+    end
+    subgraph SUB2["🔵 Sub-agent B context (isolated)"]
+        TB["only: system prompt +<br/>the task you sent"]
+    end
+    H -->|"delegate: copy needed state"| TA
+    H -->|"delegate: copy needed state"| TB
+    TA -. "cannot see coordinator history" .-x H
+    TB -. "cannot see sub-agent A" .-x TA
+    classDef p fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    classDef b fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    class H p; class TA b; class TB b;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Isolation, made concrete</h2>
+    <p>The sub-agent's <code>messages</code> is a brand-new list. Nothing from the coordinator leaks in — only what
+    you write into it.</p>
+<pre><span class="cm"># WRONG assumption: "the sub-agent saw the user say the budget is $5k earlier."</span>
+<span class="cm"># It did NOT. Its context is only what's in THIS messages list + system.</span>
+sub = client.messages.create(
+    model=<span class="st">"claude-sonnet-4-6"</span>, max_tokens=<span class="st">1024</span>,
+    system=<span class="st">"You are a pricing specialist."</span>,          <span class="cm"># its only standing context</span>
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+               <span class="st">"content"</span>: <span class="st">"Recommend a plan."</span>}],           <span class="cm"># budget NEVER mentioned → it can't know it</span>
+)
+
+<span class="cm"># RIGHT: restate the needed fact explicitly in the delegated task.</span>
+sub = client.messages.create(
+    model=<span class="st">"claude-sonnet-4-6"</span>, max_tokens=<span class="st">1024</span>,
+    system=<span class="st">"You are a pricing specialist."</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+               <span class="st">"content"</span>: <span class="st">"Budget is $5,000/mo. Recommend a plan within it."</span>}],
+)</pre>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Assuming a sub-agent shares the coordinator's context. → It does <b>not</b>. Each
+    sub-agent has its own context window and sees only the message you delegate to it plus its system prompt.</div>
+    <div class="trap"><b>Trap:</b> "The user already said X, so the specialist knows X." → Only the coordinator heard X.
+    Unless you restate X in the delegated task, the sub-agent has never seen it.</div>
+    <div class="trap"><b>Trap:</b> Expecting sub-agent A's output to be visible to sub-agent B automatically. → It
+    isn't. If B needs A's result, the coordinator must pass it in explicitly (4.5, 4.7).</div>
+    <div class="trap"><b>Trap:</b> Thinking isolation is a limitation to work around. → It's a deliberate design win
+    (focus, context budget, parallelism). The correct response is explicit state passing, not shared memory.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A coordinator delegates "summarize the doc" to a sub-agent but never includes the doc. What happens?</summary>
+    <p class="answer">The sub-agent has nothing to summarize — it can't see the coordinator's context where the doc
+    might live. The doc text must be passed <b>into the delegated message</b>. This is the classic lost-state bug (4.5).</p></details>
+    <details><summary>Q2 · Why is context isolation actually helpful, not just a constraint?</summary>
+    <p class="answer">It keeps each specialist focused on its own task, avoids replaying the coordinator's large
+    history (saving tokens), and lets isolated sub-agents run in parallel without interference.</p></details>
+    <details><summary>Q3 · Sub-agent B needs a number that sub-agent A computed. How does B get it?</summary>
+    <p class="answer">The coordinator collects A's result and <b>passes it explicitly</b> into B's delegated task.
+    There is no shared memory between isolated sub-agents.</p></details>
+
+    <div class="pager">
+        <a href="4-3-coordinator-design.html"><span class="k">← Prev</span>4.3 · Coordinator design</a>
+        <a class="next" href="4-5-state-passing.html"><span class="k">Next →</span>4.5 · Explicit state passing</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 4.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

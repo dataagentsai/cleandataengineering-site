@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.3 Context Isolation &amp; Delegation · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 7 · Subagents</div>
+    <h1>7.3 · Context Isolation &amp; Delegation</h1>
+    <div class="tag">Separate context windows</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Each subagent gets its OWN context window</h2>
+    <p>This is the whole point. <strong>Each subagent starts with a fresh, isolated context window</strong> with
+    its own system prompt. It does <em>not</em> see your conversation history, the skills you've already invoked,
+    or the files Claude has already read. Claude composes a short delegation message that summarises the task, and
+    the subagent works from there. When it finishes, <strong>only its result returns to the main conversation</strong> —
+    the verbose intermediate work (search hits, logs, file dumps) stays behind in the subagent's context.</p>
+
+    <div class="note">🔑 The key benefit for context management: high-volume work happens in a
+    <strong>separate window</strong>, so it never pollutes the main conversation. You pay the tokens once, over
+    there, and get a clean summary back.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> What a subagent starts with</h2>
+    <p>A non-fork subagent's initial context is deliberately minimal:</p>
+    <table>
+        <tr><th>Included at startup</th><th>Notes</th></tr>
+        <tr><td><strong>System prompt</strong></td><td>The agent's own prompt (Markdown body) plus environment details — <em>not</em> the full Claude Code system prompt.</td></tr>
+        <tr><td><strong>Task message</strong></td><td>The delegation prompt Claude writes when handing off the work.</td></tr>
+        <tr><td><strong>CLAUDE.md &amp; memory</strong></td><td>The memory hierarchy the main conversation loads. (Built-in <code>Explore</code> and <code>Plan</code> skip this to stay fast.)</td></tr>
+        <tr><td><strong>Preloaded skills</strong></td><td>Full content of any skill named in the agent's <code>skills</code> field.</td></tr>
+    </table>
+    <p>Because a subagent starts fresh, if a rule must reach it (for example "ignore the <code>vendor/</code>
+    directory"), restate it in the prompt you give Claude when delegating — the subagent won't infer it from your
+    earlier conversation.</p>
+
+    <div class="warn">⚠️ Isolation cuts both ways: when subagents <em>complete</em>, their results return to the
+    main conversation. Running many subagents that each return long detailed results can itself consume
+    significant context. Ask them to return summaries, not transcripts.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Verbose work stays isolated; only a summary returns</h2>
+    <div class="mermaid">
+flowchart TD
+    MAIN["🗨️ Main conversation<br/>(context you care about)"] -->|"delegation message<br/>(task summary)"| SUB
+    subgraph ISO["Subagent — separate context window"]
+      SUB["Fresh system prompt<br/>+ task message"] --> WORK["Reads files, runs tests,<br/>fetches docs → huge output"]
+      WORK --> SUM["Distils to a short result"]
+    end
+    SUM -->|"only the summary"| MAIN
+    NOTE["❌ Search hits · logs · file dumps<br/>never reach the main window"] -.-> WORK
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef iso fill:#e7f1ff,stroke:#4a90d9,color:#1a3a5a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class MAIN ok; class SUB iso; class WORK iso; class SUM iso; class NOTE bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Delegating a high-volume task</h2>
+    <p>The classic isolation pattern: let the subagent absorb the noisy test output and hand back only what you
+    need.</p>
+<pre><span class="cm"># In the main conversation, you ask:</span>
+Use a subagent to run the test suite and report only the
+failing tests with their error messages.
+
+<span class="cm"># What happens:</span>
+<span class="cm">#  - The subagent runs the full suite in ITS OWN context</span>
+<span class="cm">#  - Thousands of lines of pass/fail output stay in that window</span>
+<span class="cm">#  - Only the short list of failures + errors returns to you</span></pre>
+    <div class="good">This is why subagents "preserve context": the expensive, verbose part is isolated, and
+    the main thread receives a compact answer it can act on.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Isolated context vs. shared context</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Isolated subagent context</h4>
+            <ul><li>Verbose exploration never bloats the main window</li>
+            <li>Independent tool access &amp; permissions per agent</li>
+            <li>Parallel subagents each explore without cross-talk</li></ul></div>
+        <div class="con"><h4>⚠️ Cost of isolation</h4>
+            <ul><li>Subagent can't see prior conversation — must be told what it needs</li>
+            <li>It starts fresh, so it may need time to gather context (latency)</li>
+            <li>Many detailed returns can still add up in the main context</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "A subagent shares the main conversation's context." → It does <b>not</b>. It
+    starts in a <b>fresh, isolated context window</b> and doesn't see your history, invoked skills, or files Claude
+    already read. (The one exception is a <em>fork</em>, which inherits the conversation.)</div>
+    <div class="trap"><b>Trap:</b> "The subagent returns its full working transcript." → Only its <b>result /
+    summary</b> returns to the main conversation. The intermediate output stays in the subagent's window.</div>
+    <div class="trap"><b>Trap:</b> "Subagents don't help with context because their output comes back anyway." →
+    The <em>verbose</em> work stays isolated; just the distilled summary returns. That's the context saving —
+    though many long returns can still accumulate, so ask for summaries.</div>
+    <div class="trap"><b>Trap:</b> "A subagent automatically knows my project rules from the chat." → It only
+    knows what its system prompt, CLAUDE.md, and the delegation message contain. Restate any conversation-specific
+    rule in the delegation prompt.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What is the single biggest benefit of running a subagent in a separate context window?</summary>
+    <p class="answer"><b>Context management:</b> the verbose side-work happens in the subagent's own window and
+    never pollutes the main conversation — only a compact summary returns.</p></details>
+    <details><summary>Q2 · Does a subagent see your earlier conversation and the files Claude already read?</summary>
+    <p class="answer">No. It starts with a fresh, isolated context — its own system prompt, the delegation task
+    message, CLAUDE.md/memory, and any preloaded skills. Not your chat history or previously read files. (A
+    <em>fork</em> is the exception.)</p></details>
+    <details><summary>Q3 · What comes back to the main conversation when a subagent finishes?</summary>
+    <p class="answer">Only its result/summary. The high-volume intermediate output (search results, logs, file
+    contents) stays in the subagent's context.</p></details>
+
+    <div class="pager">
+        <a href="7-2-subagent-config.html"><span class="k">← Back</span>7.2 · Subagent Configuration</a>
+        <a class="next" href="7-4-invoking-subagents.html"><span class="k">Next →</span>7.4 · Invoking Subagents</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 7.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

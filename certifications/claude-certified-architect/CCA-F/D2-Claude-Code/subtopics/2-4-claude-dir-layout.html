@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.4 The .claude Directory & /config · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 2 · Settings &amp; Configuration</div>
+    <h1>2.4 · The .claude Directory &amp; /config</h1>
+    <div class="tag">Where everything lives</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Two <code>.claude/</code> directories: user and project</h2>
+    <p>Almost everything Claude Code reads lives in a <code>.claude/</code> directory. There are two of them, mirroring
+    the settings scopes from 2.1:</p>
+    <ul>
+        <li><code>~/.claude/</code> — your <strong>user</strong> directory: global defaults across every project.</li>
+        <li><code>.claude/</code> (in the repo) — the <strong>project</strong> directory: shared, committed config.</li>
+    </ul>
+    <p>Both directories hold the same <em>kinds</em> of things, and the contents merge with project taking precedence:</p>
+    <table>
+        <tr><th>Path</th><th>What it holds</th></tr>
+        <tr><td><code>settings.json</code></td><td>Settings at that scope (user or project)</td></tr>
+        <tr><td><code>settings.local.json</code></td><td>Personal, gitignored overrides (project dir only)</td></tr>
+        <tr><td><code>CLAUDE.md</code></td><td>Memory / instructions at that scope</td></tr>
+        <tr><td><code>commands/</code></td><td>Custom slash commands (one <code>.md</code> file each)</td></tr>
+        <tr><td><code>agents/</code></td><td>Subagent definitions (one <code>.md</code> file each)</td></tr>
+        <tr><td><code>skills/</code></td><td>Custom skills</td></tr>
+        <tr><td><code>hooks/</code></td><td>Hook scripts referenced by the <code>hooks</code> setting</td></tr>
+    </table>
+    <div class="note">🔑 Hooks themselves are <em>configured</em> in <code>settings.json</code> under the
+    <code>hooks</code> key; the <code>hooks/</code> folder is just a convenient home for the scripts those hooks
+    invoke.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Sibling files &amp; the managed directory</h2>
+    <p>A few important files live <em>next to</em> <code>.claude/</code>, not inside it:</p>
+    <table>
+        <tr><th>Path</th><th>Role</th></tr>
+        <tr><td><code>.mcp.json</code></td><td>Project-scoped MCP server definitions (repo root)</td></tr>
+        <tr><td><code>~/.claude.json</code></td><td>OAuth session, MCP config, and app state (a file, not the dir)</td></tr>
+        <tr><td><code>/Library/Application Support/ClaudeCode/managed-settings.json</code></td><td>Enterprise managed policy (macOS)</td></tr>
+        <tr><td><code>/etc/claude-code/managed-settings.json</code></td><td>Enterprise managed policy (Linux / WSL)</td></tr>
+    </table>
+    <div class="warn">⚠️ Don't confuse <code>~/.claude/</code> (the <em>directory</em> of settings, commands, agents)
+    with <code>~/.claude.json</code> (a single <em>file</em> holding session/MCP state). Different things.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> What <code>/config</code> does</h2>
+    <p><code>/config</code> is the in-app settings UI. Running it opens a tabbed interface where you can view status
+    (version, auth) and change settings — model, theme, output style, and more — that reload without a restart.
+    Editing <code>settings.json</code> by hand and using <code>/config</code> are two doors to the same config.</p>
+    <div class="good">Use <code>/config</code> for quick, interactive tweaks; edit <code>settings.json</code> directly
+    when you want the change committed to the repo and reviewed.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The .claude layout at a glance</h2>
+    <div class="mermaid">
+flowchart TD
+    U["~/.claude/ (USER)"] --> US["settings.json"]
+    U --> UM["CLAUDE.md"]
+    U --> UC["commands/"]
+    U --> UA["agents/"]
+    U --> UK["skills/"]
+    P[".claude/ (PROJECT, in repo)"] --> PS["settings.json (committed)"]
+    P --> PL["settings.local.json (gitignored)"]
+    P --> PM["CLAUDE.md"]
+    P --> PC["commands/ · agents/ · skills/ · hooks/"]
+    ROOT["repo root"] --> MCP[".mcp.json (project MCP servers)"]
+    HOME["home"] --> STATE["~/.claude.json (session + MCP state)"]
+    MGD["managed dir"] --> MP["managed-settings.json (enterprise policy)"]
+    classDef user fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef proj fill:#cfe2ff,stroke:#3d7bfe,color:#0a3a9a;
+    classDef top fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class US,UM,UC,UA,UK user; class PS,PL,PM,PC proj; class MP top;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Inspecting a project .claude directory</h2>
+    <p>A typical committed layout — settings, memory, a custom command, and a subagent, plus the gitignored local file.</p>
+<pre><span class="cm"># from the repo root</span>
+$ tree -a .claude .mcp.json
+.claude
+├── settings.json          <span class="cm"># committed team settings</span>
+├── settings.local.json    <span class="cm"># gitignored personal overrides</span>
+├── CLAUDE.md              <span class="cm"># project memory / instructions</span>
+├── commands
+│   └── deploy.md          <span class="cm"># /deploy slash command</span>
+├── agents
+│   └── reviewer.md        <span class="cm"># a custom subagent</span>
+└── skills
+    └── changelog/
+.mcp.json                  <span class="cm"># project-scoped MCP servers</span>
+
+<span class="cm"># open the interactive settings UI</span>
+$ claude
+&gt; /config                 <span class="cm"># tabbed settings, live-reloads most changes</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Editing settings.json vs. using /config</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Edit <code>settings.json</code> directly</h4>
+            <ul><li>Committable and reviewable in version control</li>
+            <li>Scriptable; supports every key incl. <code>hooks</code>, <code>permissions</code></li>
+            <li>Shareable with the whole team at project scope</li></ul></div>
+        <div class="con"><h4>⚠️ <code>/config</code> interactive UI</h4>
+            <ul><li>Fast, discoverable, live-reloads without restart</li>
+            <li>Great for personal/session tweaks (model, theme)</li>
+            <li>But: not everything is exposed; not a review artifact</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "MCP servers are defined in <code>.claude/settings.json</code>." → Project MCP
+    servers live in <b><code>.mcp.json</code></b> at the repo root. Settings can <em>approve</em> them
+    (<code>enableAllProjectMcpServers</code>) but don't define them.</div>
+    <div class="trap"><b>Trap:</b> "<code>~/.claude.json</code> and the <code>~/.claude/</code> folder are the same
+    thing." → One is a <b>state file</b> (session, MCP), the other is the <b>config directory</b>
+    (settings, commands, agents, skills).</div>
+    <div class="trap"><b>Trap:</b> "Custom slash commands go in a top-level <code>commands.json</code>." → Each
+    command is its own <code>.md</code> file inside <b><code>.claude/commands/</code></b> (user or project).</div>
+    <div class="trap"><b>Trap:</b> "<code>/config</code> only shows read-only status." → It's an interactive editor:
+    it changes settings and live-reloads most of them without a restart.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Where does a project-scoped MCP server get declared?</summary>
+    <p class="answer">In <b><code>.mcp.json</code></b> at the repo root — not in <code>settings.json</code>. The
+    <code>enableAllProjectMcpServers</code> setting can auto-approve the servers declared there.</p></details>
+    <details><summary>Q2 · A teammate's custom <code>/deploy</code> command isn't showing up. Where should it live?</summary>
+    <p class="answer">As <code>deploy.md</code> inside <b><code>.claude/commands/</code></b> (project scope, committed) or
+    <code>~/.claude/commands/</code> (user scope). Slash commands are individual Markdown files in a
+    <code>commands/</code> folder.</p></details>
+    <details><summary>Q3 · What's the difference between editing settings.json and running <code>/config</code>?</summary>
+    <p class="answer">Both change the same configuration. Editing <b><code>settings.json</code></b> is committable,
+    scriptable, and covers every key; <b><code>/config</code></b> is an interactive UI for quick tweaks that
+    live-reloads most changes without a restart.</p></details>
+
+    <div class="pager">
+        <a href="2-3-env-vars.html"><span class="k">← Back</span>2.3 · Environment Variables</a>
+        <a class="next" href="3-1-permission-modes.html"><span class="k">Next →</span>3.1 · Permission Modes</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 2.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

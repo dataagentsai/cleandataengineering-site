@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.2 Error Handling Patterns · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 3 · Tool Results &amp; Error Handling</div>
+    <h1>3.2 · Error Handling Patterns</h1>
+    <div class="tag">Return errors, don't throw</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Hand the failure back to Claude, don't crash the loop</h2>
+    <p>When your tool fails — a 500 from an upstream API, a missing file, a bad argument — the wrong move is to let
+    the exception bubble up and kill the request. The right move is to <strong>return the error to Claude as an
+    ordinary <code>tool_result</code> with <code>is_error: true</code></strong>. Claude reads that just like any other
+    result and can <em>recover</em>: apologize, retry with corrected input, try a different tool, or ask the user for
+    what's missing. Throwing keeps the failure inside your process; returning it puts the failure where the model can
+    act on it.</p>
+
+    <div class="bad">Anti-pattern: <code>raise</code>/<code>throw</code> out of the tool handler. The agent loop
+    dies, Claude never sees the error, and the user gets a stack trace instead of a graceful recovery.</div>
+    <div class="good">Pattern: catch the exception, put its message in <code>content</code>, set
+    <code>is_error: true</code>, and continue the conversation. The loop survives.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Recoverable vs. fatal</h2>
+    <p>Not every error is equal. Sort them by whether <em>Claude can fix it by trying again</em>:</p>
+    <table>
+        <tr><th>Class</th><th>Example</th><th>Return to Claude?</th><th>What Claude does</th></tr>
+        <tr><td><b>Recoverable — bad args</b></td><td>Missing required <code>location</code>; malformed date</td><td>✅ <code>is_error: true</code> naming the problem</td><td>Retries the tool with the fix (typically 2–3 attempts) before apologizing</td></tr>
+        <tr><td><b>Recoverable — transient</b></td><td>Rate limit; upstream 500; timeout</td><td>✅ <code>is_error: true</code> with retry hint</td><td>Waits/retries or explains to the user and offers to try later</td></tr>
+        <tr><td><b>Fatal for this tool</b></td><td>Auth revoked; resource permanently gone</td><td>✅ <code>is_error: true</code>, clear "cannot proceed" message</td><td>Stops calling it; tells the user or switches approach</td></tr>
+        <tr><td><b>Harness-level</b></td><td>Irreversible action denied by your gate</td><td>✅ Return a "DENIED / not executed" result</td><td>Adapts — doesn't keep hammering the blocked action</td></tr>
+    </table>
+    <div class="note">🔑 In every row you still return a <code>tool_result</code>. "Fatal" means Claude should stop
+    <em>retrying that tool</em> — not that your code should throw. The error message is what tells it which.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Write the error <em>for the model</em></h2>
+    <p>Claude only knows what your <code>content</code> string says. A generic <code>"failed"</code> gives it nothing
+    to reason with. An instructive message — <em>what</em> went wrong and <em>what to try next</em> — lets it recover
+    without guessing.</p>
+    <div class="good">✅ <code>"Rate limit exceeded. Retry after 60 seconds."</code> · ✅ <code>"Error: missing
+    required 'location' parameter."</code></div>
+    <div class="bad">⚠️ <code>"failed"</code> · ⚠️ <code>"Error 500"</code> — Claude can't tell if it should retry,
+    fix an argument, or give up.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Throw vs. return-as-result</h2>
+    <div class="mermaid">
+flowchart TD
+    T["Tool call fails"] --> Q{"How do you surface it?"}
+    Q -->|"throw / raise"| CRASH["🔴 Exception escapes<br/>loop dies, Claude blind"]
+    Q -->|"tool_result + is_error:true"| BACK["Claude reads the error"]
+    BACK --> R{"Recoverable?"}
+    R -->|"bad args / transient"| RETRY["🟢 Retry with fix<br/>(2–3 attempts)"]
+    R -->|"fatal"| STOP["🟠 Stop this tool,<br/>explain to user"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class RETRY ok; class STOP gate; class CRASH bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Catch, then return is_error (don't re-raise)</h2>
+<pre><span class="kw">def</span> <span class="fn">handle</span>(block):
+    <span class="kw">try</span>:
+        result = <span class="fn">run_tool</span>(block.name, block.input)
+        <span class="kw">return</span> { <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+                 <span class="st">"tool_use_id"</span>: block.id,
+                 <span class="st">"content"</span>: result }
+    <span class="kw">except</span> ToolError <span class="kw">as</span> e:
+        <span class="cm"># Hand the failure to Claude — instructive text, not "failed".</span>
+        <span class="kw">return</span> { <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+                 <span class="st">"tool_use_id"</span>: block.id,
+                 <span class="st">"content"</span>: <span class="fn">str</span>(e),      <span class="cm"># e.g. "Rate limit exceeded. Retry after 60s."</span>
+                 <span class="st">"is_error"</span>: <span class="kw">True</span> }        <span class="cm"># Claude reads this and can recover</span></pre>
+    <p>The resulting JSON block Claude receives:</p>
+<pre>{ <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+  <span class="st">"tool_use_id"</span>: <span class="st">"toolu_01A09q90qw90lq917835lq9"</span>,
+  <span class="st">"content"</span>: <span class="st">"ConnectionError: the weather service API is not available (HTTP 500)"</span>,
+  <span class="st">"is_error"</span>: <span class="kw">true</span> }</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> is_error return vs. throwing</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Return <code>is_error: true</code></h4>
+            <ul><li>Loop survives; Claude can retry or adapt</li>
+            <li>Model-readable recovery path</li>
+            <li>One consistent shape for success and failure</li></ul></div>
+        <div class="con"><h4>⚠️ Throw the exception</h4>
+            <ul><li>Simple in trivial scripts</li>
+            <li>But: request dies, Claude never sees it</li>
+            <li>No recovery, no retry, opaque to the user</li></ul></div>
+    </div>
+    <div class="note">Note: this is for <strong>client tools</strong>. For <em>server</em> tools (web search, code
+    execution), Anthropic handles errors internally — you don't send <code>is_error</code> results for those.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Letting the tool exception propagate. → That kills the agent loop and blinds Claude.
+    <b>Catch it and return <code>is_error: true</code></b> so the model can recover.</div>
+    <div class="trap"><b>Trap:</b> Treating a bad-argument error as fatal. → Missing/invalid parameters are
+    <b>recoverable</b> — return the error naming the missing field and Claude retries (2–3 times) with it filled in.</div>
+    <div class="trap"><b>Trap:</b> Returning <code>"failed"</code>. → Write <b>instructive</b> errors — what went wrong
+    and what to try next — because the message is all Claude has to reason with.</div>
+    <div class="trap"><b>Trap:</b> Sending <code>is_error</code> results for <em>server</em> tools. → Server tools
+    (web search, code execution) handle their own errors on Anthropic's side; you only return <code>is_error</code>
+    for client tools you execute.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Your weather API returns HTTP 500. Throw, or return something — and what exactly?</summary>
+    <p class="answer">Return a <code>tool_result</code> with <code>is_error: true</code> and an instructive
+    <code>content</code> like <code>"weather service unavailable (HTTP 500). Retry later."</code> Throwing would kill
+    the loop and hide the failure from Claude.</p></details>
+    <details><summary>Q2 · Claude calls <code>get_weather</code> with no <code>location</code>. Is that recoverable, and how do you respond?</summary>
+    <p class="answer">Recoverable. Return <code>is_error: true</code> with <code>"Error: Missing required 'location'
+    parameter."</code> Claude will re-call the tool with the location filled in (retrying a couple of times before
+    giving up). <code>strict: true</code> on the tool schema prevents this class entirely.</p></details>
+    <details><summary>Q3 · Why is a vague <code>"error"</code> string worse than a specific one, given Claude can't see your logs?</summary>
+    <p class="answer">The <code>content</code> string is the model's <em>only</em> view of the failure. A specific
+    message ("retry after 60s", "auth expired, re-authorize") tells it whether to retry, fix an argument, or stop —
+    a bare "error" leaves it guessing.</p></details>
+
+    <div class="pager">
+        <a href="3-1-returning-results.html"><span class="k">← Back</span>3.1 · Returning Results</a>
+        <a class="next" href="3-3-large-results-truncation.html"><span class="k">Next →</span>3.3 · Large / Structured Results &amp; Truncation</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 3.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

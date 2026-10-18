@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.1 Hook Events Overview · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 6 · Hooks</div>
+    <h1>6.1 · Hook Events Overview</h1>
+    <div class="tag">The lifecycle events you can hook</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Hooks fire at fixed points in Claude Code's lifecycle</h2>
+    <p>A <strong>hook</strong> is a user-defined command that Claude Code runs <em>automatically</em> at a specific
+    <strong>lifecycle event</strong>. Hooks give you <strong>deterministic</strong> control: instead of hoping the
+    model chooses to format a file or skip a dangerous command, you attach code to the event and it
+    <em>always</em> runs. Each event fires at a well-defined moment — before a tool, after a tool, when you submit
+    a prompt, when the model stops, when a session starts or ends.</p>
+
+    <p>These are the core events the exam expects you to know, in roughly the order they occur in a turn:</p>
+    <table>
+        <tr><th>Event</th><th>Fires when</th><th>Can it block?</th></tr>
+        <tr><td><code>SessionStart</code></td><td>A session begins or resumes (matchers: <code>startup</code>, <code>resume</code>, <code>clear</code>, <code>compact</code>)</td><td>No — injects context</td></tr>
+        <tr><td><code>UserPromptSubmit</code></td><td>You submit a prompt, before Claude processes it</td><td>Yes — can erase the prompt</td></tr>
+        <tr><td><code>PreToolUse</code></td><td>Before a tool call executes</td><td>Yes — can deny the tool</td></tr>
+        <tr><td><code>PostToolUse</code></td><td>After a tool call succeeds</td><td>Feedback only — tool already ran</td></tr>
+        <tr><td><code>Notification</code></td><td>Claude Code sends a notification (needs input / permission)</td><td>No</td></tr>
+        <tr><td><code>Stop</code></td><td>Claude finishes responding (the main agent)</td><td>Yes — can force it to keep going</td></tr>
+        <tr><td><code>SubagentStop</code></td><td>A subagent (Task) finishes responding</td><td>Yes — can force it to keep going</td></tr>
+        <tr><td><code>PreCompact</code></td><td>Before context compaction (matchers: <code>manual</code>, <code>auto</code>)</td><td>Yes</td></tr>
+        <tr><td><code>SessionEnd</code></td><td>A session terminates</td><td>No</td></tr>
+    </table>
+
+    <div class="note">🔑 Two mental buckets: <strong>pre-events</strong> (<code>PreToolUse</code>,
+    <code>UserPromptSubmit</code>, <code>PreCompact</code>) run <em>before</em> an action and can stop it;
+    <strong>post-events</strong> (<code>PostToolUse</code>, <code>Stop</code>, <code>SubagentStop</code>) run
+    <em>after</em> and give feedback or push work to continue.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The current set is larger — but the core nine anchor it</h2>
+    <p>Recent Claude Code versions expose <strong>many more events</strong> beyond the core nine — for example
+    <code>SubagentStart</code>, <code>PostToolUseFailure</code>, <code>PostToolBatch</code>,
+    <code>PermissionRequest</code>, <code>UserPromptExpansion</code>, <code>SessionEnd</code>,
+    <code>PostCompact</code>, <code>ConfigChange</code>, and <code>FileChanged</code>. You browse the full,
+    version-current list any time with the <code>/hooks</code> menu inside Claude Code. Learn the core nine well;
+    they cover the vast majority of real automations, and the rest follow the same input/output contract.</p>
+
+    <div class="warn">⚠️ Don't confuse <code>Stop</code> with <code>SubagentStop</code>. <code>Stop</code> fires when
+    the <strong>main</strong> agent finishes; <code>SubagentStop</code> fires when a <strong>Task subagent</strong>
+    finishes. A <code>Stop</code> hook fires every time Claude finishes responding — not only at "task done."</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Where each event sits in a turn</h2>
+    <div class="mermaid">
+flowchart TD
+    S["SessionStart<br/>(begin / resume)"] --> U["UserPromptSubmit<br/>(you submit a prompt)"]
+    U --> PRE{"PreToolUse<br/>before each tool"}
+    PRE -->|"allowed"| T["Tool runs"]
+    T --> POST["PostToolUse<br/>after tool succeeds"]
+    POST -->|"more tools"| PRE
+    POST -->|"done"| STOP["Stop<br/>Claude finishes"]
+    PRE -.->|"deny"| BLOCK["🔴 Tool blocked"]
+    STOP --> END["SessionEnd<br/>(terminate)"]
+    N["Notification"] -.->|"needs input"| U
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class S ok; class POST ok; class END ok; class PRE gate; class STOP gate; class BLOCK bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A hook keyed by its event name</h2>
+    <p>In <code>settings.json</code>, the top-level <code>hooks</code> object is keyed by <strong>event name</strong>.
+    Here a <code>PostToolUse</code> hook logs the session, and a <code>Stop</code> hook plays a sound when Claude
+    finishes — two different lifecycle moments, two different keys.</p>
+<pre>{
+  <span class="st">"hooks"</span>: {
+    <span class="cm">// after any tool succeeds, append a line to a log</span>
+    <span class="st">"PostToolUse"</span>: [
+      { <span class="st">"hooks"</span>: [
+          { <span class="st">"type"</span>: <span class="st">"command"</span>,
+            <span class="st">"command"</span>: <span class="st">"jq -r .tool_name >> ~/.claude/tools.log"</span> } ] }
+    ],
+    <span class="cm">// when the main agent finishes responding</span>
+    <span class="st">"Stop"</span>: [
+      { <span class="st">"hooks"</span>: [
+          { <span class="st">"type"</span>: <span class="st">"command"</span>, <span class="st">"command"</span>: <span class="st">"afplay /System/Library/Sounds/Glass.aiff"</span> } ] }
+    ]
+  }
+}</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Pre-events vs. post-events</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Pre-events (PreToolUse, UserPromptSubmit)</h4>
+            <ul><li>Run <em>before</em> the action — can veto it</li>
+            <li>The place to enforce guardrails and policy</li>
+            <li>Can inject context that shapes what Claude does next</li></ul></div>
+        <div class="con"><h4>⚠️ Post-events (PostToolUse, Stop)</h4>
+            <ul><li>Run <em>after</em> — the action already happened</li>
+            <li>Can't undo; only give feedback or trigger follow-up work</li>
+            <li>Best for formatting, logging, notifications, "keep going" checks</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "A <code>PostToolUse</code> hook can cancel the edit." → No. The tool already
+    executed; <code>PostToolUse</code> can only feed back or reformat. To <b>prevent</b> a tool, use
+    <code>PreToolUse</code>.</div>
+    <div class="trap"><b>Trap:</b> "<code>Stop</code> only fires at task completion." → It fires <b>every time
+    Claude finishes responding</b>, not just when the whole task is done. It does not fire on user interrupts.</div>
+    <div class="trap"><b>Trap:</b> Mixing up <code>Stop</code> and <code>SubagentStop</code>. → <code>Stop</code> is
+    the main agent; <code>SubagentStop</code> is a Task subagent. Distinct events, distinct hooks.</div>
+    <div class="trap"><b>Trap:</b> Thinking the nine events are the whole list. → Current versions add many more
+    (<code>SubagentStart</code>, <code>PostToolBatch</code>, <code>SessionEnd</code>, …). Use <code>/hooks</code>
+    to see the live set for your version.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You want to block a dangerous command before it runs. Which event?</summary>
+    <p class="answer"><b>PreToolUse</b> — it fires before the tool executes and can deny it. <code>PostToolUse</code>
+    runs after and cannot stop the action.</p></details>
+    <details><summary>Q2 · Which event injects text into context when a session begins or resumes?</summary>
+    <p class="answer"><b>SessionStart</b>. Its stdout is added to Claude's context, and its matchers
+    (<code>startup</code>, <code>resume</code>, <code>clear</code>, <code>compact</code>) let you target, e.g.,
+    only post-compaction re-injection.</p></details>
+    <details><summary>Q3 · A Task subagent just finished. Which event fires — Stop or SubagentStop?</summary>
+    <p class="answer"><b>SubagentStop</b>. <code>Stop</code> fires only for the main agent finishing its response;
+    a subagent finishing fires <code>SubagentStop</code>.</p></details>
+
+    <div class="pager">
+        <a href="5-5-distributing-skills.html"><span class="k">← Back</span>5.5 · Distributing Skills</a>
+        <a class="next" href="6-2-hook-configuration.html"><span class="k">Next →</span>6.2 · Hook Configuration &amp; Matchers</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 6.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

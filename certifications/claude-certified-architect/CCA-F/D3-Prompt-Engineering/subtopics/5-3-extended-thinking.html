@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.3 · Extended Thinking vs Prompted CoT · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 5 · Chain of Thought &amp; Extended Thinking</div>
+    <h1>5.3 · Extended Thinking vs Prompted CoT</h1>
+    <div class="tag">Native reasoning budget</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Reasoning as a first-class API capability</h2>
+    <p><strong>Extended thinking</strong> is a native capability: instead of coaxing step-by-step reasoning through
+    prompt wording (5.1–5.2), you turn it on with the <code>thinking</code> parameter. The model then reasons in
+    dedicated <strong><code>thinking</code> content blocks</strong> that come back <em>separate</em> from the final
+    <code>text</code> answer — no tags to write, no regex to strip. You control <em>how much</em> it reasons with a
+    reasoning budget or an effort level.</p>
+
+    <div class="note">🔑 Prompted CoT is <em>you</em> engineering the words. Extended thinking is the <em>model</em>
+    doing genuine internal reasoning, returned in its own blocks with automatic optimization — Anthropic's docs note
+    adaptive thinking reliably beats manual CoT on hard tasks.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Budget vs. effort — two ways to size the reasoning</h2>
+    <p>How you dial the reasoning depends on the model generation:</p>
+    <table>
+        <tr><th>Mode</th><th>Config</th><th>Applies to</th></tr>
+        <tr><td><strong>Manual budget</strong></td><td><code>thinking: {type: "enabled", budget_tokens: N}</code> — <code>N</code> must be &lt; <code>max_tokens</code></td><td>Older models (e.g. Opus 4.5, Haiku 4.5). Deprecated on 4.6; returns 400 on Opus 4.7/4.8, Sonnet&nbsp;5, Fable&nbsp;5.</td></tr>
+        <tr><td><strong>Adaptive + effort</strong></td><td><code>thinking: {type: "adaptive"}</code> + <code>output_config: {effort: "low"|"medium"|"high"|"xhigh"|"max"}</code></td><td>Current models. The model decides when/how much to think; <code>effort</code> tunes depth.</td></tr>
+    </table>
+    <p>The response format is the same either way: <code>thinking</code> blocks (each carrying a
+    <code>signature</code>) precede the <code>text</code> answer. A <code>display</code> setting
+    (<code>"summarized"</code> vs <code>"omitted"</code>) controls whether the reasoning text is surfaced — you're
+    billed for the full thinking tokens regardless.</p>
+
+    <div class="bad">🚫 <strong>You cannot prefill the assistant turn while extended thinking is enabled.</strong>
+    Putting words in Claude's mouth on the last assistant turn conflicts with native reasoning — the request is
+    rejected. (Separately, prefill is unsupported on 4.6+ models entirely.) Use structured outputs or a clear
+    instruction to shape the answer instead.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Two roads to step-by-step reasoning</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Task needs reasoning"] --> B{"Prompted CoT<br/>or native thinking?"}
+    B -->|"prompt wording"| C["Prompted CoT (5.1/5.2)<br/>reasoning in the text body"]
+    B -->|"thinking parameter"| D{"Which model?"}
+    D -->|"older"| E["🔵 enabled + budget_tokens"]
+    D -->|"current"| F["🟢 adaptive + effort"]
+    E --> G["Separate 'thinking' blocks<br/>+ signature, then 'text'"]
+    F --> G
+    G --> H["🚫 no assistant prefill<br/>while thinking is on"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef mid fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class F ok; class E mid; class C mid; class H bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Enable thinking, read the separate blocks</h2>
+    <p>On current models, adaptive thinking + effort. The reasoning arrives as <code>thinking</code> blocks you can
+    log or ignore; the answer is the <code>text</code> block.</p>
+<pre><span class="cm"># Current models: native reasoning, no prompt tricks, no prefill allowed.</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">16000</span>,
+    thinking={<span class="st">"type"</span>: <span class="st">"adaptive"</span>},          <span class="cm"># native reasoning on</span>
+    output_config={<span class="st">"effort"</span>: <span class="st">"high"</span>},        <span class="cm"># tune depth: low..max</span>
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Prove there are infinitely many primes ≡ 3 (mod 4)."</span>}],
+)
+
+<span class="kw">for</span> block <span class="kw">in</span> resp.content:
+    <span class="kw">if</span> block.type == <span class="st">"thinking"</span>:
+        <span class="fn">log</span>(block.thinking)          <span class="cm"># separate reasoning block (+ block.signature)</span>
+    <span class="kw">elif</span> block.type == <span class="st">"text"</span>:
+        <span class="fn">show</span>(block.text)              <span class="cm"># the final answer</span>
+
+<span class="cm"># Older models instead: thinking={"type": "enabled", "budget_tokens": 10000}</span>
+<span class="cm"># (budget_tokens must be &lt; max_tokens; 400 on Opus 4.7/4.8, Sonnet 5, Fable 5)</span></pre>
+
+    <div class="warn">⚠️ Preserve <code>thinking</code> blocks (and their <code>signature</code>) unmodified when you
+    send them back in a later turn — the signature is an integrity check and altering it returns a 400. This matters
+    most during tool-use loops (see 5.4).</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Prompted CoT vs. extended thinking</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Extended thinking</h4>
+            <ul><li>Native reasoning; no prompt engineering</li>
+            <li>Reasoning in <em>separate</em> blocks — nothing to strip</li>
+            <li>Adaptive + effort auto-tunes depth to difficulty</li>
+            <li>Reasoning preserved across tool calls via signatures</li></ul></div>
+        <div class="con"><h4>⚠️ Costs &amp; constraints</h4>
+            <ul><li>Thinking tokens are billed and add latency</li>
+            <li><b>No assistant prefill</b> while enabled</li>
+            <li>Tool-use pairs it with constraints (5.4)</li>
+            <li><code>budget_tokens</code> is gone on the newest models</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Trying to prefill the assistant turn with thinking on. → <b>Not allowed</b> — the
+    request is rejected. Shape the output with structured outputs or an instruction instead of a prefill.</div>
+    <div class="trap"><b>Trap:</b> Using <code>budget_tokens</code> on a current model. → It's deprecated on 4.6 and
+    <b>returns a 400</b> on Opus 4.7/4.8, Sonnet&nbsp;5, and Fable&nbsp;5. Use <code>thinking: {type: "adaptive"}</code>
+    with <code>effort</code>.</div>
+    <div class="trap"><b>Trap:</b> Expecting the answer in <code>content[0]</code>. → With thinking on, the
+    <b><code>thinking</code> block(s) come first</b>; the answer is the <code>text</code> block — iterate and check
+    <code>block.type</code>.</div>
+    <div class="trap"><b>Trap:</b> Editing or dropping the thinking block's <code>signature</code> before replaying
+    it. → The signature must be passed back <b>unmodified</b>, or the API returns a 400.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A candidate sets <code>budget_tokens</code> on <code>claude-opus-4-8</code> and gets a 400. Why?</summary>
+    <p class="answer">Manual <code>budget_tokens</code> is removed on the newest models (Opus 4.7/4.8, Sonnet&nbsp;5,
+    Fable&nbsp;5). Use <code>thinking: {type: "adaptive"}</code> and control depth with
+    <code>output_config: {effort: ...}</code> instead.</p></details>
+    <details><summary>Q2 · Why can't you prefill the assistant turn with extended thinking enabled?</summary>
+    <p class="answer">Native reasoning generates the assistant turn's leading content itself, so a client-supplied
+    prefill on that turn conflicts with it and the request is rejected. Use structured outputs or an explicit
+    instruction to steer the answer's shape.</p></details>
+    <details><summary>Q3 · How does the reasoning come back differently from prompted structured CoT?</summary>
+    <p class="answer">Extended thinking returns reasoning in <b>separate <code>thinking</code> content blocks</b>
+    (each with a <code>signature</code>), so you never tag or regex it out — you just read the <code>text</code>
+    block. Structured CoT keeps reasoning inline in the response body inside tags you defined.</p></details>
+
+    <div class="pager">
+        <a href="5-2-structured-thinking-tags.html"><span class="k">← Back</span>5.2 · Structured Thinking with Tags</a>
+        <a class="next" href="5-4-thinking-with-tools.html"><span class="k">Next →</span>5.4 · Thinking with Tool Use</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 5.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

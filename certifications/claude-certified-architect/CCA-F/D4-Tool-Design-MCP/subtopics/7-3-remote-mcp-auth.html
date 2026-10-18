@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.3 Remote MCP Servers & OAuth · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design & MCP</a> › Cluster 7 · Building &amp; Consuming MCP Servers</div>
+    <h1>7.3 · Remote MCP Servers &amp; OAuth</h1>
+    <div class="tag">Auth for hosted servers</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Remote servers are third-party HTTPS endpoints you connect over the wire</h2>
+    <p>A <strong>remote MCP server</strong> is one publicly exposed over HTTP (Streamable HTTP or SSE) at an
+    <code>https://</code> URL, versus a local stdio server the host launches as a child process. Companies deploy
+    remote MCP servers so developers can connect to their services — the connector docs list examples such as
+    <strong>Notion, Asana, Stripe, Sentry, GitHub</strong>, and others. These are <em>third-party</em> services, not
+    owned or endorsed by Anthropic: <strong>connect only to servers you trust</strong> and review their security terms
+    first — a remote server you attach can read whatever the model shares and is a prompt-injection surface.</p>
+    <div class="note">🔑 The Messages API connector (7.2), Claude Code (7.4), and Claude Desktop all consume remote
+    servers by URL. The difference is <em>who holds the credential</em>: the connector takes a pre-obtained token in
+    the request; Claude Code runs the OAuth flow interactively for you.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Most remote servers require OAuth; pass a Bearer access token</h2>
+    <p>Many hosted MCP servers require authentication and use <strong>OAuth 2.0</strong>. For the Messages API
+    connector, you supply the OAuth <strong>Bearer access token</strong> in the server definition's
+    <code>authorization_token</code> field. Critically, <strong>you handle the OAuth flow and token refresh
+    yourself</strong> — the API expects a valid access token at request time and does not run the browser flow for
+    you. (Claude Code and Claude Desktop <em>do</em> run the flow — see 7.4.)</p>
+    <div class="good">To obtain a token for testing, the <strong>MCP Inspector</strong> (7.5) has a "Quick OAuth Flow":
+    pick the transport, enter the server URL, authorize in the browser, then copy the <code>access_token</code> into
+    <code>authorization_token</code>.</div>
+    <div class="warn">⚠️ MCP OAuth tokens are <strong>not</strong> the same as a service's native REST API key. A hosted
+    MCP server (e.g. Notion, Slack) typically wants an OAuth Bearer token, not the provider's integration/API key —
+    they're different auth systems and the API key will fail against the MCP endpoint. Access tokens also
+    <strong>expire</strong>; refresh them before they lapse.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Where the credential comes from</h2>
+    <div class="mermaid">
+flowchart TD
+    S["Remote MCP server<br/>needs OAuth"] --> Q{"Which consumer?"}
+    Q -->|"Messages API connector"| A["You obtain the token<br/>(handle OAuth + refresh yourself)"]
+    A --> A2["🟠 Pass authorization_token<br/>in mcp_servers[]"]
+    Q -->|"Claude Code / Desktop"| B["Host runs the OAuth flow"]
+    B --> B2["🟢 /mcp or claude mcp login<br/>token stored + auto-refreshed"]
+    Q -->|"No auth needed"| C["🔵 Omit authorization_token"]
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef net fill:#cce5ff,stroke:#4a90d9,color:#0b3d66;
+    class A2 gate; class B2 ok; class C net;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Attaching an OAuth token to a connector request</h2>
+    <p>Obtain the access token out of band (your OAuth flow, or the Inspector for testing), then place it in
+    <code>authorization_token</code>. Refresh and re-send before it expires.</p>
+<pre><span class="cm"># Bearer token in the server definition (Messages API connector)</span>
+mcp_servers=[
+    {
+        <span class="st">"type"</span>: <span class="st">"url"</span>,
+        <span class="st">"url"</span>: <span class="st">"https://example-server.modelcontextprotocol.io/sse"</span>,
+        <span class="st">"name"</span>: <span class="st">"authenticated-server"</span>,
+        <span class="st">"authorization_token"</span>: <span class="st">"YOUR_ACCESS_TOKEN_HERE"</span>,  <span class="cm"># OAuth Bearer; you refresh it</span>
+    }
+]</pre>
+<pre><span class="cm"># Get a token for TESTING via the MCP Inspector:</span>
+<span class="fn">npx</span> @modelcontextprotocol/inspector
+<span class="cm"># → set Transport (SSE / Streamable HTTP) → enter URL</span>
+<span class="cm"># → "Open Auth Settings" → "Quick OAuth Flow" → authorize</span>
+<span class="cm"># → copy the access_token → paste into authorization_token</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> API-supplied token vs. host-managed OAuth</h2>
+    <table>
+        <tr><th></th><th>Messages API connector</th><th>Claude Code / Desktop</th></tr>
+        <tr><td>Who runs the OAuth flow</td><td>You (out of band)</td><td>The host (browser flow)</td></tr>
+        <tr><td>Token refresh</td><td>Your responsibility</td><td>Automatic</td></tr>
+        <tr><td>Where token lives</td><td><code>authorization_token</code> in each request</td><td>Stored securely by the host</td></tr>
+        <tr><td>Best for</td><td>Server-to-server / programmatic use</td><td>Interactive developer use</td></tr>
+    </table>
+    <div class="good">If a server needs no auth, simply omit <code>authorization_token</code>. Never hard-code a
+    long-lived secret where a short-lived OAuth token is expected — and never send a service's REST API key in place of
+    its MCP OAuth token.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The connector runs OAuth for me." → For the <b>Messages API connector</b>, you
+    obtain and refresh the access token yourself and pass it in <code>authorization_token</code>. Only the
+    <b>Claude Code / Desktop</b> hosts run the interactive flow.</div>
+    <div class="trap"><b>Trap:</b> Using a provider's API key as the MCP credential. → Hosted MCP servers usually want
+    an <b>OAuth Bearer token</b>. The service's native API/integration key authenticates a different system and won't
+    work against the MCP endpoint.</div>
+    <div class="trap"><b>Trap:</b> Trusting any remote server. → Remote servers are <b>third-party</b> services, not
+    Anthropic-operated. Connect only to servers you trust; a malicious or compromised server is a prompt-injection and
+    data-exfiltration vector (Cluster 8).</div>
+    <div class="trap"><b>Trap:</b> Assuming a token lasts forever. → OAuth access tokens <b>expire</b>. A connector
+    request with a stale token fails; refresh proactively.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · How does an OAuth-protected server get its credential in a Messages API connector request?</summary>
+    <p class="answer">You obtain a valid OAuth <b>Bearer access token</b> yourself and put it in the server definition's
+    <code>authorization_token</code> field. The API does not run the OAuth flow — you're also responsible for
+    refreshing the token before it expires.</p></details>
+    <details><summary>Q2 · A Notion integration token isn't authenticating the Notion MCP server. Why?</summary>
+    <p class="answer">MCP servers use <b>OAuth</b>, a different auth system than the provider's native REST API key. The
+    integration token authenticates Notion's REST API, not its MCP endpoint — you need an OAuth Bearer token for the
+    MCP server.</p></details>
+    <details><summary>Q3 · What's the security posture toward remote MCP servers, and why?</summary>
+    <p class="answer">Treat them as untrusted third parties — connect only to servers you trust after reviewing their
+    security practices. A remote server sees what the model shares with it and can inject content into the model's
+    context, making it a prompt-injection surface (see 8.1).</p></details>
+
+    <div class="pager">
+        <a href="7-2-mcp-connector-api.html"><span class="k">← Back</span>7.2 · The Claude API MCP Connector</a>
+        <a class="next" href="7-4-mcp-in-claude-code.html"><span class="k">Next →</span>7.4 · MCP in Claude Code / Desktop</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 7.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

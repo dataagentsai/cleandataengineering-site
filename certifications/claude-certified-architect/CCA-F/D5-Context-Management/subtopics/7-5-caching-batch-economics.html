@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.5 Caching + Batch Economics · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 7 · Cost &amp; Performance Optimization</div>
+    <h1>7.5 · Caching + Batch Economics</h1>
+    <div class="tag">Stack the discounts</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The caching price table</h2>
+    <p><strong>Prompt caching</strong> is a prefix match: a stable prefix (tools → system → early messages) is
+    written to cache once, then reused. The economics are a set of multipliers on the model's base input rate:</p>
+
+    <table>
+        <tr><th>Operation</th><th>Multiplier on base input</th><th>Meaning</th></tr>
+        <tr><td>Cache <strong>write</strong>, 5-min TTL</td><td><strong>1.25×</strong></td><td>Premium to store the prefix (default TTL)</td></tr>
+        <tr><td>Cache <strong>write</strong>, 1-hour TTL</td><td><strong>2×</strong></td><td>Premium for the longer-lived entry</td></tr>
+        <tr><td>Cache <strong>read</strong> (hit)</td><td><strong>0.1×</strong></td><td>~90% cheaper than a fresh read</td></tr>
+        <tr><td>Uncached input</td><td>1× (full)</td><td>Baseline</td></tr>
+    </table>
+
+    <div class="note">🔑 Break-even: at the 5-min write premium (1.25×) plus one read (0.1×) = 1.35× vs. 2× for
+    two uncached reads, caching pays off from the <strong>second</strong> request. The 1-hour TTL (2× write) needs
+    at least <strong>three</strong> reads to win. Minimum cacheable prefix is ~1,024 tokens on Opus 4.8 / Sonnet;
+    shorter prefixes silently don't cache.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Caching and batching stack — multiplicatively</h2>
+    <p>These are independent discounts, and the multipliers <strong>combine</strong>. The Batch API's 50% cut
+    (7.2) applies to <em>all</em> token usage, including cached reads. So a cached prefix read <em>inside</em> a
+    batch is billed at <code>0.1× × 0.5 = 0.05×</code> of base input — a 95% discount on that portion. This is the
+    cheapest way to run a large eval that shares one big prompt: cache the shared context, then batch every
+    variant against it.</p>
+
+    <table>
+        <tr><th>Scenario (Opus 4.8, $5/MTok input)</th><th>Effective rate on the shared prefix</th></tr>
+        <tr><td>Live, uncached</td><td>1× → $5.00 / MTok</td></tr>
+        <tr><td>Live, cache read</td><td>0.1× → $0.50 / MTok</td></tr>
+        <tr><td>Batch, uncached</td><td>0.5× → $2.50 / MTok</td></tr>
+        <tr><td><strong>Batch + cache read</strong></td><td><strong>0.05× → $0.25 / MTok</strong></td></tr>
+    </table>
+
+    <div class="warn">⚠️ Caveat inside a batch: ephemeral cache entries can <strong>expire before the read</strong>
+    if the batch runs long, and <code>max_tokens: 0</code> cache pre-warming is <em>not</em> supported in a batch.
+    Structure batches so cache-writing and cache-reading requests are submitted together, and lean on the 1-hour
+    TTL when the batch may take a while.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> When NOT to batch — and when NOT to cache</h2>
+    <p><strong>Don't batch a latency-sensitive path.</strong> The 50% discount costs you an async window of up to
+    24 hours — fine for evals, fatal for a chat reply, a voice turn, or any user waiting on a result. Interactive
+    paths stay on live requests; make <em>those</em> fast with 7.3's levers (stream, right-size, cache the prefix).
+    <strong>Don't cache a prefix that changes every call</strong> — you'd pay the 1.25×/2× write premium and never
+    collect a read. And don't cache a prefix under the ~1,024-token minimum; it won't cache at all.</p>
+
+    <div class="good">Rule of thumb: <em>Interactive?</em> Live + stream + cache the stable prefix.
+    <em>Non-urgent &amp; bulk?</em> Batch it — and if the batch shares a big prefix, cache that too for the stacked
+    95% discount.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Route by urgency, stack the discounts</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Workload with a large shared prefix"] --> Q{"Needs a fast reply?"}
+    Q -->|"yes: interactive"| LIVE["🔵 Live request"]
+    LIVE --> LC["Cache the prefix<br/>reads 0.1× (~90% off)"]
+    LC --> STREAM["🟢 Stream for low TTFT"]
+    Q -->|"no: bulk / evals"| BATCH["🟢 Batch API<br/>0.5× (50% off)"]
+    BATCH --> BC["Cache the shared prefix<br/>0.1× × 0.5 = 0.05×"]
+    BC --> BEST["🟢 ~95% off the prefix"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef mid fill:#cce5ff,stroke:#3399ff,color:#004085;
+    class LC ok; class STREAM ok; class BATCH ok; class BC ok; class BEST ok; class LIVE mid;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Cache the shared prefix, then batch every variant</h2>
+    <p>One big cached system prompt, reused across a whole batch of questions — 50% batch discount on top of the
+    ~90% cache-read discount.</p>
+<pre><span class="kw">from</span> anthropic.types.message_create_params <span class="kw">import</span> MessageCreateParamsNonStreaming
+<span class="kw">from</span> anthropic.types.messages.batch_create_params <span class="kw">import</span> Request
+
+<span class="cm"># The shared prefix — cached once, read by every request in the batch.</span>
+shared_system = [{
+    <span class="st">"type"</span>: <span class="st">"text"</span>,
+    <span class="st">"text"</span>: large_reference_doc,        <span class="cm"># same across all requests</span>
+    <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>, <span class="st">"ttl"</span>: <span class="st">"1h"</span>},  <span class="cm"># longer TTL for a slow batch</span>
+}]
+
+batch = client.messages.batches.<span class="fn">create</span>(requests=[
+    <span class="fn">Request</span>(
+        custom_id=<span class="st">f"q-{i}"</span>,
+        params=<span class="fn">MessageCreateParamsNonStreaming</span>(
+            model=<span class="st">"claude-opus-4-8"</span>,
+            max_tokens=<span class="st">512</span>,
+            system=shared_system,               <span class="cm"># cache read → 0.1×, then ×0.5 batch = 0.05×</span>
+            messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: q}],
+        ),
+    )
+    <span class="kw">for</span> i, q <span class="kw">in</span> <span class="fn">enumerate</span>(questions)
+])
+<span class="cm"># Prefix billed at ~0.05× base; per-question tokens at 0.5× (batch).</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Stacking discounts vs. keeping it live</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Batch + cache (non-urgent)</h4>
+            <ul><li>~95% off the shared prefix (0.1× × 0.5)</li>
+            <li>50% off all other tokens</li>
+            <li>Ideal for evals over one big context</li></ul></div>
+        <div class="con"><h4>⚠️ Live + cache (interactive)</h4>
+            <ul><li>~90% off the prefix, full price otherwise</li>
+            <li>But immediate — no 24h wait</li>
+            <li>Pair with streaming for low TTFT</li></ul></div>
+    </div>
+    <div class="note">🔑 The discounts are orthogonal: model tier (7.1), cache reads, batch, and fewer tokens (7.4)
+    all multiply. Pick each dial by the workload — urgency decides batch, prefix stability decides cache.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Batch and caching are alternatives — pick one." → They <b>stack</b>. A cached
+    read inside a batch is billed at 0.1× × 0.5 = <b>0.05×</b> base — both discounts apply at once.</div>
+    <div class="trap"><b>Trap:</b> "Caching is always free money." → Writes cost <b>1.25×</b> (5-min) or <b>2×</b>
+    (1-hour). It only pays off if the prefix is stable and re-read — from the 2nd read (5-min) or 3rd (1-hour).</div>
+    <div class="trap"><b>Trap:</b> Batching an interactive path to save 50%. → Batch adds an async window up to
+    <b>24 hours</b>. Never put a user-facing, latency-sensitive request in a batch.</div>
+    <div class="trap"><b>Trap:</b> Assuming a cache always survives a batch. → Ephemeral entries can <b>expire</b>
+    before a long batch reads them, and <code>max_tokens: 0</code> pre-warming isn't supported in a batch. Use the
+    1-hour TTL and co-submit writer + reader requests.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What is the effective rate on a cached prefix read inside a batch, as a multiple of base input?</summary>
+    <p class="answer"><b>0.05×</b> — the cache read multiplier (0.1×) times the batch discount (0.5×). About 95%
+    off the base input rate on that prefix.</p></details>
+    <details><summary>Q2 · When should you NOT use the Batch API?</summary>
+    <p class="answer">On any <b>latency-sensitive / interactive</b> path — chat, voice, "do it now" actions. Batch
+    is asynchronous with a window up to 24 hours; the 50% discount isn't worth making a waiting user sit through
+    it. Keep those live and use streaming/caching to make them fast.</p></details>
+    <details><summary>Q3 · A large eval runs 5,000 questions against one shared 30K-token document. How do you minimize cost?</summary>
+    <p class="answer">Put the shared document in a <b>cached</b> system prefix (1-hour TTL, since the batch may run
+    a while) and submit all questions in a <b>batch</b>. The prefix is billed at ~0.05× base (cache read × batch),
+    and the rest at 0.5× — the two discounts stack. Right-size the model too (7.1) if the task allows.</p></details>
+
+    <div class="pager">
+        <a href="7-4-token-efficient-patterns.html"><span class="k">← Back</span>7.4 · Token-Efficient Patterns</a>
+        <a class="next" href="8-1-usage-metrics.html"><span class="k">Next →</span>8.1 · Usage Metrics</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 7.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

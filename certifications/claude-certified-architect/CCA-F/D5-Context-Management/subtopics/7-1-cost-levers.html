@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.1 Cost Levers (Model, Cache, Batch) · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 7 · Cost &amp; Performance Optimization</div>
+    <h1>7.1 · Cost Levers (Model, Cache, Batch)</h1>
+    <div class="tag">The four dials that move spend</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Four dials, and you turn them in order</h2>
+    <p>On the Messages API you pay <strong>per input token and per output token</strong>, and the rate depends on
+    the model. Almost every cost win comes from turning one of <strong>four dials</strong>: right-size the
+    <strong>model tier</strong>, cache the stable <strong>prompt prefix</strong>, push non-urgent work through the
+    <strong>Batch API</strong>, and <strong>reduce the tokens</strong> you send and receive. They compound — cheaper
+    tokens (model), fewer paid tokens (cache), a 50% discount (batch), and fewer tokens overall (concision) all
+    multiply together.</p>
+
+    <table>
+        <tr><th>Dial</th><th>What it changes</th><th>Rough saving</th><th>Best when</th></tr>
+        <tr><td><strong>Model tier</strong></td><td>Per-token rate (Haiku &lt; Sonnet &lt; Opus)</td><td>Up to ~5× cheaper input on Haiku vs Opus</td><td>Task is easy enough for a smaller model</td></tr>
+        <tr><td><strong>Prompt caching</strong></td><td>Cached prefix billed at ~0.1×</td><td>~90% off the cached tokens</td><td>Large stable prefix reused across calls</td></tr>
+        <tr><td><strong>Batch API</strong></td><td>50% off all token usage</td><td>Half price</td><td>Non-interactive / bulk / evals</td></tr>
+        <tr><td><strong>Fewer tokens</strong></td><td>Total billable tokens</td><td>Linear with what you cut</td><td>Always — concise prompts &amp; outputs</td></tr>
+    </table>
+
+    <div class="note">🔑 Published rates (per million tokens, input / output): <strong>Haiku 4.5</strong> $1 / $5 ·
+    <strong>Sonnet</strong> $3 / $15 · <strong>Opus 4.8</strong> $5 / $25. The model dial is the biggest single
+    move — a Haiku call costs ~1/5 the input of the same call on Opus.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Right-size the model to the task difficulty</h2>
+    <p>Reach for the smallest model that <em>reliably</em> clears the task. <strong>Haiku</strong> for
+    classification, extraction, routing, short summaries — high-volume, speed-critical work. <strong>Sonnet</strong>
+    for balanced production workloads. <strong>Opus</strong> for the hardest reasoning, long-horizon agentic runs,
+    and correctness-critical output. Don't over-provision "to be safe": a task that Haiku handles at $1/MTok input
+    is pure waste on Opus at $5. Don't under-provision either — a model that fails and forces a retry (or ships a
+    wrong answer) is the most expensive option of all.</p>
+
+    <div class="good">Route by difficulty: cheap model for the easy 80%, escalate to Opus only for the hard cases.
+    A small classifier that <em>decides which model to call</em> often pays for itself many times over.</div>
+    <div class="bad">Anti-pattern: sending every request to Opus "for quality." You pay the top rate on work a
+    smaller tier would clear — and usually slower, too.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Turn the dials in order</h2>
+    <div class="mermaid">
+flowchart TD
+    A["A request to serve"] --> M{"Hardest model needed?"}
+    M -->|"easy: classify / extract"| HAIKU["🟢 Haiku tier<br/>$1 / $5 per MTok"]
+    M -->|"balanced"| SON["🔵 Sonnet tier<br/>$3 / $15"]
+    M -->|"hard / agentic"| OPUS["🟠 Opus tier<br/>$5 / $25"]
+    HAIKU --> C{"Large stable prefix?"}
+    SON --> C
+    OPUS --> C
+    C -->|"yes"| CACHE["🟢 Cache the prefix<br/>reads ~0.1× (~90% off)"]
+    C -->|"no"| U{"Needs an answer now?"}
+    CACHE --> U
+    U -->|"no: bulk / evals"| BATCH["🟢 Batch API<br/>50% off, async ≤24h"]
+    U -->|"yes: interactive"| LIVE["🔵 Live call<br/>keep it concise"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef mid fill:#cce5ff,stroke:#3399ff,color:#004085;
+    classDef warn fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class HAIKU ok; class CACHE ok; class BATCH ok; class SON mid; class LIVE mid; class OPUS warn;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Same call, three tiers — pick by difficulty</h2>
+    <p>The model string is the dial. Add <code>cache_control</code> to reuse a stable prefix, and note where the
+    cheaper tier is simply correct.</p>
+<pre><span class="cm"># Easy, high-volume task → Haiku (cheapest tokens, fastest).</span>
+label = client.messages.create(
+    model=<span class="st">"claude-haiku-4-5"</span>,          <span class="cm"># $1 / $5 per MTok</span>
+    max_tokens=<span class="st">16</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">f"Sentiment (one word): {review}"</span>}],
+)
+
+<span class="cm"># Hard reasoning task → Opus, with the big shared prefix CACHED.</span>
+ans = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>,           <span class="cm"># $5 / $25 per MTok</span>
+    max_tokens=<span class="st">1024</span>,
+    system=[{
+        <span class="st">"type"</span>: <span class="st">"text"</span>,
+        <span class="st">"text"</span>: big_policy_doc,          <span class="cm"># stable across many calls</span>
+        <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>},  <span class="cm"># reads ~0.1× base</span>
+    }],
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: question}],
+)
+<span class="cm"># Reused prefix shows up as cache_read_input_tokens on later calls.</span>
+<span class="kw">print</span>(ans.usage.cache_read_input_tokens)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Cheaper tokens vs. capability</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Turning the dials</h4>
+            <ul><li>Right-sized model: up to ~5× cheaper input on easy work</li>
+            <li>Cache: ~90% off the reused prefix</li>
+            <li>Batch: flat 50% off non-urgent jobs</li>
+            <li>Concision: linear savings, every call</li></ul></div>
+        <div class="con"><h4>⚠️ Pushing too hard</h4>
+            <ul><li>Too-small a model → retries or wrong answers (net more expensive)</li>
+            <li>Caching a prefix that changes every call → pays the write premium, never reads</li>
+            <li>Batching a latency-sensitive path → users wait minutes</li></ul></div>
+    </div>
+    <div class="note">🔑 Optimize spend <em>after</em> the workload is correct, not before. A cheap wrong answer
+    is the worst outcome — measure quality first, then squeeze cost.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Use Opus everywhere for quality." → Right-size the model. Haiku input is ~1/5
+    the price of Opus and handles classification/extraction/routing well. Escalate to Opus only for hard or
+    correctness-critical tasks.</div>
+    <div class="trap"><b>Trap:</b> Treating the four levers as either/or. → They <b>stack</b>. A cached prefix in a
+    batched request on a right-sized model gets all three discounts at once.</div>
+    <div class="trap"><b>Trap:</b> "Prompt caching always saves money." → Only when the prefix is <b>stable and
+    reused</b>. Cache writes cost ~1.25× (5-min) or 2× (1-hour); if you never get a read, you've paid a premium
+    for nothing.</div>
+    <div class="trap"><b>Trap:</b> Reaching for the Batch API on an interactive path. → Batch is asynchronous
+    (up to a 24-hour window). It's for evals and bulk jobs, never for a user waiting on a reply.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Name the four cost dials and one sentence on each.</summary>
+    <p class="answer"><b>Model tier</b> — right-size to task difficulty (Haiku/Sonnet/Opus); <b>prompt caching</b> —
+    reuse a stable prefix at ~0.1× (≈90% off); <b>Batch API</b> — 50% off asynchronous bulk work; <b>fewer
+    tokens</b> — concise prompts and capped outputs cut billable tokens linearly.</p></details>
+    <details><summary>Q2 · A task classifies support tickets by category at high volume. Which tier and why?</summary>
+    <p class="answer"><b>Haiku</b> — classification is easy and speed/volume-critical, so the cheapest tier
+    ($1/$5 per MTok) that does it reliably is correct. Sending this to Opus is ~5× the input cost for no quality
+    gain.</p></details>
+    <details><summary>Q3 · Why can "use a cheaper model" sometimes <em>increase</em> total cost?</summary>
+    <p class="answer">If the model is too weak it fails or answers wrong, forcing retries, human correction, or a
+    re-run on a bigger model — you pay twice. Right-size to the smallest model that <em>reliably</em> clears the
+    task, not the smallest one that ever does.</p></details>
+
+    <div class="pager">
+        <a href="6-5-streaming-reliability.html"><span class="k">← Back</span>6.5 · Streaming for Reliability</a>
+        <a class="next" href="7-2-batch-api.html"><span class="k">Next →</span>7.2 · The Batch API</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 7.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

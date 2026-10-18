@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.4 Statelessness &amp; Conversation State · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 1 · Foundations</div>
+    <h1>1.4 · Statelessness &amp; Conversation State</h1>
+    <div class="tag">The API remembers nothing — "memory" is you replaying history</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The API has no memory</h2>
+    <p><code>POST /v1/messages</code> is <strong>stateless</strong>. The server keeps <strong>no session, no
+    conversation, no memory</strong> between calls. Each request is judged entirely on what you send in it:
+    the <code>system</code> prompt and the full <code>messages[]</code> array. When the response comes back,
+    the server forgets everything.</p>
+
+    <div class="note">🔑 There is no "conversation ID" and no server-side session to attach to. What feels like
+    "the model remembering the last turn" is <strong>you resending the last turn</strong>. Memory = replay.</div>
+
+    <p>So a multi-turn conversation is a discipline <em>you</em> implement: keep a growing
+    <code>messages[]</code> list on your side, and on every call resend <strong>all of it</strong> plus the
+    same <code>system</code> prompt. Turn <em>N</em> is a fresh request that happens to contain turns
+    <em>1 … N&minus;1</em> verbatim.</p>
+
+    <table>
+        <tr><th>Assumption</th><th>Reality</th></tr>
+        <tr><td>"The model remembers what I said earlier."</td><td>Only because you resent it in <code>messages[]</code>.</td></tr>
+        <tr><td>"I open a session and keep chatting."</td><td>No sessions. Every call is independent and self-contained.</td></tr>
+        <tr><td>"The server stores history for me."</td><td>You store it. The server reads it and forgets it.</td></tr>
+        <tr><td>"Longer chats are free once started."</td><td>Every turn resends the whole history → input tokens grow each turn.</td></tr>
+    </table>
+
+    <div class="warn">⚠️ Cost consequence: because you resend everything, <strong>input tokens grow with the
+    conversation length</strong>. A 30-turn chat pays to re-read turns 1&ndash;29 on turn 30. Managing this is
+    the job of pruning &amp; compaction — see <strong>7.5</strong>.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Turn N resends turns 1..N-1</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant App as 🧑 Your App (holds messages[])
+    participant API as 🟣 /v1/messages (stateless)
+    Note over App: messages = [u1]
+    App->>API: system + [u1]
+    API-->>App: a1
+    Note over App: messages = [u1, a1, u2]
+    App->>API: system + [u1, a1, u2]  (resend all)
+    API-->>App: a2
+    Note over App: messages = [u1, a1, u2, a2, u3]
+    App->>API: system + [u1, a1, u2, a2, u3]  (resend all again)
+    API-->>App: a3
+    Note over API: Server keeps NOTHING between calls
+    </div>
+
+    <h2><span class="chip code">CODE</span> A ConversationManager that replays history</h2>
+<pre><span class="cm"># "Memory" is just: keep messages[] and resend everything each turn.</span>
+<span class="kw">import</span> anthropic
+
+<span class="kw">class</span> <span class="fn">ConversationManager</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, system):
+        self.client = anthropic.<span class="fn">Anthropic</span>()
+        self.system = system
+        self.messages = []               <span class="cm"># YOU own the history</span>
+
+    <span class="kw">def</span> <span class="fn">send</span>(self, user_text):
+        <span class="cm"># 1) append the new user turn</span>
+        self.messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: user_text})
+
+        <span class="cm"># 2) resend system + the ENTIRE history — stateless server</span>
+        resp = self.client.messages.<span class="fn">create</span>(
+            model=<span class="st">"claude-opus-4-8"</span>,
+            max_tokens=<span class="st">1024</span>,
+            system=self.system,
+            messages=self.messages,
+        )
+
+        <span class="cm"># 3) append the whole assistant turn so the next call replays it (see 1.6)</span>
+        self.messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content})
+        <span class="kw">return</span> resp
+
+chat = <span class="fn">ConversationManager</span>(system=<span class="st">"You are a helpful tutor."</span>)
+chat.<span class="fn">send</span>(<span class="st">"My name is Basant."</span>)
+chat.<span class="fn">send</span>(<span class="st">"What's my name?"</span>)   <span class="cm"># works ONLY because turn 1 was resent</span></pre>
+
+    <div class="good">The model "knows" the name on turn 2 purely because <code>send()</code> resent the earlier
+    turns. Drop the history and the model is a blank slate again.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Stateless replay vs. a server session</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Statelessness buys you</h4>
+            <ul><li>Total control — you decide exactly what the model sees each turn</li>
+            <li>Trivial to scale &amp; retry; any request is self-contained</li>
+            <li>Easy to edit, prune, or branch history on your side</li></ul></div>
+        <div class="con"><h4>⚠️ You must handle</h4>
+            <ul><li>Storing and resending the full history yourself</li>
+            <li>Rising input-token cost as the chat grows (→ 7.5)</li>
+            <li>Context-window limits over long conversations (needs compaction)</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Assuming a server-side session or "conversation ID." → There is none. The API
+    is stateless; every call must carry the full <code>system</code> + <code>messages[]</code>. If you don't
+    resend it, the model doesn't have it.</div>
+    <div class="trap"><b>Trap:</b> "The model forgot the earlier turn" as an API bug. → It's not a bug — the
+    earlier turn wasn't in the <code>messages[]</code> you sent. Memory is your responsibility.</div>
+    <div class="trap"><b>Trap:</b> Assuming long conversations don't add cost once started. → Each turn resends
+    the whole history, so <b>input tokens grow every turn</b>. Long chats need pruning/compaction to stay
+    affordable and within the context window (7.5).</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A user says their name in turn 1; in turn 5 the model doesn't know it. Where's the bug?</summary>
+    <p class="answer">In your state handling, not the API. The turn-1 message wasn't included in the
+    <code>messages[]</code> you sent on turn 5 (you dropped or truncated it). The stateless server only knows
+    what you resend, so you must carry the relevant history forward.</p></details>
+    <details><summary>Q2 · Why does a 50-turn conversation cost more per turn than a 2-turn one?</summary>
+    <p class="answer">Because statelessness forces you to resend the full history every call, so input tokens grow
+    with conversation length. Turn 50 re-reads turns 1&ndash;49. This is exactly why pruning and compaction (7.5)
+    exist — to bound the resent context.</p></details>
+    <details><summary>Q3 · Is there a "conversation ID" you can pass to resume a chat server-side?</summary>
+    <p class="answer">No. The Messages API keeps no session. To "resume," you reload your own stored
+    <code>messages[]</code> and resend it. All conversation state lives on your side.</p></details>
+
+    <div class="pager">
+        <a href="1-3-loop-mechanics.html"><span class="k">← Prev</span>1.3 · The Loop Mechanics</a>
+        <a class="next" href="1-5-message-structure-blocks.html"><span class="k">Next →</span>1.5 · Message Structure &amp; Content Blocks</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 1.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

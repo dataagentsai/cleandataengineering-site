@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.1 Tools (Server-Exposed Functions) · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design & MCP</a> › Cluster 6 · MCP Primitives</div>
+    <h1>6.1 · Tools (Server-Exposed Functions)</h1>
+    <div class="tag">Model-controlled actions</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Tools are the <em>model-controlled</em> primitive</h2>
+    <p>An MCP server exposes <strong>tools</strong> so a language model can <em>act</em> on the world — query a
+    database, call an API, run a computation. The defining property, and the one the exam loves: tools are
+    <strong>model-controlled</strong>. The spec says tools "are designed to be <strong>model-controlled</strong>,
+    meaning that the language model can discover and invoke tools automatically based on its contextual
+    understanding and the user's prompts." The model decides <em>when</em> to call — nobody hand-picks the call.</p>
+
+    <p>Every tool is uniquely identified by a <code>name</code> and carries an <code>inputSchema</code> (JSON Schema)
+    that tells the model what arguments it accepts. The client discovers tools with <code>tools/list</code> and the
+    model triggers an invocation, which the client sends as <code>tools/call</code>.</p>
+
+    <table>
+        <tr><th>Aspect</th><th>How tools work</th></tr>
+        <tr><td>Control</td><td><strong>Model-controlled</strong> — the LLM decides to call</td></tr>
+        <tr><td>Discovery</td><td><code>tools/list</code> → returns <code>name</code>, <code>title</code>, <code>description</code>, <code>inputSchema</code></td></tr>
+        <tr><td>Invocation</td><td><code>tools/call</code> with <code>name</code> + <code>arguments</code></td></tr>
+        <tr><td>Return</td><td><code>content</code> array (text / image / audio / resource) + <code>isError</code> flag</td></tr>
+        <tr><td>Change signal</td><td><code>notifications/tools/list_changed</code> (if <code>listChanged</code> declared)</td></tr>
+        <tr><td>Nature</td><td>An <strong>action</strong> with side effects — not just data</td></tr>
+    </table>
+
+    <div class="note">🔑 Even though the model drives invocation, the spec insists there <b>SHOULD</b> always be a
+    human in the loop able to deny a tool call. Model-controlled means the model <em>chooses</em>; it doesn't mean
+    the app must execute blindly.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Two ways a tool reports failure</h2>
+    <p>Distinguish the two error channels — a classic trap. A malformed or unknown call is a <strong>protocol
+    error</strong> (standard JSON-RPC <code>error</code>, e.g. <code>-32602 Unknown tool</code>). A tool that ran
+    but failed at its job (API down, bad business input) returns a <em>normal</em> result with
+    <code>isError: true</code> inside it. The second kind is deliberately surfaced back to the model so it can read
+    the error text and adapt.</p>
+
+    <div class="good">Business/runtime failures → <code>isError: true</code> in the result (the model sees it and
+    can retry). Protocol violations → JSON-RPC <code>error</code> object (the model never asked validly).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Discover → model selects → call → result</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant LLM
+    participant Client
+    participant Server
+    Note over Client,Server: Discovery
+    Client->>Server: tools/list
+    Server-->>Client: [get_weather, ...] + inputSchema
+    Note over Client,LLM: Model-controlled selection
+    LLM->>Client: "call get_weather(New York)"
+    Note over Client,Server: Invocation
+    Client->>Server: tools/call {name, arguments}
+    Server-->>Client: {content:[...], isError:false}
+    Client->>LLM: Process result
+    Note over Client,Server: Updates
+    Server--)Client: notifications/tools/list_changed
+    classDef srv fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef cli fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class Server srv; class Client cli;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A tool definition, a call, and its result</h2>
+    <p>The server advertises <code>get_weather</code> via <code>tools/list</code>; the model triggers a
+    <code>tools/call</code>; the server replies with a <code>content</code> array and <code>isError</code>.</p>
+<pre><span class="cm">// tools/list  → server advertises the tool (name + JSON Schema)</span>
+{
+  <span class="st">"name"</span>: <span class="st">"get_weather"</span>,
+  <span class="st">"title"</span>: <span class="st">"Weather Information Provider"</span>,
+  <span class="st">"description"</span>: <span class="st">"Get current weather for a location"</span>,
+  <span class="st">"inputSchema"</span>: {
+    <span class="st">"type"</span>: <span class="st">"object"</span>,
+    <span class="st">"properties"</span>: {
+      <span class="st">"location"</span>: { <span class="st">"type"</span>: <span class="st">"string"</span>, <span class="st">"description"</span>: <span class="st">"City name or zip code"</span> }
+    },
+    <span class="st">"required"</span>: [<span class="st">"location"</span>]
+  }
+}
+
+<span class="cm">// tools/call  → the model invokes it</span>
+{ <span class="st">"method"</span>: <span class="st">"tools/call"</span>,
+  <span class="st">"params"</span>: { <span class="st">"name"</span>: <span class="st">"get_weather"</span>, <span class="st">"arguments"</span>: { <span class="st">"location"</span>: <span class="st">"New York"</span> } } }
+
+<span class="cm">// result  → content array + isError flag</span>
+{ <span class="st">"content"</span>: [ { <span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: <span class="st">"72°F, partly cloudy"</span> } ],
+  <span class="st">"isError"</span>: <span class="kw">false</span> }</pre>
+
+    <div class="note">🔑 Compare with 6.2: a <b>Resource</b> named <code>weather://forecast</code> would <em>return the
+    same data as readable context</em> with no side effect — a Tool <em>does the fetch</em> as an action the model
+    chose. Same information, opposite control model.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Model-controlled power vs. safety</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Tools (model-controlled)</h4>
+            <ul><li>Model can act autonomously — real agentic reach</li>
+            <li>Typed <code>inputSchema</code> lets the model call correctly</li>
+            <li><code>isError</code> lets the model self-correct on failure</li></ul></div>
+        <div class="con"><h4>⚠️ The cost of that autonomy</h4>
+            <ul><li>Side effects: a wrong call can delete/charge/send</li>
+            <li>Needs human-in-the-loop confirm on sensitive ops</li>
+            <li>Annotations are <b>untrusted</b> unless the server is trusted</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The user picks which tool runs." → No. Tools are <b>model-controlled</b>; the LLM
+    decides based on context. That's exactly what separates them from <em>user-controlled</em> Prompts (6.3).</div>
+    <div class="trap"><b>Trap:</b> Confusing the two error paths. → A failed job returns <code>isError: true</code>
+    inside a normal result (model sees it); an invalid/unknown call returns a JSON-RPC <code>error</code>.</div>
+    <div class="trap"><b>Trap:</b> "Tools return data like resources." → Tools <b>act</b> (side effects); Resources
+    <b>expose readable data</b>. Same info can appear as either — the control model is the difference.</div>
+    <div class="trap"><b>Trap:</b> Trusting tool <code>annotations</code> blindly. → The spec says clients
+    <b>MUST</b> treat annotations as untrusted unless they come from a trusted server.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Which two protocol methods cover tool discovery and invocation?</summary>
+    <p class="answer"><code>tools/list</code> to discover (returns each tool's <code>name</code>,
+    <code>description</code>, and <code>inputSchema</code>), and <code>tools/call</code> to invoke (with
+    <code>name</code> + <code>arguments</code>).</p></details>
+    <details><summary>Q2 · A tool ran but the upstream API was rate-limited. How is that reported?</summary>
+    <p class="answer">As a normal result with <code>isError: true</code> and the error text in the
+    <code>content</code> array — so the model can read it and adapt. It is <b>not</b> a JSON-RPC protocol
+    error (those are for unknown tools / invalid arguments).</p></details>
+    <details><summary>Q3 · Why are tools called "model-controlled," and what safety follows?</summary>
+    <p class="answer">Because the LLM decides when to invoke them from context. Since that autonomy can trigger side
+    effects, the spec says there SHOULD always be a human able to deny an invocation, and clients SHOULD confirm
+    sensitive operations.</p></details>
+
+    <div class="pager">
+        <a href="5-5-mcp-vs-tool-use.html"><span class="k">← Back</span>5.5 · MCP vs Tool Use</a>
+        <a class="next" href="6-2-mcp-resources.html"><span class="k">Next →</span>6.2 · Resources</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 6.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

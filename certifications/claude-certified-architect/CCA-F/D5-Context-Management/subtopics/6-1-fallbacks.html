@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.1 Fallbacks (Model / Provider / Degraded) · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 6 · Reliability: Degradation &amp; Recovery</div>
+    <h1>6.1 · Fallbacks (Model / Provider / Degraded)</h1>
+    <div class="tag">A plan B for every call</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> When the primary path fails, don't fail the request</h2>
+    <p>Every model call can fail transiently — a <code>529 overloaded_error</code> (the API is temporarily
+    overloaded across all users), a <code>429 rate_limit_error</code>, or a <code>500 api_error</code>. Those are the
+    <strong>retryable</strong> status codes; the Anthropic SDKs already retry them with exponential backoff (twice by
+    default, honoring the <code>retry-after</code> header). A <strong>fallback</strong> is the next layer: after retries
+    are exhausted, route the same request down an alternate path instead of surfacing an error to the user.</p>
+
+    <div class="note">🔑 Retry first (same path, wait), then fall back (different path). A fallback without a retry
+    budget just hammers a second dependency; a retry without a fallback gives up once the primary stays down.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Four fallback tiers, cheapest degradation last</h2>
+    <p>Order your fallbacks from "closest to the original answer" to "most degraded but still useful." Each rung
+    trades a little quality or freshness for a much higher chance of returning <em>something</em>.</p>
+
+    <table>
+        <tr><th>Fallback tier</th><th>What changes</th><th>When to use</th><th>Cost of the swap</th></tr>
+        <tr><td><b>Another model tier</b></td><td>Opus → Sonnet → Haiku</td><td>Repeated 529 / overload on the primary model</td><td>Lower capability, cheaper &amp; often less loaded</td></tr>
+        <tr><td><b>Another region / provider</b></td><td>1st-party API → Bedrock / Vertex</td><td>Whole-provider outage or regional saturation</td><td>Feature-parity gaps; separate quota pool</td></tr>
+        <tr><td><b>Cached / canned response</b></td><td>Serve a prior or templated answer</td><td>Everything upstream is down</td><td>Stale, but instant and free</td></tr>
+        <tr><td><b>Degraded mode</b></td><td>Skip the LLM; return a rule-based / partial result</td><td>Last resort — keep the product usable</td><td>No generation, but no error page</td></tr>
+    </table>
+
+    <div class="good">Anthropic ships a <strong>server-side <code>fallbacks</code></strong> parameter (beta) that
+    re-runs a refused request on a fallback model inside the same call — one round trip, no client logic. For
+    overload/region failover you own the routing client-side, but the mental model is identical: name the plan B up
+    front.</div>
+
+    <div class="warn">⚠️ 529 is shared-capacity overload; a sudden 429 spike can instead be your org's <em>acceleration
+    limit</em> — ramp traffic gradually rather than failing straight to a fallback on every 429.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The fallback ladder</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Model request"] --> P["Primary: Opus, 1st-party"]
+    P -->|"200 OK"| DONE["🟢 Return answer"]
+    P -->|"429 / 500 / 529<br/>(retryable)"| R{"Retries left?<br/>(backoff)"}
+    R -->|"yes"| P
+    R -->|"exhausted"| T2["🔵 Another model tier<br/>Sonnet / Haiku"]
+    T2 -->|"still failing"| T3["🟠 Another region / provider<br/>Bedrock / Vertex"]
+    T3 -->|"still failing"| T4["🟠 Cached / canned response"]
+    T4 -->|"nothing cached"| T5["🔴 Degraded mode<br/>rule-based / partial"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef alt fill:#cce5ff,stroke:#4a90d9,color:#0a3a6a;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class DONE ok; class T2 alt; class T3 gate; class T4 gate; class T5 bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A fallback ladder around the Messages API</h2>
+    <p>Retryable errors (429/500/529) climb the ladder; a bad request (400) is <em>not</em> retryable and re-raises.</p>
+<pre><span class="cm"># Cheapest-degradation-last ladder. SDK already retries each call twice;</span>
+<span class="cm"># this handles what to do AFTER a path is exhausted.</span>
+TIERS = [
+    (<span class="st">"claude-opus-4-8"</span>,   primary_client),   <span class="cm"># 1st-party, top tier</span>
+    (<span class="st">"claude-sonnet-5"</span>,   primary_client),   <span class="cm"># cheaper, often less loaded</span>
+    (<span class="st">"claude-opus-4-8"</span>,   bedrock_client),   <span class="cm"># different region / provider</span>
+]
+
+<span class="kw">def</span> <span class="fn">answer_with_fallback</span>(messages):
+    <span class="kw">for</span> model, client <span class="kw">in</span> TIERS:
+        <span class="kw">try</span>:
+            <span class="kw">return</span> client.messages.<span class="fn">create</span>(
+                model=model, max_tokens=<span class="st">1024</span>, messages=messages)
+        <span class="kw">except</span> (anthropic.RateLimitError,           <span class="cm"># 429</span>
+                anthropic.InternalServerError,      <span class="cm"># 500</span>
+                anthropic.APIStatusError) <span class="kw">as</span> e:      <span class="cm"># 529 overloaded</span>
+            <span class="kw">if</span> <span class="fn">getattr</span>(e, <span class="st">"status_code"</span>, <span class="kw">None</span>) == <span class="st">400</span>:
+                <span class="kw">raise</span>                                <span class="cm"># not retryable — real bug</span>
+            <span class="fn">log</span>(<span class="st">f"tier {model} failed: {e}; trying next"</span>)
+    <span class="kw">return</span> <span class="fn">cached_or_degraded</span>(messages)              <span class="cm"># canned answer, marked degraded</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Falling back vs. failing fast</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Layered fallbacks</h4>
+            <ul><li>Availability survives a model/provider outage</li>
+            <li>User sees an answer, not an error page</li>
+            <li>Cheaper tiers absorb overload spikes</li></ul></div>
+        <div class="con"><h4>⚠️ Fallback everywhere, always</h4>
+            <ul><li>Silent quality drops hide real incidents</li>
+            <li>Falling back on a 400 masks a genuine bug</li>
+            <li>Extra latency &amp; cost per attempt; parity gaps across providers</li></ul></div>
+    </div>
+    <div class="good">Fall back on <b>retryable</b> failures (429 / 5xx / 529) only. Surface 400/401/403/404 — those
+    are your bug, not the provider's capacity.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Retry a 400/404 through the fallback ladder." → Only <b>429, 500, 529</b> (and
+    connection/timeout) are retryable. A 400 is a malformed request — retrying or falling back just repeats the bug.</div>
+    <div class="trap"><b>Trap:</b> Treating 529 as fatal. → <code>overloaded_error</code> is <b>temporary</b> capacity
+    pressure. Back off and retry, then drop to a cheaper tier or another region — don't error the whole request.</div>
+    <div class="trap"><b>Trap:</b> Falling back with no signal to the caller. → A degraded/cached answer should be
+    <b>marked</b> as such (see 6.3), or you'll debug a "wrong answer" that was really a silent fallback.</div>
+    <div class="trap"><b>Trap:</b> Firing every 429 straight to a fallback. → A 429 spike can be an org
+    <b>acceleration limit</b> — ramp traffic gradually and honor <code>retry-after</code> before escalating.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Your Opus calls start returning 529 during a traffic spike. What's the fallback order?</summary>
+    <p class="answer">Retry with backoff first (the SDK does this, honoring <code>retry-after</code>). If it persists,
+    drop to a <b>cheaper/less-loaded model tier</b> (Sonnet/Haiku), then <b>another region or provider</b>
+    (Bedrock/Vertex), then a <b>cached/canned response</b>, and finally a <b>degraded rule-based</b> path — never a raw
+    error.</p></details>
+    <details><summary>Q2 · Why should a 400 error <em>not</em> trigger a fallback?</summary>
+    <p class="answer">400 <code>invalid_request_error</code> is non-retryable — the request itself is malformed (bad
+    schema, unsupported param). Falling back re-sends the same broken request down another path and hides the real bug.
+    Retryable codes are 429, 500, 529 (plus connection/timeout errors).</p></details>
+    <details><summary>Q3 · What's the difference between the SDK's built-in retry and a fallback?</summary>
+    <p class="answer"><b>Retry</b> = same path, wait, try again (SDK does this ~2× with backoff for 429/5xx). <b>Fallback</b>
+    = a <em>different</em> path (cheaper model, other region, cache, degraded mode) once retries are exhausted. Retry
+    handles blips; fallback handles a sustained outage of the primary path.</p></details>
+
+    <div class="pager">
+        <a href="5-5-timeouts-streaming.html"><span class="k">← Back</span>5.5 · Timeouts &amp; Streaming</a>
+        <a class="next" href="6-2-circuit-breakers.html"><span class="k">Next →</span>6.2 · Circuit Breakers</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 6.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

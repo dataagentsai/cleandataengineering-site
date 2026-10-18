@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.6 stop_sequence &amp; Custom Protocols · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 2 · Stop Reasons</div>
+    <h1>2.6 · <code>stop_sequence</code> &amp; Custom Protocols</h1>
+    <div class="tag">You supply the boundary; the model stops on it</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A stop you designed</h2>
+    <p>Unlike the other five stop reasons, <code>stop_sequence</code> is <strong>opt-in</strong>: it only occurs when
+    <em>you</em> pass a <code>stop_sequences=[…]</code> parameter. The model generates normally until its output
+    contains one of your sequences, at which point generation halts and <code>stop_reason == "stop_sequence"</code>.
+    It's a way to impose <strong>delimiters or protocol boundaries</strong> on the output.</p>
+
+    <div class="note">🔑 <code>stop_sequence</code> is <strong>rare in agents</strong>. Agent loops rely on
+    <code>end_turn</code>/<code>tool_use</code> for control. Reach for <code>stop_sequences</code> only when you need a
+    hard textual boundary — e.g. stopping at a delimiter you'll parse around.</div>
+
+    <table>
+        <tr><th>Aspect</th><th>Detail</th></tr>
+        <tr><td>How to enable</td><td>Pass <code>stop_sequences=["&lt;&lt;END&gt;&gt;"]</code> (a list) in the request.</td></tr>
+        <tr><td>When it fires</td><td>The model's output reaches one of your sequences.</td></tr>
+        <tr><td><code>stop_reason</code></td><td><code>"stop_sequence"</code></td></tr>
+        <tr><td>Which one matched</td><td>The response reports the matched sequence (e.g. <code>resp.stop_sequence</code>).</td></tr>
+        <tr><td>Typical use</td><td>Delimiters, protocol boundaries, cutting off a known section.</td></tr>
+        <tr><td>In agents</td><td>Rare — control flow normally comes from <code>end_turn</code>/<code>tool_use</code>.</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Where stop_sequence fits</h2>
+    <div class="mermaid">
+flowchart TD
+    A([request with stop_sequences=&lbrack;...&rbrack;]) --> B{"output contains<br/>a stop sequence?"}
+    B -->|No| C["generates until end_turn / max_tokens / etc."]
+    B -->|Yes| D["🟠 halt generation<br/>stop_reason == stop_sequence"]
+    D --> E["text EXCLUDES the sequence*<br/>resp.stop_sequence = which matched"]
+    E --> F["parse around your delimiter /<br/>protocol boundary"]
+    classDef stop fill:#ffe8cc,stroke:#d9480f,color:#7a2e08;
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    class D,E stop; class C ok;
+    </div>
+    <p style="font-size:.85em;color:#666;">*You supplied the sequence, so you know the boundary to parse around.</p>
+
+    <h2><span class="chip code">CODE</span> Using a stop sequence as a delimiter</h2>
+<pre><span class="cm"># You supply the boundary. Generation halts when the model emits it.</span>
+resp = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    stop_sequences=[<span class="st">"&lt;&lt;END&gt;&gt;"</span>],          <span class="cm"># a list of custom boundaries</span>
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+               <span class="st">"content"</span>: <span class="st">"Write the summary, then output &lt;&lt;END&gt;&gt;."</span>}],
+)
+
+<span class="kw">if</span> resp.stop_reason == <span class="st">"stop_sequence"</span>:
+    which = resp.stop_sequence          <span class="cm"># which of your sequences matched</span>
+    summary = resp.content[<span class="st">0</span>].text    <span class="cm"># text up to (not incl.) the boundary</span>
+    handle_boundary(summary, which)     <span class="cm"># your protocol parsing</span></pre>
+
+    <div class="good">Use it for <strong>machine-parseable boundaries</strong> (a fixed delimiter you split on) or to
+    enforce a <strong>protocol section end</strong>. For ordinary agent control, prefer letting the model reach
+    <code>end_turn</code> or request tools.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> stop_sequence vs. natural end_turn</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ stop_sequence</h4>
+            <ul><li>Hard, deterministic textual boundary you control</li>
+            <li>Great for delimiters / structured protocol cutoffs</li>
+            <li>Stops early — saves tokens past the boundary</li></ul></div>
+        <div class="con"><h4>⚠️ Costs / caveats</h4>
+            <ul><li>Rare and easy to over-engineer in agents</li>
+            <li>A stray occurrence of the sequence cuts output early</li>
+            <li>Adds a branch you must handle distinctly from <code>end_turn</code></li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Expecting <code>stop_sequence</code> without setting <code>stop_sequences</code>. → It
+    <b>only</b> fires when you supply the parameter. No parameter → you'll never see this reason.</div>
+    <div class="trap"><b>Trap:</b> Confusing <code>stop_sequence</code> with <code>end_turn</code>. → <code>end_turn</code>
+    is the model finishing naturally; <code>stop_sequence</code> is <em>your</em> custom boundary being hit. Handle
+    them as separate branches.</div>
+    <div class="trap"><b>Trap:</b> Relying on <code>stop_sequence</code> for agent control flow. → It's <b>rare</b> in
+    agents; loop control should come from <code>end_turn</code>/<code>tool_use</code>. Use stop sequences for
+    delimiters, not orchestration.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You never set stop_sequences but expect stop_reason == "stop_sequence". Will it happen?</summary>
+    <p class="answer">No. <code>stop_sequence</code> only occurs when <b>you</b> pass <code>stop_sequences=[…]</code>. Without
+    that parameter the model can't stop for that reason.</p></details>
+    <details><summary>Q2 · When is a stop sequence the right tool in an agent?</summary>
+    <p class="answer">Rarely — mainly for a <b>delimiter or protocol boundary</b> you'll parse around (e.g. cut output
+    at a fixed marker). Normal agent control flow should come from <code>end_turn</code> and <code>tool_use</code>,
+    not stop sequences.</p></details>
+    <details><summary>Q3 · How do you tell which sequence matched?</summary>
+    <p class="answer">Read the matched sequence off the response (e.g. <code>resp.stop_sequence</code>) after confirming
+    <code>stop_reason == "stop_sequence"</code>. That tells you which of your supplied boundaries fired.</p></details>
+
+    <div class="pager">
+        <a href="2-5-refusal-handling.html"><span class="k">← Prev</span>2.5 · refusal &amp; stop_details</a>
+        <a class="next" href="3-1-tool-request-result-cycle.html"><span class="k">Next →</span>3.1 · Tool request/result cycle</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 2.6</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.1 Conversation State & Statelessness · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 3 · Managing Long Conversations</div>
+    <h1>3.1 · Conversation State &amp; Statelessness</h1>
+    <div class="tag">You own the history</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The Messages API is stateless</h2>
+    <p>The Claude Messages API keeps <strong>no server-side memory of your conversation</strong>. Each call to
+    <code>POST /v1/messages</code> is independent: the model sees only what you put in <em>this</em> request. There
+    is no session ID, no thread the server holds onto. To make a multi-turn chat feel continuous, <strong>you
+    resend the entire conversation history every turn</strong> — the system prompt, every prior user and assistant
+    message, every tool call and tool result — plus the new user message.</p>
+
+    <div class="note">🔑 The mental model: the API is a pure function. <code>response = f(system, tools, messages)</code>.
+    Same inputs → the model has the same "memory." If you drop a turn from <code>messages</code>, the model
+    genuinely never saw it.</div>
+
+    <p>Everything in the request counts toward the <strong>context window</strong> (up to 1M tokens on current
+    models like Opus 4.8 / Sonnet 5): the system prompt, every message (including tool results, images, documents),
+    and your tool definitions — plus the output Claude generates this turn. Each response reports what the request
+    consumed in its <code>usage</code> field.</p>
+
+    <h2><span class="chip concept">CONCEPT</span> "You own the history" — the architectural consequence</h2>
+    <p>Because the server holds nothing, <strong>conversation state is <em>your</em> responsibility</strong>. Your
+    application is the source of truth: you append each assistant reply to a list, append the next user message, and
+    send the whole list back. This is liberating (you can edit, branch, replay, or persist history however you
+    like) and it's a burden (nobody trims the transcript for you).</p>
+
+    <p>As the conversation advances, tokens <strong>accumulate monotonically</strong> — previous turns are
+    preserved completely, so each turn is bigger and more expensive than the last. Eventually a long-running
+    conversation approaches the context-window limit. That is exactly why the rest of this cluster exists:
+    <strong>truncation</strong> (3.2), <strong>summarization / compaction</strong> (3.3), <strong>context
+    editing</strong> (3.4), and the <strong>memory tool</strong> (3.5) are the four strategies <em>you</em> apply to
+    the history you own.</p>
+
+    <div class="warn">⚠️ If input alone already exceeds the window, the API returns <code>400
+    invalid_request_error</code> ("prompt is too long"). On Claude 4.5+ models, if input + <code>max_tokens</code>
+    overflows mid-generation you instead get <code>stop_reason: "model_context_window_exceeded"</code>. Manage the
+    transcript <em>before</em> you hit either.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Statelessness forces a resend loop</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Your app holds<br/>messages[]"] --> B["Append new<br/>user message"]
+    B --> C["POST /v1/messages<br/>(FULL history each turn)"]
+    C --> D["Server: stateless<br/>response = f(system, tools, messages)"]
+    D --> E["Assistant reply<br/>+ usage.input_tokens"]
+    E --> F["Append reply to<br/>YOUR messages[]"]
+    F -->|"next turn"| B
+    F -.->|"history grows every turn →<br/>eventually hits window limit"| G["Apply 3.2–3.5<br/>to the history you own"]
+    classDef app fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef srv fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef warn fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class A,B,F app; class C,D,E srv; class G warn;
+    </div>
+
+    <h2><span class="chip code">CODE</span> You resend the whole transcript each turn</h2>
+    <p>The client owns <code>messages</code>. Each turn appends and resends everything — the server remembers
+    nothing between calls.</p>
+<pre><span class="cm"># The API is stateless — send the full conversation history each time.</span>
+<span class="kw">import</span> anthropic
+client = anthropic.<span class="fn">Anthropic</span>()
+
+messages = []  <span class="cm"># ← YOU own this. The server keeps no copy.</span>
+
+<span class="kw">def</span> <span class="fn">send</span>(user_text):
+    messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: user_text})
+    resp = client.messages.<span class="fn">create</span>(
+        model=<span class="st">"claude-opus-4-8"</span>,
+        max_tokens=<span class="cm">1024</span>,
+        messages=messages,                       <span class="cm"># resend the ENTIRE list</span>
+    )
+    reply = <span class="fn">next</span>(b.text <span class="kw">for</span> b <span class="kw">in</span> resp.content <span class="kw">if</span> b.type == <span class="st">"text"</span>)
+    messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: reply})
+    <span class="fn">print</span>(resp.usage.input_tokens)          <span class="cm"># grows every turn — history accumulates</span>
+    <span class="kw">return</span> reply
+
+<span class="fn">send</span>(<span class="st">"My name is Alice."</span>)
+<span class="fn">send</span>(<span class="st">"What's my name?"</span>)  <span class="cm"># works ONLY because turn 1 is still in messages[]</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Client-owned state</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ You own the history</h4>
+            <ul><li>Full control: edit, branch, replay, persist, or prune however you like</li>
+            <li>No hidden server state to reason about or expire</li>
+            <li>Enables the 3.2–3.5 strategies — they operate on <em>your</em> list</li></ul></div>
+        <div class="con"><h4>⚠️ You own the history</h4>
+            <ul><li>Tokens (and cost + latency) grow every single turn</li>
+            <li>Nobody trims for you — unmanaged chats hit the window limit</li>
+            <li>You must persist state yourself to survive a restart</li></ul></div>
+    </div>
+    <div class="good">Because state is client-side, prompt caching pays off: keep the stable prefix (frozen system
+    prompt, deterministic tools) first so each resend reuses the cache instead of reprocessing it at full price.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The API remembers the conversation for me if I pass a session/thread ID." → The
+    Messages API is <b>stateless</b>. There is no session ID; you resend the full <code>messages</code> array every
+    turn.</div>
+    <div class="trap"><b>Trap:</b> "Claude 'forgot' what I told it earlier." → It never had it unless that turn is
+    still in the <code>messages</code> you sent. Statelessness means dropped turns are genuinely gone.</div>
+    <div class="trap"><b>Trap:</b> Assuming only the new message is billed. → <b>Everything</b> in the request —
+    full history, system prompt, tool defs, images — counts as input tokens every turn. That's why long chats get
+    expensive and eventually overflow.</div>
+    <div class="trap"><b>Trap:</b> Confusing claude.ai with the API. → The chat product may roll context on a FIFO
+    basis for you; the raw API does not. On the API, context management is <b>your</b> job.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What does "the Messages API is stateless" mean in practice?</summary>
+    <p class="answer">The server keeps no memory of prior calls. To hold a conversation you must <b>resend the entire
+    history</b> (system prompt + all prior messages + tool results) on every request. Response = f(system, tools,
+    messages), with no server-side session.</p></details>
+    <details><summary>Q2 · Why does a long conversation get more expensive and eventually fail?</summary>
+    <p class="answer">Turns accumulate — previous turns are preserved completely, so input tokens grow every turn.
+    Since all of it is re-sent and re-billed, cost and latency climb, and once input approaches the context-window
+    limit you get a 400 "prompt is too long" (or <code>model_context_window_exceeded</code> mid-generation).</p></details>
+    <details><summary>Q3 · Who is responsible for trimming or compressing the transcript, and why?</summary>
+    <p class="answer"><b>You are</b> — the client owns the history. Because the API holds no state, the model can't
+    prune for you. The 3.2–3.5 strategies (truncate, summarize, context-edit, external memory) are all things your
+    application does to the <code>messages</code> list it controls.</p></details>
+
+    <div class="pager">
+        <a href="2-5-caching-in-loops.html"><span class="k">← Back</span>2.5 · Caching in Loops</a>
+        <a class="next" href="3-2-truncation-sliding-window.html"><span class="k">Next →</span>3.2 · Truncation / Sliding Window</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 3.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

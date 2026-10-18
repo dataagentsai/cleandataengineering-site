@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cost — Anti-Patterns, Best Practices & the JSON that always costs more · CCA-F D5</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .rulebox { background:#f6fef9; border:1px solid #bfe6cd; border-left:4px solid #28a745; border-radius:0 6px 6px 0; padding:8px 14px; margin:8px 0; font-size:.92em; }
+  .rulebox code { background:#e6fcf0; }
+  .costmore { background:#fdecee; border:1px solid #f3c6cc; border-radius:8px; padding:10px 14px; margin:10px 0; }
+  .costless { background:#eafaf0; border:1px solid #bfe6cd; border-radius:8px; padding:10px 14px; margin:10px 0; }
+</style>
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../CCA-F_Study_Guide.html">CCA-F</a> › <a href="index.html">Domain 5</a> › Cost — Anti-Patterns &amp; Best Practices</div>
+    <h1>💰 Cost — Anti-Patterns, Best Practices &amp; the JSON that always costs more</h1>
+    <div class="tag">What you actually pay for · every waste pattern &amp; its fix · CoT / adaptive thinking cost · a guardrail checklist</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <div class="note">🎯 This page is both a <b>CCA exam reference</b> and the <b>source list for cost guardrails</b> — the
+    numbered <span class="rulebox" style="display:inline;padding:2px 8px">RULE</span> boxes are written to be turned into
+    automated checks (e.g. in <em>CostSherlock</em>) later.</div>
+
+    <h2><span class="chip concept">1 · THE COST MODEL</span> What you actually pay for</h2>
+    <p>Every <code>/v1/messages</code> call bills <b>input tokens</b> + <b>output tokens</b>, at <em>different rates</em>.
+    Four facts drive almost all cost decisions:</p>
+    <ul>
+        <li><b>Output costs ~5× input.</b> Across the whole line-up (Opus $5→$25, Sonnet $3→$15, Haiku $1→$5, Fable $10→$50 per 1M), output is 5× the input rate.</li>
+        <li><b>Thinking / CoT tokens are billed as <em>output</em>.</b> Extended/adaptive thinking is the expensive kind of token.</li>
+        <li><b>The API is stateless</b> — you resend the <em>entire</em> message history every turn, so <b>every token in <code>messages</code> is re-billed on every call</b>. A long conversation pays for its whole past, repeatedly.</li>
+        <li><b>Tools + system are re-sent (and re-billed) every call too</b> — unless a cache covers them.</li>
+    </ul>
+
+    <h3>Pricing &amp; cache multipliers (the numbers to know)</h3>
+    <div style="overflow-x:auto">
+    <table>
+        <tr><th>Model</th><th>Input $/1M</th><th>Output $/1M</th><th>Output ÷ Input</th></tr>
+        <tr><td>Claude Opus 4.8 / 4.7</td><td>$5</td><td>$25</td><td>5×</td></tr>
+        <tr><td>Claude Sonnet 5</td><td>$3</td><td>$15</td><td>5×</td></tr>
+        <tr><td>Claude Haiku 4.5</td><td>$1</td><td>$5</td><td>5×</td></tr>
+        <tr><td>Claude Fable 5</td><td>$10</td><td>$50</td><td>5×</td></tr>
+    </table>
+    </div>
+    <div style="overflow-x:auto">
+    <table>
+        <tr><th>Token class</th><th>Multiplier vs base input</th><th>usage field</th></tr>
+        <tr><td>Normal input</td><td>1×</td><td><code>input_tokens</code></td></tr>
+        <tr><td><b>Cache read (hit)</b></td><td><b>~0.1×</b> — ~90% cheaper</td><td><code>cache_read_input_tokens</code></td></tr>
+        <tr><td>Cache write, 5-min TTL</td><td>1.25×</td><td><code>cache_creation_input_tokens</code></td></tr>
+        <tr><td>Cache write, 1-hour TTL</td><td>2×</td><td><code>cache_creation_input_tokens</code></td></tr>
+        <tr><td>Output (incl. thinking)</td><td>5× (per table above)</td><td><code>output_tokens</code></td></tr>
+        <tr><td><b>Batch API</b></td><td><b>~0.5×</b> on input <em>and</em> output</td><td>—</td></tr>
+    </table>
+    </div>
+    <div class="note">A cached prefix breaks even after just <b>two</b> requests: <code>1.25× + 0.1× = 1.35×</code> vs <code>2×</code>
+    uncached. Cache read is the single biggest lever on a repeated prefix. (Full mechanics:
+    <a href="caching-and-memory.html">Prompt Caching &amp; Memory</a>.)</div>
+
+    <h2><span class="chip exam">2 · COST ANTI-PATTERNS</span> The ways teams overspend</h2>
+    <div style="overflow-x:auto">
+    <table>
+        <tr><th>#</th><th>Anti-pattern</th><th>Why it costs</th><th>Fix</th></tr>
+        <tr><td>A1</td><td><b>No prompt caching</b> on a stable system prompt / tools / schema</td><td>The whole prefix is re-processed at 1× every call</td><td>Add <code>cache_control</code> on the last stable block</td></tr>
+        <tr><td>A2</td><td><b>Cache-busting the prefix</b> — a timestamp, UUID, or unsorted JSON <em>inside</em> the cached region</td><td>Prefix bytes change → miss → you pay the write premium <em>and</em> full input, every call</td><td>Move volatile data <em>after</em> the breakpoint; sort JSON keys</td></tr>
+        <tr><td>A3</td><td><b>Carrying huge <code>tool_result</code> payloads</b> in history forever</td><td>Stateless resend re-bills them every turn</td><td>Context editing (clear old tool uses) · compaction</td></tr>
+        <tr><td>A4</td><td><b>Over-large model for the task</b> (Opus for classification)</td><td>Paying 5× Haiku's rate for no quality gain</td><td>Model-tier by task; escalate only hard steps</td></tr>
+        <tr><td>A5</td><td><b>Unbounded agent loop</b> (no <code>max_turns</code>)</td><td>A stuck agent calls tools forever</td><td>Hard turn cap + graceful stop</td></tr>
+        <tr><td>A6</td><td><b>Huge <code>max_tokens</code></b> / no output ceiling</td><td>Lets a response run long at 5× rate</td><td>Set the smallest <code>max_tokens</code> that fits</td></tr>
+        <tr><td>A7</td><td><b>Thinking / high effort on trivial tasks</b></td><td>CoT tokens billed as output for no benefit</td><td>Low effort (or no thinking) for easy work</td></tr>
+        <tr><td>A8</td><td><b>Prose when you need data</b></td><td>You pay output tokens for framing words</td><td><code>output_config.format</code> + a tight schema</td></tr>
+        <tr><td>A9</td><td><b>One request per item</b> for bulk work</td><td>No batch discount, more overhead</td><td>Batch API (~50% off) for latency-tolerant jobs</td></tr>
+        <tr><td>A10</td><td><b>Over-fetching context</b> (whole schema / all docs)</td><td>Input tokens for content the task never needs</td><td>RAG / retrieve only what's relevant; slim tool defs</td></tr>
+        <tr><td>A11</td><td><b>Cache breakpoint after the volatile part</b></td><td>Nothing stable precedes it → never caches</td><td>Order tools→system→messages; breakpoint after the big stable chunk</td></tr>
+        <tr><td>A12</td><td><b>Letting the cache expire</b> between calls (default 5-min TTL, sparse traffic)</td><td>Every call is a fresh write, never a read</td><td>1-hour TTL if reuse is spaced; keep it warm</td></tr>
+        <tr><td>A13</td><td><b>No streaming on long outputs</b></td><td>Request timeout → retry → pay twice</td><td>Stream; use <code>get_final_message()</code></td></tr>
+        <tr><td>A14</td><td><b>Duplicating the system prompt</b> into each user turn</td><td>Re-billed as message input every turn, uncacheable there</td><td>Put durable instructions in <code>system</code> once, and cache it</td></tr>
+        <tr><td>A15</td><td><b>Changing tools/system mid-conversation</b></td><td>Invalidates the whole downstream cache (cascade)</td><td>Keep tools/system byte-stable across the session</td></tr>
+    </table>
+    </div>
+    <div class="bad"><b>The compounding trap:</b> A2 + A3 together — a cache that never hits <em>and</em> a history that keeps
+    growing — means every turn re-processes a bigger prefix at full price. This is the most common runaway-cost bug in agents.</div>
+
+    <h2><span class="chip code">3 · MESSAGE JSON THAT <em>ALWAYS</em> COSTS MORE</span> Same result, higher bill</h2>
+    <p>These request shapes are strictly more expensive than an equivalent that returns the same answer. Each pair is
+    ❌ costlier vs ✅ cheaper.</p>
+
+    <h3>3.1 · Volatile data <em>inside</em> the cached prefix → cache never hits (A2)</h3>
+    <div class="costmore">❌ A timestamp sits in the cached system block, so its bytes change every call — permanent miss + write premium.
+<pre><span class="st">"system"</span>: [{
+  <span class="st">"type"</span>:<span class="st">"text"</span>,
+  <span class="st">"text"</span>:<span class="st">"Current time: 2026-07-16T09:31:07Z. You are a support agent. &lt;5000-token policy…&gt;"</span>,
+  <span class="st">"cache_control"</span>:{<span class="st">"type"</span>:<span class="st">"ephemeral"</span>}          <span class="cm"># caches a prefix that changes every call → useless</span>
+}]</pre></div>
+    <div class="costless">✅ Static policy cached; the volatile time moves into the (uncached) user turn.
+<pre><span class="st">"system"</span>: [{
+  <span class="st">"type"</span>:<span class="st">"text"</span>, <span class="st">"text"</span>:<span class="st">"You are a support agent. &lt;5000-token policy…&gt;"</span>,
+  <span class="st">"cache_control"</span>:{<span class="st">"type"</span>:<span class="st">"ephemeral"</span>}          <span class="cm"># byte-stable → HIT at ~0.1× after the first call</span>
+}],
+<span class="st">"messages"</span>:[{<span class="st">"role"</span>:<span class="st">"user"</span>,<span class="st">"content"</span>:<span class="st">"[time: 2026-07-16T09:31:07Z] …"</span>}]</pre></div>
+
+    <h3>3.2 · Big stable content with <em>no</em> <code>cache_control</code> → re-billed at 1× forever (A1)</h3>
+    <div class="costmore">❌ A large schema/tools re-sent every turn, uncached — full input price on every call.
+<pre><span class="st">"tools"</span>: [ …40 tool defs… ],
+<span class="st">"system"</span>: <span class="st">"…8K-token schema…"</span>            <span class="cm"># no cache_control anywhere → 1× every single turn</span></pre></div>
+    <div class="costless">✅ Same content, one breakpoint after the stable region → ~0.1× on every later turn.
+<pre><span class="st">"tools"</span>: [ …40 tool defs… ],
+<span class="st">"system"</span>: [{<span class="st">"type"</span>:<span class="st">"text"</span>,<span class="st">"text"</span>:<span class="st">"…8K-token schema…"</span>,
+             <span class="st">"cache_control"</span>:{<span class="st">"type"</span>:<span class="st">"ephemeral"</span>}}]   <span class="cm"># covers tools+system (order: tools→system→messages)</span></pre></div>
+
+    <h3>3.3 · Huge <code>tool_result</code> kept in history → re-billed every turn (A3)</h3>
+    <div class="costmore">❌ A 30K-token API dump stays in <code>messages</code> for the rest of the session — paid again on <em>every</em> subsequent call.
+<pre><span class="st">"messages"</span>:[ …, {<span class="st">"role"</span>:<span class="st">"user"</span>,<span class="st">"content"</span>:[{<span class="st">"type"</span>:<span class="st">"tool_result"</span>,
+   <span class="st">"tool_use_id"</span>:<span class="st">"t1"</span>,<span class="st">"content"</span>:<span class="st">"&lt;30K tokens of raw JSON&gt;"</span>}]}, … ]</pre></div>
+    <div class="costless">✅ Clear stale tool results once they're no longer needed (context editing) — the dialogue stays intact.
+<pre><span class="cm"># request context_management with clear_tool_uses_20250919 → old tool_results dropped,</span>
+<span class="cm"># conversation preserved. See the context-bloat cheat sheet.</span></pre></div>
+
+    <h3>3.4 · Oversized ceiling + thinking on a yes/no task (A6/A7)</h3>
+    <div class="costmore">❌ A trivial classification with room to ramble and forced deep thinking — output (incl. CoT) billed at 5×.
+<pre>{<span class="st">"model"</span>:<span class="st">"claude-opus-4-8"</span>, <span class="st">"max_tokens"</span>:<span class="st">32000</span>,
+ <span class="st">"output_config"</span>:{<span class="st">"effort"</span>:<span class="st">"high"</span>}, <span class="st">"messages"</span>:[{…<span class="st">"Is this spam? yes/no"</span>}]}</pre></div>
+    <div class="costless">✅ Small model, tight ceiling, low effort, structured answer.
+<pre>{<span class="st">"model"</span>:<span class="st">"claude-haiku-4-5"</span>, <span class="st">"max_tokens"</span>:<span class="st">8</span>,
+ <span class="st">"output_config"</span>:{<span class="st">"effort"</span>:<span class="st">"low"</span>,
+   <span class="st">"format"</span>:{<span class="st">"type"</span>:<span class="st">"json_schema"</span>,<span class="st">"schema"</span>:{<span class="st">"type"</span>:<span class="st">"object"</span>,
+     <span class="st">"properties"</span>:{<span class="st">"spam"</span>:{<span class="st">"type"</span>:<span class="st">"boolean"</span>}},<span class="st">"required"</span>:[<span class="st">"spam"</span>]}}}}</pre></div>
+
+    <h3>3.5 · One call per item vs one batch (A9)</h3>
+    <div class="costmore">❌ 10,000 synchronous calls, full price, plus per-request overhead.</div>
+    <div class="costless">✅ One <b>Message Batches</b> job — ~50% off input <em>and</em> output, correlate results by <code>custom_id</code>. Use it whenever latency isn't critical.</div>
+
+    <h2><span class="chip trade">4 · CoT &amp; ADAPTIVE THINKING</span> The expensive tokens</h2>
+    <p>Extended thinking (chain-of-thought) is where cost quietly grows, because <b>thinking tokens are billed as output
+    (5×)</b>. Key facts for the exam and for guardrails:</p>
+    <ul>
+        <li><b>Adaptive thinking</b> (<code>thinking:{"type":"adaptive"}</code>) lets the model <em>scale</em> reasoning to the task — great for hard problems, but it means output (and cost) is variable. On Opus 4.8/4.7/Sonnet 5 the old <code>budget_tokens</code> is gone (a <b>400</b>).</li>
+        <li><b>Effort</b> (<code>output_config.effort</code>: low / medium / high / xhigh / max) is your dial: lower effort → fewer thinking+output tokens → cheaper &amp; faster. Match effort to difficulty; don't pay <code>high</code> for a lookup.</li>
+        <li><b>Thinking on trivial tasks is pure waste</b> — a classifier or extraction rarely needs it. Reserve it for multi-step reasoning, planning, hard reconciliation.</li>
+        <li><b>Thinking blocks live in the response</b> and, in agent loops, are appended back into <code>messages</code> — so they add to the resent history too. <b>Context editing</b> can strip old thinking to stop paying for it every turn.</li>
+        <li><b>Verbose outputs multiply everywhere</b> — a chatty final answer is 5× tokens on top of the thinking. Ask for the shortest useful answer; use schemas.</li>
+    </ul>
+    <div class="warn"><b>Exam trap:</b> "raise the thinking budget to make it smarter/cheaper." Wrong on both — <code>budget_tokens</code>
+    is removed (400) on current models, and <em>more</em> thinking is <em>more</em> output cost. Use <b>adaptive thinking + the
+    <code>effort</code> dial</b>, and only where reasoning is actually needed.</div>
+
+    <h2><span class="chip concept">5 · COST BEST PRACTICES</span> The mirror image</h2>
+    <ul>
+        <li><b>Cache the stable prefix</b> — order <code>tools → system → messages</code>, put the breakpoint after the largest byte-stable block, keep it byte-identical. (Mind the min-prefix floor: 1024 tokens on Opus 4.8/Sonnet 5, up to 4096 on Haiku 4.5 — below it, nothing caches.)</li>
+        <li><b>Keep the cache warm</b> — reuse within the 5-min TTL; switch to the 1-hour TTL when calls are spaced (needs ≥3 reuses to beat 5-min).</li>
+        <li><b>Trim context</b> — RAG over whole-schema dumps; slim tool descriptions; context editing to drop stale tool results; compaction for very long chats.</li>
+        <li><b>Right-size the model</b> — Haiku for simple/high-volume, Sonnet mid, Opus for the hard step. Tier <em>within</em> an agent (cheap draft, expensive verify).</li>
+        <li><b>Cap the output</b> — smallest <code>max_tokens</code> that fits; structured outputs to kill framing tokens.</li>
+        <li><b>Match effort to difficulty</b> — low effort / no thinking for easy tasks; reserve high/xhigh for genuinely hard reasoning.</li>
+        <li><b>Batch the bulk</b> — Message Batches API (~50%) for anything latency-tolerant.</li>
+        <li><b>Stream long outputs</b> — avoid timeout-driven retries (double billing).</li>
+        <li><b>Bound the loop</b> — <code>max_turns</code> + graceful stop.</li>
+        <li><b>Measure</b> — read <code>usage</code> every call (<code>input_tokens</code>, <code>output_tokens</code>, <code>cache_read_input_tokens</code>, <code>cache_creation_input_tokens</code>); track cost/request &amp; cache-hit-rate = <code>cache_read / (cache_read + cache_creation + input_tokens)</code>.</li>
+    </ul>
+
+    <h2><span class="chip exam">6 · COST GUARDRAIL CHECKLIST</span> The CostSherlock seed</h2>
+    <p>Written as rules you can automate against a request payload + its <code>usage</code> response:</p>
+    <div class="rulebox"><b>R1 · Uncached big prefix:</b> IF <code>len(system)+len(tools) &gt; min_prefix(model)</code> AND no <code>cache_control</code> present → <b>WARN</b> (add caching).</div>
+    <div class="rulebox"><b>R2 · Cache miss on a stable prefix:</b> IF prefix unchanged since last call AND <code>cache_read_input_tokens == 0</code> → <b>FLAG</b> a cache-buster (volatile field / unsorted JSON / breakpoint placement).</div>
+    <div class="rulebox"><b>R3 · Oversized model:</b> IF task class ∈ {classify, extract, route} AND <code>model</code> is Opus/Fable → <b>SUGGEST</b> Haiku/Sonnet.</div>
+    <div class="rulebox"><b>R4 · No output ceiling:</b> IF <code>max_tokens</code> unset or &gt; task budget → <b>WARN</b>.</div>
+    <div class="rulebox"><b>R5 · Effort mismatch:</b> IF <code>effort ∈ {high,xhigh,max}</code> on a task class that doesn't need reasoning → <b>SUGGEST</b> lower effort.</div>
+    <div class="rulebox"><b>R6 · History bloat:</b> IF any single <code>tool_result</code> &gt; N tokens AND it persists across &gt; K turns → <b>SUGGEST</b> context editing.</div>
+    <div class="rulebox"><b>R7 · Prose where data is wanted:</b> IF downstream parses the output AND no <code>output_config.format</code> → <b>SUGGEST</b> structured output.</div>
+    <div class="rulebox"><b>R8 · Unbatched bulk:</b> IF request rate is high AND latency SLA is loose AND not using Batch → <b>SUGGEST</b> Batch API.</div>
+    <div class="rulebox"><b>R9 · Unbounded loop:</b> IF agent loop has no <code>max_turns</code> → <b>BLOCK</b>.</div>
+    <div class="rulebox"><b>R10 · Deprecated params:</b> IF <code>budget_tokens</code> / <code>temperature</code> / <code>top_p</code> present on a current model → <b>BLOCK</b> (400 anyway).</div>
+
+    <h2><span class="chip concept">7 · EXAM ONE-LINERS</span></h2>
+    <div class="note">
+    • <b>Output ≈ 5× input</b>, and <b>thinking counts as output</b> — verbose reasoning is the expensive path.<br>
+    • The API is <b>stateless</b>: every token in <code>messages</code> is <b>re-billed every turn</b> — trim history.<br>
+    • <b>Cache read ~0.1×</b>, write 1.25× (5-min) / 2× (1-hour); break-even at 2 requests.<br>
+    • <b>Batch API ~50% off</b> input and output for latency-tolerant work.<br>
+    • Control thinking with <b>adaptive + <code>effort</code></b>, never <code>budget_tokens</code> (400 on current models).<br>
+    • The classic runaway bug: a <b>cache that never hits</b> + a <b>history that never shrinks</b>.
+    </div>
+
+    <div class="good">Related: <a href="caching-and-memory.html">Prompt Caching &amp; Memory</a> ·
+    <a href="cheatsheet-context-bloat.html">Fixing Context Bloat</a> ·
+    <a href="subtopics/7-1-cost-levers.html">7.1 Cost levers</a> ·
+    <a href="subtopics/7-2-batch-api.html">7.2 Batch API</a> ·
+    <a href="subtopics/7-4-token-efficient-patterns.html">7.4 Token-efficient patterns</a> ·
+    <a href="error-handling-who-catches-what.html">400s (deprecated params)</a>.</div>
+
+    <div class="pager">
+        <a href="index.html"><span class="k">← Back</span>Domain 5 hub</a>
+        <a class="next" href="subtopics/7-1-cost-levers.html"><span class="k">Next →</span>7.1 Cost levers</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Cost — Anti-Patterns, Best Practices &amp; Guardrails</footer>
+</body>
+</html>

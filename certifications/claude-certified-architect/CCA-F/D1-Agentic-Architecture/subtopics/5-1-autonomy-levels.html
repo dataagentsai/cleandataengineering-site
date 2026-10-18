@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.1 Autonomy Levels · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 5 · Autonomy</div>
+    <h1>5.1 · Autonomy Levels</h1>
+    <div class="tag">The supervised → fully-autonomous spectrum</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Autonomy is a dial, not a switch</h2>
+    <p>Once you've decided to build an agent, the next architectural decision is <strong>how much
+    latitude the loop gets before a human is involved</strong>. Autonomy is a spectrum. Turning the dial
+    up buys you <em>speed and throughput</em>; it also enlarges the <strong>blast radius</strong> — the
+    scope of damage a single bad decision can cause. The architect picks the <em>lowest</em> autonomy that
+    still meets the throughput requirement, then gates the rest (see 5.2).</p>
+
+    <table>
+        <tr><th>Level</th><th>Who acts / who approves</th><th>Speed</th><th>Blast radius</th><th>Fits when…</th></tr>
+        <tr><td><strong>Supervised</strong></td>
+            <td>Agent <em>suggests</em>, a human <em>approves</em> every side-effecting step</td>
+            <td>Slow (human in the loop)</td><td>Smallest — nothing runs unreviewed</td>
+            <td>Irreversible / high-stakes actions; early rollout; regulated flows</td></tr>
+        <tr><td><strong>Semi-autonomous</strong></td>
+            <td>Agent <em>acts</em>; a human can <em>override</em> / interrupt</td>
+            <td>Balanced</td><td>Moderate — bounded by gates &amp; monitoring</td>
+            <td>Most production agents: act on the reversible, gate the dangerous</td></tr>
+        <tr><td><strong>Fully autonomous</strong></td>
+            <td>Agent <em>acts freely</em>, no per-step human</td>
+            <td>Fastest</td><td>Largest — a mistake propagates unchecked</td>
+            <td>Low cost-of-error, sandboxed, or fully reversible domains</td></tr>
+    </table>
+
+    <div class="note">🔑 The governing trade-off: <strong>higher autonomy = more speed but a bigger blast
+    radius</strong>. You are not choosing "good vs. bad" — you are trading human latency against the cost of
+    an unreviewed mistake.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The autonomy spectrum</h2>
+    <div class="mermaid">
+flowchart LR
+    S["🟢 Supervised<br/>suggest → human approves<br/>safe · slow"]
+      --> M["🔵 Semi-autonomous<br/>acts · human can override<br/>balanced"]
+      --> F["🟣 Fully autonomous<br/>acts freely<br/>fast · higher risk"]
+    S -.->|"turn the dial up →<br/>+speed · +blast radius"| F
+    classDef a fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef b fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef c fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    class S a; class M b; class F c;
+    </div>
+
+    <h2><span class="chip concept">CONCEPT</span> Autonomy is per-action, not per-agent</h2>
+    <p>A common mistake is to pick one autonomy level for the <em>whole</em> agent. Real designs set autonomy
+    <strong>per tool</strong>. The same agent can run <code>read_file</code> fully autonomously while forcing
+    <code>send_email</code> through a supervised gate. This is exactly the reversibility axis of 5.4: cheap,
+    reversible reads auto-run; irreversible writes get a human. The agent <em>feels</em> semi-autonomous overall
+    because its dangerous edges are individually supervised.</p>
+
+    <h2><span class="chip code">CODE</span> Selecting autonomy per tool call</h2>
+    <p>The Messages API is stateless: each turn you re-send the transcript. That gives <em>you</em> the seam to
+    decide, per <code>tool_use</code>, whether to auto-run or hold for approval before continuing the loop.</p>
+<pre><span class="cm"># Autonomy encoded as a policy the harness consults for each tool the model picks.</span>
+AUTONOMY = {
+    <span class="st">"read_file"</span>:  <span class="st">"auto"</span>,        <span class="cm"># reversible → fully autonomous</span>
+    <span class="st">"list_dir"</span>:   <span class="st">"auto"</span>,
+    <span class="st">"send_email"</span>: <span class="st">"supervised"</span>,  <span class="cm"># irreversible → human approves</span>
+    <span class="st">"delete"</span>:     <span class="st">"supervised"</span>,
+}
+
+<span class="kw">def</span> <span class="fn">level_for</span>(tool_name):
+    <span class="kw">return</span> AUTONOMY.get(tool_name, <span class="st">"supervised"</span>)   <span class="cm"># default: safest (deny-by-default)</span>
+
+<span class="kw">for</span> block <span class="kw">in</span> resp.content:
+    <span class="kw">if</span> block.type == <span class="st">"tool_use"</span>:
+        <span class="kw">if</span> <span class="fn">level_for</span>(block.name) == <span class="st">"supervised"</span> <span class="kw">and</span> <span class="kw">not</span> <span class="fn">human_ok</span>(block):
+            result = <span class="st">"Denied by policy: needs human approval."</span>   <span class="cm"># see 5.2</span>
+        <span class="kw">else</span>:
+            result = <span class="fn">run_tool</span>(block.name, block.input)</pre>
+    <div class="good">Design move: default unknown tools to the <strong>safest</strong> level. A new tool added
+    without a policy entry should require approval, not silently run fully autonomously.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Turning the dial up</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ More autonomy</h4>
+            <ul><li>Higher throughput — no waiting on humans</li>
+            <li>Lower latency per task; scales to many concurrent runs</li>
+            <li>Humans freed for exceptions, not routine approvals</li></ul></div>
+        <div class="con"><h4>⚠️ More autonomy</h4>
+            <ul><li>Bigger blast radius — mistakes act before review</li>
+            <li>Harder to audit; errors compound across the loop</li>
+            <li>Needs stronger guardrails, budgets, and monitoring</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb: <strong>start supervised, earn autonomy</strong>. Ship a new agent
+    supervised, watch its decisions, then promote reversible actions to auto as confidence grows.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "More autonomy is always better because it's faster." → Speed rises but so does
+    <b>blast radius</b>. The right level is the <b>lowest</b> that meets the throughput need, not the highest.</div>
+    <div class="trap"><b>Trap:</b> Treating autonomy as one setting for the whole agent. → Set it <b>per tool</b>.
+    Reversible reads can be fully autonomous while an irreversible <code>delete</code> stays supervised.</div>
+    <div class="trap"><b>Trap:</b> Equating "fully autonomous" with "no guardrails." → Even a fully-autonomous
+    agent still needs budgets, max-iteration caps (5.3), and monitoring — autonomy removes the <em>human</em>,
+    not the limits.</div>
+    <div class="trap"><b>Trap:</b> Assuming default-open. → A safe harness is <b>deny-by-default</b>: an
+    unclassified action requires approval rather than running freely.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A banking agent can issue refunds. Which autonomy level, and why?</summary>
+    <p class="answer"><b>Supervised</b> for the refund action specifically. Issuing money is high-stakes and
+    hard to reverse, so a human should approve it — even if the rest of the agent (reading account history,
+    drafting a reply) runs semi-autonomously. Autonomy is set per action.</p></details>
+    <details><summary>Q2 · Your agent only reads logs and summarizes them in a sandbox. What level fits?</summary>
+    <p class="answer"><b>Fully autonomous.</b> Reads are reversible and the sandbox caps the blast radius, so
+    there's no value in a human approving each step. Reserve human latency for actions that can actually cause harm.</p></details>
+    <details><summary>Q3 · Stakeholders want "maximum speed." How do you push autonomy up safely?</summary>
+    <p class="answer">Don't flip one global switch. Promote <em>individual reversible</em> tools to auto, keep
+    irreversible ones gated (5.2/5.4), and add budgets + max-iteration caps (5.3). You raise throughput on the
+    safe majority while preserving small blast radius on the dangerous minority.</p></details>
+
+    <div class="pager">
+        <a href="4-9-managed-agents-awareness.html"><span class="k">← Back</span>4.9 · Managed agents awareness</a>
+        <a class="next" href="5-2-permission-policies-gates.html"><span class="k">Next →</span>5.2 · Permission Policies &amp; Gates</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 5.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.3 Input vs Output Tokens &amp; max_tokens · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 1 · Context Windows &amp; Token Budgeting</div>
+    <h1>1.3 · Input vs Output Tokens &amp; max_tokens</h1>
+    <div class="tag">Reserve room for the reply</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> <code>max_tokens</code> reserves output space inside the window</h2>
+    <p>Every turn splits into two phases that share <strong>one</strong> window: the <strong>input phase</strong>
+    (system prompt + all history + current message + tool defs) and the <strong>output phase</strong> (the reply).
+    <code>max_tokens</code> is the cap on that output phase — it <strong>reserves room for the reply</strong>. The
+    reservation has to fit: the output you allow <em>plus</em> the input must live inside the same context window,
+    and the <strong>generated output counts against the window</strong> just like the input does.</p>
+
+    <div class="note">🔑 Rule of thumb: <code>input_tokens + max_tokens ≤ context window</code>. Reserve too little
+    and the reply truncates; reserve too much and the history can't fit. The output isn't "free space" outside the
+    window — it's carved <em>from</em> it.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Thinking tokens are output, and count too</h2>
+    <p>With extended thinking, the thinking budget is a <strong>subset of <code>max_tokens</code></strong> and is
+    <strong>billed as output tokens</strong> — and, like every other output token, it counts toward the context
+    window. With <strong>adaptive thinking</strong> (the mode on current models) Claude decides its thinking
+    allocation dynamically, so output usage varies request to request. When you reserve output room, reserve enough
+    for both the visible reply <em>and</em> any thinking it needs.</p>
+
+    <div class="warn">⚠️ Hitting the reservation ends the turn with <code>stop_reason: "max_tokens"</code> — the reply
+    is truncated mid-thought. That is a <em>self-imposed output cap</em>, and is <strong>not</strong> the same as
+    running out of context window (that's <code>model_context_window_exceeded</code>, covered in 1.5).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The window is split, not extended</h2>
+    <div class="mermaid">
+flowchart LR
+    W["Context window"] --> INP["INPUT: system + history + tools<br/>(input_tokens)"]
+    W --> RES["OUTPUT: reply + thinking<br/>(≤ max_tokens)"]
+    INP --> CK{"input + max_tokens<br/>≤ window?"}
+    RES --> CK
+    CK -->|"yes"| OK["🟢 Fits — safe to send"]
+    CK -->|"no"| BAD["🔴 Shrink history or<br/>lower max_tokens"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class OK ok; class RES gate; class BAD bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Size <code>max_tokens</code> against the remaining window</h2>
+<pre>WINDOW = <span class="st">1_000_000</span>          <span class="cm"># Opus 4.8 — 1M, default</span>
+SAFETY = <span class="st">2_000</span>              <span class="cm"># leave slack for count drift</span>
+
+input_tokens = client.messages.<span class="fn">count_tokens</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, messages=history,
+).input_tokens
+
+<span class="cm"># Reserve output from whatever the input leaves behind.</span>
+room = WINDOW - input_tokens - SAFETY
+max_out = <span class="fn">min</span>(<span class="st">8_000</span>, room)   <span class="cm"># cap the reply to what actually fits</span>
+
+<span class="kw">if</span> max_out &lt;= <span class="st">0</span>:
+    history = <span class="fn">trim_history</span>(history)   <span class="cm"># no room for a reply → make room (1.4/1.5)</span>
+
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=max_out,             <span class="cm"># output reservation, inside the window</span>
+    thinking={<span class="st">"type"</span>: <span class="st">"adaptive"</span>},  <span class="cm"># thinking is billed as output, counts too</span>
+    messages=history,
+)
+<span class="kw">if</span> resp.stop_reason == <span class="st">"max_tokens"</span>:
+    ...  <span class="cm"># reply hit the reservation — raise max_out or continue</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> How big should <code>max_tokens</code> be?</h2>
+    <table>
+        <tr><th>Setting</th><th>Upside</th><th>Downside</th></tr>
+        <tr><td>Generous <code>max_tokens</code></td><td>Reply won't truncate; room for thinking</td><td>Eats window; less room for history; higher worst-case cost/latency</td></tr>
+        <tr><td>Tight <code>max_tokens</code></td><td>More room for history; predictable cost</td><td>Risk of <code>stop_reason: "max_tokens"</code> mid-answer</td></tr>
+    </table>
+    <div class="good">Practical default: pick <code>max_tokens</code> from the <em>remaining</em> window
+    (<code>window − input − safety</code>), not a fixed number — the input side grows every turn (1.4).</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "<code>max_tokens</code> is separate from the context window." → No. Output is
+    reserved <b>inside</b> the window: <code>input + max_tokens</code> must fit, and output counts toward the
+    window.</div>
+    <div class="trap"><b>Trap:</b> "Just set <code>max_tokens</code> huge to be safe." → A huge reservation crowds
+    out history and can push <code>input + max_tokens</code> past the window. Size it to what actually fits.</div>
+    <div class="trap"><b>Trap:</b> "Thinking tokens are free / don't count." → Thinking is a subset of
+    <code>max_tokens</code>, billed as <b>output</b>, and counts toward the window.</div>
+    <div class="trap"><b>Trap:</b> "<code>stop_reason: max_tokens</code> means I'm out of context." → It means you
+    hit <em>your</em> output cap. Out-of-context is a different stop reason,
+    <code>model_context_window_exceeded</code> (1.5).</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What does <code>max_tokens</code> control, and where does that budget come from?</summary>
+    <p class="answer">It caps the <b>output phase</b> (the reply). The reservation is carved from the same context
+    window as the input — <code>input_tokens + max_tokens</code> must fit, and generated output counts toward the
+    window.</p></details>
+    <details><summary>Q2 · Do extended-thinking tokens count against <code>max_tokens</code> and the window?</summary>
+    <p class="answer">Yes to both. Thinking is a <b>subset of <code>max_tokens</code></b>, billed as output tokens,
+    and counts toward the context window. Adaptive thinking sizes it dynamically per request.</p></details>
+    <details><summary>Q3 · Why compute <code>max_tokens</code> from the remaining window rather than hard-coding it?</summary>
+    <p class="answer">Because the input side grows every turn (1.4). A fixed <code>max_tokens</code> that fit early can
+    later push <code>input + max_tokens</code> past the window. Deriving it from <code>window − input − safety</code>
+    keeps the reservation valid as history accumulates.</p></details>
+
+    <div class="pager">
+        <a href="1-2-token-counting.html"><span class="k">← Back</span>1.2 · Token Counting &amp; the Count Endpoint</a>
+        <a class="next" href="1-4-budgeting-conversation.html"><span class="k">Next →</span>1.4 · Budgeting a Growing Conversation</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 1.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

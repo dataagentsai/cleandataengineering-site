@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CCA-F — MCP Skeletons</title>
+<link rel="stylesheet" href="../Foundations-Mock-Exam-4/assets/exam.css">
+<style>
+  .ex{background:var(--card);border:1px solid var(--line);border-radius:12px;
+      padding:18px 20px;margin-bottom:18px}
+  .ex h3{margin:0 0 4px;font-size:17px}
+  .exnum{font-size:11px;letter-spacing:.7px;text-transform:uppercase;
+         color:var(--acc2);font-weight:700}
+  .obj{font-size:12px;color:var(--dim);background:var(--card2);border:1px solid var(--line);
+       border-radius:5px;padding:2px 8px;display:inline-block;margin:4px 6px 10px 0}
+  pre{background:var(--card2);border:1px solid var(--line);border-radius:9px;
+      padding:12px 14px;overflow-x:auto;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre code{background:none;padding:0;font-size:inherit}
+  .watch{border-left:3px solid var(--ok);background:rgba(34,197,94,.07);
+         padding:10px 14px;border-radius:0 9px 9px 0;margin:12px 0}
+  .watch b{color:var(--ok)}
+  .kills{border-left:3px solid var(--warn);background:rgba(245,158,11,.07);
+         padding:10px 14px;border-radius:0 9px 9px 0;margin:12px 0;font-size:14px}
+  .kills b{color:var(--warn)}
+  .caveat{border-left:3px solid var(--no);background:rgba(239,68,68,.07);
+          padding:10px 14px;border-radius:0 9px 9px 0;margin:12px 0;font-size:14px}
+  .caveat b{color:var(--no)}
+  h2.sec{margin:34px 0 14px;font-size:20px;border-bottom:1px solid var(--line);padding-bottom:8px}
+  table.map{border-collapse:collapse;width:100%;font-size:13.5px;margin:10px 0}
+  table.map th,table.map td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);
+                            vertical-align:top}
+  table.map th{color:var(--acc2)}
+  .file{font-size:12px;color:var(--dim);margin-top:10px}
+  .file a{color:var(--acc2);text-decoration:none}
+  .toc{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 0}
+  .toc a{font-size:12.5px;background:var(--card2);border:1px solid var(--line);
+         border-radius:7px;padding:5px 10px;color:var(--ink);text-decoration:none}
+  .toc a:hover{border-color:var(--acc)}
+  .diagram{font:12.5px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;color:var(--dim)}
+  .lead{font-size:15.5px}
+</style>
+</head>
+<body>
+<header class="page">
+  <div class="crumb"><a href="../CCA-F_Study_Guide.html">CCA-F</a> ›
+    <a href="../D4-Tool-Design-MCP/index.html">Domain 4</a> › MCP Skeletons</div>
+  <h1>MCP <span style="color:var(--acc2)">Skeletons</span></h1>
+  <div class="tag">Eight bare-minimum servers, one per design pattern · Tool Design &amp; MCP, 18% of the exam · ~45 minutes to read</div>
+</header>
+
+<div class="wrap">
+
+  <div class="intro">
+    <h2>Why this section exists</h2>
+    <p class="lead">Reading the MCP spec is not the same as seeing the smallest thing that works.
+    The spec tells you what is <em>possible</em>; it does not tell you which of the possible things
+    is <em>right</em>, and the exam tests the second one. The design decisions only become visible
+    when several minimal servers sit side by side and you can see what changes between them.</p>
+    <p>So: eight servers, each about 40–80 lines, each isolating exactly one decision. Every one runs.
+    All eight are smoke-tested against <code>fastmcp 3.4.7</code> — the behaviours claimed on this page
+    were observed, not remembered.</p>
+    <p><b>Read them in order.</b> 1–2 establish the primitives, 3–4 the failure and control patterns,
+    5–8 the ones that only show up at scale. Each card ends with the exam question shape it answers.</p>
+    <div>
+      <span class="pill">8 skeletons</span>
+      <span class="pill">Python · FastMCP</span>
+      <span class="pill">Runnable &amp; tested</span>
+      <span class="pill">Objectives 4.5 – 4.8</span>
+    </div>
+    <div class="toc">
+      <a href="#model">The mental model</a>
+      <a href="#s1">1 · Tools-only</a>
+      <a href="#s2">2 · Resources</a>
+      <a href="#s3">3 · Structured errors</a>
+      <a href="#s4">4 · Gated / stateful</a>
+      <a href="#s5">5 · Heterogeneous backends</a>
+      <a href="#s6">6 · Pagination</a>
+      <a href="#s7">7 · Env-var config</a>
+      <a href="#s8">8 · Namespacing</a>
+      <a href="#map">Exam map</a>
+      <a href="../Wire-Format-Reference/index.html">→ Wire-Format Reference</a>
+    </div>
+  </div>
+
+  <!-- ================= CONCEPTUAL GROUNDING ================= -->
+  <h2 class="sec" id="model">First, the mental model</h2>
+
+  <div class="ex">
+    <h3>MCP is a port, not a feature</h3>
+    <p>Before MCP, every integration was bespoke: your agent needed a GitHub connector, a Postgres
+    connector, a Slack connector, each written against a different SDK, each re-written for the next
+    agent you built. <b>M</b> agents × <b>N</b> systems = M×N integrations. MCP makes it M+N: every
+    system exposes one MCP server, every agent speaks one MCP client. It is the USB-C analogy people
+    reach for, and for once the analogy is accurate — it standardises the <em>socket</em>, not what
+    flows through it.</p>
+
+    <p style="margin-top:14px"><b>The three parties.</b> Getting these names right is worth an exam
+    mark on its own, because the question usually turns on which one is doing the choosing:</p>
+    <pre class="diagram"><code>   ┌──────────────────── HOST ────────────────────┐
+   │  Claude Code / Claude Desktop / your agent   │      the application the
+   │                                              │      human is talking to
+   │   ┌────────┐   ┌────────┐   ┌────────┐       │
+   │   │ CLIENT │   │ CLIENT │   │ CLIENT │       │      one client per server,
+   │   └───┬────┘   └───┬────┘   └───┬────┘       │      1:1, held by the host
+   └───────┼────────────┼────────────┼────────────┘
+           │            │            │                  ← the MCP protocol (JSON-RPC 2.0)
+      ┌────┴────┐  ┌────┴────┐  ┌────┴─────┐
+      │ SERVER  │  │ SERVER  │  │  SERVER  │            your code: exposes tools,
+      │ (files) │  │  (git)  │  │ (tickets)│            resources and prompts
+      └─────────┘  └─────────┘  └──────────┘</code></pre>
+    <div class="watch"><b>The bit that catches people:</b> the <em>model</em> is not in this picture.
+    The model never speaks MCP. The host collects the tool lists from its clients, hands them to the
+    model as ordinary tool definitions in the Messages API, and translates the model's
+    <code>tool_use</code> blocks back into MCP calls. MCP is a host-to-server protocol. Whether a tool
+    arrived via MCP or was hand-written in your code is invisible to the model — a distinction that
+    matters when a question asks "what does the model see?"</div>
+  </div>
+
+  <div class="ex">
+    <h3>The three primitives, sorted by <em>who decides</em></h3>
+    <p>Nearly every "should this be a tool or a resource?" question is answered by one axis: who
+    initiates. Not what the data is — who chooses to bring it in.</p>
+    <table class="map">
+      <tr><th>Primitive</th><th>Controlled by</th><th>Shape</th><th>In Claude Code</th></tr>
+      <tr>
+        <td><b>Tool</b></td>
+        <td><b>Model</b>-controlled — the model decides to call it, mid-turn</td>
+        <td>A verb. Takes arguments, may have side effects.</td>
+        <td>Appears as <code>mcp__server__tool</code></td>
+      </tr>
+      <tr>
+        <td><b>Resource</b></td>
+        <td><b>Application</b>-controlled — the client/user decides to attach it</td>
+        <td>A noun at a URI. Read-only, no side effects.</td>
+        <td>Attached by <code>@</code>-mention</td>
+      </tr>
+      <tr>
+        <td><b>Prompt</b></td>
+        <td><b>User</b>-controlled — the human picks it deliberately</td>
+        <td>A parameterised template the server supplies.</td>
+        <td>Appears as <code>/mcp__server__prompt</code></td>
+      </tr>
+    </table>
+    <div class="kills"><b>The trap:</b> "read-only, so it must be a resource." Not quite. Read-only is
+    necessary, not sufficient. A read-only operation that needs <em>searching</em> — arguments, a
+    decision, a query the model composes — is still a tool, because a resource URI cannot express a
+    search. Skeleton 2 shows the same catalogue exposed both ways, side by side, so the boundary
+    stops being abstract.</div>
+  </div>
+
+  <div class="ex">
+    <h3>Transports: the only two you need</h3>
+    <table class="map">
+      <tr><th></th><th>stdio</th><th>HTTP (streamable)</th></tr>
+      <tr><td><b>Runs</b></td><td>As a subprocess on your machine, launched by the host</td>
+          <td>As a remote service you connect to by URL</td></tr>
+      <tr><td><b>Talks over</b></td><td>stdin / stdout</td><td>HTTP POST, streaming responses via SSE</td></tr>
+      <tr><td><b>Auth</b></td><td>Environment variables — it is already your machine, your user</td>
+          <td>OAuth 2.1 / bearer tokens — it is a network boundary</td></tr>
+      <tr><td><b>Concurrency</b></td><td>One client per process</td><td>Many clients, one process</td></tr>
+      <tr><td><b>Use when</b></td><td>Local tools, local files, personal credentials</td>
+          <td>Shared/hosted servers, team-wide services</td></tr>
+    </table>
+    <div class="caveat"><b>Why this is not trivia:</b> the transport decides whether server-side state
+    is safe. A module-level dict is a perfectly good session store on stdio (one process serves one
+    client) and a cross-user data leak over HTTP (one process serves everybody). Skeleton 4 is built on
+    exactly that fault line, and the scenario questions love it — they give you a working stdio design
+    and then say "now 500 users share it."</div>
+    <p class="file">Older material mentions a separate <code>SSE</code> transport; it has been folded
+    into streamable HTTP and is deprecated. Recognise the name, do not choose it.</p>
+  </div>
+
+  <div class="ex">
+    <h3>The lifecycle, in four beats</h3>
+    <pre><code>1. initialize        client → server   protocol version + capabilities, both directions
+2. initialized       client → server   handshake done
+3. discovery         client → server   tools/list, resources/list, prompts/list
+4. invocation        client → server   tools/call, resources/read, prompts/get</code></pre>
+    <p>Discovery happens <em>at connection time</em>, which is the source of two behaviours worth
+    remembering: a server you edit is not re-read until the client reconnects, and every connected
+    server's full tool list is loaded into the context window before the conversation starts. That
+    second one is the hidden cost in skeleton 8.</p>
+  </div>
+
+  <p style="margin:26px 0 4px;color:var(--dim);font-size:14px">
+    That is the whole conceptual base. Everything below is one decision on top of it.</p>
+
+  <!-- ================= THE SKELETONS ================= -->
+  <h2 class="sec">The eight skeletons</h2>
+
+  <!-- 1 -->
+  <div class="ex" id="s1">
+    <div class="exnum">Skeleton 01 · the baseline</div>
+    <h3>Tools-only server</h3>
+    <span class="obj">Pattern: capabilities as tools, nothing else</span>
+    <span class="obj">~80% of real servers</span>
+    <p>The starting shape. Two tools, no resources, no prompts, no state.</p>
+<pre><code>@mcp.tool
+def get_order(order_id: str) -> dict:
+    """Retrieve the full record for ONE order, given its exact order ID.
+
+    Order IDs look like "A-1001". If you only have a customer's email, call
+    search_orders first to obtain the ID — this tool cannot look up by email.
+    """</code></pre>
+    <div class="watch"><b>What it exposes:</b> the description <em>is</em> the selection mechanism.
+    The model never sees your source, your function body, or your intent — only three fields:
+    <code>name</code>, <code>description</code>, <code>inputSchema</code>. Anything you need it to get
+    right has to live in those three. The docstring above does four things a weak one does not: says
+    <em>when</em> to use it, says what it does <em>not</em> do, points at the companion tool, and shows
+    the argument's shape. Compare: <code>"""Gets an order."""</code> — and notice that no amount of
+    prompt engineering upstream recovers what that one omits.</div>
+    <div class="kills"><b>Exam shape:</b> "The agent calls the wrong tool / never calls the tool /
+    passes the wrong arguments." The fix is the description, not the code. Write it for a competent
+    new hire who can see the signature but has never seen the system.</div>
+    <div class="file">📄 <a href="skeletons/01_tools_only.py">skeletons/01_tools_only.py</a></div>
+  </div>
+
+  <!-- 2 -->
+  <div class="ex" id="s2">
+    <div class="exnum">Skeleton 02 · the boundary</div>
+    <h3>Resources server</h3>
+    <span class="obj">Pattern: content catalogue addressed by URI</span>
+    <span class="obj">Tool vs resource</span>
+    <p>The same policy catalogue, exposed <em>both</em> ways in one file so the boundary is visible
+    rather than described.</p>
+<pre><code>@mcp.resource("policy://index")        # static — one fixed address
+def policy_index() -> str: ...
+
+@mcp.resource("policy://{topic}")      # template — a family of addresses
+def policy_doc(topic: str) -> str: ...
+
+@mcp.tool                              # same data, model-controlled, searchable
+def search_policies(query: str) -> list[str]: ...</code></pre>
+    <div class="watch"><b>What it exposes:</b> the decision is about control, not about data.
+    Known address, client attaches it → resource. Needs searching, arguments, or a judgement →
+    tool. Changes state, sends, charges, deletes → tool, always. Note the
+    <code>{topic}</code> placeholder makes the second one a <em>template</em>, listed separately
+    from static resources: a family of addresses, not one address.</div>
+    <div class="caveat"><b>The practical caveat:</b> resource support is client-dependent. Claude Code
+    surfaces MCP resources via <code>@</code>-mention; some clients ignore resources entirely and see
+    only your tools. A capability exposed <em>only</em> as a resource is invisible on those clients —
+    which is why servers that must work everywhere expose both, exactly as this one does.</div>
+    <div class="kills"><b>Exam shape:</b> "Should this be a tool or a resource?" Ask who chooses, and
+    whether it changes anything.</div>
+    <div class="file">📄 <a href="skeletons/02_resources.py">skeletons/02_resources.py</a></div>
+  </div>
+
+  <!-- 3 -->
+  <div class="ex" id="s3">
+    <div class="exnum">Skeleton 03 · the one that changes agent behaviour most</div>
+    <h3>Structured-error server</h3>
+    <span class="obj">Pattern: every failure carries category + retryability</span>
+    <p>An error string is not an error contract. "Request failed" tells the agent nothing about
+    whether to retry, fix its arguments, give up, or escalate — so it guesses.</p>
+<pre><code>def fail(category, retryable, message, next_step) -> dict:
+    return {"isError": True, "errorCategory": category,
+            "isRetryable": retryable, "message": message, "nextStep": next_step}
+
+# already refunded  → business,   retryable=False → stop, explain
+# amount too large  → validation, retryable=True  → fix the argument, retry
+# gateway down      → transient,  retryable=True  → back off, retry identical call
+# not your order    → permission, retryable=False → escalate to a human</code></pre>
+    <div class="watch"><b>What it exposes:</b> four categories cover almost everything, and the
+    difference between them is <em>what the agent should do next</em> — which is why
+    <code>nextStep</code> earns its place. Without the categories the classic failure is an infinite
+    retry loop against a permanent error; the mirror-image failure is giving up on a 503 that would
+    have succeeded one second later.</div>
+    <div class="caveat"><b>Returned vs raised — two different mechanisms, and a verified finding.</b>
+    Returning a dict means the call succeeded at the protocol level and the payload describes a
+    business failure. <em>Raising</em> sets the protocol-level <code>isError</code> flag. The two are
+    not interchangeable, and raising the wrong exception type leaks:
+<pre style="margin:8px 0 0"><code>raise ToolError("The payment gateway is unavailable")
+   → model sees exactly that text.                          safe: you wrote it
+
+raise ValueError("conn refused: pg://admin:hunter2@10.0.0.4")
+   → model sees "Error calling tool 'x': conn refused: pg://admin:hunter2@…"
+                                        an internal DSN, password and all</code></pre>
+    <p style="margin:8px 0 0">Observed on <code>fastmcp 3.4.7</code>, not assumed. <b>The rule:</b>
+    catch your exceptions and re-raise as <code>ToolError</code> with a message you chose, or return a
+    structured failure. A raw stack-trace message reaching the model is both a context leak and a
+    security leak.</p></div>
+    <div class="kills"><b>Exam shape:</b> "The agent retried a failing tool 20 times." /
+    "The agent gave up on a request that would have succeeded."</div>
+    <div class="file">📄 <a href="skeletons/03_structured_errors.py">skeletons/03_structured_errors.py</a></div>
+  </div>
+
+  <!-- 4 -->
+  <div class="ex" id="s4">
+    <div class="exnum">Skeleton 04 · prose is not a control</div>
+    <h3>Gated / stateful server</h3>
+    <span class="obj">Pattern: prerequisite enforced server-side</span>
+    <span class="obj">get_customer → process_refund</span>
+    <p>A side-effecting tool refuses to run until a prerequisite tool has been called in this session.</p>
+<pre><code>_verified: set[str] = set()          # session state lives in the SERVER
+
+@mcp.tool
+def process_refund(email, order_id, amount) -> dict:
+    if email not in _verified:
+        return {"isError": True, "errorCategory": "business", "isRetryable": True,
+                "message": f"Identity for {email} has not been verified.",
+                "nextStep": f"Call get_customer with email='{email}', then retry."}
+    ...</code></pre>
+    <div class="watch"><b>What it exposes:</b> you cannot enforce ordering with prose. Writing "always
+    call get_customer first" in a description is a <em>request</em>; the model complies most of the
+    time — which is the worst possible rate for something that moves money. The server is the only
+    place ordering can actually be enforced. Note also that this failure is unusually
+    <code>isRetryable: true</code>, but only after a <em>different</em> call: that is what
+    <code>nextStep</code> is for, and it lets a capable agent self-correct in one hop instead of
+    surfacing a dead end to the user.</div>
+    <div class="caveat"><b>The follow-up question you should expect:</b> "now it runs over HTTP for
+    500 users." The module-level <code>set</code> is correct on stdio — one process, one client — and
+    becomes a cross-user vulnerability the moment the transport changes, leaking one user's
+    verification into another user's session. Key it by session ID on HTTP.</div>
+    <div class="kills"><b>Exam shape:</b> "How do you ensure the agent verifies identity before
+    refunding?" → gate it server-side; the description is documentation, not a control.</div>
+    <div class="file">📄 <a href="skeletons/04_gated_stateful.py">skeletons/04_gated_stateful.py</a></div>
+  </div>
+
+  <!-- 5 -->
+  <div class="ex" id="s5">
+    <div class="exnum">Skeleton 05 · where mapping belongs</div>
+    <h3>Heterogeneous-backend server</h3>
+    <span class="obj">Pattern: three upstreams, one contract</span>
+    <p>Salesforce, Zendesk and a legacy database disagree about field names, date formats, status
+    vocabularies and ID shapes. One tool hides all of it.</p>
+<pre><code>"CreatedDate": "2026-08-19T09:14:00.000+0000"   ┐
+"created_at":  "2026-08-20T11:02:00Z"           ├─→  "createdDate": "2026-08-21"
+"CREATED":     "20260821"                       ┘
+
+"Working" / "open" / "P"   ─────────────────────→  "status": "in_progress"
+Id "500xx1" / id 88231 / TICKET_NO 4471 ────────→  "id": "sf:500xx1" | "zd:88231"</code></pre>
+    <div class="watch"><b>What it exposes:</b> normalising in the server costs 30 lines once.
+    Normalising in the model costs tokens on every call, forever — three schemas to hold, three status
+    vocabularies to reconcile, cross-system comparisons done in prose — and it is only
+    <em>probably</em> right. Two details carry weight: IDs are <b>prefixed</b> so they round-trip to
+    the correct upstream and never collide, and <code>source</code> is <b>kept</b>, because
+    normalising is not the same as hiding — the model may need to say "that one is in the read-only
+    legacy system."</div>
+    <div class="caveat"><b>The limit of the pattern:</b> normalise the shape, never the meaning. If
+    Zendesk's "solved" and Salesforce's "Closed" carry genuinely different business meaning, collapsing
+    both to <code>closed</code> destroys information. Keep a <code>sourceStatus</code> alongside when
+    the vocabularies do not truly align.</div>
+    <div class="kills"><b>Exam shape:</b> "Three CRMs with different formats — how should the MCP
+    server expose them?" → one tool, one normalised contract, mapping in the server. Not three tools.</div>
+    <div class="file">📄 <a href="skeletons/05_heterogeneous_backend.py">skeletons/05_heterogeneous_backend.py</a></div>
+  </div>
+
+  <!-- 6 -->
+  <div class="ex" id="s6">
+    <div class="exnum">Skeleton 06 · the context window is the scarce resource</div>
+    <h3>Paginated / large-result server</h3>
+    <span class="obj">Pattern: bounded pages, cursor, total</span>
+    <p>A tool result enters the context window and <em>stays there</em> for the rest of the
+    conversation. Fifty thousand rows do not cost you once — they crowd out everything the agent still
+    needs, on every subsequent turn.</p>
+<pre><code>size = min(limit, _MAX_LIMIT)      # ← the caller CANNOT raise the ceiling
+
+return {"rows": page,
+        "totalCount": len(matches),          # what exists
+        "nextCursor": str(end) or None,      # how to continue
+        "truncated":  end &lt; len(matches)}    # what you have NOT seen
+
+@mcp.tool
+def summarise_logs(query) -> dict:  # counts and buckets, returns no rows</code></pre>
+    <div class="watch"><b>What it exposes:</b> four moves, in priority order. <b>Clamp</b> — if the
+    ceiling is a parameter the model can set, it is not a ceiling; this is the one that actually saves
+    you. <b>Signal</b> — silent truncation is the real hazard, the agent confidently reporting "3
+    errors" when there were 300 and it saw one page. <b>Continue</b> — an opaque cursor it just passes
+    back. <b>Aggregate</b> — the best large result is the one you never return.</div>
+    <div class="kills"><b>Exam shape:</b> "The tool returns 50,000 rows and the agent runs out of
+    context." → cap server-side, paginate, and offer a summarise tool. The model cannot impose the
+    bound; by the time it sees the result, the damage is done.</div>
+    <div class="file">📄 <a href="skeletons/06_paginated.py">skeletons/06_paginated.py</a></div>
+  </div>
+
+  <!-- 7 -->
+  <div class="ex" id="s7">
+    <div class="exnum">Skeleton 07 · secrets and scope</div>
+    <h3>Env-var-config server</h3>
+    <span class="obj">Pattern: ${VAR} expansion, nothing committed</span>
+    <p>The server reads credentials from the environment; the <code>.mcp.json</code> that launches it
+    references <code>${API_TOKEN}</code>, never the value.</p>
+<pre><code>{"mcpServers": {"configured-api": {
+    "command": "python", "args": ["skeletons/07_env_config.py"],
+    "env": {"API_TOKEN": "${API_TOKEN}",
+            "API_BASE":  "${API_BASE:-https://api.example.com}"}}}}</code></pre>
+    <p>The committed file holds the <em>wiring</em>; every developer supplies their own <em>value</em>.
+    The three config scopes, narrowest first:</p>
+    <table class="map">
+      <tr><th>Scope</th><th>Reaches</th><th>Committed?</th><th>Secrets?</th></tr>
+      <tr><td><code>local</code></td><td>This project, this machine</td><td>No</td><td>Acceptable</td></tr>
+      <tr><td><code>project</code></td><td><code>.mcp.json</code> at the repo root, whole team</td>
+          <td><b>Yes</b></td><td><b>Never</b> — use <code>${VAR}</code></td></tr>
+      <tr><td><code>user</code></td><td>All your projects, this machine</td><td>No</td><td>Personal tokens</td></tr>
+    </table>
+    <div class="watch"><b>What it exposes:</b> the server fails loudly at startup if the token is
+    missing, rather than starting happily and failing later as a confusing error inside the model's
+    transcript. And <code>whoami</code> returns a <em>fingerprint</em> — <code>dem…yz (14 chars)</code>
+    — never the token: enough to debug "did it load the right key", useless to anyone reading a log.</div>
+    <div class="caveat"><b>Three things that go wrong.</b> (1) The token is pasted in literally "just
+    to test it" and reaches git — rotate it, because a secret in git history stays leaked after the fix
+    commit. (2) The server inherits your interactive shell's environment until it does not: a
+    GUI-launched client may never source your <code>~/.zshrc</code>, so the variable is set in your
+    terminal and empty in the server. (3) Config is logged at startup.</div>
+    <div class="kills"><b>Exam shape:</b> "The team needs the same MCP server, but each developer has
+    their own API key." → project scope for the wiring, <code>${VAR}</code> for the value.</div>
+    <div class="file">📄 <a href="skeletons/07_env_config.py">skeletons/07_env_config.py</a> ·
+      <a href="skeletons/mcp.json.example">mcp.json.example</a></div>
+  </div>
+
+  <!-- 8 -->
+  <div class="ex" id="s8">
+    <div class="exnum">Skeleton 08 · when servers collide</div>
+    <h3>Namespacing &amp; collision</h3>
+    <span class="obj">Pattern: two servers, one tool name</span>
+    <p>Both a docs server and a tickets server expose <code>search</code>. This file defines both, so
+    the collision is visible in one place.</p>
+<pre><code>mcp__docs__search      "Search internal ENGINEERING DOCUMENTATION — architecture
+                        notes, runbooks… Do NOT use for customer conversations."
+mcp__tickets__search   "Search CUSTOMER SUPPORT TICKETS — conversations with
+                        customers… Do NOT use for internal documentation."</code></pre>
+    <div class="watch"><b>What it exposes:</b> the client namespaces tool <em>names</em> by server, so
+    the wire-level clash is handled for you — the model cannot literally call the wrong name. But it
+    still has to <em>choose</em>, and descriptions are not namespaced. If both say "Search for
+    information", the prefix was cosmetic and the model picks by coin-flip. Three moves actually
+    disambiguate: lead with the <b>domain</b> in the first words, state the <b>negative</b>
+    ("Do NOT use for X — that is the Y server"), and give <b>trigger phrases</b> matching how a user
+    will really ask.</div>
+    <div class="caveat"><b>The real answer, and the one people miss:</b> every connected server's full
+    tool list sits in the context window on every request. Ten servers × eight tools is eighty
+    descriptions re-read each turn — tokens, latency, and more chances to choose wrong. The strongest
+    fix for tool confusion is usually not better descriptions at all. It is connecting fewer servers.</div>
+    <div class="kills"><b>Exam shape:</b> "Two MCP servers expose similar tools and the agent picks the
+    wrong one." → disambiguate the descriptions; renaming alone does not fix selection.</div>
+    <div class="file">📄 <a href="skeletons/08_namespacing.py">skeletons/08_namespacing.py</a></div>
+  </div>
+
+  <!-- ================= MAP ================= -->
+  <h2 class="sec" id="map">What this maps to on the exam</h2>
+  <div class="ex">
+    <table class="map">
+      <tr><th>Skeleton</th><th>Domain 4 cluster</th><th>The question shape it answers</th></tr>
+      <tr><td>1 · Tools-only</td><td>2 · Designing tools</td><td>"The agent picks the wrong tool"</td></tr>
+      <tr><td>2 · Resources</td><td>6 · MCP primitives</td><td>"Tool or resource?"</td></tr>
+      <tr><td>3 · Structured errors</td><td>3 · Results &amp; errors</td><td>"It retried 20 times" / "it gave up too early"</td></tr>
+      <tr><td>4 · Gated / stateful</td><td>7 · Building servers</td><td>"Ensure identity is verified before the refund"</td></tr>
+      <tr><td>5 · Heterogeneous</td><td>2 · Designing tools</td><td>"Three systems, different formats"</td></tr>
+      <tr><td>6 · Pagination</td><td>3 · Large results</td><td>"50,000 rows blew the context window"</td></tr>
+      <tr><td>7 · Env config</td><td>8 · MCP security</td><td>"Each developer has their own key"</td></tr>
+      <tr><td>8 · Namespacing</td><td>2 · Overlap · 5 · Fundamentals</td><td>"Two servers, similar tools"</td></tr>
+    </table>
+    <p style="margin-top:14px">When you have read all eight, sit
+    <a href="../D4-Tool-Design-MCP/quizzes/index.html">the Domain 4 quiz bank</a> — sets 5 to 8 are the
+    MCP ones. The bar is not picking the right option; it is being able to say <em>why each distractor
+    fails</em>. Most MCP distractors are plausible because they solve the problem in the wrong
+    <em>place</em> — in the prompt instead of the server, in the model instead of the contract.</p>
+  </div>
+
+  <div class="ex">
+    <h3>Running them</h3>
+<pre><code>cd CCA-F/D4-MCP-Skeletons/skeletons
+pip install fastmcp
+
+python test_skeletons.py        # exercises all eight in-process, no network
+python 01_tools_only.py         # or run one as a real stdio server</code></pre>
+    <p style="margin-top:10px">To wire one into Claude Code, copy
+    <a href="skeletons/mcp.json.example">mcp.json.example</a> to <code>.mcp.json</code> at a repo root
+    and reconnect. Discovery happens at connection time — edits to a running server are not picked up
+    until then.</p>
+    <p style="margin-top:10px;color:var(--dim);font-size:13.5px">A hands-on lab built on these same
+    servers — wire them up, break them deliberately, watch the agent react — is the planned follow-on
+    to this page.</p>
+  </div>
+
+</div>
+
+<footer>CCA-F · MCP Skeletons · Domain 4 — Tool Design &amp; MCP Integration, 18% of the exam</footer>
+</body>
+</html>

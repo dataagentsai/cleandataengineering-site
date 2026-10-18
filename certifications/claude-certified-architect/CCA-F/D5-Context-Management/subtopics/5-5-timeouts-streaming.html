@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.5 Timeouts &amp; Long Requests · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 5 · Reliability: Errors &amp; Retries</div>
+    <h1>5.5 · Timeouts &amp; Long Requests</h1>
+    <div class="tag">Stream to avoid timeouts</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Big <code>max_tokens</code> without streaming times out</h2>
+    <p>A large <code>max_tokens</code> means a long generation, and a non-streaming request holds one idle HTTP
+    connection open for the whole time. Two things go wrong past roughly <strong>10 minutes</strong>: some networks
+    silently <strong>drop idle connections</strong> (you get a failure or hang with no response), and the request
+    exceeds practical timeout windows. Anthropic's guidance is explicit — <strong>avoid a large
+    <code>max_tokens</code> on a non-streaming request</strong>. Instead, <strong>stream</strong> the response (or
+    use the Batch API). Streaming keeps data flowing on the connection, so it never goes idle, and you can start
+    processing tokens as they arrive.</p>
+
+    <div class="note">🔑 The SDKs enforce this. They validate that a non-streaming Messages request isn't expected
+    to exceed the ~10-minute timeout; a large <code>max_tokens</code> without <code>stream=True</code> is refused
+    before it's even sent (Python raises a <code>ValueError</code>). Pass <code>stream=True</code> / use
+    <code>messages.stream()</code>, or explicitly raise <code>timeout</code>, to proceed.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Streaming, or the Batch API — pick by latency need</h2>
+    <p>There are two ways to handle a long request safely:</p>
+    <ul>
+    <li><strong>Streaming (SSE)</strong> — for interactive/real-time work. Tokens arrive incrementally as
+    Server-Sent Events; the connection stays warm. If you don't need per-token handling, the SDK helpers
+    (<code>get_final_message()</code> / <code>finalMessage()</code>) consume the stream for you and hand back the
+    complete <code>Message</code> — identical to a non-streaming call, but without the timeout risk.</li>
+    <li><strong>Message Batches API</strong> — for non-latency-sensitive bulk work. You submit up to 100,000
+    requests, then <em>poll</em> for results rather than holding a connection, so network reliability stops
+    mattering. Most batches finish within an hour (24h max), at ~50% of standard price.</li>
+    </ul>
+
+    <div class="good">Interactive chat / long single response → <b>stream</b>. Overnight bulk generation where
+    latency doesn't matter → <b>Batch API</b> (poll for results, half price).</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Errors can still arrive mid-stream</h2>
+    <p>A streaming request first returns HTTP <strong>200</strong>, then delivers events. So an error can occur
+    <em>after</em> the 200 — it arrives as an <code>error</code> event in the SSE stream, not as an HTTP status your
+    normal <code>try/except</code> around the call would catch. Handle stream errors inside the iteration, and
+    remember that if a stream is interrupted you may hold a <em>partial</em> response. Also note the default client
+    <code>timeout</code> (10 minutes) is configurable, and its units differ by SDK — seconds in Python/Ruby,
+    milliseconds in TypeScript.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Route the long request</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Request with large max_tokens"] --> Q{"Latency-sensitive?"}
+    Q -->|"yes — user waiting"| S["🟢 Stream (SSE)<br/>connection stays warm"]
+    Q -->|"no — bulk / offline"| B["🟢 Batch API<br/>poll for results, ~50% cost"]
+    A -.->|"non-streaming + big max_tokens"| X["🔴 SDK refuses<br/>(idle-timeout risk)"]
+    S --> F["get_final_message()<br/>for the whole reply"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class S ok; class B ok; class F ok; class X bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Stream a 128K-token response, get the final message</h2>
+    <p>Use the streaming helper so the connection never idles — then pull the complete message without handling
+    individual events.</p>
+<pre><span class="kw">with</span> client.messages.<span class="fn">stream</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">128000</span>,                         <span class="cm"># large output → MUST stream</span>
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Write a detailed analysis…"</span>}],
+) <span class="kw">as</span> stream:
+    <span class="kw">for</span> text <span class="kw">in</span> stream.text_stream:        <span class="cm"># optional: render incrementally</span>
+        <span class="fn">print</span>(text, end=<span class="st">""</span>, flush=<span class="kw">True</span>)
+    msg = stream.<span class="fn">get_final_message</span>()        <span class="cm"># complete Message, no timeout risk</span>
+
+<span class="cm"># Bulk, latency-insensitive? Use the Batch API instead — poll, don't hold a socket:</span>
+batch = client.messages.batches.<span class="fn">create</span>(requests=[...])   <span class="cm"># ~50% cost, 24h window</span>
+<span class="cm"># …poll client.messages.batches.retrieve(batch.id) until "ended", then read results</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Streaming vs. Batch API for long work</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Streaming (SSE)</h4>
+            <ul><li>Real-time — tokens as they generate</li>
+            <li>Connection stays warm, no idle-timeout drop</li>
+            <li><code>get_final_message()</code> if you just want the whole reply</li></ul></div>
+        <div class="con"><h4>✅ Batch API (different job)</h4>
+            <ul><li>No live connection — poll for results</li>
+            <li>~50% cheaper, up to 100K requests, 24h window</li>
+            <li>But: not real-time — wrong choice for interactive UX</li></ul></div>
+    </div>
+    <div class="warn">⚠️ The failure mode to avoid: a big <code>max_tokens</code> on a <em>non-streaming</em> call.
+    That's the one the SDK blocks and the network drops.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Just raise <code>max_tokens</code> and wait." → A large <code>max_tokens</code>
+    without streaming can exceed the non-streaming timeout and get dropped by idle-connection limits. <b>Stream it</b>
+    (or use the Batch API).</div>
+    <div class="trap"><b>Trap:</b> Thinking streaming is only for showing tokens in a UI. → Even if you don't render
+    deltas, streaming plus <code>get_final_message()</code> gives you timeout protection for long generations.</div>
+    <div class="trap"><b>Trap:</b> Wrapping a streaming call in a plain try/except and expecting to catch every error.
+    → Streaming returns 200 first; errors can arrive as <b>mid-stream <code>error</code> events</b>, handled inside
+    the iteration, not as an HTTP status.</div>
+    <div class="trap"><b>Trap:</b> Using streaming for huge offline bulk jobs. → For non-latency-sensitive volume,
+    the <b>Batch API</b> is the right tool — poll for results, ~50% cheaper, no held connection.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why must a request with a very large <code>max_tokens</code> stream?</summary>
+    <p class="answer">A long non-streaming generation holds one idle connection open past the ~10-minute timeout;
+    networks may drop it and the SDK refuses it. Streaming keeps the connection active with incremental events, so
+    it never goes idle — use <code>get_final_message()</code> if you just want the whole reply.</p></details>
+    <details><summary>Q2 · When would you choose the Batch API over streaming for a long request?</summary>
+    <p class="answer">When the work is <b>not latency-sensitive</b> — bulk/offline generation. You submit and
+    <b>poll</b> for results instead of holding a connection (removing network-reliability risk), at ~50% of
+    standard cost. Streaming is for interactive, real-time responses.</p></details>
+    <details><summary>Q3 · A streaming request returned 200, then failed. Where do you catch that?</summary>
+    <p class="answer"><b>Inside the stream iteration</b> — as an <code>error</code> event in the SSE stream. Because
+    the HTTP response already succeeded (200), the failure won't surface as a status code in a try/except around the
+    call. You may also be left holding a partial response.</p></details>
+
+    <div class="pager">
+        <a href="5-4-rate-limits.html"><span class="k">← Back</span>5.4 · Rate Limits &amp; Handling 429</a>
+        <a class="next" href="6-1-fallbacks.html"><span class="k">Next →</span>6.1 · Fallbacks</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 5.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.1 What Agent Skills Are · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 5 · Skills</div>
+    <h1>5.1 · What Agent Skills Are</h1>
+    <div class="tag">SKILL.md model-invoked capability</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A skill is a folder with a SKILL.md</h2>
+    <p>An <strong>Agent Skill</strong> is a <strong>directory</strong> whose entrypoint is a single file called
+    <code>SKILL.md</code>. That file has two parts: <strong>YAML frontmatter</strong> between <code>---</code>
+    markers, and a <strong>markdown body</strong> of instructions. The frontmatter carries a
+    <code>name</code> and a <code>description</code>; the body is the procedural knowledge Claude follows once the
+    skill is in use. Alongside <code>SKILL.md</code> the folder may bundle <strong>optional supporting files</strong>
+    — reference docs, templates, example outputs, and executable scripts.</p>
+
+    <div class="note">🔑 Minimal skill = one folder + one <code>SKILL.md</code>. Everything else (scripts,
+    references, assets) is optional and loaded only when needed.</div>
+
+    <p>Claude Code skills follow the <strong>Agent Skills open standard</strong> (agentskills.io), so the same folder
+    format works across Claude products — Claude Code, the Claude API, and claude.ai — though each surface manages
+    and stores skills differently. Create a skill "when you keep pasting the same instructions, checklist, or
+    multi-step procedure into chat," or when a section of <code>CLAUDE.md</code> has grown from a fact into a
+    procedure. Unlike <code>CLAUDE.md</code> — which is always in context — a skill's body loads only when it's
+    used, so long reference material costs almost nothing until you need it.</p>
+
+    <h2><span class="chip concept">CONCEPT</span> Model-invoked, not user-invoked</h2>
+    <p>The defining trait of a skill is that it is <strong>model-invoked</strong>: <em>Claude</em> decides to use one
+    by matching your request against the skill's <code>description</code>. You don't have to name it. Ask
+    "what did I change?" and Claude loads a <code>summarize-changes</code> skill on its own if the description says
+    so. This contrasts with a classic slash command, which is <strong>user-invoked</strong> — nothing happens until
+    you type it. In Claude Code a skill is <em>both</em> by default: Claude can auto-trigger it, and you can also run
+    it directly by typing <code>/skill-name</code> (the command name comes from the directory name).</p>
+
+    <table>
+        <tr><th>Aspect</th><th>Agent Skill</th></tr>
+        <tr><td>What it is</td><td>A folder with <code>SKILL.md</code> + optional bundled files</td></tr>
+        <tr><td>Required frontmatter</td><td><code>name</code> and <code>description</code> (only <code>description</code> is truly recommended)</td></tr>
+        <tr><td>Who triggers it</td><td><strong>Claude</strong>, by matching the task to the <code>description</code> (also user-typable as <code>/name</code>)</td></tr>
+        <tr><td>When the body loads</td><td>Only when the skill triggers — not upfront</td></tr>
+        <tr><td>Standard</td><td>Agent Skills open standard (agentskills.io)</td></tr>
+    </table>
+
+    <div class="good">Because a skill is just files on disk, it is version-controllable, reviewable, and shareable —
+    commit <code>.claude/skills/</code> to your repo and the whole team gets the capability.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Anatomy of a skill folder</h2>
+    <div class="mermaid">
+flowchart TD
+    R["Task from user"] --> M{"Does the request match<br/>a skill's description?"}
+    M -->|"yes"| LOAD["🟢 Claude loads SKILL.md body<br/>(model-invoked)"]
+    M -->|"or you type /name"| LOAD
+    LOAD --> B["Body: markdown instructions"]
+    B --> OPT{"Body references<br/>bundled files?"}
+    OPT -->|"reference.md / examples.md"| REF["📄 Read as needed"]
+    OPT -->|"scripts/helper.py"| SCR["⚙️ Execute via bash<br/>(code never enters context)"]
+    M -->|"no match, not typed"| SKIP["⚪ Only name+description<br/>stay in context"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class LOAD ok; class REF gate; class SCR gate; class SKIP bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A minimal SKILL.md</h2>
+    <p>The directory name (<code>summarize-changes</code>) becomes the command <code>/summarize-changes</code>. The
+    <code>description</code> tells Claude <em>what</em> the skill does and <em>when</em> to use it — that string is
+    what auto-invocation matches against.</p>
+<pre><span class="cm"># File: ~/.claude/skills/summarize-changes/SKILL.md</span>
+---
+name: summarize-changes
+description: Summarizes uncommitted changes and flags anything risky. Use when the
+  user asks what changed, wants a commit message, or asks to review their diff.
+---
+
+## Instructions
+
+Summarize the current git diff in two or three bullet points, then list any risks
+you notice such as missing error handling, hardcoded values, or tests that need
+updating. If the diff is empty, say there are no uncommitted changes.</pre>
+
+    <div class="warn">⚠️ Field rules from the standard: <code>name</code> ≤ 64 chars, lowercase letters, numbers,
+    and hyphens only, and cannot contain the reserved words <code>anthropic</code> or <code>claude</code>.
+    <code>description</code> must be non-empty and ≤ 1024 chars.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Skill vs. stuffing it all into CLAUDE.md</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Put a procedure in a skill</h4>
+            <ul><li>Body loads only when the task matches — near-zero idle cost</li>
+            <li>Can bundle scripts and reference files</li>
+            <li>Directly invocable as <code>/name</code></li>
+            <li>Reviewable, versioned, shareable per-folder</li></ul></div>
+        <div class="con"><h4>⚠️ Put the same procedure in CLAUDE.md</h4>
+            <ul><li>Always in context — pays tokens every turn, used or not</li>
+            <li>No bundled files, no scripts</li>
+            <li>Grows unwieldy as procedures pile up</li>
+            <li>Good only for short, always-true facts</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb: <strong>facts</strong> that are always true → CLAUDE.md;
+    <strong>procedures</strong> triggered by specific tasks → a skill.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "A skill is a single markdown file." → It's a <b>directory</b>; the file inside is
+    <code>SKILL.md</code>. The folder can also hold scripts, references, and assets.</div>
+    <div class="trap"><b>Trap:</b> "Skills are user-invoked like old slash commands." → Skills are
+    <b>model-invoked</b> by default — Claude triggers them by matching the <code>description</code>. You <i>can</i>
+    also type <code>/name</code>, but auto-invocation is the point.</div>
+    <div class="trap"><b>Trap:</b> "You must set <code>name</code>." → Only <code>description</code> is recommended;
+    <code>name</code> is optional and defaults to the directory name. But you can't skip the <code>SKILL.md</code>
+    file itself.</div>
+    <div class="trap"><b>Trap:</b> "Skills only exist in Claude Code." → Agent Skills are an <b>open standard</b>;
+    the same SKILL.md format is used on the Claude API and claude.ai too (Claude Code stores them on the
+    filesystem, no upload needed).</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What are the two required-ish pieces of a skill's frontmatter, and which matters most?</summary>
+    <p class="answer"><b>name</b> and <b>description</b>. Only <b>description</b> is genuinely recommended — it's
+    what Claude matches the task against to decide whether to auto-invoke. <b>name</b> is optional and defaults to
+    the folder name.</p></details>
+    <details><summary>Q2 · Why is "model-invoked" the key property of a skill?</summary>
+    <p class="answer">Because Claude decides to load the skill on its own by matching your request to the
+    <code>description</code>, without you naming it. That's the contrast with a plain slash command, which does
+    nothing until the user types it. A skill can still be typed as <code>/name</code>, but auto-invocation is what
+    makes it a skill.</p></details>
+    <details><summary>Q3 · When should a procedure live in a skill rather than in CLAUDE.md?</summary>
+    <p class="answer">When it's a task-triggered <b>procedure</b> (a checklist, a multi-step workflow) rather than an
+    always-true fact. CLAUDE.md is always in context and pays tokens every turn; a skill's body loads only when the
+    task matches, so long procedures cost almost nothing until used.</p></details>
+
+    <div class="pager">
+        <a href="4-5-command-scopes.html"><span class="k">← Back</span>4.5 · Command Scopes</a>
+        <a class="next" href="5-2-progressive-disclosure.html"><span class="k">Next →</span>5.2 · Progressive Disclosure &amp; Invocation</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 5.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

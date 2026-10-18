@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.1 Prefilling the Assistant Turn · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 6 · Prefill &amp; Output Control</div>
+    <h1>6.1 · Prefilling the Assistant Turn</h1>
+    <div class="tag">Put words in Claude's mouth</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> An assistant message you write, that Claude continues</h2>
+    <p>Normally you send a request whose last message has <code>role: "user"</code>, and Claude produces the
+    whole <code>assistant</code> turn from scratch. <strong>Prefilling</strong> means adding a <em>partial</em>
+    <code>assistant</code> message as the <strong>last</strong> item in <code>messages</code>. Claude doesn't
+    start a fresh turn — it <strong>continues generating from exactly where your text ends</strong>. You have,
+    literally, put the first words in its mouth.</p>
+
+    <div class="note">🔑 The prefill is text <em>you</em> author. Claude appends to it. So the beginning of the
+    response is deterministic — you control the opening token(s), which is enough to control the whole
+    <em>shape</em> of what follows.</div>
+
+    <p>This gives you three levers that a user-turn instruction can only <em>request</em>:</p>
+    <table>
+        <tr><th>Goal</th><th>Prefill</th><th>Effect</th></tr>
+        <tr><td>Force straight-into-JSON</td><td><code>{</code></td><td>No prose preamble; the response <em>is</em> a JSON object (6.2)</td></tr>
+        <tr><td>Enforce a structure</td><td><code>&lt;analysis&gt;</code></td><td>Response opens inside the tag you chose (6.2)</td></tr>
+        <tr><td>Skip "Here is…" preamble</td><td>the first real word</td><td>Claude continues the sentence you started, not a new one</td></tr>
+        <tr><td>Hold a persona</td><td><code>[Sherlock]:</code></td><td>Response stays in the voice you framed (6.3)</td></tr>
+    </table>
+
+    <div class="warn">⚠️ Prefilling the last assistant turn is a feature of <strong>earlier</strong> Claude models.
+    On Claude 4.6-and-newer models (and Fable 5 / Mythos) a last-turn prefill returns a <strong>400 error</strong> —
+    the recommended replacement is Structured Outputs. The full rule set is in 6.5; this cluster teaches the
+    mechanic because the exam tests both the technique and its constraints.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Prefill vs. a user-turn instruction</h2>
+    <p>Both aim at the same outcome — a specific output shape — but they differ in <em>enforcement strength</em>.
+    An instruction like <em>"reply only with JSON"</em> is a request Claude usually honors. A prefill of
+    <code>{</code> makes the first character of the response a literal <code>{</code>, because it is text that
+    already exists in the transcript. Prefill constrains; instruction persuades.</p>
+
+    <div class="good">Rule of thumb: instruction describes what you want; prefill <em>guarantees the opening</em>.
+    They compose — a clear instruction plus a prefill is stronger than either alone.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Where the prefill sits and what Claude does with it</h2>
+    <div class="mermaid">
+flowchart TD
+    U["user: 'Give me the user record as JSON'"] --> A["assistant (prefill): '{'"]
+    A --> Q{"Last message role?"}
+    Q -->|"assistant"| CONT["🟢 Claude CONTINUES from the prefill<br/>generates: &quot;name&quot;: &quot;Ada&quot; ...}"]
+    Q -->|"user"| FRESH["Claude writes a fresh turn<br/>(may add 'Here is the JSON:' preamble)"]
+    CONT --> FINAL["Final assistant text =<br/>prefill + generation"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class CONT ok; class FINAL ok; class FRESH gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A request with a prefilled assistant message</h2>
+    <p>The prefill is just another entry in <code>messages</code> — with <code>role: "assistant"</code>, placed
+    last. Claude's returned <code>content</code> holds <em>only what it generated</em>; the prefill is not
+    echoed back, so you prepend it yourself when parsing (see 6.5).</p>
+<pre><span class="kw">import</span> anthropic
+client = anthropic.Anthropic()
+
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-5"</span>,          <span class="cm"># a model that still allows prefill (see 6.5)</span>
+    max_tokens=<span class="st">300</span>,
+    messages=[
+        {<span class="st">"role"</span>: <span class="st">"user"</span>,      <span class="st">"content"</span>: <span class="st">"Give me the user record for Ada as JSON."</span>},
+        {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: <span class="st">"{"</span>},   <span class="cm"># ← PREFILL: last turn is assistant</span>
+    ],
+)
+
+generated = resp.content[<span class="st">0</span>].text            <span class="cm"># e.g.  "name": "Ada", "id": 7}</span>
+full_json = <span class="st">"{"</span> + generated               <span class="cm"># prepend the prefill → valid JSON</span>
+<span class="kw">print</span>(full_json)</pre>
+
+    <div class="bad">Do NOT read <code>resp.content[0].text</code> and try to <code>json.loads()</code> it directly — it
+    starts at <code>"name"</code>, not <code>{</code>. The opening brace lives in your prefill, not the response.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Prefill vs. leaving the last turn to the user</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Prefill the assistant turn</h4>
+            <ul><li>Deterministic opening — no preamble to strip</li>
+            <li>Forces format/structure/persona from token one</li>
+            <li>Cheap: a few tokens of your own text</li></ul></div>
+        <div class="con"><h4>⚠️ Costs &amp; limits</h4>
+            <ul><li>Unsupported on Claude 4.6+/Fable 5 → 400 (6.5)</li>
+            <li>Incompatible with extended thinking (6.5)</li>
+            <li>You must prepend the prefill when parsing</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Prefill goes in the system prompt." → No. A prefill is an
+    <b><code>assistant</code>-role message placed last in <code>messages</code></b>. The system prompt is a
+    separate channel and cannot make Claude continue from partial text.</div>
+    <div class="trap"><b>Trap:</b> "The response includes the prefill." → It does not. <code>content</code> holds
+    only the <b>generated continuation</b>; the final assistant text is <b>prefill + generation</b>, and you
+    reconstruct it yourself.</div>
+    <div class="trap"><b>Trap:</b> "Prefill is just an instruction phrased differently." → An instruction
+    <i>requests</i> a shape; a prefill <b>fixes the opening tokens</b>, so it constrains the output far more
+    strongly.</div>
+    <div class="trap"><b>Trap:</b> Assuming prefill works on every model. → Last-turn prefill is
+    <b>rejected (400)</b> on Claude 4.6-and-newer and Fable 5 / Mythos; only earlier models allow it.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What exactly makes a message a "prefill"?</summary>
+    <p class="answer">It is a message with <b><code>role: "assistant"</code></b> placed as the <b>last</b> entry in
+    the <code>messages</code> array. Because the conversation ends on a partial assistant turn, Claude continues
+    generating from where that text stops instead of starting a new turn.</p></details>
+    <details><summary>Q2 · You prefill <code>{</code> and get back <code>"name": "Ada"}</code>. How do you get valid JSON?</summary>
+    <p class="answer">Prepend the prefill: <code>"{" + response_text</code>. The API returns only the generated
+    continuation, so the opening brace you supplied must be added back before parsing.</p></details>
+    <details><summary>Q3 · Why prefer a prefill over "please respond only in JSON"?</summary>
+    <p class="answer">The instruction is a request Claude usually — but not always — honors and may still emit a
+    preamble. A prefill of <code>{</code> makes the first character literally <code>{</code>, so there is no
+    preamble to strip and the shape is enforced from token one. (On new models, use Structured Outputs for the
+    same guarantee — 6.5.)</p></details>
+
+    <div class="pager">
+        <a href="5-5-cot-tradeoffs.html"><span class="k">← Back</span>5.5 · CoT Trade-offs</a>
+        <a class="next" href="6-2-prefill-format-control.html"><span class="k">Next →</span>6.2 · Prefill to Control Format</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 6.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

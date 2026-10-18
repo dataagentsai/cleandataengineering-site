@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.3 Skill Structure &amp; Bundled Resources · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 5 · Skills</div>
+    <h1>5.3 · Skill Structure &amp; Bundled Resources</h1>
+    <div class="tag">Frontmatter · scripts · references</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The directory layout</h2>
+    <p>A skill is a directory with <code>SKILL.md</code> as its required entrypoint. Every other file is optional and
+    exists to keep the main file focused while pushing detail to disk, where it's read only on demand:</p>
+
+<pre>my-skill/
+├── SKILL.md          <span class="cm"># required — frontmatter + instructions (the only mandatory file)</span>
+├── reference.md      <span class="cm"># detailed API docs — read when needed</span>
+├── examples.md       <span class="cm"># example outputs / expected format</span>
+├── template.md       <span class="cm"># a template for Claude to fill in</span>
+└── scripts/
+    └── helper.py     <span class="cm"># executed via bash, not loaded into context</span></pre>
+
+    <p>Each bundled file plays to a different strength: <strong>markdown references</strong> for flexible guidance
+    and factual lookup, <strong>scripts</strong> for deterministic, reliable operations. Crucially you must
+    <strong>reference supporting files from <code>SKILL.md</code></strong> so Claude knows what each contains and
+    when to load it — an unreferenced file is invisible to the model. Keep <code>SKILL.md</code> itself under about
+    500 lines and move heavy detail into separate files.</p>
+
+    <div class="good">Point at bundled files with plain markdown links, e.g. <code>For complete API details, see
+    [reference.md](reference.md)</code>. Claude follows the link and reads the file only when the task calls for it.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The frontmatter reference</h2>
+    <p>All frontmatter fields are optional; only <code>description</code> is recommended. The most commonly tested
+    fields:</p>
+
+    <table>
+        <tr><th>Field</th><th>Purpose</th></tr>
+        <tr><td><code>name</code></td><td>Display name in listings. Defaults to the directory name. ≤ 64 chars, lowercase/digits/hyphens, no <code>anthropic</code>/<code>claude</code>.</td></tr>
+        <tr><td><code>description</code></td><td>What the skill does &amp; when to use it — Claude matches on this. Non-empty, ≤ 1024 chars.</td></tr>
+        <tr><td><code>disable-model-invocation</code></td><td><code>true</code> = only you can invoke it (manual <code>/name</code> only).</td></tr>
+        <tr><td><code>user-invocable</code></td><td><code>false</code> = hide from the <code>/</code> menu; Claude can still auto-invoke.</td></tr>
+        <tr><td><code>allowed-tools</code></td><td>Tools Claude may use <em>without</em> a permission prompt while the skill is active.</td></tr>
+        <tr><td><code>disallowed-tools</code></td><td>Tools removed from the pool while the skill is active (clears on your next message).</td></tr>
+        <tr><td><code>argument-hint</code> / <code>arguments</code></td><td>Autocomplete hint and named positional args for <code>$name</code> substitution.</td></tr>
+        <tr><td><code>context</code> / <code>agent</code></td><td><code>context: fork</code> runs the skill in a subagent; <code>agent</code> picks the subagent type.</td></tr>
+        <tr><td><code>model</code> / <code>effort</code></td><td>Override the model / effort level while the skill is active.</td></tr>
+        <tr><td><code>paths</code></td><td>Glob patterns that limit auto-activation to matching files.</td></tr>
+    </table>
+
+    <div class="warn">⚠️ <code>allowed-tools</code> does <strong>not</strong> restrict the tool pool — every tool
+    stays callable and your permission settings still apply. It only <em>pre-approves</em> the listed tools so
+    Claude won't prompt for them. For project skills it takes effect only after you accept the workspace trust
+    dialog. Review project skills before trusting a repo — a skill can grant itself broad access.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> How the parts fit together</h2>
+    <div class="mermaid">
+flowchart TD
+    SM["SKILL.md"] --> FM["YAML frontmatter<br/>name · description · allowed-tools · …"]
+    SM --> BODY["Markdown body<br/>(instructions)"]
+    FM --> META["🟢 Level-1 metadata<br/>always in context"]
+    BODY --> LINK{"Body links to<br/>bundled files?"}
+    LINK -->|"[reference.md]"| REF["📄 reference / examples<br/>read on demand"]
+    LINK -->|"scripts/helper.py"| RUN["⚙️ run via bash<br/>output only enters context"]
+    RUN --> DIR["Path uses \${CLAUDE_SKILL_DIR}<br/>so it resolves anywhere"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class META ok; class REF gate; class RUN gate; class DIR gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A skill that bundles and runs a script</h2>
+    <p>The <code>allowed-tools</code> line pre-approves the python call so Claude runs it without a prompt. The
+    script path uses <code>${CLAUDE_SKILL_DIR}</code> — the directory holding this <code>SKILL.md</code> — so it
+    resolves whether the skill is installed personally, in a project, or via a plugin.</p>
+<pre><span class="cm"># File: ~/.claude/skills/codebase-visualizer/SKILL.md</span>
+---
+name: codebase-visualizer
+description: Generate an interactive collapsible tree visualization of your codebase.
+  Use when exploring a new repo, understanding project structure, or finding large files.
+allowed-tools: Bash(python3 *)
+---
+
+<span class="cm"># Codebase Visualizer</span>
+
+Run the visualization script from your project root:
+
+    python3 ${CLAUDE_SKILL_DIR}/scripts/visualize.py .
+
+This creates codebase-map.html in the current directory and opens it in the browser.
+
+## Additional resources
+- For output-format details, see [reference.md](reference.md)</pre>
+
+    <div class="note">🔑 The script's Python source never enters context — Claude runs it via bash and sees only its
+    printed output. That makes bundled scripts far cheaper and more reliable than having Claude regenerate
+    equivalent code inline.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Inline instructions vs. bundled resources</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Move detail into bundled files</h4>
+            <ul><li><code>SKILL.md</code> stays short and readable (&lt; 500 lines)</li>
+            <li>Large refs load only for the tasks that need them</li>
+            <li>Scripts give deterministic results, zero code-in-context</li></ul></div>
+        <div class="con"><h4>⚠️ Cram everything into SKILL.md</h4>
+            <ul><li>The whole body loads every time the skill triggers</li>
+            <li>Long reference material inflates every invocation</li>
+            <li>Harder to maintain and review</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Bundled files load automatically with the skill." → No — Claude reads a bundled
+    file only when the <code>SKILL.md</code> body <b>references</b> it and the task needs it. Unreferenced files are
+    never seen.</div>
+    <div class="trap"><b>Trap:</b> "<code>allowed-tools</code> limits which tools the skill can use." → It
+    <b>pre-approves</b> (grants without prompting); it does not restrict. Use <code>disallowed-tools</code> or deny
+    rules to actually remove tools.</div>
+    <div class="trap"><b>Trap:</b> "Reference the script with a relative path." → Use
+    <code>${CLAUDE_SKILL_DIR}</code> so the path resolves regardless of the current working directory or where the
+    skill is installed.</div>
+    <div class="trap"><b>Trap:</b> "<code>SKILL.md</code> is optional if you have other files." → <code>SKILL.md</code>
+    is the <b>required entrypoint</b>. Everything else is optional.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What's the one required file in a skill directory, and what must you do so Claude uses the others?</summary>
+    <p class="answer"><code>SKILL.md</code> is required. For any other bundled file to be used, you must
+    <b>reference it from SKILL.md</b> (e.g. a markdown link to <code>reference.md</code>) so Claude knows it exists
+    and when to read it.</p></details>
+    <details><summary>Q2 · What does <code>allowed-tools</code> actually do?</summary>
+    <p class="answer">It <b>pre-approves</b> the listed tools while the skill is active, so Claude uses them without a
+    permission prompt. It does not restrict the tool pool — all tools remain callable and your permission settings
+    still govern the rest. For project skills it applies only after the workspace trust dialog is accepted.</p></details>
+    <details><summary>Q3 · Why reference a bundled script with <code>${CLAUDE_SKILL_DIR}</code>?</summary>
+    <p class="answer">It expands to the directory containing this <code>SKILL.md</code>, so the script path is correct
+    whether the skill lives in <code>~/.claude/skills/</code>, a project's <code>.claude/skills/</code>, or a plugin
+    — regardless of the current working directory.</p></details>
+
+    <div class="pager">
+        <a href="5-2-progressive-disclosure.html"><span class="k">← Back</span>5.2 · Progressive Disclosure &amp; Invocation</a>
+        <a class="next" href="5-4-skills-vs-others.html"><span class="k">Next →</span>5.4 · Skills vs Commands vs Subagents vs MCP</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 5.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

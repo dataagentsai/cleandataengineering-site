@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.5 Subagents vs Skills vs Commands · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 7 · Subagents</div>
+    <h1>7.5 · Subagents vs Skills vs Commands</h1>
+    <div class="tag">When to reach for each</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Three ways to package behaviour — one axis separates them</h2>
+    <p>Subagents, skills, and slash commands all extend Claude Code, but they differ on two questions:
+    <strong>who invokes it</strong> and <strong>which context window it runs in</strong>.</p>
+    <table>
+        <tr><th>Mechanism</th><th>Invoked by</th><th>Runs in</th><th>Adds</th></tr>
+        <tr><td><strong>Subagent</strong></td><td>Claude (auto-delegate) or you (explicit)</td><td>Its <strong>own isolated</strong> context window</td><td>Context isolation + tool restriction + optionally a different model</td></tr>
+        <tr><td><strong>Skill</strong></td><td>Claude (model-invoked)</td><td>The <strong>same</strong> (main) context window</td><td>Reusable prompts / workflows / instructions in-context</td></tr>
+        <tr><td><strong>Slash command</strong></td><td><strong>You</strong> (typed <code>/name</code>)</td><td>The <strong>same</strong> (main) context window</td><td>A user-triggered, reusable prompt</td></tr>
+    </table>
+
+    <div class="note">🔑 The distinguishing feature of a subagent is <strong>context isolation</strong> — plus the
+    ability to restrict tools and pick a different model. Skills and commands run <em>in the same context</em> as
+    your conversation.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Choosing between them</h2>
+    <p>The official guidance is direct: <strong>consider a Skill instead of a subagent when you want reusable
+    prompts or workflows that run in the main conversation context</strong> rather than in an isolated subagent
+    context. So:</p>
+    <ul>
+        <li><strong>Reach for a subagent</strong> when the work is verbose or self-contained and you want it out
+        of the main window, or when you need to <em>restrict tools</em> / <em>route to a cheaper model</em>.</li>
+        <li><strong>Reach for a skill</strong> when you want a reusable capability Claude invokes on its own, but
+        the work should stay <em>in</em> the main conversation with full shared context.</li>
+        <li><strong>Reach for a slash command</strong> when <em>you</em> want to trigger a reusable prompt on
+        demand by typing <code>/name</code>.</li>
+    </ul>
+    <div class="good">Rule of thumb: need a clean context window and/or tool &amp; model control → <b>subagent</b>.
+    Need a model-invoked capability that shares context → <b>skill</b>. Need a user-triggered prompt → <b>command</b>.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> A decision path</h2>
+    <div class="mermaid">
+flowchart TD
+    Q1{"Do you want the work in a<br/>SEPARATE context window?<br/>(or restrict tools / model)"}
+    Q1 -->|"yes"| SUB["🟢 Subagent<br/>isolated context + tool/model control"]
+    Q1 -->|"no — keep shared context"| Q2{"Who should trigger it?"}
+    Q2 -->|"Claude, on its own"| SKILL["🔵 Skill<br/>model-invoked, same context"]
+    Q2 -->|"You, by typing /name"| CMD["🟣 Slash command<br/>user-invoked prompt, same context"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef skill fill:#e7f1ff,stroke:#4a90d9,color:#1a3a5a;
+    classDef cmd fill:#efe3fb,stroke:#9b59b6,color:#5b2a86;
+    class SUB ok; class SKILL skill; class CMD cmd;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Same idea, three packagings</h2>
+    <p>A "code review" capability, expressed each way — note where each lives and who fires it.</p>
+<pre><span class="cm"># SUBAGENT — .claude/agents/code-reviewer.md</span>
+<span class="cm"># Claude delegates when the task matches; runs in its OWN context.</span>
+<span class="kw">---</span>
+<span class="kw">name:</span> code-reviewer
+<span class="kw">description:</span> <span class="st">Expert code reviewer. Use proactively after code changes.</span>
+<span class="kw">tools:</span> <span class="st">Read, Grep, Glob</span>
+<span class="kw">---</span>
+You are a senior code reviewer...
+
+<span class="cm"># SKILL — model-invoked, runs in the MAIN context (shares your conversation)</span>
+<span class="cm"># SLASH COMMAND — you type /review to fire a reusable prompt in the MAIN context</span></pre>
+    <div class="warn">⚠️ Same wording ("review my code") can trigger different mechanisms. The material difference
+    is <em>where it runs</em>: a subagent isolates it; a skill and a command keep it in your conversation.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Isolated subagent vs. in-context skill/command</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Subagent (isolated)</h4>
+            <ul><li>Keeps verbose work out of the main window</li>
+            <li>Can restrict tools and pin a different model</li>
+            <li>Independent permissions per agent</li></ul></div>
+        <div class="con"><h4>⚠️ Skill / command (shared context)</h4>
+            <ul><li>Full shared context — no re-explaining the situation</li>
+            <li>Lower latency; no fresh-start context gathering</li>
+            <li>But verbose output lands in your main conversation</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Skills and subagents are the same thing." → A <b>skill is model-invoked and runs
+    in the same context</b>; a <b>subagent runs in an isolated context window</b> and adds tool restriction and
+    optional model choice. Different context is the key distinction.</div>
+    <div class="trap"><b>Trap:</b> "Slash commands and subagents are interchangeable." → A slash command is a
+    <b>user-invoked prompt</b> that runs in the main context. A subagent is delegated (auto or explicit) and runs
+    in its own context.</div>
+    <div class="trap"><b>Trap:</b> "Use a subagent for any reusable prompt." → If you just want a reusable prompt
+    or workflow in the <b>main conversation context</b>, the docs point you to a <b>Skill</b> instead. Subagents
+    are for isolation / tool / model control.</div>
+    <div class="trap"><b>Trap:</b> "Only subagents can restrict tools or change the model." → That combination —
+    <b>context isolation + tool restriction + optionally a different model</b> — is exactly what a subagent adds
+    over a skill or command. That's the reason to pick one.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What is the defining difference between a subagent and a skill?</summary>
+    <p class="answer">A subagent runs in its <b>own isolated context window</b> (and can restrict tools / use a
+    different model); a skill is <b>model-invoked and runs in the same context</b> as the main conversation.</p></details>
+    <details><summary>Q2 · You want a reusable workflow that stays in the main conversation. Which mechanism?</summary>
+    <p class="answer">A <b>Skill</b> — the docs specifically recommend a skill over a subagent when you want reusable
+    prompts/workflows in the main context rather than isolated subagent context.</p></details>
+    <details><summary>Q3 · What does a subagent add over a slash command?</summary>
+    <p class="answer">Context isolation (its own window), tool restriction, and optionally a different model. A
+    slash command is a user-invoked prompt that runs in the main context with no isolation.</p></details>
+
+    <div class="pager">
+        <a href="7-4-invoking-subagents.html"><span class="k">← Back</span>7.4 · Invoking Subagents</a>
+        <a class="next" href="8-1-headless-mode.html"><span class="k">Next →</span>8.1 · Headless Mode</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 7.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.5 Explicit State Passing · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 4 · Multi-Agent</div>
+    <h1>4.5 · Explicit State Passing</h1>
+    <div class="tag">Pass all the required state — but only the required state</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The two-sided rule</h2>
+    <p>Because sub-agents are context-isolated (4.4), the coordinator must hand each one the state it needs
+    <strong>explicitly</strong>. But there's a second edge: passing <em>too much</em> bloats the sub-agent's
+    context, costs tokens, and can distract it. So the rule has two sides:</p>
+    <ul>
+        <li><strong>Completeness:</strong> pass <em>all</em> the state the sub-task genuinely requires — don't
+        assume it's "known."</li>
+        <li><strong>Minimality:</strong> pass the <em>minimum</em> needed — avoid dumping the whole history to
+        prevent context explosion.</li>
+    </ul>
+
+    <div class="note">🔑 <strong>Pass the minimum <em>required</em> state.</strong> Missing state → the lost-state
+    bug (the sub-agent guesses or fails). Excess state → context explosion (cost, latency, distraction). Aim for
+    the tight middle.</div>
+
+    <table>
+        <tr><th>Failure mode</th><th>Cause</th><th>Symptom</th></tr>
+        <tr><td><strong>Lost state</strong></td><td>Under-passing — assumed the sub-agent knew it</td><td>Sub-agent hallucinates, asks, or produces wrong output</td></tr>
+        <tr><td><strong>Context explosion</strong></td><td>Over-passing — dumped full history "to be safe"</td><td>Higher tokens/cost/latency; specialist loses focus</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> How to decide what to pass</h2>
+    <p>For each sub-task, ask: <em>what facts must this specialist have to do its job well?</em> Include those and
+    nothing else. Typical payload: the specific inputs (a doc, a number, constraints), relevant prior results, and
+    the acceptance criteria. Exclude: unrelated turns, other specialists' internal reasoning, and the coordinator's
+    scratch work.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The state payload</h2>
+    <div class="mermaid">
+flowchart LR
+    subgraph CTX["🟣 Coordinator context (large)"]
+        F1["needed: budget, doc"]
+        F2["needed: prior result"]
+        X1["noise: chit-chat"]
+        X2["noise: other sub-task's reasoning"]
+    end
+    F1 --> P["📦 explicit state payload<br/>(minimal + complete)"]
+    F2 --> P
+    X1 -. excluded .-x P
+    X2 -. excluded .-x P
+    P -->|delegate| SUB["🔵 Sub-agent (isolated)"]
+    classDef p fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    classDef b fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef pack fill:#fff9db,stroke:#b08900,color:#7a5c00;
+    class CTX p; class SUB b; class P pack;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Delegate with an explicit state payload</h2>
+    <p>Build a small, structured payload of exactly what the specialist needs, then send it as the delegated task.</p>
+<pre><span class="cm"># Collect only the state THIS sub-task requires — complete but minimal.</span>
+state = {
+    <span class="st">"objective"</span>: <span class="st">"Recommend a database for the workload below."</span>,
+    <span class="st">"constraints"</span>: {<span class="st">"budget_usd_mo"</span>: <span class="st">5000</span>, <span class="st">"region"</span>: <span class="st">"eu-west"</span>},
+    <span class="st">"workload"</span>: workload_summary,          <span class="cm"># the specific input it must reason over</span>
+    <span class="st">"prior_findings"</span>: research_result,     <span class="cm"># a relevant earlier result — passed in, not assumed</span>
+    <span class="cm"># NOTE: no coordinator chit-chat, no other specialists' scratch work.</span>
+}
+
+<span class="kw">import</span> json
+task = <span class="st">f"Task:\n{json.dumps(state, indent=2)}\n\nReturn a single recommendation with a one-line reason."</span>
+
+specialist = client.messages.create(
+    model=<span class="st">"claude-sonnet-4-6"</span>, max_tokens=<span class="st">1024</span>,
+    system=<span class="st">"You are a database-selection specialist. Use ONLY the state provided."</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: task}],   <span class="cm"># the explicit, self-contained payload</span>
+)</pre>
+
+    <div class="good">Structuring state as JSON makes "what did I actually pass?" auditable — a direct defense
+    against the lost-state bug, and it keeps the payload tight.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Completeness vs. minimality</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Lean, complete payload</h4>
+            <ul><li>Sub-agent has exactly what it needs</li>
+            <li>Lower tokens, cost, and latency</li>
+            <li>Specialist stays focused on its task</li></ul></div>
+        <div class="con"><h4>⚠️ Getting it wrong</h4>
+            <ul><li>Too little → lost-state bug, wrong output</li>
+            <li>Too much → context explosion, distraction</li>
+            <li>"Just pass everything" is not the safe default</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> The <b>lost-state bug</b> — assuming the sub-agent "knows" a fact from the
+    coordinator's history. → It's isolated (4.4). If it isn't in the delegated payload, the sub-agent never saw it.</div>
+    <div class="trap"><b>Trap:</b> "To be safe, pass the entire conversation." → That causes <b>context explosion</b>:
+    cost, latency, and distraction. Pass the <b>minimum required</b>, not everything.</div>
+    <div class="trap"><b>Trap:</b> Passing another specialist's internal reasoning instead of its result. → Sub-agents
+    need each other's <b>outputs</b>, not their scratch work. Keep the payload to what's actually required.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A drafting sub-agent produces off-topic copy. The coordinator "told" it the brief earlier in its own turn. Diagnosis?</summary>
+    <p class="answer"><b>Lost-state bug.</b> The brief lived in the coordinator's context, which the isolated sub-agent
+    can't see. Fix: put the brief into the delegated message payload.</p></details>
+    <details><summary>Q2 · A team fixes lost-state by piping the full 40-turn history into every sub-agent. New problem?</summary>
+    <p class="answer"><b>Context explosion.</b> Tokens, cost, and latency spike, and specialists lose focus. Pass only
+    the minimum required state per sub-task, not the whole transcript.</p></details>
+    <details><summary>Q3 · Why prefer a structured (e.g. JSON) state payload over free-form prose?</summary>
+    <p class="answer">It makes exactly what you passed auditable and keeps the payload tight — easy to see if a
+    required field is missing (lost state) or if you're over-including (explosion).</p></details>
+
+    <div class="pager">
+        <a href="4-4-subagent-context-isolation.html"><span class="k">← Prev</span>4.4 · Sub-agent context isolation</a>
+        <a class="next" href="4-6-parallel-vs-sequential.html"><span class="k">Next →</span>4.6 · Parallel vs. sequential</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 4.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

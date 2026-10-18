@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.5 · CoT Trade-offs &amp; When Not to Use · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 5 · Chain of Thought &amp; Extended Thinking</div>
+    <h1>5.5 · CoT Trade-offs &amp; When Not to Use</h1>
+    <div class="tag">Latency &amp; tokens vs accuracy</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Reasoning is a spend, not a default</h2>
+    <p>Every form of reasoning in this cluster — prompted CoT, structured tags, native extended thinking — buys
+    accuracy with <strong>output tokens and latency</strong>. That's a great trade on genuinely hard problems and a
+    <strong>pure tax on easy ones</strong>. The engineering discipline is to switch reasoning <em>on where it moves
+    the needle</em> and leave it <em>off where it doesn't</em> — not to sprinkle "think step by step" everywhere.</p>
+
+    <div class="note">🔑 The decision rule: does the task have a real risk of a wrong one-shot answer? If yes,
+    reasoning earns its cost. If a direct answer is already reliable, reasoning is latency and spend for nothing.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> When to skip it</h2>
+    <p>Turn reasoning <em>off</em> (or never add it) for tasks that are simple, latency-sensitive, or high-volume:</p>
+    <div class="bad">Skip / disable reasoning for: classification into known labels, extraction, format conversion,
+    lookups, sentiment tagging, short factual answers, and real-time UX where every hundred milliseconds counts.</div>
+    <div class="good">Keep reasoning for: multi-step math, logical proofs, multi-factor analysis, agentic tool loops
+    (5.4), and anything where a wrong answer is expensive and a naive answer is unreliable.</div>
+    <p>Two dials let you turn the cost down without turning reasoning fully off: lower the <code>effort</code> level,
+    or (on models that support it) cap the manual <code>budget_tokens</code>. On current models,
+    <code>effort: "low"</code> is the light-touch setting; <code>"high"</code>/<code>"max"</code> is for
+    correctness-critical work.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Decide, then dial</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Task"] --> Q{"Real risk of a<br/>wrong one-shot answer?"}
+    Q -->|"no"| OFF["🟢 No reasoning<br/>direct answer — fast &amp; cheap"]
+    Q -->|"yes"| ON{"Latency-sensitive?"}
+    ON -->|"very"| LOW["🔵 Reason lightly<br/>effort: low / small budget"]
+    ON -->|"correctness matters most"| HIGH["🟠 Reason deeply<br/>effort: high / max"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef mid fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class OFF ok; class LOW mid; class HIGH gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Match the reasoning level to the task</h2>
+    <p>One codebase, three tiers: no reasoning for classification, light reasoning for a moderate task, deep
+    reasoning where correctness dominates cost.</p>
+<pre><span class="cm"># Tier 1 — simple classification: NO reasoning. Fast, cheap, reliable.</span>
+client.messages.<span class="fn">create</span>(model=<span class="st">"claude-haiku-4-5"</span>, max_tokens=<span class="st">10</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Label sentiment (pos/neg/neutral): 'Loved it!'"</span>}])
+
+<span class="cm"># Tier 2 — moderate task, latency-sensitive: light reasoning.</span>
+client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">4000</span>,
+    thinking={<span class="st">"type"</span>: <span class="st">"adaptive"</span>},
+    output_config={<span class="st">"effort"</span>: <span class="st">"low"</span>},           <span class="cm"># dial the cost down</span>
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Summarize and flag any billing risk..."</span>}])
+
+<span class="cm"># Tier 3 — correctness &gt; cost: deep reasoning.</span>
+client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">16000</span>,
+    thinking={<span class="st">"type"</span>: <span class="st">"adaptive"</span>},
+    output_config={<span class="st">"effort"</span>: <span class="st">"max"</span>},           <span class="cm"># spend for accuracy</span>
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Audit this contract for conflicting clauses..."</span>}])</pre>
+
+    <div class="warn">⚠️ Reasoning tokens count toward <code>max_tokens</code> and the bill even when you set
+    <code>display: "omitted"</code> — hiding the reasoning text does not make it free. Budget <code>max_tokens</code>
+    generously so a long think doesn't truncate the answer.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> The knobs at a glance</h2>
+    <table>
+        <tr><th>Setting</th><th>Accuracy</th><th>Latency / tokens</th><th>Use when</th></tr>
+        <tr><td>No reasoning</td><td>Fine on easy tasks</td><td>Lowest</td><td>Classify, extract, convert, look up</td></tr>
+        <tr><td>Prompted CoT</td><td>Better on hard tasks</td><td>Higher (inline reasoning)</td><td>No native thinking, or you want visible steps</td></tr>
+        <tr><td>Adaptive + <code>effort: low</code></td><td>Good</td><td>Moderate</td><td>Moderate tasks, latency-sensitive</td></tr>
+        <tr><td>Adaptive + <code>effort: high/max</code></td><td>Best</td><td>Highest</td><td>Correctness matters more than cost</td></tr>
+    </table>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "More reasoning is always better." → On simple tasks it adds <b>latency and
+    tokens with no accuracy gain</b>. Match the reasoning level to the task's difficulty.</div>
+    <div class="trap"><b>Trap:</b> Thinking <code>display: "omitted"</code> saves money. → It only hides the
+    reasoning <b>text</b>; the thinking tokens are still generated and billed.</div>
+    <div class="trap"><b>Trap:</b> Setting a tiny <code>max_tokens</code> with deep reasoning on. → A long think can
+    <b>eat the budget and truncate the answer</b>. Reasoning tokens count toward <code>max_tokens</code>.</div>
+    <div class="trap"><b>Trap:</b> Treating <code>effort</code> as all-or-nothing. → It's a <b>dial</b> —
+    <code>low</code> for latency-sensitive work, <code>high</code>/<code>max</code> when correctness outweighs cost.
+    You don't have to choose between "off" and "full."</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A high-volume sentiment classifier is slow and expensive after someone added extended thinking. Fix?</summary>
+    <p class="answer">Remove reasoning entirely — classification into known labels is a simple task where a direct
+    answer is equally accurate. Reasoning here is pure latency and token cost with no accuracy benefit.</p></details>
+    <details><summary>Q2 · Does <code>display: "omitted"</code> reduce your bill?</summary>
+    <p class="answer">No. It only suppresses the reasoning <b>text</b> in the response (helping time-to-first-token
+    when streaming). The full thinking tokens are still generated and billed.</p></details>
+    <details><summary>Q3 · You need maximum accuracy on a legal audit and cost is secondary. What settings?</summary>
+    <p class="answer">Adaptive thinking with <code>output_config: {effort: "high"}</code> or <code>"max"</code>, and a
+    generous <code>max_tokens</code> so the reasoning doesn't truncate the answer. This is exactly the task where the
+    token/latency spend earns its keep.</p></details>
+
+    <div class="pager">
+        <a href="5-4-thinking-with-tools.html"><span class="k">← Back</span>5.4 · Thinking with Tool Use</a>
+        <a class="next" href="6-1-prefilling-basics.html"><span class="k">Next →</span>6.1 · Prefilling Basics</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 5.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

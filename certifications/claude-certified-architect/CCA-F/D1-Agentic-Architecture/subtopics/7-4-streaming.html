@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.4 Streaming in Long Agentic Runs · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 7 · Performance</div>
+    <h1>7.4 · Streaming in Long Agentic Runs</h1>
+    <div class="tag">Stream big requests or they time out</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Why stream at all</h2>
+    <p>A large generation can take longer than an HTTP connection is willing to stay open waiting for a
+    single response body. Streaming sends the response incrementally, keeping the connection alive.
+    <strong>The architect's rule: stream any request with a large <code>max_tokens</code> (≳16K) to avoid
+    HTTP timeouts.</strong> In long agentic runs — where turns can produce big outputs — this is not
+    optional.</p>
+
+    <div class="note">🔑 The trigger is <strong>large <code>max_tokens</code> (≳16K)</strong>, not the model.
+    A big generation may exceed the non-streaming timeout window; streaming keeps bytes flowing so the
+    connection never idles out.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The event stream &amp; get_final_message</h2>
+    <p>A streamed request emits a sequence of typed events. You usually don't hand-assemble them — the SDK
+    helper <code>client.messages.stream(...)</code> yields events and then
+    <code>stream.get_final_message()</code> reconstructs the complete <code>Message</code> (content,
+    <code>stop_reason</code>, <code>usage</code>) so the rest of your agent loop is unchanged.</p>
+    <table>
+        <tr><th>Event</th><th>What it signals</th></tr>
+        <tr><td><code>message_start</code></td><td>The response has begun; metadata arrives.</td></tr>
+        <tr><td><code>content_block_delta</code></td><td>Incremental chunks of a content block (text, tool input…).</td></tr>
+        <tr><td><code>message_delta</code></td><td>Top-level updates — carries <code>stop_reason</code> and <code>usage</code>.</td></tr>
+        <tr><td><code>message_stop</code></td><td>The stream is complete.</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Streaming a long turn</h2>
+    <div class="mermaid">
+flowchart TD
+    A([Big request<br/>max_tokens ≳ 16K]) --> S["client.messages.stream(...)"]
+    S --> E1["🔵 message_start"]
+    E1 --> E2["🟢 content_block_delta<br/>(repeats — keeps HTTP alive)"]
+    E2 --> E3["🟠 message_delta<br/>stop_reason + usage"]
+    E3 --> E4["🔵 message_stop"]
+    E4 --> F["stream.get_final_message()<br/>→ complete Message"]
+    F --> L([resume agent loop])
+    classDef s fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef d fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef m fill:#ffe8cc,stroke:#d9480f,color:#7a2e08;
+    class E1 s; class E4 s; class E2 d; class E3 m;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Streaming with get_final_message</h2>
+    <p>Use the context-manager helper. Consume deltas if you want live output, then collapse the stream
+    into a normal <code>Message</code> and continue exactly as in a non-streamed loop.</p>
+<pre><span class="cm"># Large max_tokens → stream to avoid HTTP timeouts on a long generation.</span>
+<span class="kw">with</span> client.messages.stream(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">32000</span>,          <span class="cm"># ≳16K → stream, don't block on one body</span>
+    tools=TOOLS,
+    messages=messages,
+) <span class="kw">as</span> stream:
+    <span class="kw">for</span> event <span class="kw">in</span> stream:
+        <span class="kw">if</span> event.type == <span class="st">"content_block_delta"</span>:
+            <span class="fn">render</span>(event.delta)          <span class="cm"># optional live UI; keeps conn warm</span>
+        <span class="kw">elif</span> event.type == <span class="st">"message_delta"</span>:
+            <span class="cm"># message_delta carries stop_reason + usage</span>
+            <span class="kw">pass</span>
+
+    <span class="cm"># Reconstruct the full Message — same shape as a non-streamed .create()</span>
+    final = stream.<span class="fn">get_final_message</span>()
+
+<span class="fn">print</span>(final.stop_reason, final.usage.output_tokens)
+messages.append({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: final.content})
+<span class="cm"># ...run any tool the model chose, append tool_result, loop as usual</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Stream vs. block</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Streaming</h4>
+            <ul><li>Avoids HTTP timeouts on large <code>max_tokens</code></li>
+            <li>Enables live, token-by-token UX</li>
+            <li>Same final <code>Message</code> via <code>get_final_message()</code></li></ul></div>
+        <div class="con"><h4>⚠️ Cost of streaming</h4>
+            <ul><li>More client-side plumbing (event handling)</li>
+            <li>Overkill for tiny, fast responses</li>
+            <li>Partial output must be finalized before you act on it</li></ul></div>
+    </div>
+    <div class="good">Heuristic: small/fast response → <code>create()</code> is fine; large generation
+    (<code>max_tokens</code> ≳ 16K) or a run that needs live output → <strong>stream</strong>.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Issuing a huge non-streamed request and blaming the model when it "hangs." →
+    A large <code>max_tokens</code> (≳16K) can hit an <b>HTTP timeout</b>. Stream it.</div>
+    <div class="trap"><b>Trap:</b> Acting on partial deltas as if they were the final answer. → Finalize with
+    <code>stream.get_final_message()</code> before you branch on <code>stop_reason</code> or run a tool.</div>
+    <div class="trap"><b>Trap:</b> Expecting <code>usage</code>/<code>stop_reason</code> on the first event. →
+    They arrive on <b>message_delta</b>; <code>get_final_message()</code> is the reliable place to read
+    them.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A report-generation call with max_tokens=40000 intermittently fails with a connection timeout. Fix?</summary>
+    <p class="answer">Switch to <code>client.messages.stream(...)</code>. A generation that large can exceed the
+    non-streaming HTTP window; streaming keeps the connection alive with incremental
+    <code>content_block_delta</code> events.</p></details>
+    <details><summary>Q2 · How do you fold a streamed turn back into a normal agent loop?</summary>
+    <p class="answer">Call <code>stream.get_final_message()</code> to get a complete <code>Message</code>,
+    append <code>final.content</code> to <code>messages</code>, run any chosen tool, and loop — identical to
+    a <code>.create()</code>-based loop.</p></details>
+    <details><summary>Q3 · Which event carries stop_reason and usage?</summary>
+    <p class="answer"><code>message_delta</code>. The full sequence is
+    <code>message_start → content_block_delta… → message_delta → message_stop</code>; reading the finalized
+    message is the simplest way to get both.</p></details>
+
+    <div class="pager">
+        <a href="7-3-prompt-caching-loops.html"><span class="k">← Prev</span>7.3 · Prompt Caching in Loops</a>
+        <a class="next" href="7-5-conversation-state-mgmt.html"><span class="k">Next →</span>7.5 · Conversation-State Mgmt</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 7.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.5 The Prompt Anatomy (Element Order) · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 1 · Foundations &amp; Being Clear</div>
+    <h1>1.5 · The Prompt Anatomy (Element Order)</h1>
+    <div class="tag">Where each piece goes</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A prompt has parts, and their order matters</h2>
+    <p>A well-structured prompt is assembled from recognizable <strong>elements</strong>, and Anthropic recommends
+    a canonical <strong>order</strong> for them. Putting each piece where it belongs makes the prompt easier for
+    the model to parse and measurably improves output quality. The recommended sequence:</p>
+    <table>
+        <tr><th>#</th><th>Element</th><th>What it is</th></tr>
+        <tr><td>1</td><td><strong>Task context</strong></td><td>Role, background, the situation the model is operating in</td></tr>
+        <tr><td>2</td><td><strong>Tone</strong></td><td>The voice/style the response should take</td></tr>
+        <tr><td>3</td><td><strong>Detailed instructions</strong></td><td>The rules and steps to follow</td></tr>
+        <tr><td>4</td><td><strong>Examples</strong></td><td>Few-shot demonstrations, wrapped in tags</td></tr>
+        <tr><td>5</td><td><strong>Input data / documents</strong></td><td>The material to operate on</td></tr>
+        <tr><td>6</td><td><strong>Immediate task / request</strong></td><td>The specific ask, placed last</td></tr>
+    </table>
+    <div class="note">🔑 Read top to bottom, it flows like onboarding a person: <em>here's who you are and how to
+    sound → here are the rules → here's what good looks like → here's the material → here's exactly what I need
+    now.</em></div>
+
+    <h2><span class="chip concept">CONCEPT</span> Long documents go near the top; the request goes last</h2>
+    <p>The one placement rule the exam loves: <strong>put long-form data near the top</strong> of the prompt, above
+    your query, instructions, and examples. Anthropic: <em>"Place your long documents and inputs near the top of
+    your prompt, above your query, instructions, and examples. This improves performance across all models."</em>
+    And the payoff is quantified: <em>"Queries at the end can improve response quality by up to 30% in tests,
+    especially with complex, multi-document inputs."</em></p>
+    <p>So the <strong>immediate request lands last</strong> — after the model has ingested the context and the
+    documents. The reference table above lists input data at step 5 for a compact prompt; when that data is a
+    <em>large</em> document (20k+ tokens), hoist it to the very top and keep the actual question at the bottom.
+    Wrap each document in <code>&lt;document&gt;</code> tags with <code>&lt;source&gt;</code> and
+    <code>&lt;document_content&gt;</code> subtags so the model can tell material from instructions.</p>
+    <div class="good">Rule of thumb: <strong>long documents first, question last.</strong> The model reads the
+    material, then receives the ask fresh at the end — worth up to 30% on complex multi-document tasks.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Element order, top to bottom</h2>
+    <div class="mermaid">
+flowchart TD
+    A["① Task context<br/>(role · background)"] --> B["② Tone"]
+    B --> C["③ Detailed instructions"]
+    C --> D["④ Examples<br/>(&lt;example&gt; tags)"]
+    D --> E["⑤ Input data / documents"]
+    E --> F["⑥ Immediate task / request<br/>(placed LAST)"]
+    LD["📄 Long documents (20k+ tokens)"] -.->|"hoist near the TOP,<br/>above query &amp; examples"| A
+    classDef top fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    classDef last fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef doc fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class A top; class F last; class LD doc;
+    </div>
+
+    <h2><span class="chip code">CODE</span> The anatomy assembled — long doc up top, request last</h2>
+    <p>Note the ordering: context/role and tone first, then instructions and an example, the <em>document near the
+    top of the input block</em>, and the actual question at the very bottom.</p>
+<pre><span class="kw">system</span> = (
+    <span class="cm"># ① Task context / role</span>
+    <span class="st">"You are a contracts analyst supporting a procurement team. "</span>
+    <span class="cm"># ② Tone</span>
+    <span class="st">"Write in precise, neutral, professional language.\n\n"</span>
+    <span class="cm"># ③ Detailed instructions</span>
+    <span class="st">"Follow these steps:\n"</span>
+    <span class="st">"1. Identify the termination clause.\n"</span>
+    <span class="st">"2. Quote the exact text before summarizing.\n"</span>
+    <span class="st">"3. Flag any auto-renewal terms.\n\n"</span>
+    <span class="cm"># ④ Example (few-shot, tagged)</span>
+    <span class="st">"&lt;example&gt;Clause: '30 days written notice.' → Summary: ...&lt;/example&gt;"</span>
+)
+
+<span class="kw">user</span> = (
+    <span class="cm"># ⑤ Input data — the LONG document goes near the TOP of the input.</span>
+    <span class="st">"&lt;documents&gt;\n"</span>
+    <span class="st">"  &lt;document index='1'&gt;\n"</span>
+    <span class="st">"    &lt;source&gt;msa_2026.pdf&lt;/source&gt;\n"</span>
+    <span class="st">"    &lt;document_content&gt;{{FULL_CONTRACT_TEXT}}&lt;/document_content&gt;\n"</span>
+    <span class="st">"  &lt;/document&gt;\n"</span>
+    <span class="st">"&lt;/documents&gt;\n\n"</span>
+    <span class="cm"># ⑥ Immediate task / request — placed LAST (up to +30% on complex inputs).</span>
+    <span class="st">"Summarize the termination and renewal terms of the contract above."</span>
+)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Canonical ordering vs. ad-hoc layout</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Canonical order, doc-up-top</h4>
+            <ul><li>Model parses each element unambiguously</li>
+            <li>Query-last is worth up to ~30% on multi-doc tasks</li>
+            <li>Long data near the top improves performance across all models</li>
+            <li>Easy to template and reuse</li></ul></div>
+        <div class="con"><h4>⚠️ Ad-hoc / request-first</h4>
+            <ul><li>Quicker to dash off</li>
+            <li>Question before the data → model answers with less grounding</li>
+            <li>Instructions tangled with material → misinterpretation</li>
+            <li>Inconsistent across prompts, hard to iterate on</li></ul></div>
+    </div>
+    <div class="note">🔑 The two load-bearing placements: <strong>long documents near the top</strong>, and the
+    <strong>immediate request at the very bottom</strong>.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Putting the question before the long document. → Reverse it. <b>Long data near
+    the top, query last</b> — Anthropic measures up to a 30% quality gain from query-at-the-end on complex,
+    multi-document inputs.</div>
+    <div class="trap"><b>Trap:</b> Interleaving instructions, examples, and raw data with no structure. → Use the
+    canonical order and <b>XML tags</b> (<code>&lt;document&gt;</code>, <code>&lt;example&gt;</code>) so the model
+    separates material from instructions.</div>
+    <div class="trap"><b>Trap:</b> Treating element order as cosmetic. → It changes results. Ordering is a
+    <b>performance lever</b>, not formatting preference — especially the query-last placement.</div>
+    <div class="trap"><b>Trap:</b> Assuming "input data at step 5" means a big document goes in the middle. → For
+    <b>long</b> documents specifically, hoist them to the top of the input, above query and examples.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Give the recommended element order for a prompt.</summary>
+    <p class="answer">Task context (role/background) → tone → detailed instructions → examples → input data /
+    documents → immediate task/request (last). Long documents are the exception to "middle": hoist them near the
+    top of the input.</p></details>
+    <details><summary>Q2 · Where do long documents go, and where does the actual question go?</summary>
+    <p class="answer"><b>Long documents near the top</b> of the prompt, above the query, instructions, and examples;
+    the <b>question goes last</b>. Anthropic reports query-at-the-end can improve response quality by up to 30% on
+    complex, multi-document inputs.</p></details>
+    <details><summary>Q3 · Is prompt element order just cosmetic?</summary>
+    <p class="answer">No — it's a measurable performance lever. Long data near the top "improves performance across
+    all models," and placing the query last yields up to a 30% quality gain on complex multi-document tasks.
+    Structure the prompt deliberately, wrapping documents and examples in XML tags.</p></details>
+
+    <div class="pager">
+        <a href="1-4-sequential-steps.html"><span class="k">← Back</span>1.4 · Sequential Steps &amp; Numbered Instructions</a>
+        <a class="next" href="2-1-system-parameter.html"><span class="k">Next →</span>2.1 · System Parameter</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 1.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

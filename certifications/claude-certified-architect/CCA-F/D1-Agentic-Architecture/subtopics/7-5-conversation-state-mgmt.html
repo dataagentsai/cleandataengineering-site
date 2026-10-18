@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.5 Conversation-State Management · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 7 · Performance</div>
+    <h1>7.5 · Conversation-State Management</h1>
+    <div class="tag">Four ways to keep long runs inside the context window</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Why state is your problem</h2>
+    <p>The Messages API is <strong>stateless</strong> — you resend the full conversation every turn. So in a
+    long agentic run, the transcript grows until it threatens the context limit, and every turn re-pays for
+    all those tokens. Four techniques keep the window bounded; they compose, and the exam expects you to
+    know <em>when</em> to use each.</p>
+
+    <table>
+        <tr><th>Technique</th><th>What it does</th><th>Trade-off</th><th>Use when…</th></tr>
+        <tr><td><strong>Pruning / windowing</strong></td>
+            <td>Drop old turns; keep a recent window.</td>
+            <td>Simple &amp; cheap, but you <em>lose</em> the dropped info outright.</td>
+            <td>Only recent context matters (e.g. chat-style).</td></tr>
+        <tr><td><strong>Compaction</strong> <em>(beta)</em></td>
+            <td>Server-side summarizes the conversation as it nears the context limit.</td>
+            <td>Preserves gist; you <strong>must append <code>response.content</code> back</strong> to
+            keep the compaction blocks.</td>
+            <td>Long runs where older detail should survive as a summary.</td></tr>
+        <tr><td><strong>Context editing</strong></td>
+            <td>Prunes stale <em>tool_results</em> and <em>thinking</em> blocks.</td>
+            <td>Reclaims tokens from bulky intermediate data; keeps the dialogue.</td>
+            <td>Tool-heavy runs with large, now-irrelevant tool outputs.</td></tr>
+        <tr><td><strong>Memory tool</strong></td>
+            <td>Cross-session persistence via a <code>/memories</code> directory.</td>
+            <td>Survives <em>across</em> conversations, not just within one.</td>
+            <td>Facts must outlive a single run/session.</td></tr>
+    </table>
+
+    <div class="note">🔑 Pruning, compaction, and context editing manage state <em>within</em> one run; the
+    <strong>Memory tool</strong> is the only one that persists <em>across</em> sessions
+    (<code>/memories</code>).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Choosing a state technique</h2>
+    <div class="mermaid">
+flowchart TD
+    A([Context growing]) --> Q1{"Need info to survive<br/>across sessions?"}
+    Q1 -->|Yes| M["🟣 Memory tool<br/>/memories directory"]
+    Q1 -->|No| Q2{"Bulky stale tool_results<br/>/ thinking blocks?"}
+    Q2 -->|Yes| C["🔵 Context editing<br/>prune tool_results & thinking"]
+    Q2 -->|No| Q3{"Must older detail<br/>survive as a summary?"}
+    Q3 -->|Yes| K["🟠 Compaction (beta)<br/>append response.content back!"]
+    Q3 -->|No| P["🟢 Prune / window<br/>drop old turns"]
+    classDef mem fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    classDef ce fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef cm fill:#ffe8cc,stroke:#d9480f,color:#7a2e08;
+    classDef pr fill:#d4edda,stroke:#28a745,color:#155724;
+    class M mem; class C ce; class K cm; class P pr;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A windowed loop — and the compaction gotcha</h2>
+    <p>Windowing is a few lines you own. Compaction is server-side, but it hands you compaction blocks in
+    <code>response.content</code> that you <strong>must append back</strong>, or the next turn loses them.</p>
+<pre><span class="cm"># Stateless API → you resend everything. Keep a bounded window yourself.</span>
+<span class="kw">def</span> <span class="fn">window</span>(messages, keep=<span class="st">20</span>):
+    <span class="cm"># Keep the first turn (task) + the most recent `keep` turns.</span>
+    <span class="kw">return</span> messages[:<span class="st">1</span>] + messages[-keep:] <span class="kw">if</span> <span class="fn">len</span>(messages) &gt; keep + <span class="st">1</span> <span class="kw">else</span> messages
+
+<span class="kw">while</span> True:
+    resp = client.messages.create(
+        model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">4096</span>,
+        tools=TOOLS, messages=<span class="fn">window</span>(messages),
+    )
+    <span class="cm"># ⚠️ With compaction (beta): append the WHOLE response.content back,</span>
+    <span class="cm"># so server-generated compaction blocks are preserved for the next turn.</span>
+    messages.append({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content})
+    <span class="kw">if</span> resp.stop_reason == <span class="st">"end_turn"</span>: <span class="kw">break</span>
+    <span class="cm"># ...run chosen tool, append tool_result, loop</span></pre>
+
+    <div class="warn">💡 Compaction is <strong>beta</strong> and <strong>server-side</strong>: you don't
+    summarize yourself, but you must faithfully echo <code>response.content</code> back into
+    <code>messages</code> so the compaction blocks it produced aren't dropped on the next call.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Lossy speed vs. lossless recall</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Prune / window / context-edit</h4>
+            <ul><li>Cheapest, most predictable token savings</li>
+            <li>Context editing targets bulky tool_results/thinking specifically</li>
+            <li>You stay in control of exactly what's dropped</li></ul></div>
+        <div class="con"><h4>⚠️ Compaction / Memory</h4>
+            <ul><li>Compaction preserves gist but is lossy &amp; needs the append-back discipline</li>
+            <li>Memory adds a persistence surface to manage (<code>/memories</code>)</li>
+            <li>More moving parts than a simple window</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Using compaction but not appending <code>response.content</code> back. → You
+    <b>drop the compaction blocks</b> and the next turn regresses. Always echo the full content back.</div>
+    <div class="trap"><b>Trap:</b> Reaching for the <b>Memory tool</b> to shrink one long conversation. →
+    Memory is for <b>cross-session</b> persistence; within a run use pruning, context editing, or
+    compaction.</div>
+    <div class="trap"><b>Trap:</b> Assuming the server "remembers" between calls. → The API is
+    <b>stateless</b>; you resend state every turn, which is exactly why these techniques exist.</div>
+    <div class="trap"><b>Trap:</b> Pruning when you actually needed the old detail. → Windowing is
+    <b>lossy</b>. If older detail must survive, use compaction (summary) or context editing (targeted),
+    not a blunt drop.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A coding agent's context is dominated by huge past tool_result payloads it no longer needs. Which technique?</summary>
+    <p class="answer"><b>Context editing</b> — it prunes stale <code>tool_results</code> and thinking blocks
+    specifically, reclaiming those tokens while keeping the live dialogue intact.</p></details>
+    <details><summary>Q2 · Users expect the assistant to recall preferences from last week's separate session. Which technique?</summary>
+    <p class="answer">The <b>Memory tool</b> — cross-session persistence via a <code>/memories</code> directory.
+    The other three only manage state within a single run.</p></details>
+    <details><summary>Q3 · After enabling compaction, older facts vanish a turn later. What did the code forget to do?</summary>
+    <p class="answer">Append the full <code>response.content</code> back into <code>messages</code>. Compaction
+    is server-side and returns compaction blocks in the response; if you don't echo them back, they're lost
+    on the next call.</p></details>
+
+    <div class="pager">
+        <a href="7-4-streaming.html"><span class="k">← Prev</span>7.4 · Streaming</a>
+        <a class="next" href="7-6-observability-metrics.html"><span class="k">Next →</span>7.6 · Observability &amp; Metrics</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 7.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

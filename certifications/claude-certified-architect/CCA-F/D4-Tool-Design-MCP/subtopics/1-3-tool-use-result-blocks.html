@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.3 tool_use & tool_result Blocks (the Contract) · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 1 · Tool Use Fundamentals</div>
+    <h1>1.3 · tool_use &amp; tool_result Blocks (the Contract)</h1>
+    <div class="tag">Matching ids, roles, ordering</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Two block types, joined by an id</h2>
+    <p>Tool use is a <strong>contract</strong> between two content blocks. Claude emits a
+    <code>tool_use</code> block (in an <em>assistant</em> turn); you reply with a matching
+    <code>tool_result</code> block (in a <em>user</em> turn). The link between them is the
+    <strong>id</strong>.</p>
+    <table>
+        <tr><th>Block</th><th>Role</th><th>Key fields</th></tr>
+        <tr><td><code>tool_use</code></td><td>assistant</td><td><code>id</code> (e.g. <code>toolu_…</code>), <code>name</code>, <code>input</code></td></tr>
+        <tr><td><code>tool_result</code></td><td>user</td><td><code>tool_use_id</code> (must equal the <code>tool_use.id</code>), <code>content</code>, optional <code>is_error</code></td></tr>
+    </table>
+    <div class="note">🔑 <code>tool_result.tool_use_id</code> <strong>must exactly match</strong> the
+    <code>tool_use.id</code> it answers. This is how Claude pairs a result to the call that produced it — order
+    alone is not enough.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The four rules the contract enforces</h2>
+    <ol>
+        <li><strong>Matching ids.</strong> Each <code>tool_result</code> carries the
+        <code>tool_use_id</code> of the call it answers.</li>
+        <li><strong>User role.</strong> <code>tool_result</code> blocks live in a <code>user</code> message —
+        never assistant.</li>
+        <li><strong>Answer every call.</strong> If an assistant turn has multiple <code>tool_use</code> blocks
+        (parallel tool use), your next user message must return a <code>tool_result</code> for
+        <em>every</em> one of them, all in a <strong>single</strong> user message.</li>
+        <li><strong>Ordering.</strong> <code>tool_result</code> blocks should come first in that user turn,
+        before any other content.</li>
+    </ol>
+    <div class="bad">Missing a <code>tool_result</code> for even one of several parallel <code>tool_use</code>
+    blocks — or splitting results across separate user messages — is an error and quietly trains Claude to stop
+    making parallel calls.</div>
+    <div class="good">On failure, don't drop the result — return a <code>tool_result</code> with
+    <code>"is_error": true</code> and an informative message. Claude reads it and adapts (retry, ask, or route
+    around).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The id binds the pair</h2>
+    <div class="mermaid">
+flowchart LR
+    subgraph A["assistant turn"]
+      TU1["tool_use<br/>id: toolu_A1<br/>name, input"]
+      TU2["tool_use<br/>id: toolu_B2<br/>name, input"]
+    end
+    subgraph U["user turn (ONE message)"]
+      TR1["tool_result<br/>tool_use_id: toolu_A1<br/>content"]
+      TR2["tool_result<br/>tool_use_id: toolu_B2<br/>is_error: true"]
+    end
+    TU1 -->|"matched id"| TR1
+    TU2 -->|"matched id"| TR2
+    classDef use fill:#e7f1ff,stroke:#4a90d9,color:#1a3a5a;
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef err fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class TU1 use; class TU2 use; class TR1 ok; class TR2 err;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A matched tool_use → tool_result exchange</h2>
+    <p>The assistant turn holds the <code>tool_use</code>; the following user turn returns every
+    <code>tool_result</code> — one <code>ok</code>, one flagged <code>is_error</code> — with matching ids.</p>
+<pre><span class="cm"># --- assistant turn Claude produced (stop_reason: "tool_use") ---</span>
+{
+  <span class="st">"role"</span>: <span class="st">"assistant"</span>,
+  <span class="st">"content"</span>: [
+    {<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: <span class="st">"I'll check the weather and the time."</span>},
+    {<span class="st">"type"</span>: <span class="st">"tool_use"</span>, <span class="st">"id"</span>: <span class="st">"toolu_A1"</span>,
+     <span class="st">"name"</span>: <span class="st">"get_weather"</span>, <span class="st">"input"</span>: {<span class="st">"location"</span>: <span class="st">"SF"</span>}},
+    {<span class="st">"type"</span>: <span class="st">"tool_use"</span>, <span class="st">"id"</span>: <span class="st">"toolu_B2"</span>,
+     <span class="st">"name"</span>: <span class="st">"get_time"</span>, <span class="st">"input"</span>: {<span class="st">"tz"</span>: <span class="st">"Pacific"</span>}}
+  ]
+}
+
+<span class="cm"># --- your reply: ONE user message, a result for EVERY tool_use ---</span>
+{
+  <span class="st">"role"</span>: <span class="st">"user"</span>,
+  <span class="st">"content"</span>: [
+    {<span class="st">"type"</span>: <span class="st">"tool_result"</span>, <span class="st">"tool_use_id"</span>: <span class="st">"toolu_A1"</span>,
+     <span class="st">"content"</span>: <span class="st">"15 °C, partly cloudy"</span>},
+    {<span class="st">"type"</span>: <span class="st">"tool_result"</span>, <span class="st">"tool_use_id"</span>: <span class="st">"toolu_B2"</span>,
+     <span class="st">"content"</span>: <span class="st">"Timezone service unavailable."</span>,
+     <span class="st">"is_error"</span>: <span class="kw">true</span>}      <span class="cm"># failed — flag it, don't drop it</span>
+  ]
+}</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Signaling failure two ways</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ <code>tool_result</code> with <code>is_error: true</code></h4>
+            <ul><li>Claude sees the failure and can recover in-loop</li>
+            <li>Keeps the contract intact (every <code>tool_use</code> answered)</li>
+            <li>The error message steers the next attempt</li></ul></div>
+        <div class="con"><h4>⚠️ Dropping the result / raising outside the loop</h4>
+            <ul><li>An unanswered <code>tool_use</code> breaks the request</li>
+            <li>Claude gets no signal to adapt — it just stalls</li>
+            <li>Server-tool errors are the exception: they arrive as result blocks with an error, not exceptions</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Using <code>id</code> instead of <code>tool_use_id</code>. → The
+    <code>tool_use</code> block has <code>id</code>; the <code>tool_result</code> references it via
+    <code>tool_use_id</code>. They must be equal.</div>
+    <div class="trap"><b>Trap:</b> Answering only some parallel <code>tool_use</code> blocks. → You must return a
+    <code>tool_result</code> for <b>every</b> <code>tool_use</code> in the turn, all in <b>one</b> user
+    message.</div>
+    <div class="trap"><b>Trap:</b> Splitting results across multiple user messages. → Return them together in a
+    single user turn; splitting silently trains Claude to stop calling tools in parallel.</div>
+    <div class="trap"><b>Trap:</b> Omitting a failed tool's result. → Return it with <code>is_error: true</code>
+    and a message. Silence is worse than a reported error.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · How is a <code>tool_result</code> linked to the call it answers?</summary>
+    <p class="answer">Via <code>tool_use_id</code>: the <code>tool_result</code>'s <code>tool_use_id</code> must
+    exactly equal the <code>id</code> of the <code>tool_use</code> block it responds to. Positional order alone
+    is not the link.</p></details>
+    <details><summary>Q2 · Claude returns three <code>tool_use</code> blocks in one turn. What must your reply look like?</summary>
+    <p class="answer">A <b>single user message</b> containing <b>three</b> <code>tool_result</code> blocks — one
+    per <code>tool_use_id</code>. Every call must be answered, and all results go in that one user turn (results
+    first, before other content).</p></details>
+    <details><summary>Q3 · A tool throws. How do you report it inside the contract?</summary>
+    <p class="answer">Return a <code>tool_result</code> for that <code>tool_use_id</code> with
+    <code>"is_error": true</code> and an informative <code>content</code> message. Claude reads the error and
+    adapts — retry, ask for clarification, or take another path. Don't drop the block.</p></details>
+
+    <div class="pager">
+        <a href="1-2-tool-definition-schema.html"><span class="k">← Back</span>1.2 · The Tool Definition</a>
+        <a class="next" href="1-4-tool-choice.html"><span class="k">Next →</span>1.4 · tool_choice</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 1.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.5 Chunking &amp; Context Assembly · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 4 · Long Context &amp; Retrieval</div>
+    <h1>4.5 · Chunking &amp; Context Assembly</h1>
+    <div class="tag">Build the prompt deliberately</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Chunk size, overlap, rank, dedup</h2>
+    <p>The retrieval half of a RAG pipeline (4.3) hinges on how you cut the corpus and which pieces you keep. Four knobs:</p>
+    <table>
+        <tr><th>Knob</th><th>What it controls</th><th>The tension</th></tr>
+        <tr><td><strong>Chunk size</strong></td><td>Granularity of each embedded/retrievable unit</td><td>Too small → context lost, claims un-embeddable; too big → noisy, dilutes the match</td></tr>
+        <tr><td><strong>Overlap</strong></td><td>Shared tokens between adjacent chunks</td><td>Prevents a fact from being split across a boundary; costs storage &amp; near-duplicate hits</td></tr>
+        <tr><td><strong>Ranking</strong></td><td>Order candidates by relevance to the query</td><td>Embedding similarity is fast but coarse — a reranker (e.g. Voyage <code>rerank-2.5</code>) reorders the top candidates more precisely</td></tr>
+        <tr><td><strong>Dedup</strong></td><td>Drop near-identical chunks before assembly</td><td>Overlap and repeated boilerplate produce redundant hits that waste window budget</td></tr>
+    </table>
+    <div class="note">🔑 Anthropic has no embedding model, so chunk sizing is really about the retriever you choose (e.g.
+    Voyage). But the <em>assembly</em> — how the surviving chunks are placed in the prompt — is pure Anthropic
+    long-context practice.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Assemble so the best material is best-placed</h2>
+    <p>Retrieval decides <em>what</em> enters the window; assembly decides <em>where</em>. Reuse the cluster's rules:</p>
+    <ul>
+        <li><strong>Chunks near the top, query at the end</strong> — the query-at-the-end lift is up to 30% (4.1); it also
+        keeps the most relevant chunks off the weakly-attended middle (4.2).</li>
+        <li><strong>Wrap each chunk</strong> in <code>&lt;document&gt;</code> tags with a <code>&lt;source&gt;</code> so the
+        model can attribute and, if you enable <em>Citations</em>, cite it (4.4).</li>
+        <li><strong>Rank into position</strong> — put the highest-ranked chunk where attention is strongest; don't scatter
+        the best evidence into the middle.</li>
+        <li><strong>Quote-first instruction last</strong> — ask Claude to extract the relevant passages before answering.</li>
+    </ul>
+    <div class="good">For citable RAG, put each retrieved chunk into its own <em>custom content</em> document (no further
+    chunking) or a plain-text document — then citations point back at exactly the chunk you retrieved.</div>
+    <div class="warn">Assembly is byte-order-sensitive for caching: keep the stable, ranked chunk prefix identical across
+    turns and put the volatile query after the <code>cache_control</code> breakpoint, or you re-pay the write each call.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> From corpus to a deliberately-built prompt</h2>
+    <div class="mermaid">
+flowchart TD
+    C["Corpus"] --> CH["Chunk (size + overlap)"]
+    CH --> E["Embed + retrieve top-k"]
+    E --> RK["Rank / rerank"]
+    RK --> DD["Dedup near-duplicates"]
+    DD --> AS["🟢 Assemble: ranked chunks on top,<br/>tagged w/ &lt;source&gt;, query at end,<br/>quote-first instruction"]
+    AS --> ANS["Grounded, well-attended answer"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class AS ok; class ANS ok;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Rank, dedup, and assemble the final prompt</h2>
+    <p>Rerank the retrieved candidates, drop near-duplicates, then place the survivors highest-first with the query last.</p>
+<pre><span class="cm"># candidates: [(chunk, embed_score), …] from the vector store</span>
+ranked = vo.<span class="fn">rerank</span>(query, [c <span class="kw">for</span> c, _ <span class="kw">in</span> candidates],
+                  model=<span class="st">"rerank-2.5"</span>).results   <span class="cm"># precise reorder</span>
+
+seen, kept = <span class="fn">set</span>(), []
+<span class="kw">for</span> r <span class="kw">in</span> ranked:                                  <span class="cm"># dedup near-identical</span>
+    key = r.document[:<span class="st">120</span>]
+    <span class="kw">if</span> key <span class="kw">not</span> <span class="kw">in</span> seen:
+        seen.<span class="fn">add</span>(key); kept.<span class="fn">append</span>(r.document)
+
+<span class="cm"># Assemble: highest-ranked chunk on TOP, each tagged, query at the END.</span>
+blocks = [
+    {<span class="st">"type"</span>: <span class="st">"document"</span>,                          <span class="cm"># citable per-chunk</span>
+     <span class="st">"source"</span>: {<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"media_type"</span>: <span class="st">"text/plain"</span>, <span class="st">"data"</span>: ch},
+     <span class="st">"title"</span>: <span class="st">f"chunk-{i}"</span>, <span class="st">"citations"</span>: {<span class="st">"enabled"</span>: <span class="kw">True</span>}}
+    <span class="kw">for</span> i, ch <span class="kw">in</span> <span class="fn">enumerate</span>(kept)
+]
+blocks.<span class="fn">append</span>({<span class="st">"type"</span>: <span class="st">"text"</span>,
+               <span class="st">"text"</span>: <span class="st">f"Quote the passages relevant to: {query}\nThen answer."</span>})
+
+resp = client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">1024</span>, messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: blocks}])</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Small chunks vs. large chunks</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Smaller chunks + overlap + rerank</h4>
+            <ul><li>Sharper embedding matches, less noise per hit</li>
+            <li>Overlap keeps facts from splitting at boundaries</li>
+            <li>Reranking recovers precision embeddings miss</li></ul></div>
+        <div class="con"><h4>⚠️ Large chunks, no rerank/dedup</h4>
+            <ul><li>Fewer pieces to manage</li>
+            <li>But each hit carries more irrelevant text into the window</li>
+            <li>Duplicates and boilerplate waste budget and dilute attention</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Retrieval quality is the whole game." → Retrieval decides <b>what</b> enters the window;
+    <b>assembly</b> decides where. Ranked chunks on top + query at the end still applies to a RAG prompt.</div>
+    <div class="trap"><b>Trap:</b> Skipping dedup after overlapping chunking. → Overlap and boilerplate produce near-duplicate
+    hits that burn window budget and dilute attention — dedup before assembly.</div>
+    <div class="trap"><b>Trap:</b> Scattering the top-ranked chunk into the middle. → Put the strongest evidence at the
+    high-attention edges (top/near-query), not buried mid-prompt (4.2).</div>
+    <div class="trap"><b>Trap:</b> Reordering ranked chunks every turn under a cache breakpoint. → A changed prefix
+    invalidates the cache. Keep the ranked chunk block stable; put the varying query after the breakpoint.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why use chunk overlap?</summary>
+    <p class="answer">So a fact that straddles a boundary isn't split across two chunks and lost to retrieval. Overlap shares
+    tokens between adjacent chunks; the cost is extra storage and more near-duplicate hits — which is why you then
+    <b>dedup</b> before assembly.</p></details>
+    <details><summary>Q2 · You've retrieved 20 chunks. How should they enter the prompt?</summary>
+    <p class="answer">Rerank them, dedup near-duplicates, then place the highest-ranked chunks <b>on top</b> (each wrapped in
+    <code>&lt;document&gt;</code>/<code>&lt;source&gt;</code> tags), with the <b>query at the end</b> and a quote-first
+    instruction. Assembly reuses the 4.1/4.2 placement rules.</p></details>
+    <details><summary>Q3 · How do chunking choices interact with the Citations feature?</summary>
+    <p class="answer">Put each retrieved chunk into its own plain-text or <b>custom content</b> document with citations
+    enabled — custom content is used as-is with no further chunking, so citations point at exactly the chunk you
+    retrieved. Remember the all-or-none rule and that citations can't be combined with
+    <code>output_config.format</code>.</p></details>
+
+    <div class="pager">
+        <a href="4-4-citations-grounding.html"><span class="k">← Back</span>4.4 · Citations &amp; Grounding</a>
+        <a class="next" href="5-1-error-codes.html"><span class="k">Next →</span>5.1 · Error Codes</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 4.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

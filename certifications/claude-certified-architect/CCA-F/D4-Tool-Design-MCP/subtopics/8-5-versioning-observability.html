@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.5 Versioning, Observability &amp; Ops · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 8 · MCP Security &amp; Production</div>
+    <h1>8.5 · Versioning, Observability &amp; Ops</h1>
+    <div class="tag">Run MCP in production</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Pin the protocol version and the server version</h2>
+    <p>MCP has two things that version independently, and production breaks when you ignore either. First, the
+    <strong>protocol version</strong> — the spec is dated (e.g. <code>2025-06-18</code>) and clients and servers
+    <strong>negotiate a version during initialization</strong>. Pin and log the negotiated version; a server that
+    only speaks an older revision may not support features (like the current authorization model) your host
+    assumes. Second, the <strong>server's own capabilities</strong> — its tool set can change under you. A
+    <strong>"rug pull"</strong> is when a previously-benign tool's description is swapped for a poisoned one after
+    you approved it (8.1), so tool definitions and their versions should be tracked, not trusted-once.</p>
+
+    <div class="note">🔑 The MCP protocol has a <code>notifications/tools/list_changed</code> signal — a server
+    can tell the client its tool list changed. Treat a changed tool list as a <strong>re-review trigger</strong>,
+    not a silent update: re-surface descriptions for approval rather than adopting new/altered tools blindly.</div>
+
+    <p>The same discipline appears in the Managed Agents surface: <strong>agents are versioned</strong> — every
+    update creates a new immutable version, and a session can <strong>pin to a specific version</strong> for
+    reproducibility and rollback. Pinning is how you get a known-good configuration you can roll back to when a
+    change regresses.</p>
+
+    <h2><span class="chip concept">CONCEPT</span> Observability, rate limits, and monitoring</h2>
+    <p>You can't secure what you can't see. Every tool call — the tool name, its <strong>full input</strong>, the
+    result, latency, and whether a human approved it — should be <strong>logged and auditable</strong>. That log
+    is what turns a suspected exfiltration (8.4) into a provable one, and it's the reason side-effecting tools get
+    a dedicated, named hook rather than hiding in a generic <code>bash</code> call. The security guidance also
+    stresses <strong>secure token storage</strong> (tokens cached or logged server-side are theft targets) and
+    <strong>short-lived tokens with refresh rotation</strong> to bound the damage of a leak.</p>
+
+    <table>
+        <tr><th>Ops concern</th><th>What to do</th><th>Why</th></tr>
+        <tr><td>Protocol version</td><td>Log the negotiated version; pin expectations</td><td>Feature/auth support varies by revision</td></tr>
+        <tr><td>Server/tool version</td><td>Track tool definitions; re-review on <code>list_changed</code></td><td>Rug-pull &amp; drift detection</td></tr>
+        <tr><td>Tool-call logging</td><td>Record name, input, result, approver, latency</td><td>Audit trail for exfil / abuse</td></tr>
+        <tr><td>Rate limits</td><td>Cap calls per tool / per session; back off on 429</td><td>Contain runaway loops &amp; abuse</td></tr>
+        <tr><td>Token hygiene</td><td>Short-lived tokens, rotate refresh tokens, never log tokens</td><td>Limit theft blast radius</td></tr>
+        <tr><td>Monitoring / alerting</td><td>Alert on anomalies: new egress host, secret-path reads, error spikes</td><td>Detect attacks in flight</td></tr>
+    </table>
+
+    <div class="good">Production checklist: allow-list servers (8.1) · OAuth 2.1 scoped tokens (8.2) · human gate
+    on side effects (8.3) · isolate untrusted content (8.4) · <strong>version-pin + log + rate-limit + monitor
+    (8.5)</strong>. Security is the whole cluster, not one control.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The observed, rate-limited tool-call path</h2>
+    <div class="mermaid">
+flowchart TD
+    M["Model requests tool call"] --> RL{"Under rate limit?"}
+    RL -->|"no"| DROP["🔴 429 / back off<br/>contain runaway loop"]
+    RL -->|"yes"| VER{"Tool version /<br/>list unchanged?"}
+    VER -->|"changed"| REV["🟠 Re-review<br/>(possible rug pull)"]
+    VER -->|"known-good, pinned"| LOG["Log: name + input + approver"]
+    LOG --> RUN["Invoke tool → log result + latency"]
+    RUN --> MON["📊 Monitor: anomaly alerts<br/>(new egress, secret reads)"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class LOG ok; class RUN ok; class MON ok; class REV gate; class DROP bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Version-pinning + auditable tool-call logging</h2>
+    <p>Pin the config to a known version, and emit a structured audit record for every call — including the
+    approver, so an exfiltration attempt is traceable after the fact.</p>
+<pre><span class="cm"># Pin a session to a known-good, immutable agent version (rollback point).</span>
+session = client.beta.sessions.create(
+    agent={<span class="st">"type"</span>: <span class="st">"agent"</span>, <span class="st">"id"</span>: agent.id, <span class="st">"version"</span>: agent.version},
+    environment_id=env.id,
+)
+
+<span class="cm"># Log every tool call: an audit trail is what makes exfil provable.</span>
+<span class="kw">def</span> <span class="fn">audit</span>(evt):
+    <span class="fn">log</span>({
+        <span class="st">"ts"</span>:          evt.timestamp,
+        <span class="st">"mcp_version"</span>: negotiated_protocol_version,   <span class="cm"># e.g. "2025-06-18"</span>
+        <span class="st">"server"</span>:      evt.server_name,
+        <span class="st">"tool"</span>:        evt.name,
+        <span class="st">"input"</span>:       evt.input,      <span class="cm"># full args — exfil is visible here</span>
+        <span class="st">"approved_by"</span>: evt.approver,   <span class="cm"># human or "auto"</span>
+        <span class="st">"result_len"</span>:  <span class="fn">len</span>(evt.result),
+        <span class="st">"latency_ms"</span>:  evt.latency,
+    })
+    <span class="cm"># NEVER log tokens or secret values — redact before writing.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Pin &amp; observe vs. auto-update &amp; fire-and-forget</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Version-pin + log + monitor</h4>
+            <ul><li>Reproducible config; clean rollback on regression</li>
+            <li>Rug-pull &amp; drift caught via <code>list_changed</code> re-review</li>
+            <li>Audit trail makes abuse provable</li>
+            <li>Rate limits contain runaway loops</li></ul></div>
+        <div class="con"><h4>⚠️ Auto-adopt latest, no logging</h4>
+            <ul><li>Always "current", less maintenance</li>
+            <li>But: a rug-pulled tool ships silently</li>
+            <li>No trail when an exfil is suspected</li>
+            <li>Unbounded calls = runaway cost &amp; abuse</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "There's one MCP version to worry about." → Two: the negotiated
+    <b>protocol version</b> and the <b>server's tool set/version</b>. Both drift; log and pin both.</div>
+    <div class="trap"><b>Trap:</b> "A tool I approved once stays safe." → A <b>rug pull</b> swaps its description
+    later. Treat <code>tools/list_changed</code> as a <b>re-review trigger</b>, not a silent update.</div>
+    <div class="trap"><b>Trap:</b> "Log everything, including the tokens, for completeness." → <b>Never log
+    tokens or secrets</b> — cached/logged tokens are theft targets. Log tool name, input, and approver;
+    redact secrets.</div>
+    <div class="trap"><b>Trap:</b> "Rate limits are a cost feature, not a security one." → They also
+    <b>contain runaway agent loops and abuse</b> — a security control as much as a billing one.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Which two things version independently in an MCP deployment, and why track both?</summary>
+    <p class="answer">The <b>protocol version</b> (negotiated at initialization, e.g. <code>2025-06-18</code> —
+    determines which features/auth model are available) and the <b>server's own tool set/version</b> (which can
+    change under you — a rug pull swaps a benign description for a poisoned one). Pin and log both; treat a
+    <code>tools/list_changed</code> notification as a re-review trigger.</p></details>
+    <details><summary>Q2 · What should a tool-call audit log capture, and what must it never contain?</summary>
+    <p class="answer">Capture the tool name, its <b>full input</b>, the result (or its size), latency, the
+    negotiated protocol/server version, and <b>who approved it</b> (human or auto). That's what turns a suspected
+    exfiltration into a provable one. It must <b>never</b> contain tokens or secret values — those are theft
+    targets; redact before writing.</p></details>
+    <details><summary>Q3 · How does version pinning support safe operations?</summary>
+    <p class="answer">Pinning a session (or client) to a specific, immutable agent/config version gives you a
+    <b>known-good, reproducible</b> baseline and a <b>rollback point</b>: if a new version regresses or a tool
+    definition is compromised, you pin new sessions back to the prior version while you investigate, instead of
+    every session silently adopting the change.</p></details>
+
+    <div class="pager">
+        <a href="8-4-confused-deputy-exfiltration.html"><span class="k">← Back</span>8.4 · Confused Deputy &amp; Exfiltration</a>
+        <a class="next" href="../index.html"><span class="k">Next →</span>Domain 4 hub</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 8.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

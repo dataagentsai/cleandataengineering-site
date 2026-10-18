@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.2 Circuit Breakers · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 6 · Reliability</div>
+    <h1>6.2 · Circuit Breakers</h1>
+    <div class="tag">Stop calling a failing dependency before it takes you down</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> What a circuit breaker does</h2>
+    <p>A <strong>circuit breaker</strong> wraps a tool or sub-agent and watches its error rate. Once failures cross
+    a threshold, the breaker <em>trips</em> and stops sending calls to that component for a cooldown — failing fast
+    (or falling back) instead of hammering a dead dependency. This is the direct fix for the <strong>cascade</strong>
+    failure mode from 6.1: it prevents wasted calls and stops one broken component from dragging down the rest.</p>
+
+    <div class="note">🔑 A retry re-issues <em>one</em> call. A circuit breaker governs the <em>aggregate</em> — it
+    decides whether the component is worth calling <strong>at all</strong> right now. They compose: retry within a
+    call, breaker across calls.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The three-state machine</h2>
+    <div class="mermaid">
+stateDiagram-v2
+    [*] --> Closed
+    Closed --> Open: error rate crosses threshold<br/>(N failures)
+    Open --> HalfOpen: cooldown elapsed
+    HalfOpen --> Closed: trial call succeeds
+    HalfOpen --> Open: trial call fails
+    note right of Closed: calls flow through normally
+    note right of Open: calls are blocked / fall back<br/>fail fast, no wasted calls
+    note right of HalfOpen: let ONE trial call through
+    </div>
+    <table>
+        <tr><th>State</th><th>Behaviour</th><th>Transition out</th></tr>
+        <tr><td><strong>Closed</strong></td><td>Normal — calls pass through; failures are counted</td><td>→ <strong>Open</strong> after N failures (threshold crossed)</td></tr>
+        <tr><td><strong>Open</strong></td><td>Tripped — calls are blocked and fail fast / fall back immediately</td><td>→ <strong>Half-open</strong> once the cooldown timer elapses</td></tr>
+        <tr><td><strong>Half-open</strong></td><td>Trial — let a single probe call through</td><td>Success → <strong>Closed</strong>; failure → back to <strong>Open</strong></td></tr>
+    </table>
+
+    <h2><span class="chip code">CODE</span> A minimal breaker wrapper</h2>
+    <p>Wrap any callable — an SDK call or a tool. The breaker short-circuits when open, probes when half-open, and resets on a successful probe.</p>
+<pre><span class="kw">import</span> time, anthropic
+
+<span class="kw">class</span> <span class="fn">CircuitBreaker</span>:
+    <span class="kw">def</span> <span class="fn">__init__</span>(self, threshold=<span class="st">5</span>, cooldown=<span class="st">30</span>):
+        self.threshold, self.cooldown = threshold, cooldown
+        self.failures = <span class="st">0</span>
+        self.state = <span class="st">"closed"</span>
+        self.opened_at = <span class="st">0.0</span>
+
+    <span class="kw">def</span> <span class="fn">call</span>(self, fn, *args, **kw):
+        <span class="kw">if</span> self.state == <span class="st">"open"</span>:
+            <span class="kw">if</span> time.monotonic() - self.opened_at &lt; self.cooldown:
+                <span class="kw">raise</span> RuntimeError(<span class="st">"circuit open — failing fast"</span>)  <span class="cm"># no wasted call</span>
+            self.state = <span class="st">"half-open"</span>                             <span class="cm"># cooldown elapsed → probe</span>
+        <span class="kw">try</span>:
+            result = fn(*args, **kw)
+        <span class="kw">except</span> Exception:
+            self._on_failure()
+            <span class="kw">raise</span>
+        self._on_success()                                    <span class="cm"># closed / probe passed</span>
+        <span class="kw">return</span> result
+
+    <span class="kw">def</span> <span class="fn">_on_failure</span>(self):
+        self.failures += <span class="st">1</span>
+        <span class="kw">if</span> self.state == <span class="st">"half-open"</span> <span class="kw">or</span> self.failures &gt;= self.threshold:
+            self.state, self.opened_at = <span class="st">"open"</span>, time.monotonic()  <span class="cm"># trip</span>
+
+    <span class="kw">def</span> <span class="fn">_on_success</span>(self):
+        self.failures, self.state = <span class="st">0</span>, <span class="st">"closed"</span>            <span class="cm"># reset</span>
+
+<span class="cm"># Usage: guard a flaky tool so its outages can't cascade.</span>
+breaker = CircuitBreaker(threshold=<span class="st">5</span>, cooldown=<span class="st">30</span>)
+<span class="kw">def</span> <span class="fn">run_search_tool</span>(query):
+    <span class="kw">return</span> breaker.call(flaky_search_api, query)</pre>
+    <div class="warn">⚠️ Count only failures the breaker can act on. A <code>400 invalid_request</code> is <em>your</em>
+    bug and will fail identically on retry — tripping on it just hides the real error. Trip on transient/dependency
+    failures (5xx, 529, connection, timeouts), not on 4xx client errors (see 6.3).</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Sensitivity of the threshold</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Trip early (low threshold / short cooldown)</h4>
+            <ul><li>Stops cascades fast; sheds load quickly</li>
+            <li>Recovers responsiveness for the rest of the system</li></ul></div>
+        <div class="con"><h4>⚠️ Trip early — the cost</h4>
+            <ul><li>A brief blip can open the circuit and block healthy traffic</li>
+            <li>Too-short cooldown flaps between open/half-open</li>
+            <li>May trigger fallback/degradation more often than needed</li></ul></div>
+    </div>
+    <div class="good">Tune to the dependency: rare-but-real outages want a higher threshold; a truly critical,
+    frequently-flaky dependency wants an early trip plus a defined fallback (6.4).</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Add retries to fix the cascade." → Retries against a dead dependency <b>accelerate</b>
+    the cascade. The correct primitive is a <b>circuit breaker</b> that stops calling it.</div>
+    <div class="trap"><b>Trap:</b> Confusing the states. → <b>Closed = healthy</b> (calls flow). <b>Open = tripped</b>
+    (calls blocked). It's the inverse of an electrical switch, which trips people up.</div>
+    <div class="trap"><b>Trap:</b> Going open → closed directly. → You must pass through <b>half-open</b> (a single trial
+    call) first; jumping straight to closed risks re-opening the floodgates onto a still-broken dependency.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Which state lets exactly one probe call through, and what happens on each outcome?</summary>
+    <p class="answer"><b>Half-open.</b> It permits a single trial call. Success → transition to <b>closed</b> (resume
+    normal traffic); failure → back to <b>open</b> and restart the cooldown.</p></details>
+    <details><summary>Q2 · Should a circuit breaker count HTTP 400 errors toward its threshold?</summary>
+    <p class="answer">No. A 400 is a client-side <code>invalid_request</code> that will fail identically every time —
+    it's not a dependency outage. Tripping on it masks a bug you should fix. Count transient/dependency failures
+    (5xx, 529, connection errors, timeouts).</p></details>
+    <details><summary>Q3 · Breaker and retry are both configured on the same tool. How do they interact?</summary>
+    <p class="answer">They compose at different scopes. <b>Retry</b> handles a single transient call (rung 1). The
+    <b>breaker</b> tracks the aggregate error rate across calls and, once tripped, stops even attempting retries —
+    which is what prevents retry storms from cascading.</p></details>
+
+    <div class="pager">
+        <a href="6-1-failure-modes.html"><span class="k">← Prev</span>6.1 · Failure Modes</a>
+        <a class="next" href="6-3-retry-backoff-errors.html"><span class="k">Next →</span>6.3 · Retry with Backoff &amp; Error Codes</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 6.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

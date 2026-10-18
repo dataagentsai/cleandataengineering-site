@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.5 Hook Use Cases · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 6 · Hooks</div>
+    <h1>6.5 · Hook Use Cases</h1>
+    <div class="tag">Format · guard · notify</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The four canonical patterns</h2>
+    <p>Most real hooks fall into four buckets, each pairing an event with a purpose:</p>
+    <table>
+        <tr><th>Pattern</th><th>Event</th><th>What it does</th></tr>
+        <tr><td><strong>Format</strong></td><td><code>PostToolUse</code> · <code>Edit|Write</code></td><td>Run a formatter/linter on the file Claude just edited</td></tr>
+        <tr><td><strong>Guard</strong></td><td><code>PreToolUse</code> · <code>Edit|Write</code> or <code>Bash</code></td><td>Block edits to protected paths or dangerous commands</td></tr>
+        <tr><td><strong>Notify</strong></td><td><code>Notification</code> or <code>Stop</code></td><td>Desktop alert when Claude needs input or finishes</td></tr>
+        <tr><td><strong>Log / context</strong></td><td><code>PostToolUse</code> / <code>SessionStart</code></td><td>Audit-log tool use, or re-inject project context</td></tr>
+    </table>
+    <div class="note">🔑 The rule of thumb: <strong>deterministic</strong> actions that must <em>always</em> happen
+    belong in hooks, not in a CLAUDE.md instruction the model might ignore. "Always run prettier after an edit"
+    is a hook; "prefer functional style" is a memory instruction.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Format on PostToolUse, guard on PreToolUse</h2>
+    <p>The timing is not arbitrary. <strong>Formatting</strong> must happen <em>after</em> the write, so it's a
+    <code>PostToolUse</code> hook — the file already exists and you reshape it. <strong>Guarding</strong> must
+    happen <em>before</em> the write, so it's a <code>PreToolUse</code> hook that can veto. Putting a guard in
+    <code>PostToolUse</code> is too late; putting a formatter in <code>PreToolUse</code> has nothing to format
+    yet.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Each pattern on the timeline</h2>
+    <div class="mermaid">
+flowchart TD
+    U["UserPromptSubmit"] --> PRE["PreToolUse: GUARD<br/>block .env / rm -rf"]
+    PRE --> TOOL["Edit / Write / Bash runs"]
+    TOOL --> POST["PostToolUse: FORMAT + LOG<br/>prettier · append to audit log"]
+    POST --> STOP["Stop: NOTIFY<br/>desktop alert / sound"]
+    SS["SessionStart: CONTEXT<br/>re-inject conventions"] -.-> U
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class POST ok; class STOP ok; class SS ok; class PRE gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Format, guard, and notify in one settings file</h2>
+    <p>Auto-format edits (<code>PostToolUse</code>), protect sensitive files (<code>PreToolUse</code> calling a
+    script that exits 2), and pop a desktop notification when Claude needs you (<code>Notification</code>).</p>
+<pre>{
+  <span class="st">"hooks"</span>: {
+    <span class="st">"PostToolUse"</span>: [
+      { <span class="st">"matcher"</span>: <span class="st">"Edit|Write"</span>,
+        <span class="st">"hooks"</span>: [
+          { <span class="st">"type"</span>: <span class="st">"command"</span>,
+            <span class="st">"command"</span>: <span class="st">"jq -r '.tool_input.file_path' | xargs npx prettier --write"</span> } ] }
+    ],
+    <span class="st">"PreToolUse"</span>: [
+      { <span class="st">"matcher"</span>: <span class="st">"Edit|Write"</span>,
+        <span class="st">"hooks"</span>: [
+          { <span class="st">"type"</span>: <span class="st">"command"</span>,
+            <span class="st">"command"</span>: <span class="st">"\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/protect-files.sh"</span> } ] }
+    ],
+    <span class="st">"Notification"</span>: [
+      { <span class="st">"matcher"</span>: <span class="st">""</span>,
+        <span class="st">"hooks"</span>: [
+          { <span class="st">"type"</span>: <span class="st">"command"</span>,
+            <span class="st">"command"</span>: <span class="st">"osascript -e 'display notification \"Claude needs you\" with title \"Claude Code\"'"</span> } ] }
+    ]
+  }
+}</pre>
+    <p>The guard script itself checks the path and exits 2 to block:</p>
+<pre><span class="cm">#!/bin/bash</span>   <span class="cm"># .claude/hooks/protect-files.sh</span>
+INPUT=$(cat)
+FILE=$(<span class="fn">echo</span> <span class="st">"$INPUT"</span> | jq -r <span class="st">'.tool_input.file_path // empty'</span>)
+<span class="kw">for</span> p <span class="kw">in</span> <span class="st">".env"</span> <span class="st">"package-lock.json"</span> <span class="st">".git/"</span>; <span class="kw">do</span>
+  <span class="kw">if</span> [[ <span class="st">"$FILE"</span> == *<span class="st">"$p"</span>* ]]; <span class="kw">then</span>
+    <span class="fn">echo</span> <span class="st">"Blocked: $FILE matches protected pattern '$p'"</span> &gt;&amp;2
+    <span class="kw">exit</span> 2
+  <span class="kw">fi</span>
+<span class="kw">done</span>
+<span class="kw">exit</span> 0</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Hook vs. asking the model to remember</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Enforce with a hook</h4>
+            <ul><li>Runs deterministically, every time — no reliance on the LLM</li>
+            <li>Survives context compaction and long sessions</li>
+            <li>Auditable and shareable via the repo</li></ul></div>
+        <div class="con"><h4>⚠️ Rely on CLAUDE.md instruction</h4>
+            <ul><li>Flexible, judgment-based, no scripting</li>
+            <li>But the model may forget, or the instruction may drift out of context</li>
+            <li>Not suitable for hard guarantees (formatting, blocking, audit)</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Auto-formatting in a <code>PreToolUse</code> hook. → Too early — the edit hasn't
+    happened. Format in <code>PostToolUse</code>; guard in <code>PreToolUse</code>.</div>
+    <div class="trap"><b>Trap:</b> "A <code>PostToolUse</code> guard can stop the write." → No, the write already
+    landed. Protective guards must be <code>PreToolUse</code> so they can veto.</div>
+    <div class="trap"><b>Trap:</b> Only matching <code>Edit|Write</code> for a compliance scanner. → Claude can
+    also change files via <code>Bash</code>. For full coverage, add a <code>Stop</code> hook that scans the tree
+    once per turn, or also match <code>Bash</code>.</div>
+    <div class="trap"><b>Trap:</b> Putting "always format" in CLAUDE.md. → Memory is advisory; the model may skip
+    it. Deterministic guarantees belong in a hook.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You want prettier to run on every file Claude edits. Which event + matcher?</summary>
+    <p class="answer"><code>PostToolUse</code> with matcher <code>"Edit|Write"</code>. Extract the path with
+    <code>jq -r '.tool_input.file_path'</code> and pass it to prettier.</p></details>
+    <details><summary>Q2 · Block any edit to <code>.env</code>. Where does the guard go and how does it block?</summary>
+    <p class="answer">A <code>PreToolUse</code> hook (matcher <code>Edit|Write</code>) that checks
+    <code>.tool_input.file_path</code> and <code>exit 2</code>s with a stderr reason when the path is
+    protected.</p></details>
+    <details><summary>Q3 · Why prefer a hook over a CLAUDE.md rule for "always run tests before stopping"?</summary>
+    <p class="answer">A hook is <b>deterministic</b> — a <code>Stop</code> hook runs the check every time and can
+    block stopping. A memory instruction is advisory and the model may forget it.</p></details>
+
+    <div class="pager">
+        <a href="6-4-blocking-decisions.html"><span class="k">← Back</span>6.4 · Blocking &amp; Decision Control</a>
+        <a class="next" href="6-6-hook-security.html"><span class="k">Next →</span>6.6 · Hook Security</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 6.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

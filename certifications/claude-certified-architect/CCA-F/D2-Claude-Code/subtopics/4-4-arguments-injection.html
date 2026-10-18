@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.4 Arguments &amp; Injection · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 4 · Slash Commands</div>
+    <h1>4.4 · Arguments &amp; Injection</h1>
+    <div class="tag">$ARGUMENTS · $1 · !bash · @file</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Substitutions turn a static file into a live prompt</h2>
+    <p>A command body is a <strong>template</strong>. Before it reaches the model, Claude Code performs
+    substitution: it fills in the <em>arguments</em> you typed, runs any <em>bash</em> you injected, and can
+    include <em>file</em> contents. The result is a fully-rendered prompt — the model never sees the raw
+    placeholders.</p>
+
+    <table>
+        <tr><th>Placeholder</th><th>Expands to</th></tr>
+        <tr><td><code>$ARGUMENTS</code></td><td><b>All</b> arguments passed after the command name, as one string.</td></tr>
+        <tr><td><code>$ARGUMENTS[N]</code></td><td>A single argument by <b>0-based</b> index — <code>$ARGUMENTS[0]</code> is the first.</td></tr>
+        <tr><td><code>$N</code></td><td>Shorthand for <code>$ARGUMENTS[N]</code>. So <code>$0</code> = first arg, <code>$1</code> = second, <code>$2</code> = third.</td></tr>
+        <tr><td><code>$name</code></td><td>A named argument declared in the <code>arguments:</code> frontmatter list (maps to positions in order).</td></tr>
+    </table>
+
+    <div class="warn">⚠️ Indexed args are <b>0-based</b>: <code>$0</code> (or <code>$ARGUMENTS[0]</code>) is the
+    <em>first</em> argument, so <code>$1</code> is the <em>second</em>. Values are shell-quoted — wrap multi-word
+    values in quotes to keep them as one argument. <code>$ARGUMENTS</code> always holds the full string as typed.</div>
+
+    <div class="note">🔑 If you invoke a command <em>with</em> arguments but the body has <b>no</b>
+    <code>$ARGUMENTS</code> placeholder, Claude Code appends <code>ARGUMENTS: &lt;your input&gt;</code> to the end
+    so the model still sees what you typed.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> <code>!</code> runs bash, <code>@</code> pulls in a file</h2>
+    <p>Two injection forms enrich a command with real, current data:</p>
+    <ul>
+        <li><strong>Bash injection <code>!`command`</code></strong> — Claude Code <em>runs the command first</em>
+        and replaces the placeholder with its output, so the prompt arrives with live data (a diff, a status,
+        versions) already inlined. This is <em>preprocessing</em>, not something the model executes. The inline
+        form is only recognized when <code>!</code> is at the <b>start of a line or after whitespace</b>. For
+        multi-line commands, use a fenced <code>```!</code> block.</li>
+        <li><strong>File reference <code>@path/to/file</code></strong> — includes that file's contents so the
+        model can read it directly in the prompt.</li>
+    </ul>
+
+    <div class="warn">⚠️ Bash injection requires that the tool be permitted: list it in
+    <code>allowed-tools</code>, e.g. <code>allowed-tools: Bash(git diff:*)</code> or <code>Bash(gh *)</code>.
+    Managed settings can shut it off entirely with <code>"disableSkillShellExecution": true</code>, which replaces
+    each command with <code>[shell command execution disabled by policy]</code>.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The render pipeline</h2>
+    <div class="mermaid">
+flowchart TD
+    A["/pr-summary SearchBar"] --> B["Substitute args:<br/>$ARGUMENTS, $0, $1…"]
+    B --> C["Run !bash injections<br/>output replaces placeholder"]
+    C --> D["Inline @file contents"]
+    D --> E["🟢 Fully-rendered prompt → model"]
+    C -.->|"tool not in allowed-tools"| X["🔴 blocked / needs approval"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class E ok; class X bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A command using all three</h2>
+    <p>Positional args, live bash output, and a file reference in one template:</p>
+<pre><span class="cm">---</span>
+<span class="kw">description</span>: Summarize a pull request
+<span class="kw">argument-hint</span>: [pr-number]
+<span class="kw">allowed-tools</span>: Bash(gh *)
+<span class="cm">---</span>
+
+<span class="cm"># Live data — !`...` runs BEFORE the model sees anything</span>
+- PR diff: !`gh pr diff $ARGUMENTS`
+- Changed files: !`gh pr diff --name-only $ARGUMENTS`
+
+<span class="cm"># Pull a file's contents straight into the prompt</span>
+- Contribution rules: @CONTRIBUTING.md
+
+<span class="cm"># Positional args are 0-based: $0 is the FIRST argument</span>
+Focus the summary on the "$0" area if one was given.
+
+## Task
+Summarize PR #$ARGUMENTS for a reviewer.</pre>
+    <p>Running <code>/pr-summary 42 auth</code> makes <code>$ARGUMENTS</code> = <code>42 auth</code>,
+    <code>$0</code> = <code>42</code>, and <code>$1</code> = <code>auth</code>.</p>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> <code>!`bash`</code> injection vs. letting Claude run the tool</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Inject with <code>!`…`</code></h4>
+            <ul><li>Data is in the prompt before the model reasons</li>
+            <li>Deterministic — always fetched, no "did it decide to?"</li>
+            <li>Grounds the response in the real working tree</li></ul></div>
+        <div class="con"><h4>⚠️ Let Claude call the tool itself</h4>
+            <ul><li>Flexible — Claude picks what/when to run</li>
+            <li>May skip a step or run a different command</li>
+            <li>Costs an extra turn; less reproducible</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "<code>$1</code> is the first argument." → Indexed args are <b>0-based</b>:
+    <code>$0</code> / <code>$ARGUMENTS[0]</code> is first, so <code>$1</code> is the <b>second</b>. Use
+    <code>$ARGUMENTS</code> for everything at once.</div>
+    <div class="trap"><b>Trap:</b> "<code>!`cmd`</code> means Claude will run the command." → It is
+    <b>preprocessing</b> — Claude Code runs it and inlines the output <em>before</em> the model sees the prompt.
+    The model only reads the result.</div>
+    <div class="trap"><b>Trap:</b> "Bash injection works without any permission." → It needs the tool in
+    <b><code>allowed-tools</code></b>, and managed policy can disable it entirely with
+    <code>disableSkillShellExecution</code>.</div>
+    <div class="trap"><b>Trap:</b> "Any <code>!</code> in the file triggers a command." → Only when <code>!</code> is at
+    the <b>start of a line or after whitespace</b>. <code>KEY=!`cmd`</code> stays literal text.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A command has body "Migrate $0 from $1 to $2." What does <code>/migrate SearchBar React Vue</code> produce?</summary>
+    <p class="answer">"Migrate <b>SearchBar</b> from <b>React</b> to <b>Vue</b>." Because indexing is 0-based:
+    <code>$0</code>=SearchBar, <code>$1</code>=React, <code>$2</code>=Vue.</p></details>
+    <details><summary>Q2 · How do you put the current <code>git status</code> output into a command's prompt automatically?</summary>
+    <p class="answer">Use bash injection: <code>!`git status --short`</code> on its own line, and permit it with
+    <code>allowed-tools: Bash(git status:*)</code>. Claude Code runs it and inlines the output before the model
+    sees the prompt.</p></details>
+    <details><summary>Q3 · You pass arguments but the body has no <code>$ARGUMENTS</code>. Are they lost?</summary>
+    <p class="answer">No. Claude Code appends <code>ARGUMENTS: &lt;your input&gt;</code> to the end of the rendered
+    content so the model still sees what you typed.</p></details>
+
+    <div class="pager">
+        <a href="4-3-command-frontmatter.html"><span class="k">← Back</span>4.3 · Command Frontmatter</a>
+        <a class="next" href="4-5-command-scopes.html"><span class="k">Next →</span>4.5 · Command Scopes</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 4.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

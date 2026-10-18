@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.4 Sandboxing &amp; Bypassing Prompts · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 3 · Permissions &amp; Safety</div>
+    <h1>3.4 · Sandboxing &amp; Bypassing Prompts</h1>
+    <div class="tag">Safe autonomy</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Two very different ways to cut prompts</h2>
+    <p>Both reduce permission prompts, but they are opposites in safety. The exam turns on telling them apart:</p>
+    <table>
+        <tr><th></th><th>Sandbox (<code>/sandbox</code>)</th><th><code>--dangerously-skip-permissions</code></th></tr>
+        <tr><td>What it controls</td><td>What a Bash command can <b>access</b> once it runs</td><td>Whether each tool call runs at all</td></tr>
+        <tr><td>Enforced by</td><td>The <b>operating system</b> (Seatbelt / bubblewrap)</td><td>Nothing — checks are skipped</td></tr>
+        <tr><td>Replaces the prompt with</td><td>The sandbox boundary itself (auto-allow mode)</td><td>Nothing at all</td></tr>
+        <tr><td>Prompt-injection protection</td><td><b>Yes</b> — OS boundary holds even if the model is fooled</td><td><b>None</b></td></tr>
+    </table>
+
+    <p><strong>The sandboxed Bash tool</strong> lets Claude run most shell commands without asking, because you
+    instead define which files and network domains commands may touch and the OS enforces that boundary for every
+    Bash command and its child processes. Enable it with <code>/sandbox</code>; it runs on macOS (Seatbelt), Linux,
+    and WSL2 (bubblewrap + socat). Native Windows is not supported.</p>
+
+    <ul>
+        <li><strong>Filesystem isolation:</strong> default write access is the working directory + session temp
+        dir; default read is the whole machine minus denied paths. Widen/narrow with
+        <code>sandbox.filesystem.allowWrite</code>, <code>denyWrite</code>, <code>denyRead</code>,
+        <code>allowRead</code>.</li>
+        <li><strong>Network isolation:</strong> no domains pre-allowed; the first hit on a new domain prompts.
+        Pre-allow with <code>allowedDomains</code>, block with <code>deniedDomains</code>.</li>
+        <li><strong>Auto-allow mode</strong> runs sandboxed commands without prompting — but explicit deny rules,
+        content-scoped ask rules like <code>Bash(git push *)</code>, and <code>rm -rf /</code>-style removals still
+        prompt.</li>
+    </ul>
+
+    <h2><span class="chip concept">CONCEPT</span> When bypassing prompts is acceptable — and when it's reckless</h2>
+    <p><code>--dangerously-skip-permissions</code> (equivalently <code>--permission-mode bypassPermissions</code>)
+    skips prompts and safety checks. It offers <strong>no protection against prompt injection or unintended
+    actions</strong>.</p>
+    <div class="good">✅ Acceptable: <b>isolated containers, VMs, or dev containers</b> — ideally without internet
+    access — where Claude Code cannot damage your host or exfiltrate data. This is the CI / ephemeral-agent case.
+    Claude Code even refuses to start this mode as root/sudo on Linux/macOS unless it detects a recognized sandbox.</div>
+    <div class="bad">🚫 Reckless: on your <b>real workstation with your real credentials and network</b>. A single
+    prompt-injection payload in a file, web page, or dependency can then run destructive or exfiltrating commands
+    with zero confirmation. For "far fewer prompts <em>with</em> safety checks," use <code>auto</code> mode instead
+    — it keeps a background classifier reviewing actions.</div>
+
+    <div class="warn">⚠️ Even in <code>bypassPermissions</code>, explicit <b>ask</b> rules still force a prompt, and
+    removals targeting the filesystem root or home (<code>rm -rf /</code>, <code>rm -rf ~</code>) still prompt as a
+    circuit breaker against model error.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Layers of defense in depth</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Claude wants to run a Bash command"] --> P{"Permission layer:<br/>deny / ask rules?"}
+    P -->|"deny"| STOP["🔴 Blocked before it runs"]
+    P -->|"ask"| PR["🟠 Prompt (even if sandboxed)"]
+    P -->|"allowed / auto-allow"| S{"Sandbox enabled?"}
+    S -->|"yes"| OS["🟢 Runs, but OS confines FS + network<br/>holds even under prompt injection"]
+    S -->|"no + bypassPermissions"| RAW["🔴 Runs with full host access<br/>no injection protection"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class OS ok; class PR gate; class STOP bad; class RAW bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Enabling and shaping the sandbox</h2>
+<pre><span class="cm"># Turn the sandbox on for the current project (panel: Mode / Overrides / Config)</span>
+/sandbox
+
+<span class="cm"># Enable across all your projects + grant a couple of write paths, in settings.json</span>
+{
+  <span class="st">"sandbox"</span>: {
+    <span class="st">"enabled"</span>: <span class="kw">true</span>,
+    <span class="st">"filesystem"</span>: {
+      <span class="st">"allowWrite"</span>: [<span class="st">"~/.kube"</span>, <span class="st">"/tmp/build"</span>],
+      <span class="st">"denyRead"</span>: [<span class="st">"~/.ssh"</span>, <span class="st">"~/.aws"</span>]
+    },
+    <span class="st">"network"</span>: {
+      <span class="st">"allowedDomains"</span>: [<span class="st">"registry.npmjs.org"</span>, <span class="st">"*.github.com"</span>]
+    }
+  }
+}
+
+<span class="cm"># Container / CI only: skip prompts entirely (no injection protection)</span>
+claude <span class="kw">--dangerously-skip-permissions</span></pre>
+    <div class="note">🔑 Sandbox restrictions are enforced at the OS level, so they apply to <em>all</em> subprocesses
+    a command spawns (<code>kubectl</code>, <code>terraform</code>, <code>npm</code>), not just Claude's own file
+    tools. Sandbox <code>filesystem</code> paths use standard prefixes (<code>/abs</code>, <code>~/home</code>),
+    which differ from Read/Edit rules' <code>//abs</code> convention.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Sandbox auto-allow vs. skip-permissions</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Sandbox (auto-allow)</h4>
+            <ul><li>Fewer prompts <b>and</b> a real OS-enforced boundary</li>
+            <li>Survives prompt injection — a fooled model still can't leave the box</li>
+            <li>Deny/ask rules and <code>rm -rf /</code> circuit breakers still apply</li></ul></div>
+        <div class="con"><h4>🚫 <code>--dangerously-skip-permissions</code></h4>
+            <ul><li>Zero prompts, zero safety checks, no injection protection</li>
+            <li>Broad <code>allowedDomains</code> (e.g. <code>github.com</code>) can still enable exfiltration paths</li>
+            <li>Only safe in throwaway containers/VMs, ideally offline</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "<code>/sandbox</code> is a permission mode." → It isn't. Permission modes decide
+    <em>whether</em> a call runs and whether you're prompted; the sandbox restricts <em>what</em> a Bash command can
+    access once it runs. They compose.</div>
+    <div class="trap"><b>Trap:</b> "<code>--dangerously-skip-permissions</code> is fine as long as I'm careful." →
+    It offers no protection against prompt injection or unintended actions. Reserve it for isolated
+    containers/VMs; on a real machine, prefer <code>auto</code> mode or the sandbox.</div>
+    <div class="trap"><b>Trap:</b> "The sandbox blocks reading my SSH keys by default." → No. The default read policy
+    still allows reading <code>~/.ssh</code> and <code>~/.aws/credentials</code>. You must add them to
+    <code>denyRead</code> (or use <code>sandbox.credentials</code>) to block them.</div>
+    <div class="trap"><b>Trap:</b> "Allowing <code>github.com</code> in the sandbox is safe." → Broad domains can
+    create data-exfiltration paths; the proxy decides from the client-supplied hostname without inspecting TLS, so
+    techniques like domain fronting can slip out. Allow only trusted domains.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why does the sandbox protect against prompt injection while <code>--dangerously-skip-permissions</code> does not?</summary>
+    <p class="answer">The sandbox boundary is enforced by the <b>operating system</b> on the running process, so it
+    holds regardless of what the (possibly manipulated) model chose to run. Skip-permissions removes checks
+    entirely, so a fooled model's command executes with full host access.</p></details>
+    <details><summary>Q2 · A test suite needs to reach <code>registry.npmjs.org</code> under the sandbox but keeps prompting. Fix?</summary>
+    <p class="answer">Pre-allow the domain: add <code>registry.npmjs.org</code> to
+    <code>sandbox.network.allowedDomains</code>. Otherwise the first request to each new domain prompts for
+    approval.</p></details>
+    <details><summary>Q3 · When is <code>--dangerously-skip-permissions</code> the right call?</summary>
+    <p class="answer">In an isolated, disposable environment — a container, VM, or dev container, ideally without
+    internet — such as CI or an ephemeral agent, where Claude Code can't damage your host or leak data. Never on a
+    workstation with real credentials and network access.</p></details>
+
+    <div class="pager">
+        <a href="3-3-directory-access.html"><span class="k">← Back</span>3.3 · Directory Access &amp; Working Dirs</a>
+        <a class="next" href="3-5-managed-policy.html"><span class="k">Next →</span>3.5 · Enterprise Managed Policy</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 3.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

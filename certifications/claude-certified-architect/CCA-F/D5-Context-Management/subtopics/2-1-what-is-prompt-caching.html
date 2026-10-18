@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.1 What Prompt Caching Is &amp; Why · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 2 · Prompt Caching</div>
+    <h1>2.1 · What Prompt Caching Is &amp; Why</h1>
+    <div class="tag">Pay once, reuse the prefix</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Cache the static prefix, skip re-processing it</h2>
+    <p><strong>Prompt caching stores the result of processing a static <em>prefix</em> of your prompt</strong> so
+    that repeated requests carrying that same prefix skip re-processing it. On the Messages API, every request is
+    stateless — you resend the whole prompt each time. If a large, unchanging chunk sits at the front (a long
+    system prompt, a tool catalog, a retrieved document, a few-shot block), you normally pay full input price to
+    re-tokenize and re-process it on <em>every</em> call. Caching lets you <strong>pay to write it once</strong>,
+    then <strong>read it back at a fraction of the cost</strong> on subsequent calls.</p>
+
+    <div class="note">🔑 It caches a <strong>prefix</strong>, not the whole prompt. Everything up to a cache
+    breakpoint is stored; whatever comes after (the volatile question, per-request data) is processed fresh every
+    time.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Why it's worth it — cost and latency</h2>
+    <p>The win is two-fold. <strong>Cost:</strong> a cache <em>read</em> costs about <strong>0.1×</strong> the base
+    input-token price — roughly a 90% discount on the cached portion. <strong>Latency:</strong> cached tokens are
+    served from the cache instead of being processed, so time-to-first-token on a big shared prefix drops sharply.
+    The one-time cost is the <strong>write</strong>: a 5-minute cache write is <strong>1.25×</strong> base input
+    price (a 1-hour write is 2× — covered in 2.4). So a cached prefix breaks even after just two requests:
+    1.25× + 0.1× = 1.35× versus 2× if you never cached.</p>
+
+    <table>
+        <tr><th>Token treatment</th><th>Price vs. base input</th><th>When</th></tr>
+        <tr><td>Uncached input</td><td>1×</td><td>Content after the breakpoint, or no caching</td></tr>
+        <tr><td>Cache write (5-min)</td><td>1.25×</td><td>First request — prefix written to cache</td></tr>
+        <tr><td>Cache write (1-hour)</td><td>2×</td><td>Opt-in longer TTL (see 2.4)</td></tr>
+        <tr><td>Cache read (hit)</td><td>~0.1×</td><td>Later requests reuse the identical prefix</td></tr>
+    </table>
+
+    <div class="good">Ideal when the same large context is reused across many calls: agent system prompts + tool
+    definitions, a document you ask many questions about, long few-shot examples, or a multi-turn conversation
+    whose history keeps growing.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> First call writes, later calls read</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Large static prefix<br/>(system + tools + docs)"] --> B{"Prefix already<br/>in cache?"}
+    B -->|"no — first call"| WRITE["🟠 Cache WRITE<br/>process once · 1.25× price"]
+    B -->|"yes — identical bytes"| READ["🟢 Cache READ<br/>skip processing · ~0.1× price"]
+    WRITE --> SUF["Process volatile suffix<br/>(the new question) · 1×"]
+    READ --> SUF
+    SUF --> OUT["Model response"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef neutral fill:#e7f1ff,stroke:#4a90d9,color:#1a4971;
+    class READ ok; class WRITE gate; class SUF neutral;
+    </div>
+
+    <h2><span class="chip code">CODE</span> One breakpoint, two requests</h2>
+    <p>Mark the end of the reusable prefix with <code>cache_control</code>. The first call writes; the second,
+    with a byte-identical system prompt, reads it back. Inspect <code>usage</code> to confirm.</p>
+<pre><span class="cm"># First request — writes the prefix to cache</span>
+r1 = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    system=[{
+        <span class="st">"type"</span>: <span class="st">"text"</span>,
+        <span class="st">"text"</span>: LARGE_STATIC_PROMPT,       <span class="cm"># same bytes every call</span>
+        <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>},  <span class="cm"># breakpoint here</span>
+    }],
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"First question"</span>}],
+)
+<span class="fn">print</span>(r1.usage.cache_creation_input_tokens)  <span class="cm"># &gt; 0  → written (paid 1.25×)</span>
+
+<span class="cm"># Second request — identical prefix, different question</span>
+r2 = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    system=[{<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: LARGE_STATIC_PROMPT,
+             <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>}}],
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Second question"</span>}],
+)
+<span class="fn">print</span>(r2.usage.cache_read_input_tokens)      <span class="cm"># &gt; 0  → hit (paid ~0.1×)</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> When caching pays off — and when it doesn't</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Cache it</h4>
+            <ul><li>Large prefix reused across many requests</li>
+            <li>Prefix is stable — same bytes each call</li>
+            <li>Prefix clears the model's minimum token floor (2.3)</li>
+            <li>Break-even after ~2 requests within the TTL window</li></ul></div>
+        <div class="con"><h4>⚠️ Don't bother</h4>
+            <ul><li>Prefix changes from the first token every call</li>
+            <li>Prefix is tiny (below the cacheable minimum → silently uncached)</li>
+            <li>Content is used once and never repeated</li>
+            <li>You'd pay the 1.25× write premium for zero reads</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Caching stores the model's <em>output</em> / the answer." → No. It caches the
+    processed <b>input prefix</b> so it needn't be re-processed. The completion is generated fresh every call.</div>
+    <div class="trap"><b>Trap:</b> "It caches the whole prompt." → It caches a <b>prefix</b> up to a breakpoint.
+    Volatile content after the breakpoint is always processed at full price.</div>
+    <div class="trap"><b>Trap:</b> "Caching is free." → The first <b>write</b> costs 1.25× base input (2× for the
+    1-hour TTL). You only come out ahead once reads outnumber that premium — roughly two requests.</div>
+    <div class="trap"><b>Trap:</b> Assuming caching is stateful/persistent like a session. → The API is stateless;
+    the cache is an ephemeral, prefix-keyed optimization with a short TTL (2.4), not a stored conversation.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What exactly does prompt caching store, and what does it save?</summary>
+    <p class="answer">It stores the <b>processed static prefix</b> of the prompt (system, tools, leading
+    messages). On a later request with the identical prefix, the model <b>skips re-processing</b> it — saving both
+    cost (cache reads ≈ 0.1× base input) and latency (fewer tokens to process).</p></details>
+    <details><summary>Q2 · You cache a prefix but only ever send one request with it. Good idea?</summary>
+    <p class="answer">No. You pay the <b>1.25× write premium</b> and get zero reads back, so it costs more than not
+    caching. Caching pays off only when the same prefix is reused across multiple requests within the TTL.</p></details>
+    <details><summary>Q3 · Roughly how many reuses to break even on a 5-minute cache?</summary>
+    <p class="answer">About <b>two</b>: the write costs 1.25× and one read costs 0.1× (1.35× total) versus 2× if
+    you paid full price for the prefix twice. Beyond that, every additional read is nearly free.</p></details>
+
+    <div class="pager">
+        <a href="1-5-context-exceeded-errors.html"><span class="k">← Back</span>1.5 · Context Exceeded</a>
+        <a class="next" href="2-2-cache-control-breakpoints.html"><span class="k">Next →</span>2.2 · cache_control &amp; Breakpoints</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 2.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.3 Large / Structured Results &amp; Truncation · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 3 · Tool Results &amp; Error Handling</div>
+    <h1>3.3 · Large / Structured Results &amp; Truncation</h1>
+    <div class="tag">Keep results lean</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Every result block lives in the transcript forever</h2>
+    <p>A <code>tool_result</code> isn't consumed and discarded — it's appended to the conversation and
+    <strong>re-sent as input tokens on every subsequent turn</strong>. Dump a 40 KB JSON blob into a result and you
+    pay for it again on turn 2, turn 3, and every turn after, while burying the two fields Claude actually needed. The
+    design goal for tool results is the opposite of "return everything just in case": <strong>return only high-signal
+    information</strong>.</p>
+
+    <div class="bad">Anti-pattern: <code>return json.dumps(full_api_response)</code> — hundreds of nested fields,
+    internal cursors, opaque IDs. It wastes context and makes Claude hunt for the signal.</div>
+    <div class="good">Pattern: truncate, summarize, or project down to the fields that inform Claude's next step.
+    Return semantic, stable identifiers (slugs, UUIDs) rather than opaque internal references.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Three levers for a lean result</h2>
+    <table>
+        <tr><th>Lever</th><th>What it does</th><th>Use when</th></tr>
+        <tr><td><b>Truncate</b></td><td>Cap rows/chars and say what was cut (<code>"...+920 more; refine your query"</code>)</td><td>Long lists or logs where the head is representative</td></tr>
+        <tr><td><b>Summarize</b></td><td>Return an aggregate or digest instead of raw records</td><td>Claude needs the shape/answer, not every row</td></tr>
+        <tr><td><b>Project (structured)</b></td><td>Return a small object with only the needed fields</td><td>An API gives 200 fields; Claude needs 4</td></tr>
+    </table>
+    <div class="note">🔑 "Structured content" here means <em>a deliberately shaped small payload</em> — a trimmed
+    JSON object or a few typed fields — not the raw upstream response. Give Claude the schema it can act on, not the
+    firehose.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> When the payload is genuinely huge</h2>
+    <p>If a result is inherently large (a whole file, a big dataset), don't inline it. Better shapes:</p>
+    <ul>
+        <li><strong>Return a handle</strong> — an ID or path Claude can pass to a follow-up tool that fetches a slice.</li>
+        <li><strong>Return a preview + pointer</strong> — first N lines plus "full content at <code>/path</code>". (Managed-Agents MCP tools do exactly this automatically when output exceeds ~100K tokens: the agent gets a truncated preview plus a file path to <code>read</code>.)</li>
+        <li><strong>Pre-aggregate</strong> in the tool so Claude never touches the raw rows.</li>
+    </ul>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Shrink before it enters context</h2>
+    <div class="mermaid">
+flowchart TD
+    RAW["Raw tool output<br/>(large / deeply nested)"] --> Q{"Fits in a lean result?"}
+    Q -->|"yes, small"| PASS["🟢 Return as-is"]
+    Q -->|"no — too big"| SHR{"Which lever?"}
+    SHR -->|"list/log"| TR["Truncate + note what was cut"]
+    SHR -->|"needs the gist"| SM["Summarize / aggregate"]
+    SHR -->|"200 fields, need 4"| PR["Project to a small object"]
+    SHR -->|"whole file/dataset"| HD["🔵 Return handle / preview + pointer"]
+    TR --> OUT["Lean tool_result"]
+    SM --> OUT
+    PR --> OUT
+    HD --> OUT
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef info fill:#d0e7ff,stroke:#3d8bfd,color:#0a3d7a;
+    class PASS ok; class HD info;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Project + truncate instead of dumping JSON</h2>
+<pre><span class="kw">def</span> <span class="fn">search_orders</span>(query):
+    rows = api.<span class="fn">search</span>(query)              <span class="cm"># upstream: 900 rows × 60 fields each</span>
+
+    <span class="cm"># ❌ DON'T: return json.dumps(rows) — huge, re-billed every turn</span>
+
+    <span class="cm"># ✅ DO: project to the fields Claude needs, truncate, and signal the cut.</span>
+    lean = [
+        { <span class="st">"id"</span>: r[<span class="st">"order_id"</span>], <span class="st">"status"</span>: r[<span class="st">"status"</span>], <span class="st">"total"</span>: r[<span class="st">"total_usd"</span>] }
+        <span class="kw">for</span> r <span class="kw">in</span> rows[:<span class="st">20</span>]
+    ]
+    note = <span class="st">""</span> <span class="kw">if</span> <span class="fn">len</span>(rows) &lt;= <span class="st">20</span> <span class="kw">else</span> <span class="st">f"...+{len(rows) - 20} more. Refine the query to narrow."</span>
+
+    <span class="kw">return</span> { <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+             <span class="st">"tool_use_id"</span>: block.id,
+             <span class="st">"content"</span>: <span class="fn">json.dumps</span>({ <span class="st">"orders"</span>: lean, <span class="st">"note"</span>: note }) }</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Dump everything vs. curate</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Curated / lean result</h4>
+            <ul><li>Cheap on every subsequent turn</li>
+            <li>Claude finds the signal fast</li>
+            <li>Higher accuracy, less distraction</li></ul></div>
+        <div class="con"><h4>⚠️ Dump the raw payload</h4>
+            <ul><li>Zero shaping work up front</li>
+            <li>But: re-billed context bloat each turn</li>
+            <li>Buries relevant fields; can degrade reasoning</li></ul></div>
+    </div>
+    <div class="warn">Never <em>silently</em> truncate content you were asked to hand off wholesale (e.g. a file the
+    user needs in full). Truncate the <em>tool result view</em>, and give Claude a pointer to fetch the rest — don't
+    quietly drop data it needs.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Return everything so Claude has full context." → Bloated results waste context and
+    <b>bury</b> the signal. Return only high-signal fields; the result is re-billed every turn.</div>
+    <div class="trap"><b>Trap:</b> Truncating with no marker. → If you cut a list, <b>say so</b>
+    (<code>"...+920 more"</code>) so Claude knows the view is partial and can refine or paginate.</div>
+    <div class="trap"><b>Trap:</b> Returning opaque internal reference IDs. → Prefer <b>semantic, stable</b>
+    identifiers (slugs/UUIDs) Claude can reuse; internal handles it can't reason about are dead weight.</div>
+    <div class="trap"><b>Trap:</b> Inlining a whole large file/dataset. → Return a <b>handle or preview + pointer</b>
+    and let a follow-up tool fetch the slice that's actually needed.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A search tool can return 900 rows. What do you send back, and why not all 900?</summary>
+    <p class="answer">A projected, truncated view — e.g. the top 20 rows with only the fields Claude needs, plus a
+    <code>"...+880 more"</code> note. All 900 (× every field) would be re-billed as input tokens on every later turn
+    and bury the relevant records.</p></details>
+    <details><summary>Q2 · What does "structured result" buy you over dumping the raw upstream JSON?</summary>
+    <p class="answer">A small, deliberately-shaped object exposes exactly the fields Claude must reason over, using
+    stable identifiers. Raw JSON drags in nested internals and opaque IDs that cost tokens and distract the model.</p></details>
+    <details><summary>Q3 · The result is a 5 MB file. How do you keep it out of the context window?</summary>
+    <p class="answer">Don't inline it. Return a <b>handle/path or a preview plus a pointer</b>, and let Claude call a
+    follow-up tool to fetch the specific slice it needs — the same pattern MA MCP tools apply automatically above ~100K
+    tokens.</p></details>
+
+    <div class="pager">
+        <a href="3-2-error-handling.html"><span class="k">← Back</span>3.2 · Error Handling Patterns</a>
+        <a class="next" href="3-4-parallel-tool-calls.html"><span class="k">Next →</span>3.4 · Parallel Tool Calls &amp; Result Ordering</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 3.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

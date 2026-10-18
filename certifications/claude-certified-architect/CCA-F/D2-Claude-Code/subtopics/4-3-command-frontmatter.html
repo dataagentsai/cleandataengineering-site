@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.3 Command Frontmatter · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 4 · Slash Commands</div>
+    <h1>4.3 · Command Frontmatter</h1>
+    <div class="tag">allowed-tools · model · argument-hint</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> YAML at the top configures the command</h2>
+    <p>A command (or skill) file may open with a <strong>YAML frontmatter block</strong> between <code>---</code>
+    markers. Everything below the closing <code>---</code> is the prompt body. The frontmatter is where you tune
+    <em>how</em> the command behaves: what it is called, whether Claude may auto-trigger it, which tools it can use
+    without asking, and which model runs it. <strong>All fields are optional</strong> — only
+    <code>description</code> is recommended, so Claude knows when the skill applies.</p>
+
+    <table>
+        <tr><th>Key</th><th>Purpose</th></tr>
+        <tr><td><code>description</code></td><td>What the command does and when to use it. Shown in the menu; Claude uses it to decide auto-invocation. If omitted, the first paragraph of the body is used.</td></tr>
+        <tr><td><code>argument-hint</code></td><td>Hint shown during autocomplete for expected args, e.g. <code>[issue-number]</code> or <code>[filename] [format]</code>.</td></tr>
+        <tr><td><code>allowed-tools</code></td><td>Tools Claude may use <b>without asking</b> while the command is active. Space- or comma-separated, or a YAML list.</td></tr>
+        <tr><td><code>model</code></td><td>Model to use while active (same values as <code>/model</code>, or <code>inherit</code>). Override lasts the current turn; the session model resumes next prompt.</td></tr>
+        <tr><td><code>disable-model-invocation</code></td><td><code>true</code> stops Claude from auto-loading it — only <b>you</b> can trigger it with <code>/name</code>. Default <code>false</code>.</td></tr>
+    </table>
+
+    <div class="note">🔑 <code>allowed-tools</code> <b>grants</b> permission — it does not restrict. Every tool stays
+    callable; listed tools simply skip the approval prompt while the command runs. To <em>remove</em> tools use
+    <code>disallowed-tools</code>; to block globally use permission deny rules (Cluster 3).</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Manual-only workflows: <code>disable-model-invocation</code></h2>
+    <p>By default both you and Claude can invoke a command. For anything with side effects — <code>/deploy</code>,
+    <code>/commit</code>, <code>/send-slack-message</code> — add <strong><code>disable-model-invocation: true</code></strong>
+    so Claude never decides to run it on its own. You keep the trigger; Claude keeps its hands off. This also keeps
+    the command's description out of Claude's context until you invoke it.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> How frontmatter shapes a run</h2>
+    <div class="mermaid">
+flowchart TD
+    F["Command file<br/>--- frontmatter --- + body"] --> DESC["description → menu + auto-match"]
+    F --> DMI{"disable-model-invocation?"}
+    DMI -->|"true"| MAN["🟠 You-only trigger"]
+    DMI -->|"false (default)"| BOTH["🟢 You or Claude trigger"]
+    F --> AT["allowed-tools → skip approval<br/>for listed tools"]
+    F --> MOD["model → run on this model<br/>for the turn"]
+    F --> AH["argument-hint → autocomplete hint"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef man fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class BOTH ok; class MAN man;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A fully-annotated command file</h2>
+    <p>A commit helper that runs manually, pre-approves the git tools it needs, and hints at its argument:</p>
+<pre><span class="cm">---</span>
+<span class="kw">description</span>: Stage and commit the current changes
+<span class="kw">argument-hint</span>: [message]
+<span class="kw">disable-model-invocation</span>: <span class="st">true</span>
+<span class="kw">allowed-tools</span>: Bash(git add *) Bash(git commit *) Bash(git status *)
+<span class="kw">model</span>: sonnet
+<span class="cm">---</span>
+
+Stage all changes and commit them with a clear message.
+
+<span class="cm"># $ARGUMENTS becomes the commit message the user typed.</span>
+Use this as the commit subject: $ARGUMENTS</pre>
+    <div class="warn">⚠️ For a <b>project</b> command, <code>allowed-tools</code> only takes effect after you accept
+    the workspace-trust dialog for that folder — the same gate as permission rules in
+    <code>.claude/settings.json</code>. Review project commands before trusting a repo; one can grant itself broad
+    tool access.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Pre-approving tools with <code>allowed-tools</code></h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ List the tools you trust</h4>
+            <ul><li>No approval prompt mid-workflow — smooth runs</li>
+            <li>Scope tightly, e.g. <code>Bash(git commit *)</code></li>
+            <li>Intent is explicit and reviewable in the file</li></ul></div>
+        <div class="con"><h4>⚠️ Over-broad grants</h4>
+            <ul><li><code>Bash(*)</code> hands over the whole shell</li>
+            <li>A committed command can self-grant access</li>
+            <li>Only as safe as your review + workspace trust</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "<code>allowed-tools</code> restricts the command to only those tools." → It
+    <b>grants</b>, not restricts. All tools stay available; listed ones just skip the permission prompt. Use
+    <code>disallowed-tools</code> to remove tools.</div>
+    <div class="trap"><b>Trap:</b> "The <code>model</code> override sticks for the rest of the session." → It applies
+    for the <b>current turn</b> only; your session model resumes on the next prompt.</div>
+    <div class="trap"><b>Trap:</b> "<code>disable-model-invocation</code> stops <em>me</em> from running it too." → No —
+    it only stops <b>Claude</b> from auto-triggering it. You can still run <code>/name</code>. (To hide it from the
+    menu, that is <code>user-invocable: false</code>.)</div>
+    <div class="trap"><b>Trap:</b> "Frontmatter is required." → It is <b>optional</b>. A bare Markdown file is a valid
+    command; only <code>description</code> is <em>recommended</em>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You want <code>/deploy</code> to be runnable only when you type it, never auto-run by Claude. Which key?</summary>
+    <p class="answer"><b><code>disable-model-invocation: true</code></b>. It keeps the command manual-only and keeps
+    its description out of Claude's context until you invoke it.</p></details>
+    <details><summary>Q2 · Does <code>allowed-tools: Bash(git commit *)</code> block Claude from using other tools?</summary>
+    <p class="answer">No. It only <b>pre-approves</b> that git command so it runs without a prompt. Every other tool
+    is still available and still governed by your normal permission settings.</p></details>
+    <details><summary>Q3 · What does <code>argument-hint</code> do, and where is it seen?</summary>
+    <p class="answer">It provides a hint (e.g. <code>[issue-number]</code>) shown during
+    <b>autocomplete</b> so you know what arguments the command expects. It does not enforce anything.</p></details>
+
+    <div class="pager">
+        <a href="4-2-custom-commands.html"><span class="k">← Back</span>4.2 · Custom Slash Commands</a>
+        <a class="next" href="4-4-arguments-injection.html"><span class="k">Next →</span>4.4 · Arguments &amp; Injection</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 4.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

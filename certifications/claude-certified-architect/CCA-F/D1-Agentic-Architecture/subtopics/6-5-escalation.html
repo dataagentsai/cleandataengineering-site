@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.5 Escalation to Human · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 6 · Reliability</div>
+    <h1>6.5 · Escalation to Human</h1>
+    <div class="tag">The top rung — hand off when retry and fallback aren't enough</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Rung 3: escalate</h2>
+    <p><strong>Escalation</strong> is the top of the recovery ladder: retry (transient) → fallback (degraded path)
+    → <strong>escalate (human)</strong>. It's not a failure of the design — for some situations, routing to a human
+    is the <em>correct</em> outcome. The architect decides <em>which</em> conditions trip an escalation.</p>
+    <table>
+        <tr><th>Trigger</th><th>Example</th><th>Why a human</th></tr>
+        <tr><td><strong>Repeated failure</strong></td><td>Retry exhausted <em>and</em> every fallback failed</td><td>The system genuinely can't complete it safely</td></tr>
+        <tr><td><strong>Low confidence</strong></td><td>Ambiguous request, conflicting sources, model unsure</td><td>Guessing risks a wrong, costly action</td></tr>
+        <tr><td><strong>Policy</strong></td><td>Payments, refunds over a limit, legal/medical, account deletion</td><td>Governance requires human sign-off regardless of confidence</td></tr>
+    </table>
+
+    <div class="note">🔑 Policy escalation is <strong>unconditional</strong> — it fires even when the agent is highly
+    confident. "Issue a refund over $500" should route to a human by rule, not because the model felt unsure.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The recovery ladder, ending in escalation</h2>
+    <div class="mermaid">
+flowchart TD
+    F([Step fails / risky action]) --> R{"Transient?"}
+    R -->|Yes| RT["🟢 Retry w/ backoff (6.3)"]
+    RT -->|recovered| DONE["Continue"]
+    RT -->|exhausted| FB{"Fallback available<br/>& allowed?"}
+    R -->|No| FB
+    FB -->|Yes| FBK["🔵 Fallback / degrade (6.4)"]
+    FB -->|No| ESC
+    FBK -->|still fails| ESC["🟣 Escalate to human"]
+    P([Policy-gated action]) -.unconditional.-> ESC
+    LC([Low confidence]) -.-> ESC
+    ESC --> TOOL["create_escalation tool<br/>→ ticket / human queue"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef fb fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef es fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    class RT ok; class FBK fb; class ESC,TOOL es;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A <code>create_escalation</code> tool</h2>
+    <p>Model escalation as a first-class tool. Claude can <em>choose</em> to call it when it's stuck or unsure, and your code can <em>force</em> it for policy-gated actions.</p>
+<pre><span class="cm"># Give the agent an explicit escape hatch.</span>
+create_escalation = {
+    <span class="st">"name"</span>: <span class="st">"create_escalation"</span>,
+    <span class="st">"description"</span>: <span class="st">"Hand off to a human when the task can't be completed "</span>
+                   <span class="st">"safely: repeated failure, low confidence, or policy."</span>,
+    <span class="st">"input_schema"</span>: {
+        <span class="st">"type"</span>: <span class="st">"object"</span>,
+        <span class="st">"properties"</span>: {
+            <span class="st">"reason"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>,
+                       <span class="st">"enum"</span>: [<span class="st">"repeated_failure"</span>, <span class="st">"low_confidence"</span>, <span class="st">"policy"</span>]},
+            <span class="st">"summary"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>},
+            <span class="st">"context"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>},   <span class="cm"># pass state so the human isn't blind</span>
+        },
+        <span class="st">"required"</span>: [<span class="st">"reason"</span>, <span class="st">"summary"</span>],
+    },
+}
+
+<span class="kw">def</span> <span class="fn">handle_escalation</span>(args):
+    ticket = human_queue.enqueue(reason=args[<span class="st">"reason"</span>],
+                                 summary=args[<span class="st">"summary"</span>],
+                                 context=args.get(<span class="st">"context"</span>, <span class="st">""</span>))
+    <span class="kw">return</span> <span class="st">f"Escalated to a human. Ticket {ticket.id}. Awaiting review."</span>
+
+<span class="cm"># POLICY gate: force escalation regardless of the model's confidence.</span>
+<span class="kw">def</span> <span class="fn">before_action</span>(action):
+    <span class="kw">if</span> action.type == <span class="st">"refund"</span> <span class="kw">and</span> action.amount &gt; <span class="st">500</span>:
+        <span class="kw">return</span> handle_escalation({<span class="st">"reason"</span>: <span class="st">"policy"</span>,
+                                  <span class="st">"summary"</span>: <span class="st">f"Refund ${action.amount} needs approval"</span>})
+    <span class="kw">return</span> execute(action)</pre>
+    <div class="good">Always attach <strong>context</strong> to the escalation. The stateless API means the human
+    reviewer, like a sub-agent, only sees what you forward — give them the summary and relevant state so they can act.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Where to set the escalation bar</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Escalate readily</h4>
+            <ul><li>Fewer wrong autonomous actions on high-stakes work</li>
+            <li>Builds trust; clear audit trail of human decisions</li></ul></div>
+        <div class="con"><h4>⚠️ Escalate too often</h4>
+            <ul><li>Human queue becomes a bottleneck; latency spikes</li>
+            <li>Defeats the point of automation for routine cases</li>
+            <li>Alert fatigue — reviewers rubber-stamp</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Escalating only on error. → Escalation also fires on <b>low confidence</b> and on
+    <b>policy</b> even when the agent succeeds confidently (payments, legal). It's not just an error handler.</div>
+    <div class="trap"><b>Trap:</b> Escalating without context. → The reviewer inherits the stateless problem; forward
+    a summary + relevant state or the human can't act.</div>
+    <div class="trap"><b>Trap:</b> Jumping straight to escalation. → It's the <b>top</b> rung. Try retry then fallback
+    first (unless a policy gate forces an immediate human hand-off).</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A refund agent is highly confident it should refund $900. Should it just do it?</summary>
+    <p class="answer">No. A <b>policy</b> gate forces escalation for refunds over the limit <b>regardless of
+    confidence</b>. Route it to a human for approval; confidence doesn't override governance.</p></details>
+    <details><summary>Q2 · Order of the recovery ladder, and where does escalation sit?</summary>
+    <p class="answer"><b>Retry → fallback → escalate.</b> Escalation is the top rung, for repeated failure, low
+    confidence, or policy. Take cheaper/local actions first; escalate when they don't (or mustn't) apply.</p></details>
+    <details><summary>Q3 · Why expose escalation as a tool the model can call, rather than only triggering it in code?</summary>
+    <p class="answer">So the model can escalate on <b>low confidence / ambiguity</b> it detects mid-task — cases your
+    code can't pre-enumerate. Code still <b>forces</b> escalation for policy gates; the two are complementary.</p></details>
+
+    <div class="pager">
+        <a href="6-4-fallback-strategies.html"><span class="k">← Prev</span>6.4 · Fallback Strategies</a>
+        <a class="next" href="6-6-idempotency-side-effects.html"><span class="k">Next →</span>6.6 · Idempotency &amp; Side-Effect Safety</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 6.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

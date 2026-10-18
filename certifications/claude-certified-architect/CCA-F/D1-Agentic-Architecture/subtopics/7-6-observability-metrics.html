@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.6 Observability &amp; Agent Metrics · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 7 · Performance</div>
+    <h1>7.6 · Observability &amp; Agent Metrics</h1>
+    <div class="tag">You can't tune what you don't measure</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> What to instrument</h2>
+    <p>Every lever in this cluster — model choice, effort, caching, streaming, state — is only tunable if
+    you can <em>see</em> its effect. Observability for agents has two halves: <strong>log tool calls and
+    trace each run</strong> (the structure of what happened), and <strong>read the <code>usage</code>
+    object</strong> (the token economics of each call).</p>
+
+    <table>
+        <tr><th><code>usage</code> field</th><th>Meaning</th></tr>
+        <tr><td><code>input_tokens</code></td><td>Uncached input processed this call.</td></tr>
+        <tr><td><code>output_tokens</code></td><td>Tokens generated (the pricey side, ~5×).</td></tr>
+        <tr><td><code>cache_creation_input_tokens</code></td><td>Tokens written to cache (~1.25×).</td></tr>
+        <tr><td><code>cache_read_input_tokens</code></td><td>Tokens served from cache (~0.1×) — your cache-hit signal.</td></tr>
+    </table>
+
+    <div class="note">🔑 Also capture <code>response._request_id</code> on every call. It's what Anthropic
+    support needs to investigate a specific request — log it alongside the usage record.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The metrics that matter</h2>
+    <p>Aggregate the per-call data into run-level metrics. These are the numbers an architect reports on:</p>
+    <table>
+        <tr><th>Metric</th><th>Why it matters</th></tr>
+        <tr><td><strong>Latency p50 / p95 / p99</strong></td>
+            <td>Tail latency (p95/p99), not the average, is what users feel — track all three.</td></tr>
+        <tr><td><strong>Cost per run</strong></td>
+            <td>Sum token cost across every call in a run — the true price of the agent, not per-call.</td></tr>
+        <tr><td><strong>Error rate</strong></td>
+            <td>Failed calls / runs — catches regressions, bad tools, and timeouts.</td></tr>
+        <tr><td><strong>Resolution rate</strong></td>
+            <td>Fraction of runs that actually solved the task — the quality metric that justifies cost.</td></tr>
+    </table>
+
+    <div class="warn">💡 Optimize <strong>resolution rate ÷ cost per run</strong>, not raw cost. A cheaper
+    model that lowers resolution rate can raise total cost through retries — the trap from 7.1.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Trace + usage per run</h2>
+    <div class="mermaid">
+flowchart TD
+    R([Agent run · trace_id]) --> C1["LLM call → log usage + _request_id"]
+    C1 --> TC["🟢 tool call → log name, args, latency, ok/err"]
+    TC --> C2["LLM call → log usage + _request_id"]
+    C2 --> D{"done?"}
+    D -->|no| TC
+    D -->|yes| AGG["🔵 aggregate the run:<br/>cost/run · latency p50/p95/p99<br/>error rate · resolution rate"]
+    AGG --> OBS([Dashboards / alerts])
+    classDef tool fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef agg fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    class TC tool; class AGG agg;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Logging usage &amp; a trace record</h2>
+    <p>Wrap each call: pull the <code>usage</code> fields and <code>_request_id</code>, emit one structured
+    record per call tagged with the run's <code>trace_id</code>, and record each tool call too.</p>
+<pre><span class="kw">import</span> time, uuid
+
+<span class="kw">def</span> <span class="fn">traced_call</span>(trace_id, messages, tools):
+    t0 = time.perf_counter()
+    resp = client.messages.create(
+        model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">4096</span>,
+        tools=tools, messages=messages,
+    )
+    u = resp.usage
+    log.info(<span class="st">"llm_call"</span>, extra={
+        <span class="st">"trace_id"</span>:      trace_id,
+        <span class="st">"request_id"</span>:    resp._request_id,          <span class="cm"># for Anthropic support</span>
+        <span class="st">"input_tokens"</span>:  u.input_tokens,
+        <span class="st">"output_tokens"</span>: u.output_tokens,
+        <span class="st">"cache_read"</span>:    u.cache_read_input_tokens,   <span class="cm"># cache-hit signal (7.3)</span>
+        <span class="st">"cache_write"</span>:   u.cache_creation_input_tokens,
+        <span class="st">"stop_reason"</span>:   resp.stop_reason,
+        <span class="st">"latency_ms"</span>:    <span class="fn">round</span>((time.perf_counter() - t0) * <span class="st">1000</span>),
+    })
+    <span class="kw">return</span> resp
+
+<span class="kw">def</span> <span class="fn">traced_tool</span>(trace_id, name, args, fn):
+    t0 = time.perf_counter()
+    ok = True
+    <span class="kw">try</span>:
+        <span class="kw">return</span> <span class="fn">fn</span>(**args)
+    <span class="kw">except</span> Exception:
+        ok = False; <span class="kw">raise</span>
+    <span class="kw">finally</span>:
+        log.info(<span class="st">"tool_call"</span>, extra={
+            <span class="st">"trace_id"</span>: trace_id, <span class="st">"tool"</span>: name, <span class="st">"ok"</span>: ok,
+            <span class="st">"latency_ms"</span>: <span class="fn">round</span>((time.perf_counter() - t0) * <span class="st">1000</span>),
+        })
+
+trace_id = <span class="fn">str</span>(uuid.uuid4())      <span class="cm"># one id ties the whole run together</span></pre>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Reporting <b>average</b> latency only. → Tail latency
+    (<b>p95/p99</b>) is what users experience; the mean hides it.</div>
+    <div class="trap"><b>Trap:</b> Measuring <b>cost per call</b> instead of <b>cost per run</b>. → An agent
+    run is many calls; per-run cost is the number that matters.</div>
+    <div class="trap"><b>Trap:</b> Ignoring <b>resolution rate</b> while chasing cheaper tokens. → A cheaper
+    model that lowers resolution rate can raise total cost via retries. Track quality, not just spend.</div>
+    <div class="trap"><b>Trap:</b> Not capturing <code>_request_id</code>. → Without it, Anthropic support
+    can't investigate a specific failing request.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Your dashboard shows flat average latency but users complain of slowness. What are you missing?</summary>
+    <p class="answer">The <b>tail</b> — track <b>p95/p99</b>, not just p50/mean. A small fraction of very slow
+    runs (retries, big generations) drives the felt experience while the average stays calm.</p></details>
+    <details><summary>Q2 · You need to prove a caching change actually helped. Which usage field, and where does it come from?</summary>
+    <p class="answer"><code>cache_read_input_tokens</code> from the <code>usage</code> object (7.3). Log it per
+    call and confirm it's &gt; 0 across identical-prefix requests; a run-level rise means the cache is being
+    reused.</p></details>
+    <details><summary>Q3 · What single identifier lets you reconstruct an entire agent run from your logs, and what ties one call to Anthropic support?</summary>
+    <p class="answer">A per-run <b>trace_id</b> you generate stitches all calls and tool invocations together;
+    the per-call <code>response._request_id</code> is what support uses to look up a specific request.</p></details>
+
+    <div class="pager">
+        <a href="7-5-conversation-state-mgmt.html"><span class="k">← Prev</span>7.5 · Conversation-State Mgmt</a>
+        <a class="next" href="../index.html"><span class="k">Next →</span>D1 Curriculum Hub</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 7.6</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

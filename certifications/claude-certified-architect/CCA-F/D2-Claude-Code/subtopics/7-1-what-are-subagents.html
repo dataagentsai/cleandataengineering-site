@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.1 What Subagents Are · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 7 · Subagents</div>
+    <h1>7.1 · What Subagents Are</h1>
+    <div class="tag">.claude/agents custom types</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Specialized assistants defined as Markdown files</h2>
+    <p><strong>Subagents are specialized AI assistants that handle specific types of tasks.</strong> Each one is
+    a <strong>Markdown file with YAML frontmatter</strong>: the frontmatter is the configuration (name, when to
+    delegate, which tools, which model) and the Markdown body <em>becomes the subagent's system prompt</em>. When
+    Claude meets a task that matches a subagent's <code>description</code>, it delegates to that subagent, which
+    works independently in its own context and returns a result to the main conversation.</p>
+
+    <p>The core reason subagents exist is <strong>context management</strong>. Use one when a side task —
+    running the test suite, fetching docs, sweeping log files — would flood your main conversation with output
+    you'll never reference again. The subagent does that work in <em>its own context window</em> and returns only
+    the summary, so your main thread stays clean.</p>
+
+    <div class="note">🔑 A subagent = a Markdown file (YAML frontmatter + system-prompt body) that runs in a
+    <strong>separate context window</strong> and hands a summary back to the main agent.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Where they live and how you create them</h2>
+    <p>Custom subagents are discovered from two main on-disk scopes:</p>
+    <table>
+        <tr><th>Location</th><th>Scope</th><th>Use for</th></tr>
+        <tr><td><code>.claude/agents/</code></td><td><strong>Project</strong> — this codebase</td><td>Team-shared agents; check into version control</td></tr>
+        <tr><td><code>~/.claude/agents/</code></td><td><strong>User</strong> — all your projects</td><td>Personal agents available everywhere on your machine</td></tr>
+    </table>
+    <p>Both directories are scanned recursively, so you can organise files into subfolders — but identity comes
+    only from the <code>name</code> field, not the path. To create one, the doc's recommended path is to
+    <strong>ask Claude to write the file</strong> for you, or write the Markdown file yourself. The
+    <code>/agents</code> command manages subagents; in current versions running it prints a reminder to ask
+    Claude or edit <code>.claude/agents/</code> directly rather than opening a wizard.</p>
+
+    <div class="warn">⚠️ If Claude can't find a brand-new subagent, restart Claude Code. A running session doesn't
+    detect an <code>agents</code> directory that didn't exist when the session started.</div>
+
+    <p>Claude Code also ships <strong>built-in subagents</strong> — <code>Explore</code> (fast read-only search),
+    <code>Plan</code> (research during plan mode), and <code>general-purpose</code> (complex multi-step work) —
+    that Claude uses automatically. Your custom types extend, not replace, these.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> A file on disk becomes a delegatable worker</h2>
+    <div class="mermaid">
+flowchart TD
+    F["📄 .claude/agents/code-reviewer.md<br/>YAML frontmatter + system-prompt body"] --> LOAD["Claude Code loads it<br/>as a named subagent"]
+    LOAD --> MATCH{"Task matches its<br/>description?"}
+    MATCH -->|"yes"| SPAWN["🟢 Delegate:<br/>runs in its OWN context window"]
+    MATCH -->|"no"| MAIN["Stays in main conversation"]
+    SPAWN --> RET["Returns only a summary<br/>to the main agent"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef file fill:#e7f1ff,stroke:#4a90d9,color:#1a3a5a;
+    class SPAWN ok; class RET ok; class F file;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A minimal subagent file</h2>
+    <p>The frontmatter is metadata + config; everything below the closing <code>---</code> is the system prompt
+    that guides the subagent.</p>
+<pre><span class="cm"># file: .claude/agents/code-reviewer.md</span>
+<span class="kw">---</span>
+<span class="kw">name:</span> code-reviewer
+<span class="kw">description:</span> <span class="st">Reviews code for quality and best practices</span>
+<span class="kw">tools:</span> <span class="st">Read, Glob, Grep</span>
+<span class="kw">model:</span> <span class="st">sonnet</span>
+<span class="kw">---</span>
+
+You are a code reviewer. When invoked, analyze the code and provide
+specific, actionable feedback on quality, security, and best practices.</pre>
+    <div class="good">Only <code>name</code> and <code>description</code> are required. Omit <code>tools</code> and
+    the subagent inherits every tool; omit <code>model</code> and it inherits the main conversation's model.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Delegate to a subagent vs. stay in the main thread</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Reach for a subagent when</h4>
+            <ul><li>The task produces verbose output you won't reference again</li>
+            <li>You want to enforce specific tool restrictions</li>
+            <li>The work is self-contained and can return a summary</li></ul></div>
+        <div class="con"><h4>⚠️ Stay in the main conversation when</h4>
+            <ul><li>The task needs frequent back-and-forth / iteration</li>
+            <li>Multiple phases share significant context</li>
+            <li>It's a quick, targeted change — or latency matters (a subagent starts fresh)</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "A subagent is a separate running app / parallel session you monitor." → No. A
+    subagent works <b>within a single session</b>; it's a specialized assistant Claude delegates to and that
+    returns a result. Many independent monitored sessions are a different feature (background agents / agent teams).</div>
+    <div class="trap"><b>Trap:</b> "Subagents are defined in <code>settings.json</code>." → Custom subagents are
+    <b>Markdown files with YAML frontmatter</b> in <code>.claude/agents/</code> (project) or
+    <code>~/.claude/agents/</code> (user), not JSON settings entries.</div>
+    <div class="trap"><b>Trap:</b> "The whole Markdown file is config." → Only the <b>frontmatter</b> is config;
+    the <b>body is the system prompt</b>. The subagent receives that prompt plus basic environment details, not
+    the full Claude Code system prompt.</div>
+    <div class="trap"><b>Trap:</b> "You must use <code>/agents</code> to build one." → You can just ask Claude to
+    write the file, or author the Markdown by hand. <code>/agents</code> is one way to manage them, not the only way.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · In one sentence, what is a subagent and why use one?</summary>
+    <p class="answer">A subagent is a specialized AI assistant — a Markdown file with YAML frontmatter — that Claude
+    delegates matching tasks to; it runs in its <b>own context window</b> and returns only a summary, keeping
+    verbose side-work out of your main conversation.</p></details>
+    <details><summary>Q2 · Where do project vs. user subagents live, and what's the difference?</summary>
+    <p class="answer">Project subagents live in <code>.claude/agents/</code> and apply to that codebase (check them
+    into version control for the team). User subagents live in <code>~/.claude/agents/</code> and are available in
+    all your projects on that machine.</p></details>
+    <details><summary>Q3 · Which part of the file becomes the subagent's system prompt?</summary>
+    <p class="answer">The Markdown <b>body</b> below the frontmatter. The YAML frontmatter (<code>name</code>,
+    <code>description</code>, <code>tools</code>, <code>model</code>) is configuration; the body is the prompt.</p></details>
+
+    <div class="pager">
+        <a href="6-6-hook-security.html"><span class="k">← Back</span>6.6 · Hook Security</a>
+        <a class="next" href="7-2-subagent-config.html"><span class="k">Next →</span>7.2 · Subagent Configuration</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 7.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

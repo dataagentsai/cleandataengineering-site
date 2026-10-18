@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.3 Prompt Caching in Agent Loops · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 7 · Performance</div>
+    <h1>7.3 · Prompt Caching in Agent Loops</h1>
+    <div class="tag">Stable-first, or you pay to re-read every turn</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Caching is a prefix match</h2>
+    <p>Prompt caching stores the leading tokens of a request so later requests that share that exact
+    prefix skip re-processing them. The critical property: <strong>it's a prefix match</strong>. Any byte
+    change anywhere in the prefix invalidates <em>everything after it</em>. In an agent loop — where you
+    replay the whole conversation every turn — a stable prefix is what makes the loop affordable.</p>
+
+    <div class="note">🔑 Render order is <strong>tools → system → messages</strong>. Cache reads cost
+    ~0.1× and writes ~1.25× of normal input tokens. Put <strong>stable content first, volatile content
+    last</strong> so the expensive, unchanging parts stay cached across turns.</div>
+
+    <table>
+        <tr><th>Change</th><th>What it invalidates</th><th>Why</th></tr>
+        <tr><td>Edit the <strong>tools</strong></td><td><strong>The whole cache</strong></td>
+            <td>Tools render first — every downstream byte shifts.</td></tr>
+        <tr><td>Switch the <strong>model</strong> mid-loop</td><td><strong>The whole cache</strong></td>
+            <td>Caches are <em>model-scoped</em>; a different model has no shared cache.</td></tr>
+        <tr><td>Change the <strong>system</strong> prompt</td><td>System + all messages after it</td>
+            <td>System renders before messages.</td></tr>
+        <tr><td>Append a new <strong>message</strong> (normal loop)</td><td>Nothing before it</td>
+            <td>Growth at the tail — the whole prefix still matches.</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Prefix, breakpoint &amp; the volatile tail</h2>
+    <div class="mermaid">
+flowchart TD
+    subgraph P["Cacheable prefix (stable, first)"]
+        T["🟢 tools<br/>render first"] --> S["🟢 system prompt"]
+        S --> H["🟢 old conversation turns"]
+    end
+    H --> B{{"cache_control<br/>ephemeral breakpoint"}}
+    B --> V["🟠 new user turn / tool_result<br/>(volatile, last)"]
+    T -. "any byte change here" .-> X["❌ invalidates everything after"]
+    classDef stable fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef vol fill:#ffe8cc,stroke:#d9480f,color:#7a2e08;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class T stable; class S stable; class H stable; class V vol; class X bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Placing a cache breakpoint &amp; verifying</h2>
+    <p>Mark the end of the stable prefix with <code>cache_control {"type":"ephemeral"}</code>. Then
+    <strong>verify</strong> the cache is actually working by reading
+    <code>usage.cache_read_input_tokens</code> — if it's 0 across identical-prefix requests, something is
+    silently invalidating it.</p>
+<pre><span class="cm"># Stable content first (tools → system), breakpoint at the end of the prefix.</span>
+resp = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">2048</span>,
+    tools=TOOLS,                          <span class="cm"># renders first — keep it STABLE</span>
+    system=[{
+        <span class="st">"type"</span>: <span class="st">"text"</span>,
+        <span class="st">"text"</span>: SYSTEM_PROMPT,           <span class="cm"># stable; NO datetime.now() in here!</span>
+        <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>},   <span class="cm"># cache the prefix up to here</span>
+    }],
+    messages=messages,                    <span class="cm"># volatile tail grows each turn</span>
+)
+
+<span class="cm"># Verify the cache is live across identical-prefix requests:</span>
+<span class="fn">print</span>(resp.usage.cache_read_input_tokens)      <span class="cm"># &gt; 0  ✅ prefix reused</span>
+<span class="fn">print</span>(resp.usage.cache_creation_input_tokens)  <span class="cm"># write cost (~1.25x)</span>
+<span class="kw">if</span> resp.usage.cache_read_input_tokens == <span class="st">0</span>:
+    <span class="cm"># silent invalidator: model switch, tool edit, or volatile system prompt</span>
+    log.warning(<span class="st">"cache miss — check for a silent invalidator"</span>)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> What to cache</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Cache pays off when…</h4>
+            <ul><li>A big stable prefix (tools + system + long history) is replayed every turn</li>
+            <li>Reads are ~0.1× — huge savings on long agent loops</li>
+            <li>Model &amp; tools are fixed for the whole run</li></ul></div>
+        <div class="con"><h4>⚠️ Caching backfires when…</h4>
+            <ul><li>The prefix churns — you pay ~1.25× writes with no reuse</li>
+            <li>You switch models or edit tools mid-loop (full invalidation)</li>
+            <li>A volatile value (timestamp) sits in the prefix</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Putting <code>datetime.now()</code> (or any per-request value) in the system
+    prompt. → It changes the prefix every call, so <code>cache_read_input_tokens</code> stays <b>0</b> — a
+    silent invalidator. Keep volatile data in the <b>last</b> message.</div>
+    <div class="trap"><b>Trap:</b> Switching model mid-conversation to "save money." → Caches are
+    <b>model-scoped</b>; a switch invalidates the <b>whole</b> cache and you re-pay the full write.</div>
+    <div class="trap"><b>Trap:</b> Editing/appending tools between turns. → Tools render <b>first</b>, so any
+    tool change invalidates <b>everything</b> after it.</div>
+    <div class="trap"><b>Trap:</b> Assuming caching "just works." → Always verify via
+    <code>usage.cache_read_input_tokens</code>; a 0 across identical prefixes means an invalidator is
+    hiding in the prefix.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Your loop's cache_read_input_tokens is 0 every turn even though the system prompt "looks" identical. Prime suspect?</summary>
+    <p class="answer">A per-request value baked into the prefix — classically <code>datetime.now()</code> in the
+    system prompt. It changes one byte, so the whole downstream cache misses. Move it to the volatile last
+    message.</p></details>
+    <details><summary>Q2 · Mid-run you down-tier from Opus to Haiku to cut cost. What happens to the cache?</summary>
+    <p class="answer">The entire cache is invalidated — caches are <b>model-scoped</b>. You re-pay the full
+    write on the first Haiku call. Weigh that one-time cost against the per-token savings before switching.</p></details>
+    <details><summary>Q3 · Where do you place the cache_control breakpoint in a tools+system+history request?</summary>
+    <p class="answer">At the end of the <b>stable</b> region — after tools and system (and any fixed history),
+    before the volatile new turn. Render order is tools → system → messages, so everything up to the
+    breakpoint is the reusable prefix.</p></details>
+
+    <div class="pager">
+        <a href="7-2-thinking-effort.html"><span class="k">← Prev</span>7.2 · Adaptive Thinking &amp; Effort</a>
+        <a class="next" href="7-4-streaming.html"><span class="k">Next →</span>7.4 · Streaming</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 7.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

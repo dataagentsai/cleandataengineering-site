@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.6 Appending the Whole Assistant Turn · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 1 · Foundations</div>
+    <h1>1.6 · Appending the Whole Assistant Turn</h1>
+    <div class="tag">Append the full response.content — dropping blocks breaks the next call</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Append the entire turn, verbatim</h2>
+    <p>When you continue a conversation, you must append <strong>the whole <code>response.content</code></strong>
+    — the complete list of blocks — as the assistant turn. That includes not just <code>text</code> but any
+    <code>tool_use</code> and <code>thinking</code> blocks the model produced.</p>
+
+    <div class="warn">⚠️ The #1 beginner bug: appending only the <em>text</em> (e.g.
+    <code>content[0].text</code>) instead of the full block list. This silently drops the model's
+    <code>tool_use</code> and <code>thinking</code> blocks — and the very next call breaks.</div>
+
+    <p>Why it breaks: after a <code>tool_use</code> stop, your next turn sends a <code>tool_result</code> block
+    keyed by <code>tool_use_id</code>. If the matching <code>tool_use</code> block isn't in the history (because
+    you dropped it), the request is malformed — the <code>tool_result</code> refers to a
+    <code>tool_use</code> the server can't see. That produces the <strong>classic 400 error</strong>. Dropping
+    <code>thinking</code> blocks similarly loses reasoning context the model relied on.</p>
+
+    <table>
+        <tr><th>Approach</th><th>What you store</th><th>Result</th></tr>
+        <tr><td><span class="bad" style="padding:1px 6px;border-radius:4px">Wrong</span> append <code>.text</code> only</td><td>A string; tool_use &amp; thinking lost</td><td>Next tool_result has no matching tool_use → <strong>400</strong></td></tr>
+        <tr><td><span class="good" style="padding:1px 6px;border-radius:4px">Right</span> append <code>response.content</code></td><td>The full block list, verbatim</td><td>tool_use/thinking preserved → next call valid</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Correct vs. broken append</h2>
+    <div class="mermaid">
+flowchart TD
+    R["🤖 response.content<br/>[thinking, text, tool_use]"] --> C{"What do you append?"}
+    C -->|"WHOLE list ✅"| G["messages += assistant turn<br/>with ALL blocks"]
+    G --> G2["Send tool_result (tool_use_id) →<br/>🟢 matches → valid next call"]
+    C -->|"only .text ❌"| B["messages += text-only turn<br/>tool_use DROPPED"]
+    B --> B2["Send tool_result (tool_use_id) →<br/>🔴 no matching tool_use → 400"]
+    classDef good fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class G,G2 good; class B,B2 bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> The correct append pattern</h2>
+<pre><span class="cm"># ✅ RIGHT: append the whole response.content (all blocks, verbatim).</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">1024</span>,
+    tools=TOOLS,
+    messages=messages,
+)
+messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content})
+<span class="cm"># resp.content still holds any tool_use & thinking blocks → history stays valid.</span>
+
+<span class="kw">if</span> resp.stop_reason == <span class="st">"tool_use"</span>:
+    <span class="kw">for</span> block <span class="kw">in</span> resp.content:
+        <span class="kw">if</span> block.type == <span class="st">"tool_use"</span>:
+            messages.<span class="fn">append</span>({
+                <span class="st">"role"</span>: <span class="st">"user"</span>,
+                <span class="st">"content"</span>: [{
+                    <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+                    <span class="st">"tool_use_id"</span>: block.id,      <span class="cm"># must match a tool_use in history</span>
+                    <span class="st">"content"</span>: <span class="fn">run_tool</span>(block.name, block.input),
+                }],
+            })
+
+<span class="cm"># ❌ WRONG — do NOT do this: it drops tool_use & thinking blocks.</span>
+<span class="cm"># messages.append({"role": "assistant", "content": resp.content[0].text})</span></pre>
+
+    <div class="good">Rule: pass <code>resp.content</code> straight through into the assistant turn. It's already
+    the correct block-list shape — don't unwrap it to a string.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Full turn vs. text-only append</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Append full content</h4>
+            <ul><li><code>tool_use</code> IDs stay resolvable → no 400s</li>
+            <li><code>thinking</code> context preserved for the next turn</li>
+            <li>One line: <code>content: resp.content</code> — nothing to reconstruct</li></ul></div>
+        <div class="con"><h4>⚠️ Append <code>.text</code> only</h4>
+            <ul><li>Drops tool_use → next <code>tool_result</code> is orphaned → 400</li>
+            <li>Drops thinking → loses reasoning the model built on</li>
+            <li>Silently "works" until the first tool call, then breaks</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Appending only <code>response.content[0].text</code> (or <code>.text</code>). →
+    The <b>#1 beginner bug</b>. It drops <code>tool_use</code> and <code>thinking</code> blocks; the next
+    call's <code>tool_result</code> then references a missing <code>tool_use</code> → classic <b>400</b>.
+    Append the whole <code>response.content</code>.</div>
+    <div class="trap"><b>Trap:</b> Reconstructing the assistant turn by hand from the text. → Unnecessary and
+    error-prone. Pass <code>resp.content</code> through as-is; it's already the correct block list.</div>
+    <div class="trap"><b>Trap:</b> Stripping <code>thinking</code> blocks "to save tokens." → Removing them
+    breaks the turn's integrity for the next call. Keep the full turn in history; manage cost via pruning/
+    compaction (7.5), not by mangling individual turns.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · After a tool call, your next request 400s. History was built by appending <code>content[0].text</code>. Why?</summary>
+    <p class="answer">You dropped the assistant's <code>tool_use</code> block by storing only its text. Your
+    subsequent <code>tool_result</code> (keyed by <code>tool_use_id</code>) now references a
+    <code>tool_use</code> that isn't in <code>messages[]</code>, so the request is malformed → 400. Fix: append
+    the whole <code>resp.content</code>.</p></details>
+    <details><summary>Q2 · What exactly should you pass as the assistant message's <code>content</code>?</summary>
+    <p class="answer">The full <code>response.content</code> block list, verbatim — text, thinking, and tool_use
+    blocks included. Don't unwrap it to a string; <code>{"role":"assistant","content": resp.content}</code>
+    is the pattern.</p></details>
+    <details><summary>Q3 · Is it safe to delete <code>thinking</code> blocks from a stored assistant turn to cut tokens?</summary>
+    <p class="answer">No — dropping blocks from a turn breaks its integrity for the next call. Keep each turn whole
+    in history; reduce cost with pruning/compaction strategies (7.5) instead of editing the blocks within a
+    single turn.</p></details>
+
+    <div class="pager">
+        <a href="1-5-message-structure-blocks.html"><span class="k">← Prev</span>1.5 · Message Structure &amp; Content Blocks</a>
+        <a class="next" href="2-1-stop-reason-overview.html"><span class="k">Next →</span>2.1 · stop_reason Overview</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 1.6</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.2 Forcing Structured JSON via Tools · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 4 · Advanced Tool Use</div>
+    <h1>4.2 · Forcing Structured JSON via Tools</h1>
+    <div class="tag">input_schema as the output contract</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A single forced tool <em>is</em> a structured-output mechanism</h2>
+    <p>You can turn tool use inside-out to guarantee a JSON shape. The trick has three parts:</p>
+    <ol>
+      <li><strong>Define one tool whose <code>input_schema</code> is the shape you want back.</strong> You never
+      intend to "execute" it — the schema is a <em>declaration of the output contract</em>.</li>
+      <li><strong>Force it</strong> with <code>tool_choice: {"type": "tool", "name": "…"}</code>. Claude must emit
+      exactly that tool call.</li>
+      <li><strong>Read <code>tool_use.input</code></strong> from the response — that object <em>is</em> your
+      structured result. There's no round-trip; you don't send a <code>tool_result</code> back.</li>
+    </ol>
+    <div class="note">🔑 The schema is the contract. Where a free-text prompt "please reply in JSON" only
+    <em>asks</em>, forcing a tool <strong>constrains</strong> the model to your <code>input_schema</code> — no stray
+    prose, no markdown fences, no "Here is the JSON:" preamble.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Harden it — and know the native alternative</h2>
+    <p>Two upgrades and one comparison the exam cares about:</p>
+    <ul>
+      <li><strong>Add <code>strict: true</code></strong> to the tool so <code>tool_use.input</code> is
+      <em>validated</em> against the schema (requires <code>additionalProperties: false</code> + <code>required</code>).
+      Now the shape isn't just requested — it's guaranteed to parse to your exact schema.</li>
+      <li><strong>Force + strict together</strong> gives you both guarantees: the tool <em>will</em> be called
+      <em>and</em> its input conforms.</li>
+      <li><strong>Native structured outputs</strong> (<code>output_config: {"format": {"type": "json_schema",
+      "schema": …}}</code>) are the newer, purpose-built path when you want the <em>whole response</em> to be
+      JSON. Reach for the forced-tool pattern when you also want other tools available, or need the
+      "extract into this shape" framing; reach for <code>output_config.format</code> when the response itself
+      should just be a JSON document.</li>
+    </ul>
+    <div class="warn">⚠️ Forcing a tool prefills the assistant turn — Claude emits <strong>no</strong> natural-language
+    text before the <code>tool_use</code> block. And it's incompatible with extended thinking (4.1): you can't force
+    a tool while <code>thinking</code> is on.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Schema in, structured object out</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Define tool<br/>input_schema = desired shape"] --> B["tool_choice:<br/>{type:tool, name:record}"]
+    B --> C["Claude MUST emit<br/>tool_use(record, input={...})"]
+    C --> D{"strict: true?"}
+    D -->|"yes"| E["🟢 input validated<br/>to schema exactly"]
+    D -->|"no"| F["🔵 input matches shape<br/>(parse it yourself)"]
+    E --> G["Read tool_use.input<br/>= your structured result"]
+    F --> G
+    G --> H["No tool_result sent —<br/>the call IS the output"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef mid fill:#cce5ff,stroke:#4a90d9,color:#0a3a6a;
+    class E ok; class F mid;
+    </div>
+
+    <h2><span class="chip code">CODE</span> One forced, strict tool as the output schema</h2>
+    <p>The <code>record_contact</code> tool is never run — its <code>input_schema</code> defines the JSON you want,
+    and <code>tool_use.input</code> hands it back, schema-validated.</p>
+<pre>resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=[{
+        <span class="st">"name"</span>: <span class="st">"record_contact"</span>,
+        <span class="st">"description"</span>: <span class="st">"Record the extracted contact fields."</span>,
+        <span class="st">"strict"</span>: <span class="kw">True</span>,                    <span class="cm"># validate input to the schema</span>
+        <span class="st">"input_schema"</span>: {
+            <span class="st">"type"</span>: <span class="st">"object"</span>,
+            <span class="st">"properties"</span>: {
+                <span class="st">"name"</span>:  {<span class="st">"type"</span>: <span class="st">"string"</span>},
+                <span class="st">"email"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>},
+                <span class="st">"plan"</span>:  {<span class="st">"type"</span>: <span class="st">"string"</span>, <span class="st">"enum"</span>: [<span class="st">"free"</span>, <span class="st">"pro"</span>, <span class="st">"enterprise"</span>]},
+            },
+            <span class="st">"required"</span>: [<span class="st">"name"</span>, <span class="st">"email"</span>, <span class="st">"plan"</span>],
+            <span class="st">"additionalProperties"</span>: <span class="kw">False</span>,   <span class="cm"># required by strict</span>
+        },
+    }],
+    tool_choice={<span class="st">"type"</span>: <span class="st">"tool"</span>, <span class="st">"name"</span>: <span class="st">"record_contact"</span>},   <span class="cm"># force it</span>
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+               <span class="st">"content"</span>: <span class="st">"Jane Doe, jane@co.com, wants the enterprise plan."</span>}],
+)
+
+block = <span class="fn">next</span>(b <span class="kw">for</span> b <span class="kw">in</span> resp.content <span class="kw">if</span> b.type == <span class="st">"tool_use"</span>)
+data = block.input        <span class="cm"># {'name':'Jane Doe','email':'jane@co.com','plan':'enterprise'}</span>
+<span class="cm"># No tool_result round-trip — the tool_use.input IS the answer.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Forced tool vs. native structured outputs</h2>
+    <table>
+        <tr><th>Aspect</th><th>Forced tool (<code>tool_choice: tool</code>)</th><th><code>output_config.format</code></th></tr>
+        <tr><td>What it constrains</td><td>The <code>tool_use.input</code> object</td><td>The whole text response (valid JSON)</td></tr>
+        <tr><td>Read from</td><td><code>tool_use.input</code></td><td>First <code>text</code> block (parse JSON)</td></tr>
+        <tr><td>Other tools available too?</td><td>Yes — one is just forced</td><td>Not a tool concept; separate feature</td></tr>
+        <tr><td>Schema validation</td><td>Add <code>strict: true</code></td><td>Enforced by the format</td></tr>
+        <tr><td>Works with thinking?</td><td>No (forcing + thinking error)</td><td>Yes</td></tr>
+    </table>
+    <div class="good">Rule of thumb: forced tool when you're "extracting into a shape" alongside real tools;
+    <code>output_config.format</code> when the deliverable <em>is</em> a JSON document.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Sending a <code>tool_result</code> back for the forced "schema" tool. → There's
+    nothing to execute. The structured data is already in <code>tool_use.input</code>; stop there.</div>
+    <div class="trap"><b>Trap:</b> Relying only on a prompt ("reply as JSON") for a guaranteed shape. → Prompts
+    <b>ask</b>; a forced tool (optionally <code>strict</code>) <b>constrains</b>. Use the schema as the contract.</div>
+    <div class="trap"><b>Trap:</b> Expecting a chatty preamble before the tool call. → <code>tool_choice: tool</code>
+    prefills the assistant turn, so <b>no natural-language text</b> precedes <code>tool_use</code>.</div>
+    <div class="trap"><b>Trap:</b> Setting <code>strict: true</code> without <code>additionalProperties: false</code>
+    and <code>required</code>. → Strict mode needs both, or the request is rejected.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · How does one tool double as an output-schema mechanism?</summary>
+    <p class="answer">Define the tool's <code>input_schema</code> to be the JSON shape you want, force it with
+    <code>tool_choice:{"type":"tool","name":…}</code>, and read <b><code>tool_use.input</code></b> from the response —
+    that object is your structured result. The tool is never executed; the schema is the contract.</p></details>
+    <details><summary>Q2 · What does adding <code>strict: true</code> change, and what does it require?</summary>
+    <p class="answer">It makes the API <b>validate</b> <code>tool_use.input</code> against the schema, guaranteeing it
+    conforms exactly. It requires <code>additionalProperties:false</code> and a <code>required</code> list on the
+    object.</p></details>
+    <details><summary>Q3 · When would you pick <code>output_config.format</code> over a forced tool?</summary>
+    <p class="answer">When the <b>entire response</b> should be a JSON document (and you want it to coexist with
+    extended thinking, which forced tools can't). The forced-tool pattern shines when you're extracting into a
+    shape while other real tools are also available.</p></details>
+
+    <div class="pager">
+        <a href="4-1-thinking-with-tools.html"><span class="k">← Back</span>4.1 · Tool Use with Extended Thinking</a>
+        <a class="next" href="4-3-streaming-fine-grained.html"><span class="k">Next →</span>4.3 · Streaming &amp; Fine-Grained Tool Use</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 4.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

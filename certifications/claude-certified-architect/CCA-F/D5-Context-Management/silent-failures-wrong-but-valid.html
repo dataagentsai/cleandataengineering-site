@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Silent Failures · Passes but Wrong · CCA-F D5</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../CCA-F_Study_Guide.html">CCA-F</a> › <a href="index.html">Domain 5</a> › Silent Failures — Passes but Wrong</div>
+    <h1>🕳️ Silent Failures — the request <em>passes</em> but the result is wrong</h1>
+    <div class="tag">HTTP 200 · <code>stop_reason:"end_turn"</code> · no error flag · and still wrong — the dangerous quadrant</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">WHY THIS PAGE</span> The failures the API can't tell you about</h2>
+    <p>The <a href="error-handling-who-catches-what.html">companion page</a> covered the <b>loud</b> failures — the system
+    <em>tells</em> you something is wrong: a <code>400</code>, a <code>refusal</code>, an <code>is_error:true</code>, a
+    <code>max_tokens</code> cut-off. Those are the <b>safe</b> ones — a signal fires and your code can branch on it.</p>
+    <p>This page is about the <b>silent</b> class: the request is well-formed, validation passes, the model runs, and you get
+    back <b>HTTP 200 with <code>stop_reason:"end_turn"</code> and no error anywhere</b> — <em>but the content is wrong,
+    fabricated, or logically broken.</em> Nothing in the API surfaces it. It's <b>billed</b>, it <b>looks successful</b>, and
+    downstream systems <b>trust it</b>. That's why it's more dangerous than a 400: a 400 stops the pipeline; a wrong-but-valid
+    answer <em>flows through it</em>.</p>
+    <div class="bad"><b>The core danger:</b> a 400 fails <em>closed</em> (nothing happens). A silent-wrong result fails
+    <em>open</em> — a hallucinated SQL filter, a fabricated citation, or a wrong tool argument sails downstream and, in an
+    agent loop, <b>compounds</b> across turns. No status code will ever catch it.</div>
+
+    <h2><span class="chip diagram">THE QUADRANT</span> Everything is green, the answer is still wrong</h2>
+    <div class="mermaid">
+flowchart TD
+    R["Your request"] --> V{"Validation"}
+    V -->|"invalid"| E400["400 — caught, loud"]:::loud
+    V -->|"valid"| M["MODEL INFERENCE"]
+    M --> S{"stop_reason"}
+    S -->|"refusal"| REF["refusal — caught, loud"]:::loud
+    S -->|"max_tokens"| MT["truncation — caught, loud"]:::loud
+    S -->|"end_turn ✅"| OK["200 OK · looks perfect"]:::ok
+    OK --> Q{"Is the content actually correct?"}
+    Q -->|"yes"| DONE["✔ genuinely done"]:::ok
+    Q -->|"NO — but nothing flags it"| SILENT["🕳️ SILENT FAILURE<br/>hallucination · logic error · ungrounded<br/>wrong tool arg · schema-valid-but-wrong"]:::silent
+    SILENT -.->|"only caught by"| GUARD["YOUR verification layer:<br/>evals · verifier pass · grounding ·<br/>deterministic checks · human review"]:::guard
+    classDef loud fill:#fef3c7,stroke:#b45309,color:#7c2d12;
+    classDef ok fill:#dcfce7,stroke:#15803d,color:#14532d;
+    classDef silent fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d;
+    classDef guard fill:#e7ecff,stroke:#3b5bdb,color:#1e3a8a;
+    </div>
+    <p>Every gate says <b>pass</b>. The correctness check on the right <b>does not exist unless you build it.</b></p>
+
+    <h2><span class="chip exam">TAXONOMY</span> The ways a valid request returns a wrong answer</h2>
+
+    <h3>1 · Hallucination (fabrication)</h3>
+    <p>The model invents something that doesn't exist — a fake citation, a non-existent API parameter, a table/column that
+    isn't in the schema, a plausible-but-wrong number. Well-formed, confident, and false.</p>
+
+    <h3>2 · Logical / reasoning error</h3>
+    <p>Right approach, wrong execution: an arithmetic slip, an inverted condition (<code>&gt;</code> vs <code>&lt;</code>),
+    a mis-ordered step, an off-by-one. The prose reasoning looks sound; the conclusion doesn't follow.</p>
+
+    <h3>3 · Ungrounded / unfaithful to context</h3>
+    <p>You supplied documents (RAG), and the answer <b>contradicts or ignores them</b> — a faithfulness failure. The retrieval
+    was fine; the model didn't stay anchored to it.</p>
+
+    <h3>4 · Instruction drift / partial compliance</h3>
+    <p>The model quietly drops one of your constraints — "only rows after 2024", "answer in JSON", "don't include PII" — and
+    satisfies the rest. Looks complete; silently violates the spec.</p>
+
+    <h3>5 · Schema-valid but semantically wrong</h3>
+    <p><b>The trap of structured outputs.</b> <code>strict:true</code> / <code>output_config.format</code> guarantees the
+    <em>shape</em> — every field present, right types — <b>not</b> the <em>values</em>. A perfectly-validated object can carry
+    a wrong amount, a swapped ID, or a mislabelled category. Schema conformance ≠ correctness.</p>
+
+    <h3>6 · Wrong tool argument (the agent-loop killer)</h3>
+    <p>The model emits a well-formed <code>tool_use</code> with <b>wrong values</b> — the right function, bad arguments (queries
+    last month instead of last week, filters the wrong column). Your tool runs fine, returns a real <code>tool_result</code>
+    with <b>no <code>is_error</code></b>, and the wrong data feeds the next turn. Nothing errored; everything is wrong.</p>
+
+    <h3>7 · Sycophancy / anchoring to a wrong premise</h3>
+    <p>The user asserts something false ("since our fiscal year starts in March…") and the model agrees and builds on it rather
+    than correcting it. The output is internally consistent with a bad assumption.</p>
+
+    <h3>8 · Prompt-injection-induced output</h3>
+    <p>Retrieved content or a tool result contains instructions ("ignore previous rules and…") and the model follows them. The
+    request was valid; the <em>data</em> hijacked the answer. Security failure wearing a 200 OK.</p>
+
+    <h2><span class="chip trade">WHO CATCHES WHAT</span> Loud vs silent</h2>
+    <div style="overflow-x:auto">
+    <table>
+        <tr><th>Failure</th><th>HTTP</th><th>Does the API flag it?</th><th>Who must catch it</th></tr>
+        <tr><td>Invalid request</td><td>400</td><td><b>Yes</b> — error type</td><td>fix request construction</td></tr>
+        <tr><td>Refusal</td><td>200</td><td><b>Yes</b> — <code>stop_reason:"refusal"</code></td><td>branch on stop_reason</td></tr>
+        <tr><td>Tool failure you reported</td><td>200</td><td><b>Yes</b> — <code>is_error:true</code> (you set it)</td><td>the model self-corrects</td></tr>
+        <tr><td>Truncation</td><td>200</td><td><b>Yes</b> — <code>stop_reason:"max_tokens"</code></td><td>continue / raise cap</td></tr>
+        <tr style="background:#fff0f0"><td><b>Hallucination / logic / ungrounded / wrong values</b></td><td><b>200</b></td><td><b>NO — nothing. <code>end_turn</code>, no flag.</b></td><td><b>YOU — evals, verifier, grounding, deterministic checks, human review</b></td></tr>
+    </table>
+    </div>
+    <div class="warn"><b>The whole bottom row shares one property:</b> the API is <em>working exactly as designed</em>. There is no
+    status code for "correct". Correctness is an <b>application-layer</b> guarantee — it is never something the Messages API
+    returns.</div>
+
+    <h2><span class="chip practice">DEFENCES</span> How to turn silent failures into loud ones</h2>
+    <p>You can't ask the API for correctness, so the job is to <b>add a check that fires</b> — convert an invisible wrong answer
+    into a signal you can branch on, retry, or escalate.</p>
+
+    <table>
+        <tr><th>Failure mode</th><th>Defence that makes it loud</th></tr>
+        <tr><td>Hallucinated facts / entities</td><td><b>Grounding + citations</b> (answer only from supplied docs); reject if a claim has no source</td></tr>
+        <tr><td>Logic / reasoning slips</td><td><b>Verifier pass in a fresh context</b> (LLM-as-judge with a clean window); <b>self-consistency</b> (sample N, take the majority)</td></tr>
+        <tr><td>Ungrounded / unfaithful</td><td><b>Faithfulness eval</b> — does every sentence trace to a retrieved chunk?</td></tr>
+        <tr><td>Instruction drift</td><td><b>Golden-set evals</b> asserting each constraint; automated constraint checks post-generation</td></tr>
+        <tr><td>Schema-valid but wrong values</td><td><b>Deterministic validation beyond the schema</b> — range checks, referential integrity, business rules on the parsed object</td></tr>
+        <tr><td>Wrong tool argument</td><td><b>Validate before executing</b> — e.g. dry-run / <code>EXPLAIN</code> a query, confirm the arg is in range, or an <b>approval hook</b> for risky calls</td></tr>
+        <tr><td>Sycophancy / bad premise</td><td>System prompt to challenge assumptions; a verifier that checks the premise, not just the answer</td></tr>
+        <tr><td>Prompt injection</td><td><b>Runtime guardrails</b>, treat tool/retrieved content as untrusted data, least-privilege tools, isolate instructions from data</td></tr>
+    </table>
+
+    <div class="good"><b>We already built two of these</b> in the <code>nl2sql-uc-agent</code> project:
+    <code>verifier.py</code> runs a <b>fresh-context verdict</b> on the generated SQL (a second, clean pair of eyes), and
+    <code>validate_sql()</code> runs an <b>EXPLAIN</b> to make a wrong-but-well-formed query fail loudly <em>before</em> it
+    ever executes. That's the pattern: a deterministic check where one exists, an independent LLM judge where one doesn't.</div>
+
+    <div class="note"><b>Layer them by cost:</b> deterministic checks first (free, exact — schema, ranges, EXPLAIN,
+    referential integrity), then an LLM verifier (catches reasoning/grounding), then offline evals on a golden set (catches
+    drift over time), then human-in-the-loop for the highest-stakes actions. Cheap-and-exact before
+    expensive-and-probabilistic.</div>
+
+    <h2><span class="chip concept">WHY MORE DANGEROUS</span> than a 400 — the one-liner</h2>
+    <div class="bad">
+    • A <b>400 fails closed</b>: loud, unbilled, nothing happens downstream. Annoying, safe.<br>
+    • A <b>silent-wrong result fails open</b>: HTTP 200, billed, looks perfect, and <b>flows into whatever consumes it</b> —
+    a dashboard, a transaction, the next tool call.<br>
+    • In an <b>agent loop</b> it <b>compounds</b>: turn 3's hallucination becomes turn 4's premise. By the time it's visible,
+    the trajectory is far off course and expensive to unwind.
+    </div>
+
+    <h2><span class="chip exam">EXAM ONE-LINERS</span></h2>
+    <div class="note">
+    • There is <b>no status code for "correct"</b> — a wrong answer returns <b>200 + <code>end_turn</code></b>, identical to a right one.<br>
+    • <b>Structured outputs / <code>strict:true</code> guarantee shape, not truth</b> — validate the <em>values</em> yourself.<br>
+    • A <b>wrong tool argument</b> produces a valid <code>tool_result</code> with <b>no <code>is_error</code></b> — validate args before executing.<br>
+    • <b>Correctness is an application-layer guarantee</b>: evals + a verification pass + deterministic checks, not an API feature.<br>
+    • Prefer <b>deterministic checks</b> where they exist (EXPLAIN, ranges, schema+rules); use an <b>LLM verifier / self-consistency</b> only where they don't.
+    </div>
+
+    <div class="good">Related: <a href="error-handling-who-catches-what.html">D5 · Who catches what (loud failures)</a> ·
+    <a href="../D3-Prompt-Engineering/index.html">D3 · Evals &amp; grounding</a> ·
+    <a href="subtopics/8-4-production-evals.html">D5 · Evaluations in production</a> ·
+    <a href="subtopics/8-5-runtime-guardrails.html">D5 · Runtime guardrails</a> ·
+    <a href="../D4-Tool-Design-MCP/index.html">D4 · Tool design &amp; approval</a>.</div>
+
+    <div class="pager">
+        <a href="error-handling-who-catches-what.html"><span class="k">← Prev</span>Who catches what (loud)</a>
+        <a class="next" href="index.html"><span class="k">Back →</span>Domain 5 hub</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Silent Failures — Passes but Wrong</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

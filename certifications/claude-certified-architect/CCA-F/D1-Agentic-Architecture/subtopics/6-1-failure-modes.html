@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.1 Failure Modes · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 6 · Reliability</div>
+    <h1>6.1 · Failure Modes</h1>
+    <div class="tag">Cascade · lost state · timeout chain — and their fixes</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Three failure modes of agentic systems</h2>
+    <p>An agent is a loop of network calls to a <strong>stateless</strong> <code>POST /v1/messages</code>, often
+    fanned out across sub-agents and tools. That structure creates three recurring failure modes. The architect's
+    job is to <strong>name the failure mode, then apply its matching structural fix</strong> — not to sprinkle
+    <code>try/except</code> and hope.</p>
+
+    <table>
+        <tr><th>Failure mode</th><th>What goes wrong</th><th>Root cause</th><th>Structural fix</th></tr>
+        <tr><td><strong>Cascade</strong></td><td>Agent 1 fails → the failure propagates into agent 2 and 3, taking the whole system down</td>
+            <td>No isolation between dependent steps; every call keeps hitting a dead dependency</td>
+            <td><strong>Circuit breaker</strong> — stop calling the failing component (see 6.2)</td></tr>
+        <tr><td><strong>Lost state</strong></td><td>A sub-agent produces garbage because it lacks the context the parent had</td>
+            <td>The API is stateless — nothing is remembered between calls unless <em>you</em> pass it</td>
+            <td><strong>Pass state explicitly</strong> into every sub-agent's messages</td></tr>
+        <tr><td><strong>Timeout chain</strong></td><td>Sequential agents each add latency until the whole request times out</td>
+            <td>Independent work is run serially; no per-step deadline</td>
+            <td><strong>Parallelise independents</strong> + set per-step timeouts (see 6.7)</td></tr>
+    </table>
+
+    <div class="note">🔑 Because <code>/v1/messages</code> is <strong>stateless</strong>, "lost state" is the
+    <em>default</em> behaviour, not an exception. A sub-agent knows only what you put in its <code>messages</code>
+    array. If the parent gathered facts and didn't forward them, they're gone.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Failure → fix map</h2>
+    <div class="mermaid">
+flowchart LR
+    subgraph F["⚠️ Failure modes"]
+      C1["Cascade<br/>agent1 fails → 2,3 fail"]
+      C2["Lost state<br/>sub-agent lacks context"]
+      C3["Timeout chain<br/>serial latency piles up"]
+    end
+    subgraph X["🛠️ Structural fixes"]
+      X1["Circuit breaker<br/>stop the failing call"]
+      X2["Pass state<br/>explicitly forward context"]
+      X3["Parallelise + timeouts<br/>bound each step"]
+    end
+    C1 --> X1
+    C2 --> X2
+    C3 --> X3
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef fix fill:#d4edda,stroke:#28a745,color:#155724;
+    class C1,C2,C3 bad; class X1,X2,X3 fix;
+    </div>
+
+    <h2><span class="chip concept">CONCEPT</span> The recovery ladder</h2>
+    <p>When a step fails despite the structural fixes, don't give up or crash — climb the <strong>recovery
+    ladder</strong>. Take the cheapest, most local action first; escalate only when it doesn't work.</p>
+    <table>
+        <tr><th>Rung</th><th>Action</th><th>Use when</th></tr>
+        <tr><td><strong>1 · Retry</strong></td><td>Re-issue the same call, with backoff</td><td>Transient errors — 429, 5xx, 529, connection blips (see 6.3)</td></tr>
+        <tr><td><strong>2 · Fallback</strong></td><td>Try an alternate tool, skip the step, or take a degraded path</td><td>The primary path is durably broken but the task can still partly succeed (see 6.4)</td></tr>
+        <tr><td><strong>3 · Escalate</strong></td><td>Hand off to a human</td><td>Repeated failure, low confidence, or policy (e.g. payments) (see 6.5)</td></tr>
+    </table>
+    <div class="good">Signal a failed tool back to Claude with <code>tool_result</code> <code>"is_error": true</code>
+    so the model can <strong>adapt</strong> — pick another tool or explain the limitation — instead of hallucinating
+    a result.</div>
+
+    <h2><span class="chip code">CODE</span> Naming the mode, then applying the fix</h2>
+    <p>A parent agent orchestrating two sub-agents. The comments mark where each failure mode lives and which fix defuses it.</p>
+<pre><span class="cm"># Stateless API: a sub-agent knows ONLY what we pass in its messages.</span>
+<span class="kw">import</span> anthropic, concurrent.futures <span class="kw">as</span> cf
+client = anthropic.Anthropic()
+
+<span class="kw">def</span> <span class="fn">sub_agent</span>(role, context):
+    <span class="cm"># FIX for LOST STATE: forward the parent's context explicitly.</span>
+    <span class="kw">return</span> client.messages.create(
+        model=<span class="st">"claude-sonnet-4-6"</span>, max_tokens=<span class="st">1024</span>,
+        system=role,
+        messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: context}],   <span class="cm"># state passed in</span>
+    )
+
+facts = gather_facts()                          <span class="cm"># parent's context</span>
+
+<span class="cm"># FIX for TIMEOUT CHAIN: run INDEPENDENT sub-agents in parallel, not serially.</span>
+<span class="kw">with</span> cf.ThreadPoolExecutor() <span class="kw">as</span> ex:
+    f1 = ex.submit(sub_agent, <span class="st">"You are a legal reviewer."</span>, facts)
+    f2 = ex.submit(sub_agent, <span class="st">"You are a finance reviewer."</span>, facts)
+    legal  = f1.result(timeout=<span class="st">60</span>)          <span class="cm"># per-step deadline</span>
+    finance = f2.result(timeout=<span class="st">60</span>)</pre>
+    <div class="warn">⚠️ Parallelising only works for <strong>independent</strong> steps. If finance needs legal's
+    output, they're a real chain — bound each hop with its own timeout instead (see 6.7).</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Agent 2 crashes whenever agent 1's dependency is down." → That's a <b>cascade</b>;
+    the fix is a <b>circuit breaker</b> (stop calling the dead dependency), not more retries — retries against a
+    dead component just cascade faster.</div>
+    <div class="trap"><b>Trap:</b> "The sub-agent gives irrelevant answers." → Suspect <b>lost state</b> first. The API
+    is stateless; the sub-agent only sees what you passed. The fix is forwarding context, not a bigger model.</div>
+    <div class="trap"><b>Trap:</b> "Three agents run one after another and the request times out." → <b>Timeout chain.</b>
+    If the steps are independent, parallelise; either way set per-step timeouts. A single global timeout hides which hop is slow.</div>
+    <div class="trap"><b>Trap:</b> Treating retry as the answer to everything. → Retry is only rung 1, for <b>transient</b>
+    faults. A durable failure needs fallback or escalation, not an infinite retry loop.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A pipeline of five sequential sub-agents intermittently exceeds the client's latency budget. First fix?</summary>
+    <p class="answer">Identify which steps are <b>independent</b> and run those in <b>parallel</b>, and add a
+    <b>per-step timeout</b> so one slow hop can't consume the whole budget. This is the timeout-chain fix. Only if
+    the steps are genuinely dependent do you optimise each hop individually.</p></details>
+    <details><summary>Q2 · When one downstream tool starts erroring, every request in the system slows and eventually fails. Which mode, which fix?</summary>
+    <p class="answer"><b>Cascade.</b> Wrap the failing tool in a <b>circuit breaker</b> so that once its error rate
+    crosses a threshold you stop calling it and fail fast (or fall back), instead of every request piling onto the
+    dead dependency.</p></details>
+    <details><summary>Q3 · A summariser sub-agent keeps summarising the wrong document. Root cause?</summary>
+    <p class="answer"><b>Lost state.</b> The stateless API means the sub-agent only sees the <code>messages</code>
+    you sent. It never received the right document/context. Fix by explicitly passing the selected document into
+    the sub-agent's request — not by prompt-tuning.</p></details>
+
+    <div class="pager">
+        <a href="5-4-reversibility.html"><span class="k">← Prev</span>5.4 · Reversibility</a>
+        <a class="next" href="6-2-circuit-breakers.html"><span class="k">Next →</span>6.2 · Circuit Breakers</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 6.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

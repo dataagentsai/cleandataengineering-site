@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.4 · Thinking with Tool Use · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 5 · Chain of Thought &amp; Extended Thinking</div>
+    <h1>5.4 · Thinking with Tool Use</h1>
+    <div class="tag">Reason across tool results</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Reasoning about which tool, and about the result</h2>
+    <p>Extended thinking pays off most in <strong>agentic loops</strong>. Before a tool call, Claude reasons about
+    <em>which</em> tool to use and with what arguments; after a result comes back, it reasons about <em>what the
+    result means</em> and what to do next. Pairing thinking with tool use turns a blind "call tool → get result →
+    call tool" loop into a reflective one where each step is deliberated.</p>
+
+    <div class="note">🔑 The value: the model plans the tool call <em>and</em> interprets the result, instead of
+    reflexively chaining calls. That's fewer wasted calls and better recovery when a result is surprising.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Interleaved thinking</h2>
+    <p><strong>Interleaved thinking</strong> lets Claude emit a fresh <code>thinking</code> block <em>between</em>
+    tool calls — reasoning after each result before deciding the next action. On current models this is
+    <strong>automatic with adaptive thinking</strong> (no beta header). Without it, the model reasons once up front,
+    then chains tool calls with no reflection in between.</p>
+
+    <table>
+        <tr><th></th><th>Without interleaving</th><th>With interleaved thinking</th></tr>
+        <tr><td>Turn shape</td><td>[think] → tool → result → tool → result → text</td><td>[think] → tool → result → <b>[think]</b> → tool → result → <b>[think]</b> → text</td></tr>
+        <tr><td>Reflection</td><td>Only before the first call</td><td>After <em>every</em> result</td></tr>
+        <tr><td>Best for</td><td>Simple, known tool sequences</td><td>Multi-step tasks where each result changes the plan</td></tr>
+    </table>
+
+    <div class="warn">⚠️ Two hard constraints when thinking + tools run together: (1) pass the model's
+    <code>thinking</code> blocks (with <code>signature</code>) back <strong>unmodified</strong> alongside the
+    <code>tool_use</code> block and the <code>tool_result</code>, or reasoning continuity breaks; (2)
+    <code>tool_choice</code> must be <code>auto</code> or <code>none</code> — <em>forcing</em> a specific tool or
+    <code>any</code> is not supported with extended thinking.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The reflective tool loop</h2>
+    <div class="mermaid">
+flowchart TD
+    A["User request"] --> T1["🔵 thinking: which tool?"]
+    T1 --> C1["tool_use call"]
+    C1 --> R1["tool_result"]
+    R1 --> T2["🔵 thinking: interpret result,<br/>pick next step"]
+    T2 --> D{"Done?"}
+    D -->|"no"| C1
+    D -->|"yes"| ANS["🟢 text answer"]
+    R1 -.->|"replay: thinking + tool_use<br/>+ result, unmodified"| KEEP["🟠 preserve signatures"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef mid fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class ANS ok; class T1 mid; class T2 mid; class KEEP gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Preserve thinking blocks across the tool round-trip</h2>
+    <p>When you send the tool result back, the assistant turn must include the original <code>thinking</code> block
+    <em>and</em> the <code>tool_use</code> block — verbatim — so the model's reasoning carries forward.</p>
+<pre><span class="cm"># 1) First call — Claude thinks, then requests a tool.</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">16000</span>,
+    thinking={<span class="st">"type"</span>: <span class="st">"adaptive"</span>},        <span class="cm"># interleaved thinking is automatic</span>
+    tools=[weather_tool],                <span class="cm"># tool_choice stays "auto" (default)</span>
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"What's the weather in Paris?"</span>}],
+)
+thinking_block = <span class="fn">next</span>(b <span class="kw">for</span> b <span class="kw">in</span> resp.content <span class="kw">if</span> b.type == <span class="st">"thinking"</span>)
+tool_use       = <span class="fn">next</span>(b <span class="kw">for</span> b <span class="kw">in</span> resp.content <span class="kw">if</span> b.type == <span class="st">"tool_use"</span>)
+
+<span class="cm"># 2) Send result back — MUST replay the thinking block unmodified.</span>
+follow = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">16000</span>,
+    thinking={<span class="st">"type"</span>: <span class="st">"adaptive"</span>}, tools=[weather_tool],
+    messages=[
+        {<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"What's the weather in Paris?"</span>},
+        {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: [thinking_block, tool_use]},   <span class="cm"># verbatim!</span>
+        {<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: [{
+            <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+            <span class="st">"tool_use_id"</span>: tool_use.id,
+            <span class="st">"content"</span>: <span class="st">"18°C, clear"</span>,
+        }]},
+    ],
+)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Reflective loop vs. plain tool chaining</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Thinking + tools (interleaved)</h4>
+            <ul><li>Reasons about tool choice and about each result</li>
+            <li>Recovers from surprising / empty results</li>
+            <li>Fewer wasted or redundant tool calls on hard tasks</li></ul></div>
+        <div class="con"><h4>⚠️ Cost &amp; rules</h4>
+            <ul><li>Thinking tokens between every call → more cost/latency</li>
+            <li>Must replay thinking blocks + signatures unmodified</li>
+            <li><code>tool_choice</code> limited to <code>auto</code>/<code>none</code></li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Dropping the thinking block when returning a tool result. → Reasoning continuity
+    breaks. Replay the <b><code>thinking</code> block and its <code>signature</code> unmodified</b> in the assistant
+    turn alongside the <code>tool_use</code>.</div>
+    <div class="trap"><b>Trap:</b> Forcing a specific tool with thinking on. → <code>tool_choice</code> must be
+    <code>auto</code> or <code>none</code> with extended thinking; <code>{type:"tool"}</code> or <code>any</code>
+    isn't supported.</div>
+    <div class="trap"><b>Trap:</b> Expecting interleaving to need a beta header on current models. → It's
+    <b>automatic with adaptive thinking</b>; the older <code>interleaved-thinking</code> beta header is only for
+    legacy models.</div>
+    <div class="trap"><b>Trap:</b> Assuming thinking is free inside the loop. → A <code>thinking</code> block after
+    <em>every</em> result multiplies token cost and latency — worth it for hard multi-step tasks, wasteful for a
+    fixed two-call sequence.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What must the assistant turn contain when you send a tool result back with thinking on?</summary>
+    <p class="answer">The original <b><code>thinking</code> block (with its <code>signature</code>) and the
+    <code>tool_use</code> block, both unmodified</b>, followed by the <code>tool_result</code> in the next user
+    turn. Dropping the thinking block breaks reasoning continuity.</p></details>
+    <details><summary>Q2 · What does interleaved thinking add over plain up-front reasoning?</summary>
+    <p class="answer">A fresh <code>thinking</code> block <b>between tool calls</b> — the model reflects on each
+    result before choosing the next action, instead of reasoning once and then blindly chaining calls. It's
+    automatic with adaptive thinking on current models.</p></details>
+    <details><summary>Q3 · Which <code>tool_choice</code> values are allowed with extended thinking?</summary>
+    <p class="answer">Only <code>auto</code> (default) or <code>none</code>. Forcing a specific tool
+    (<code>{type:"tool"}</code>) or <code>any</code> is not supported while extended thinking is enabled.</p></details>
+
+    <div class="pager">
+        <a href="5-3-extended-thinking.html"><span class="k">← Back</span>5.3 · Extended Thinking vs Prompted CoT</a>
+        <a class="next" href="5-5-cot-tradeoffs.html"><span class="k">Next →</span>5.5 · CoT Trade-offs &amp; When Not to Use</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 5.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.5 Tool-Result Contract Failures (400s) · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 3 · Tool Results &amp; Error Handling</div>
+    <h1>3.5 · Tool-Result Contract Failures (400s)</h1>
+    <div class="tag">Why tool loops break</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The message-shape contract Claude enforces</h2>
+    <p>Returning a result isn't just "put a <code>tool_result</code> somewhere." The Messages API enforces a strict
+    shape for the turn that follows tool use, and violating it returns an <strong><code>invalid_request_error</code>
+    (HTTP 400)</strong> — the whole request is rejected. These are the four contract rules; break any one and the loop
+    stops.</p>
+    <table>
+        <tr><th>Rule</th><th>Requirement</th><th>Break it →</th></tr>
+        <tr><td><b>Every call answered</b></td><td>Each <code>tool_use</code> needs a matching <code>tool_result</code></td><td>400: <em>"tool_use ids were found without tool_result blocks immediately after"</em></td></tr>
+        <tr><td><b>IDs must match</b></td><td><code>tool_use_id</code> must equal a real <code>tool_use.id</code> from the prior assistant turn</td><td>400: unmatched / absent <code>tool_use_id</code></td></tr>
+        <tr><td><b>Results go in a <code>user</code> turn</b></td><td><code>tool_result</code> blocks belong in a <code>user</code> message, immediately after the assistant's tool-use message</td><td>400: results in the wrong role / a message in between</td></tr>
+        <tr><td><b>Results come FIRST</b></td><td>In that user message, all <code>tool_result</code> blocks precede any <code>text</code></td><td>400 (esp. with an unresolved server tool): text before results ends the turn early</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> The four failures, concretely</h2>
+    <ul>
+        <li><strong>Missing a result.</strong> Claude called three tools; you returned two. The third
+        <code>tool_use</code> has no answer → 400. (This is the #1 cause — every call must be answered, even failed
+        ones, with <code>is_error: true</code>.)</li>
+        <li><strong>Mismatched / absent <code>tool_use_id</code>.</strong> A typo'd or invented ID matches no
+        <code>tool_use</code> block → 400. The ID is the join key; it must be copied exactly.</li>
+        <li><strong>Result in an assistant turn.</strong> Putting a <code>tool_result</code> in an
+        <code>assistant</code> message, or inserting any message between the tool-use turn and the result turn,
+        breaks "immediately after" → 400.</li>
+        <li><strong>Interleaving text incorrectly.</strong> Text <em>before</em> the <code>tool_result</code> blocks in
+        the user message ends the turn early. If the assistant turn also called a server tool with no result yet, the
+        request 400s naming the unresolved server tool. Text <em>after</em> all results is fine.</li>
+    </ul>
+    <div class="note">🔑 Diagnostic: if you see <em>"tool_use ids were found without tool_result blocks immediately
+    after,"</em> check completeness (all IDs answered), placement (user turn, right after the assistant turn), and
+    ordering (results before text).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Where the 400s come from</h2>
+    <div class="mermaid">
+flowchart TD
+    A["assistant turn: tool_use × N"] --> CHK{"Your next user message"}
+    CHK -->|"result for every id"| R1{"IDs all match a tool_use?"}
+    CHK -->|"a call unanswered"| E1["🔴 400: tool_use without tool_result"]
+    R1 -->|"yes"| R2{"In a user turn, immediately after?"}
+    R1 -->|"no / typo / invented"| E2["🔴 400: mismatched tool_use_id"]
+    R2 -->|"yes"| R3{"tool_result blocks before any text?"}
+    R2 -->|"assistant turn / msg in between"| E3["🔴 400: wrong placement"]
+    R3 -->|"yes"| OK["🟢 Loop continues"]
+    R3 -->|"text first"| E4["🔴 400: text before results<br/>(unresolved server tool)"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class OK ok; class E1 bad; class E2 bad; class E3 bad; class E4 bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> The 400-triggering shape vs. the valid one</h2>
+<pre><span class="cm">// ❌ 400 — text BEFORE the tool_result in the user message</span>
+{ <span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: [
+    { <span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: <span class="st">"Here are the results:"</span> },       <span class="cm">// text first → invalid</span>
+    { <span class="st">"type"</span>: <span class="st">"tool_result"</span>, <span class="st">"tool_use_id"</span>: <span class="st">"toolu_01"</span>, <span class="st">"content"</span>: <span class="st">"..."</span> }
+] }
+
+<span class="cm">// ✅ valid — all tool_result blocks first, optional text AFTER</span>
+{ <span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: [
+    { <span class="st">"type"</span>: <span class="st">"tool_result"</span>, <span class="st">"tool_use_id"</span>: <span class="st">"toolu_01"</span>, <span class="st">"content"</span>: <span class="st">"..."</span> },
+    { <span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: <span class="st">"What should I do next?"</span> }        <span class="cm">// text after → fine</span>
+] }</pre>
+
+    <p>And the completeness rule — one result per call, even the failed one:</p>
+<pre><span class="cm">// assistant called toolu_01 AND toolu_02; you must answer BOTH</span>
+{ <span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: [
+    { <span class="st">"type"</span>: <span class="st">"tool_result"</span>, <span class="st">"tool_use_id"</span>: <span class="st">"toolu_01"</span>, <span class="st">"content"</span>: <span class="st">"ok"</span> },
+    { <span class="st">"type"</span>: <span class="st">"tool_result"</span>, <span class="st">"tool_use_id"</span>: <span class="st">"toolu_02"</span>,
+      <span class="st">"is_error"</span>: <span class="kw">true</span>, <span class="st">"content"</span>: <span class="st">"Not executed: preceding call failed."</span> }
+] }   <span class="cm">// omitting toolu_02 → 400</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Hand-rolled loop vs. SDK Tool Runner</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ SDK Tool Runner</h4>
+            <ul><li>Formats results &amp; placement for you — contract 400s avoided</li>
+            <li>Handles the multi-call turn automatically</li>
+            <li>Less loop code to get wrong</li></ul></div>
+        <div class="con"><h4>⚙️ Manual loop</h4>
+            <ul><li>Full control over batching / ordering / error handling</li>
+            <li>But: you own the contract — every rule above is yours to enforce</li></ul></div>
+    </div>
+    <div class="good">If you're hitting contract 400s repeatedly, the Tool Runner exists precisely to format
+    <code>tool_result</code> responses and the multi-call turn correctly on your behalf.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Answering only the calls that succeeded. → A missing <code>tool_result</code> for any
+    <code>tool_use</code> is a <b>400</b>. Answer every call — use <code>is_error: true</code> for the ones that failed
+    or weren't run.</div>
+    <div class="trap"><b>Trap:</b> Putting a <code>tool_result</code> in an assistant message (or slipping a message
+    between the tool-use turn and the result). → Results go in a <b>user</b> message <b>immediately after</b> the
+    assistant's tool-use turn.</div>
+    <div class="trap"><b>Trap:</b> Leading the user message with explanatory text. → <b>Tool_result blocks come
+    first</b>; text before them ends the turn early and 400s when a server tool is still unresolved. Text after is OK.</div>
+    <div class="trap"><b>Trap:</b> Reading <em>"tool_use ids were found without tool_result blocks immediately
+    after"</em> as a Claude bug. → It's the contract talking: a call is unanswered or your results are misplaced /
+    mis-ordered. Fix the shape.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Name the four ways a tool-result turn can 400.</summary>
+    <p class="answer">(1) A <code>tool_use</code> with no matching <code>tool_result</code>; (2) a
+    <code>tool_use_id</code> that matches no call (typo/invented/absent); (3) the result placed in an assistant turn or
+    not immediately after the tool-use turn; (4) text interleaved <em>before</em> the <code>tool_result</code> blocks
+    (fatal when a server tool is unresolved).</p></details>
+    <details><summary>Q2 · You get <em>"tool_use ids were found without tool_result blocks immediately after."</em> What do you check?</summary>
+    <p class="answer">Completeness (every <code>tool_use.id</code> answered), placement (results in the very next
+    <code>user</code> message, nothing in between), and ordering (all <code>tool_result</code> blocks before any
+    <code>text</code>). One of those three is wrong.</p></details>
+    <details><summary>Q3 · Can you add a sentence of narration in the same user message as the results?</summary>
+    <p class="answer">Yes — but only <b>after</b> all <code>tool_result</code> blocks. Text before them ends the turn
+    early and 400s when the assistant turn also called an unresolved server tool.</p></details>
+
+    <div class="pager">
+        <a href="3-4-parallel-tool-calls.html"><span class="k">← Back</span>3.4 · Parallel Tool Calls &amp; Result Ordering</a>
+        <a class="next" href="4-1-thinking-with-tools.html"><span class="k">Next →</span>4.1 · Thinking with Tools</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 3.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

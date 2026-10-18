@@ -1,0 +1,988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>CCA-F — Wire-Format Reference</title>
+<link rel="stylesheet" href="../Foundations-Mock-Exam-4/assets/exam.css">
+<style>
+  .ex{background:var(--card);border:1px solid var(--line);border-radius:12px;
+      padding:18px 20px;margin-bottom:18px}
+  .ex h3{margin:0 0 4px;font-size:17px}
+  .exnum{font-size:11px;letter-spacing:.7px;text-transform:uppercase;
+         color:var(--acc2);font-weight:700}
+  .obj{font-size:12px;color:var(--dim);background:var(--card2);border:1px solid var(--line);
+       border-radius:5px;padding:2px 8px;display:inline-block;margin:4px 6px 10px 0}
+  pre{background:var(--card2);border:1px solid var(--line);border-radius:9px;
+      padding:12px 14px;overflow-x:auto;font:12.5px/1.55 ui-monospace,SFMono-Regular,Menlo,monospace}
+  pre code{background:none;padding:0;font-size:inherit}
+  .ann{color:var(--acc2)}
+  h4.part{margin:16px 0 6px;font-size:12px;letter-spacing:.8px;text-transform:uppercase;
+          color:var(--dim);border-top:1px solid var(--line);padding-top:11px}
+  h4.part b{color:var(--ink);letter-spacing:0;text-transform:none;font-size:13.5px}
+  .watch{border-left:3px solid var(--ok);background:rgba(34,197,94,.07);
+         padding:10px 14px;border-radius:0 9px 9px 0;margin:12px 0}
+  .watch b{color:var(--ok)}
+  .kills{border-left:3px solid var(--warn);background:rgba(245,158,11,.07);
+         padding:10px 14px;border-radius:0 9px 9px 0;margin:12px 0;font-size:14px}
+  .kills b{color:var(--warn)}
+  .caveat{border-left:3px solid var(--no);background:rgba(239,68,68,.07);
+          padding:10px 14px;border-radius:0 9px 9px 0;margin:12px 0;font-size:14px}
+  .caveat b{color:var(--no)}
+  h2.sec{margin:34px 0 14px;font-size:20px;border-bottom:1px solid var(--line);padding-bottom:8px}
+  table.map{border-collapse:collapse;width:100%;font-size:13.5px;margin:10px 0}
+  table.map th,table.map td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);
+                            vertical-align:top}
+  table.map th{color:var(--acc2)}
+  .toc{display:flex;flex-wrap:wrap;gap:7px;margin:12px 0 0}
+  .toc a{font-size:12.5px;background:var(--card2);border:1px solid var(--line);
+         border-radius:7px;padding:5px 10px;color:var(--ink);text-decoration:none}
+  .toc a:hover{border-color:var(--acc)}
+  .lead{font-size:15.5px}
+  .scen{background:var(--card2);border:1px solid var(--line);border-radius:9px;
+        padding:11px 14px;margin:8px 0 2px;font-size:14px}
+</style>
+</head>
+<body>
+<header class="page">
+  <div class="crumb"><a href="../CCA-F_Study_Guide.html">CCA-F</a> › Wire-Format Reference</div>
+  <h1>Wire-Format <span style="color:var(--acc2)">Reference</span></h1>
+  <div class="tag">What actually goes to the model, and what actually comes back · 11 scenarios · Messages API</div>
+</header>
+
+<div class="wrap">
+
+  <div class="intro">
+    <h2>Why this section exists</h2>
+    <p class="lead">The exam is scenario-driven, but the confusing part is underneath the
+    scenarios: what exactly goes <em>into</em> the Messages API, and what exactly comes
+    <em>back</em>. Once you can picture the JSON, half the distractors in Domains 1 and 4 stop
+    being plausible — because they describe a field that does not exist, or put a value in the
+    wrong half of the round trip.</p>
+    <p>So this is not a set of exam scenarios. It is a <b>construct reference</b>. Eleven entries,
+    each with the same four parts, in the same order:</p>
+    <table class="map">
+      <tr><th style="width:130px">Part</th><th>What it gives you</th></tr>
+      <tr><td><b>1 · Scenario</b></td><td>One paragraph — the situation in plain language.</td></tr>
+      <tr><td><b>2 · Client code</b></td><td>The minimal Python that produces the call.</td></tr>
+      <tr><td><b>3 · Request JSON</b></td><td>The body sent to the model, annotated field by field.</td></tr>
+      <tr><td><b>4 · Response JSON</b></td><td>What comes back, annotated, including <code>stop_reason</code>.</td></tr>
+    </table>
+    <div>
+      <span class="pill">11 entries</span>
+      <span class="pill">Messages API only</span>
+      <span class="pill">Python + raw JSON</span>
+      <span class="pill">Domains 1 &amp; 4</span>
+    </div>
+    <div class="toc">
+      <a href="#model">How to read any call</a>
+      <a href="#e1">1 · Single turn</a>
+      <a href="#e2">2 · System + history</a>
+      <a href="#e3">3 · tool_use</a>
+      <a href="#e4">4 · tool_result</a>
+      <a href="#e5">5 · Full loop</a>
+      <a href="#e6">6 · Parallel calls</a>
+      <a href="#e7">7 · tool_choice</a>
+      <a href="#e8">8 · Structured output</a>
+      <a href="#e9">9 · is_error</a>
+      <a href="#e10">10 · MCP, both sides</a>
+      <a href="#e11">11 · Batches</a>
+      <a href="#glossary">Field glossary</a>
+    </div>
+  </div>
+
+  <div class="caveat">
+    <b>Provenance — read this once.</b> The JSON below is written from the current Claude API
+    reference: the field names, types and shapes are documented, not invented. But the
+    <em>values</em> — message IDs, token counts, the exact wording Claude replies with — are
+    illustrative. They are what a call of this shape returns, not a transcript of one specific
+    call. If you want your own real captures, <code>capture.py</code> in this folder runs eight
+    of these scenarios against a live API key and writes the actual request and response bodies
+    to disk. See <a href="#capture" style="color:var(--acc2)">Capturing the real thing</a>.
+  </div>
+
+  <!-- ===================== MENTAL MODEL ===================== -->
+  <h2 class="sec" id="model">How to read any Messages API call</h2>
+
+  <div class="ex">
+    <h3>Four facts that explain most of the JSON</h3>
+
+    <p><b>1 · The API is stateless.</b> There is no conversation on the server. Every request
+    carries the <em>entire</em> history, and the model's "memory" is just the array you resend.
+    A 40-turn conversation means a 40-turn <code>messages</code> array on turn 40 — which is why
+    context and caching are cost questions, not just capacity questions.</p>
+
+    <p><b>2 · There are three inputs, and their order is fixed.</b> The prompt is assembled as
+    <code>tools</code> → <code>system</code> → <code>messages</code>. That order is why tool
+    definitions sit at the very front of the cache prefix, and why editing your tool list
+    invalidates everything downstream of it.</p>
+
+    <p><b>3 · <code>content</code> is always an array of typed blocks — never a string.</b> On the
+    way in you may write a plain string as a shorthand; on the way back you always get an array.
+    A response can hold a <code>text</code> block and two <code>tool_use</code> blocks at once.
+    <code>content[0].text</code> is the single most common bug in beginner Claude code.</p>
+
+    <p><b>4 · <code>stop_reason</code> is the router.</b> It tells your code what to do next, and
+    the whole agentic loop is a switch over it:</p>
+    <table class="map">
+      <tr><th>Value</th><th>What your code must do</th></tr>
+      <tr><td><code>end_turn</code></td><td>Nothing — Claude finished. Exit the loop.</td></tr>
+      <tr><td><code>tool_use</code></td><td>Execute the requested tool(s), append results, call again.</td></tr>
+      <tr><td><code>max_tokens</code></td><td>Output was truncated mid-thought. Raise <code>max_tokens</code> or stream.</td></tr>
+      <tr><td><code>stop_sequence</code></td><td>Hit one of your custom stop strings.</td></tr>
+      <tr><td><code>pause_turn</code></td><td>A long server-side tool turn — resend to resume. Do <b>not</b> add "Continue."</td></tr>
+      <tr><td><code>refusal</code></td><td>Declined on safety grounds. Check <code>stop_details</code>.</td></tr>
+    </table>
+
+    <div class="watch"><b>Where thinking fits.</b> On Claude Opus 5 thinking is <em>on by
+    default</em> — omitting the <code>thinking</code> parameter runs adaptive thinking. But
+    <code>display</code> defaults to <code>"omitted"</code>, so the reasoning is not readable in
+    the response; pass <code>thinking: {"type": "adaptive", "display": "summarized"}</code> to get
+    a summary back. The practical consequence for every example below: <b>branch on
+    <code>block.type</code></b> rather than assuming <code>content[0]</code> is your text.</div>
+
+    <div class="kills"><b>Scope note.</b> Everything here is the Messages API wire format —
+    <code>POST /v1/messages</code> — plus the Batches endpoint. Agent SDK shapes (hooks, subagent
+    spawn payloads) are deliberately excluded: they sit a layer above this one, and mixing them in
+    would blur the exact distinction this page exists to make. Entry 10 is the one place two
+    protocols appear side by side, and that contrast is the point of it.</div>
+  </div>
+
+  <!-- ===================== 01 ===================== -->
+  <div class="ex" id="e1">
+    <div class="exnum">Entry 01 · the baseline</div>
+    <h3>Plain single-turn message</h3>
+    <p class="scen"><b>Scenario.</b> The simplest possible call. One question, one answer, no
+    tools, no system prompt, no history. Everything else on this page is this shape with more
+    fields — so learn where each part lives here and the rest is additive.</p>
+
+    <h4 class="part"><b>Client code</b></h4>
+<pre><code>import anthropic
+client = anthropic.Anthropic()          # reads ANTHROPIC_API_KEY from the environment
+
+response = client.messages.create(
+    model="claude-opus-5",
+    max_tokens=1024,
+    messages=[{"role": "user", "content": "What is the capital of France?"}],
+)
+
+for block in response.content:          # content is a LIST of typed blocks
+    if block.type == "text":
+        print(block.text)</code></pre>
+
+    <h4 class="part"><b>Request JSON</b> — the body on the wire</h4>
+<pre><code>POST https://api.anthropic.com/v1/messages
+x-api-key: sk-ant-...
+anthropic-version: 2023-06-01              <span class="ann">← required on every request, always this value</span>
+content-type: application/json
+
+{
+  "model": "claude-opus-5",                <span class="ann">← exact ID; never append a date suffix</span>
+  "max_tokens": 1024,                      <span class="ann">← REQUIRED. A hard ceiling on the response</span>
+  "messages": [
+    {
+      "role": "user",                      <span class="ann">← must be "user" for the first message</span>
+      "content": "What is the capital of France?"
+    }                                      <span class="ann">  a plain string here is shorthand for</span>
+  ]                                        <span class="ann">  [{"type":"text","text":"..."}]</span>
+}</code></pre>
+
+    <h4 class="part"><b>Response JSON</b> — what comes back</h4>
+<pre><code>{
+  "id": "msg_01XFDUDYJgAACzvnptvVoYEL",    <span class="ann">← log this; it is what support asks for</span>
+  "type": "message",
+  "role": "assistant",                     <span class="ann">← always "assistant" on a response</span>
+  "model": "claude-opus-5",                <span class="ann">← which model actually served it</span>
+  "content": [
+    { "type": "text",
+      "text": "The capital of France is Paris." }
+  ],                                       <span class="ann">← an ARRAY. May also hold thinking / tool_use blocks</span>
+  "stop_reason": "end_turn",               <span class="ann">← finished naturally; nothing for you to do</span>
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 14,                    <span class="ann">← what you were billed to send</span>
+    "output_tokens": 9                     <span class="ann">← what you were billed to receive (5x the input rate)</span>
+  }
+}</code></pre>
+
+    <div class="watch"><b>The three fields that matter downstream.</b> <code>content</code> (an
+    array, always), <code>stop_reason</code> (your router), <code>usage</code> (your bill). Almost
+    every later entry changes only what is inside <code>content</code> and what
+    <code>stop_reason</code> says.</div>
+  </div>
+
+  <!-- ===================== 02 ===================== -->
+  <div class="ex" id="e2">
+    <div class="exnum">Entry 02 · how turns accumulate</div>
+    <h3>System prompt + multi-turn history</h3>
+    <p class="scen"><b>Scenario.</b> A third user message in an ongoing conversation, with a
+    persistent instruction. This is where the statelessness becomes concrete: to ask the third
+    question you must resend the first two exchanges, including Claude's own replies.</p>
+
+    <h4 class="part"><b>Client code</b></h4>
+<pre><code>response = client.messages.create(
+    model="claude-opus-5",
+    max_tokens=1024,
+    system="You are a terse geography tutor. Answer in one sentence.",
+    messages=[
+        {"role": "user",      "content": "What is the capital of France?"},
+        {"role": "assistant", "content": "Paris is the capital of France."},   # Claude's PRIOR reply
+        {"role": "user",      "content": "And its population?"},
+    ],
+)</code></pre>
+
+    <h4 class="part"><b>Request JSON</b></h4>
+<pre><code>{
+  "model": "claude-opus-5",
+  "max_tokens": 1024,
+  "system": "You are a terse geography tutor. Answer in one sentence.",
+                                           <span class="ann">← TOP-LEVEL, not a message with role "system"</span>
+  "messages": [
+    { "role": "user",      "content": "What is the capital of France?" },
+    { "role": "assistant", "content": "Paris is the capital of France." },
+                                           <span class="ann">← you replay Claude's own words back to it</span>
+    { "role": "user",      "content": "And its population?" }
+                                           <span class="ann">← "its" only resolves because of the history above</span>
+  ]
+}</code></pre>
+
+    <h4 class="part"><b>Response JSON</b></h4>
+<pre><code>{
+  "id": "msg_01BqXR7kL2mNpQrStUvWxYz",
+  "type": "message", "role": "assistant", "model": "claude-opus-5",
+  "content": [
+    { "type": "text",
+      "text": "Paris has a population of roughly 2.1 million in the city proper." }
+  ],
+  "stop_reason": "end_turn",
+  "stop_sequence": null,
+  "usage": {
+    "input_tokens": 48,                    <span class="ann">← grew: the whole history is re-billed every turn</span>
+    "output_tokens": 17
+  }
+}</code></pre>
+
+    <div class="watch"><b>The cost shape of a conversation.</b> <code>input_tokens</code> climbs on
+    every turn because you resend everything. A long chat is quadratic in total tokens, not
+    linear — turn N re-bills turns 1…N−1. That is the entire economic case for prompt caching,
+    and the reason context management is a Domain 5 topic rather than a footnote.</div>
+
+    <div class="kills"><b>Two rules and one exception.</b> The first message must be
+    <code>user</code>. Consecutive same-role messages are legal — the API merges them into one
+    turn. The exception: on Claude Opus 5 you <em>may</em> append a <code>{"role": "system"}</code>
+    message mid-array for an operator instruction that arrives late — it must follow a user
+    message and cannot be <code>messages[0]</code>. That is a cache-preserving trick, not the
+    normal way to set a system prompt.</div>
+  </div>
+
+  <!-- ===================== 03 ===================== -->
+  <div class="ex" id="e3">
+    <div class="exnum">Entry 03 · the assistant turn that asks</div>
+    <h3>Tool definition → <code>stop_reason: "tool_use"</code></h3>
+    <p class="scen"><b>Scenario.</b> You give Claude a tool and ask something it cannot answer
+    without it. Claude does not call anything — it <em>asks you</em> to, and stops. Nothing has
+    executed yet; the ball is in your court.</p>
+
+    <h4 class="part"><b>Client code</b></h4>
+<pre><code>WEATHER_TOOL = {
+    "name": "get_weather",
+    "description": "Get the current weather for a location. Call this whenever the user "
+                   "asks about current conditions, temperature, or whether to bring a coat.",
+    "input_schema": {
+        "type": "object",
+        "properties": {
+            "location": {"type": "string", "description": "City and country, e.g. Paris, France"},
+            "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]},
+        },
+        "required": ["location"],
+    },
+}
+
+response = client.messages.create(
+    model="claude-opus-5", max_tokens=1024,
+    tools=[WEATHER_TOOL],
+    messages=[{"role": "user", "content": "What is the weather in Paris?"}],
+)
+print(response.stop_reason)     # "tool_use"</code></pre>
+
+    <h4 class="part"><b>Request JSON</b></h4>
+<pre><code>{
+  "model": "claude-opus-5",
+  "max_tokens": 1024,
+  "tools": [                               <span class="ann">← rendered FIRST in the prompt, before system</span>
+    {
+      "name": "get_weather",               <span class="ann">← how Claude will refer to it</span>
+      "description": "Get the current weather for a location. Call this whenever
+                      the user asks about current conditions, temperature, or
+                      whether to bring a coat.",
+                                           <span class="ann">← the selection mechanism. Say WHEN, not just what</span>
+      "input_schema": {                    <span class="ann">← snake_case here. (MCP spells it inputSchema — entry 10)</span>
+        "type": "object",
+        "properties": {
+          "location": { "type": "string", "description": "City and country, e.g. Paris, France" },
+          "unit":     { "type": "string", "enum": ["celsius", "fahrenheit"] }
+                                           <span class="ann">← enum beats prose for a fixed value set</span>
+        },
+        "required": ["location"]           <span class="ann">← "unit" is optional; Claude may omit it</span>
+      }
+    }
+  ],
+  "messages": [
+    { "role": "user", "content": "What is the weather in Paris?" }
+  ]
+}</code></pre>
+
+    <h4 class="part"><b>Response JSON</b></h4>
+<pre><code>{
+  "id": "msg_01Aq9w8ZfLmNoPqRsTuVwXyZ",
+  "type": "message", "role": "assistant", "model": "claude-opus-5",
+  "content": [
+    { "type": "text",
+      "text": "Let me check the current weather in Paris." },
+                                           <span class="ann">← optional. Claude may or may not narrate first</span>
+    { "type": "tool_use",
+      "id": "toolu_01A09q90qw90lq917835lq9",
+                                           <span class="ann">← REMEMBER THIS ID. You must echo it back verbatim</span>
+      "name": "get_weather",
+      "input": { "location": "Paris, France" }
+                                           <span class="ann">← already parsed JSON, matching your input_schema.</span>
+    }                                      <span class="ann">  Note "unit" is absent — it was optional</span>
+  ],
+  "stop_reason": "tool_use",               <span class="ann">← THE SIGNAL: Claude is waiting on you</span>
+  "stop_sequence": null,
+  "usage": { "input_tokens": 384, "output_tokens": 65 }
+                                           <span class="ann">← input jumped: the tool definition is part of the prompt</span>
+}</code></pre>
+
+    <div class="watch"><b>Nothing has run.</b> A <code>tool_use</code> block is a <em>request</em>,
+    not an execution. The model has no ability to reach your function — it emits a structured
+    intention and stops. Every side effect in an agent happens in your code, which is why
+    approval gates live client-side and are actually enforceable.</div>
+
+    <div class="kills"><b>Watch the token jump.</b> 14 input tokens in entry 01, 384 here. The
+    tool definition is prompt text, billed on every request that carries it — the concrete reason
+    "connect fewer servers" is real advice and not just tidiness.</div>
+  </div>
+
+  <!-- ===================== 04 ===================== -->
+  <div class="ex" id="e4">
+    <div class="exnum">Entry 04 · the user turn that answers</div>
+    <h3>Returning a <code>tool_result</code> — and ID pairing</h3>
+    <p class="scen"><b>Scenario.</b> You ran <code>get_weather("Paris, France")</code> and got
+    "18°C, light rain". Now you hand it back. The surprise for most people: the result goes in a
+    message with role <b>user</b>, not "tool" — and it must quote the exact ID from entry 03.</p>
+
+    <h4 class="part"><b>Client code</b></h4>
+<pre><code>tool_use = next(b for b in response.content if b.type == "tool_use")
+result   = execute_tool(tool_use.name, tool_use.input)     # your code, your risk
+
+followup = client.messages.create(
+    model="claude-opus-5", max_tokens=1024,
+    tools=[WEATHER_TOOL],                                  # tools must still be present
+    messages=[
+        {"role": "user",      "content": "What is the weather in Paris?"},
+        {"role": "assistant", "content": response.content},  # the WHOLE content array
+        {"role": "user", "content": [{
+            "type": "tool_result",
+            "tool_use_id": tool_use.id,                    # exact echo
+            "content": result,
+        }]},
+    ],
+)</code></pre>
+
+    <h4 class="part"><b>Request JSON</b></h4>
+<pre><code>{
+  "model": "claude-opus-5",
+  "max_tokens": 1024,
+  "tools": [ { "name": "get_weather", ... } ],
+                                           <span class="ann">← still required. Dropping it 400s: the history</span>
+                                           <span class="ann">  references a tool the request no longer declares</span>
+  "messages": [
+    { "role": "user", "content": "What is the weather in Paris?" },
+
+    { "role": "assistant",                 <span class="ann">← replay Claude's turn EXACTLY as it came back</span>
+      "content": [
+        { "type": "text", "text": "Let me check the current weather in Paris." },
+        { "type": "tool_use",
+          "id": "toolu_01A09q90qw90lq917835lq9",
+          "name": "get_weather",
+          "input": { "location": "Paris, France" } }
+      ] },
+
+    { "role": "user",                      <span class="ann">← "user", NOT "tool". There is no tool role</span>
+      "content": [
+        { "type": "tool_result",
+          "tool_use_id": "toolu_01A09q90qw90lq917835lq9",
+                                           <span class="ann">← must match the tool_use id character for character</span>
+          "content": "18°C, light rain, wind 12 km/h"
+        }                                  <span class="ann">← a string, or an array of blocks for richer results</span>
+      ] }
+  ]
+}</code></pre>
+
+    <h4 class="part"><b>Response JSON</b></h4>
+<pre><code>{
+  "id": "msg_01CdEfGhIjKlMnOpQrStUvWx",
+  "type": "message", "role": "assistant", "model": "claude-opus-5",
+  "content": [
+    { "type": "text",
+      "text": "It's currently 18°C in Paris with light rain and a 12 km/h wind — worth taking an umbrella." }
+  ],
+  "stop_reason": "end_turn",               <span class="ann">← Claude had what it needed. The loop ends here</span>
+  "stop_sequence": null,
+  "usage": { "input_tokens": 471, "output_tokens": 31 }
+}</code></pre>
+
+    <div class="caveat"><b>The three 400s that come from this one message.</b><br>
+    1 · <b>Dropping the assistant turn.</b> Sending the <code>tool_result</code> without replaying
+    the <code>tool_use</code> block that caused it — an orphaned result referencing an ID the
+    conversation never mentioned.<br>
+    2 · <b>Appending only the text.</b> <code>{"role": "assistant", "content": block.text}</code>
+    silently discards the <code>tool_use</code> block. Append <code>response.content</code>, the
+    whole array.<br>
+    3 · <b>A mismatched or invented <code>tool_use_id</code>.</b> The pairing is how the API knows
+    which request this answers; there is no positional fallback.</div>
+  </div>
+
+  <!-- ===================== 05 ===================== -->
+  <div class="ex" id="e5">
+    <div class="exnum">Entry 05 · the whole thing, end to end</div>
+    <h3>A full two-iteration agentic loop</h3>
+    <p class="scen"><b>Scenario.</b> Entries 03 and 04 joined up, seen as one flow. This is the
+    agentic loop in its entirety — there is nothing else to it. Two HTTP requests, one tool
+    execution in between, and a <code>stop_reason</code> switch controlling the whole thing.</p>
+
+    <h4 class="part"><b>Client code</b> — the loop is a while over <code>stop_reason</code></h4>
+<pre><code>messages = [{"role": "user", "content": "What is the weather in Paris?"}]
+
+while True:
+    response = client.messages.create(
+        model="claude-opus-5", max_tokens=1024,
+        tools=[WEATHER_TOOL], messages=messages,
+    )
+
+    if response.stop_reason == "end_turn":
+        break                                        # done
+
+    if response.stop_reason == "pause_turn":         # long server-tool turn
+        messages.append({"role": "assistant", "content": response.content})
+        continue                                     # resend; do NOT add "Continue."
+
+    # stop_reason == "tool_use"
+    messages.append({"role": "assistant", "content": response.content})   # whole array
+
+    results = []
+    for block in response.content:
+        if block.type == "tool_use":
+            results.append({
+                "type": "tool_result",
+                "tool_use_id": block.id,
+                "content": execute_tool(block.name, block.input),
+            })
+    messages.append({"role": "user", "content": results})   # ALL results, ONE message
+
+print(next(b.text for b in response.content if b.type == "text"))</code></pre>
+
+    <h4 class="part"><b>The wire trace</b> — two round trips</h4>
+<pre><code>┌─ REQUEST 1 ─────────────────────────────────────────────────────────┐
+│ messages: [ user:"What is the weather in Paris?" ]                  │
+│ tools:    [ get_weather ]                                           │
+└─────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─ RESPONSE 1 ────────────────────────────────────────────────────────┐
+│ content:     [ text, tool_use(id=toolu_01A09…, {location:"Paris"}) ] │
+│ stop_reason: "tool_use"          ← your loop does NOT exit           │
+│ usage:       in 384 / out 65                                        │
+└─────────────────────────────────────────────────────────────────────┘
+                              ↓
+                 <span class="ann">YOUR CODE RUNS THE TOOL — no network call to Anthropic</span>
+                 <span class="ann">get_weather({"location": "Paris, France"}) → "18°C, light rain"</span>
+                              ↓
+┌─ REQUEST 2 ─────────────────────────────────────────────────────────┐
+│ messages: [ user:"What is the weather in Paris?",                   │
+│             assistant:[text, tool_use(id=toolu_01A09…)],   ← replay │
+│             user:[tool_result(tool_use_id=toolu_01A09…)]  ← pairing │
+│ tools:    [ get_weather ]                          ← still present  │
+└─────────────────────────────────────────────────────────────────────┘
+                              ↓
+┌─ RESPONSE 2 ────────────────────────────────────────────────────────┐
+│ content:     [ text:"It's currently 18°C in Paris…" ]               │
+│ stop_reason: "end_turn"          ← loop exits                       │
+│ usage:       in 471 / out 31     ← request 1's tokens re-billed     │
+└─────────────────────────────────────────────────────────────────────┘</code></pre>
+
+    <div class="watch"><b>Read the usage line twice.</b> 384 + 65 + 471 + 31 for one weather
+    question. The second request re-bills the first — history, tool definitions and all. An agent
+    that takes ten tool-steps pays for the whole transcript ten times. This single fact explains
+    prompt caching, context editing, compaction, and why "return fewer rows" is a cost decision
+    rather than a style preference.</div>
+
+    <div class="kills"><b>The loop terminates on <code>end_turn</code>, not on an answer.</b>
+    Beginner loops test "did I get text back?" — but a <code>tool_use</code> response often
+    contains text too (the narration in entry 03). Switch on <code>stop_reason</code>; it is the
+    only reliable signal.</div>
+  </div>
+
+  <!-- ===================== 06 ===================== -->
+  <div class="ex" id="e6">
+    <div class="exnum">Entry 06 · several at once</div>
+    <h3>Parallel tool calls</h3>
+    <p class="scen"><b>Scenario.</b> "Compare the weather in Paris, Tokyo and Cairo." Claude does
+    not need the first answer to know it wants the other two, so it emits three
+    <code>tool_use</code> blocks in a <em>single</em> assistant turn. Parallel calling is on by
+    default.</p>
+
+    <h4 class="part"><b>Response JSON</b> — one turn, three requests</h4>
+<pre><code>{
+  "id": "msg_01DeFgHiJkLmNoPqRsTuVwXy",
+  "type": "message", "role": "assistant", "model": "claude-opus-5",
+  "content": [
+    { "type": "text", "text": "I'll check all three cities." },
+    { "type": "tool_use", "id": "toolu_01aaa", "name": "get_weather",
+      "input": { "location": "Paris, France" } },
+    { "type": "tool_use", "id": "toolu_01bbb", "name": "get_weather",
+      "input": { "location": "Tokyo, Japan" } },
+    { "type": "tool_use", "id": "toolu_01ccc", "name": "get_weather",
+      "input": { "location": "Cairo, Egypt" } }
+                                           <span class="ann">← three blocks, three DISTINCT ids, one turn</span>
+  ],
+  "stop_reason": "tool_use",               <span class="ann">← still just "tool_use" — no plural variant</span>
+  "usage": { "input_tokens": 402, "output_tokens": 132 }
+}</code></pre>
+
+    <h4 class="part"><b>Request JSON</b> — all results in ONE user message</h4>
+<pre><code>{ "role": "user",
+  "content": [
+    { "type": "tool_result", "tool_use_id": "toolu_01aaa", "content": "18°C, light rain" },
+    { "type": "tool_result", "tool_use_id": "toolu_01bbb", "content": "24°C, clear"      },
+    { "type": "tool_result", "tool_use_id": "toolu_01ccc", "content": "35°C, sunny"      }
+  ] }                                      <span class="ann">← order does not matter; the ids do the pairing</span>
+</code></pre>
+
+    <div class="caveat"><b>The silent failure that trains the model out of parallelism.</b>
+    Splitting those three results across three separate user messages is not a hard error — the
+    request usually succeeds. But it teaches Claude, in-context, that this conversation returns
+    results one at a time, and it stops batching calls. You lose the concurrency and never see an
+    error explaining why. <b>All results from one assistant turn go back in one user message.</b></div>
+
+    <div class="watch"><b>Execute them concurrently.</b> The three calls are independent by
+    construction — that is why Claude batched them. Running them in a sequential
+    <code>for</code> loop throws away the entire benefit. And if one fails, still return a
+    <code>tool_result</code> for it with <code>is_error: true</code> (entry 09) — never drop a
+    block, or you orphan an ID.</div>
+
+    <div class="kills"><b>To turn it off:</b> add <code>"disable_parallel_tool_use": true</code>
+    <em>inside</em> <code>tool_choice</code> — e.g.
+    <code>{"type": "auto", "disable_parallel_tool_use": true}</code>. It is a field on
+    <code>tool_choice</code>, not a top-level request parameter.</div>
+  </div>
+
+  <!-- ===================== 07 ===================== -->
+  <div class="ex" id="e7">
+    <div class="exnum">Entry 07 · forcing the model's hand</div>
+    <h3><code>tool_choice</code>: three responses, same request otherwise</h3>
+    <p class="scen"><b>Scenario.</b> The user says "Hello! How are you today?" — a message that
+    plainly needs no weather tool. Holding everything else constant and changing only
+    <code>tool_choice</code> shows exactly what the parameter controls.</p>
+
+    <h4 class="part"><b>The four values</b></h4>
+<pre><code>"tool_choice": { "type": "auto" }                          <span class="ann">← default. Claude decides</span>
+"tool_choice": { "type": "any" }                           <span class="ann">← must call SOMETHING, model picks which</span>
+"tool_choice": { "type": "tool", "name": "get_weather" }   <span class="ann">← must call THIS one</span>
+"tool_choice": { "type": "none" }                          <span class="ann">← may not call anything</span></code></pre>
+
+    <h4 class="part"><b>Response A</b> — <code>{"type": "auto"}</code></h4>
+<pre><code>  "content": [
+    { "type": "text", "text": "I'm doing well, thank you! How can I help you today?" }
+  ],
+  "stop_reason": "end_turn"                <span class="ann">← correctly ignored the tool. No call needed</span></code></pre>
+
+    <h4 class="part"><b>Response B</b> — <code>{"type": "any"}</code></h4>
+<pre><code>  "content": [
+    { "type": "tool_use", "id": "toolu_01ddd", "name": "get_weather",
+      "input": { "location": "New York, USA" } }
+                                           <span class="ann">← forced to call something, so it invented a plausible</span>
+  ],                                       <span class="ann">  argument. The user never mentioned a city</span>
+  "stop_reason": "tool_use"</code></pre>
+
+    <h4 class="part"><b>Response C</b> — <code>{"type": "tool", "name": "get_weather"}</code></h4>
+<pre><code>  "content": [
+    { "type": "tool_use", "id": "toolu_01eee", "name": "get_weather",
+      "input": { "location": "London, UK" } }
+                                           <span class="ann">← same story: a required argument had to come from</span>
+  ],                                       <span class="ann">  somewhere, so the model supplied one</span>
+  "stop_reason": "tool_use"</code></pre>
+
+    <div class="caveat"><b>This is the lesson, and it is an exam favourite.</b> Forcing a tool does
+    not make the call <em>correct</em> — it makes it <em>mandatory</em>. Claude must satisfy
+    <code>required: ["location"]</code>, so on a greeting it fabricates a location. Note also that
+    with <code>any</code> or a forced tool, the narrating <code>text</code> block disappears: there
+    is no room for "let me check" when the turn must be a tool call.</div>
+
+    <div class="watch"><b>When forcing is right.</b> Extraction and classification, where you
+    already know a call is needed and only want the arguments — the tool is being used as a typed
+    output schema rather than as an action. For that, prefer structured outputs (entry 08), which
+    say what you mean. Forcing is also incompatible with programmatic tool calling.</div>
+  </div>
+
+  <!-- ===================== 08 ===================== -->
+  <div class="ex" id="e8">
+    <div class="exnum">Entry 08 · guaranteed shapes</div>
+    <h3>Structured output — and what a schema violation looks like</h3>
+    <p class="scen"><b>Scenario.</b> You need JSON you can hand straight to
+    <code>json.loads()</code> and then to a typed model — no "sometimes it wraps it in a code
+    fence" defensive parsing. Two different mechanisms do this, and they solve different halves of
+    the problem.</p>
+
+    <h4 class="part"><b>Mechanism 1 · <code>output_config.format</code></b> — constrains the RESPONSE</h4>
+<pre><code>{
+  "model": "claude-opus-5",
+  "max_tokens": 1024,
+  "output_config": {
+    "format": {
+      "type": "json_schema",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "name":           { "type": "string"  },
+          "email":          { "type": "string"  },
+          "plan":           { "type": "string"  },
+          "demo_requested": { "type": "boolean" }
+        },
+        "required": ["name", "email", "plan", "demo_requested"],
+        "additionalProperties": false      <span class="ann">← REQUIRED on every object. Not optional</span>
+      }
+    }
+  },
+  "messages": [ { "role": "user",
+    "content": "Extract: Jane Doe (jane@co.com) wants Enterprise and asked for a demo." } ]
+}</code></pre>
+<pre><code>  "content": [
+    { "type": "text",
+      "text": "{\"name\":\"Jane Doe\",\"email\":\"jane@co.com\",\"plan\":\"Enterprise\",\"demo_requested\":true}" }
+  ],                                       <span class="ann">← still a text block — but guaranteed-valid JSON inside it</span>
+  "stop_reason": "end_turn"</code></pre>
+
+    <h4 class="part"><b>Mechanism 2 · <code>strict: true</code></b> — constrains the TOOL INPUT</h4>
+<pre><code>  "tools": [ {
+      "name": "book_flight",
+      "description": "Book a flight to a destination",
+      "strict": true,                      <span class="ann">← TOP-LEVEL on the tool. NOT inside tool_choice,</span>
+                                           <span class="ann">  and not inside input_schema</span>
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "destination": { "type": "string" },
+          "date":        { "type": "string", "format": "date" },
+          "passengers":  { "type": "integer", "enum": [1,2,3,4,5,6,7,8] }
+        },
+        "required": ["destination", "date", "passengers"],
+        "additionalProperties": false
+      } } ]</code></pre>
+
+    <h4 class="part"><b>What a violation looks like</b> — the reason strict exists</h4>
+<pre><code>WITHOUT strict — the schema is a strong hint, and hints are sometimes missed:
+
+  { "type": "tool_use", "name": "book_flight",
+    "input": { "destination": "Tokyo",
+               "passengers": "two",        <span class="ann">← STRING where the schema said integer</span>
+               "date": "March 15" } }      <span class="ann">← not an ISO date; "format":"date" was advisory</span>
+
+  → your code raises on int("two"), mid-agent, at runtime.
+
+WITH strict: true — the decoder is constrained as tokens are generated:
+
+  { "type": "tool_use", "name": "book_flight",
+    "input": { "destination": "Tokyo", "date": "2026-03-15", "passengers": 2 } }
+
+  → the invalid shape is not merely rejected. It cannot be produced.</code></pre>
+
+    <div class="caveat"><b>The JSON Schema subset is smaller than you think.</b> Supported:
+    the basic types, <code>enum</code>, <code>const</code>, <code>anyOf</code>,
+    <code>allOf</code>, <code>$ref</code>/<code>$def</code>, the string <code>format</code>
+    keywords, and <code>additionalProperties: false</code> (required). <b>Not</b> supported:
+    recursive schemas, numeric bounds (<code>minimum</code>/<code>maximum</code>), string length
+    bounds, and complex array constraints. Note the workaround visible above — <code>passengers</code>
+    uses <code>enum: [1..8]</code> precisely because <code>maximum: 8</code> is unavailable.</div>
+
+    <div class="watch"><b>Two failure modes survive both mechanisms.</b> A
+    <code>stop_reason</code> of <code>max_tokens</code> gives you truncated — therefore invalid —
+    JSON, and a <code>refusal</code> bypasses the schema entirely. Check
+    <code>stop_reason</code> before you parse. Structured outputs are also incompatible with
+    citations (400) and with prefilling.</div>
+  </div>
+
+  <!-- ===================== 09 ===================== -->
+  <div class="ex" id="e9">
+    <div class="exnum">Entry 09 · when your tool fails</div>
+    <h3><code>is_error</code> on a <code>tool_result</code>, and what happens next</h3>
+    <p class="scen"><b>Scenario.</b> Claude asked for the weather in "Atlantis". Your API returns
+    404. You have three options — crash, lie, or tell Claude the truth in a form it can act on.
+    Only the third keeps the agent running.</p>
+
+    <h4 class="part"><b>Request JSON</b> — the error result</h4>
+<pre><code>{ "role": "user",
+  "content": [
+    { "type": "tool_result",
+      "tool_use_id": "toolu_01fff",        <span class="ann">← still required. An error is still an ANSWER</span>
+      "content": "Error: no location named 'Atlantis'. Provide a real city and country.",
+                                           <span class="ann">← write it for the model to act on, not for a log file</span>
+      "is_error": true                     <span class="ann">← snake_case. (MCP spells it isError — entry 10)</span>
+    }
+  ] }</code></pre>
+
+    <h4 class="part"><b>Response JSON</b> — Claude adapts rather than stalls</h4>
+<pre><code>  "content": [
+    { "type": "text",
+      "text": "I couldn't find a location called Atlantis — it isn't a real city. Did you mean Atlanta, in the USA?" }
+  ],
+  "stop_reason": "end_turn"                <span class="ann">← recovered in one turn, without a retry loop</span></code></pre>
+
+    <div class="watch"><b>The error message is a prompt.</b> "Error: 400" tells Claude nothing and
+    it will usually retry the identical call. "No location named 'Atlantis'. Provide a real city
+    and country." names the problem <em>and</em> the recovery, and the model routes on it. This is
+    the Messages API twin of the structured-error MCP server in
+    <a href="../D4-MCP-Skeletons/index.html#s3" style="color:var(--acc2)">MCP Skeletons 03</a> —
+    same principle, one protocol lower.</div>
+
+    <div class="caveat"><b>Never drop the block.</b> Omitting the <code>tool_result</code> for a
+    failed call — because "it didn't work, so there's nothing to send" — leaves a
+    <code>tool_use</code> with no answer, which is a 400 on the next request. Every
+    <code>tool_use</code> gets exactly one <code>tool_result</code>, success or failure.</div>
+
+    <div class="kills"><b>Two different error channels, easily confused.</b>
+    <code>is_error: true</code> is <em>your tool</em> reporting a failure — HTTP 200, the
+    conversation continues, Claude sees it and adapts. An HTTP 4xx/5xx from
+    <code>/v1/messages</code> is <em>the API itself</em> failing — no response body to hand to
+    Claude, and your SDK raises. The first is a conversation event; the second is an outage.</div>
+  </div>
+
+  <!-- ===================== 10 ===================== -->
+  <div class="ex" id="e10">
+    <div class="exnum">Entry 10 · two protocols, one call</div>
+    <h3>MCP as the model sees it vs. the MCP server's own wire format</h3>
+    <p class="scen"><b>Scenario.</b> The single most clarifying entry on this page. An MCP tool and
+    a hand-written tool look <em>identical</em> to the model — MCP is a protocol between the host
+    and your server, and the model never speaks it. Here are both wire formats for the same tool,
+    stacked.</p>
+
+    <h4 class="part"><b>Side A · the Messages API</b> — using the MCP connector</h4>
+<pre><code>{
+  "model": "claude-opus-5",
+  "max_tokens": 1024,
+  "mcp_servers": [                         <span class="ann">← Anthropic makes the MCP connection server-side</span>
+    { "type": "url",
+      "url": "https://weather.example.com/mcp",
+      "name": "weather-mcp" }
+  ],
+  "tools": [
+    { "type": "mcp_toolset",
+      "mcp_server_name": "weather-mcp" }   <span class="ann">← MUST match a name in mcp_servers</span>
+  ],
+  "messages": [ { "role": "user", "content": "What is the weather in Paris?" } ]
+}
+                                           <span class="ann">requires header: anthropic-beta: mcp-client-2025-11-20</span></code></pre>
+    <div class="kills"><b>Both halves or neither.</b> Sending <code>mcp_servers</code> without the
+    matching <code>mcp_toolset</code> entry in <code>tools</code> is a validation error, not a
+    silent no-op. Every server listed must be referenced by exactly one toolset.</div>
+
+    <h4 class="part"><b>Side B · the MCP server's own protocol</b> — JSON-RPC 2.0</h4>
+<pre><code>→ discovery, at connection time                            <span class="ann">the HOST asks; the model is not involved</span>
+{ "jsonrpc": "2.0", "id": 1, "method": "tools/list" }
+
+← the server answers
+{ "jsonrpc": "2.0", "id": 1,
+  "result": { "tools": [
+    { "name": "get_weather",
+      "description": "Get the current weather for a location.",
+      "inputSchema": {                     <span class="ann">← camelCase. The Messages API says input_schema</span>
+        "type": "object",
+        "properties": { "location": { "type": "string" } },
+        "required": ["location"] } } ] } }
+
+→ invocation
+{ "jsonrpc": "2.0", "id": 2, "method": "tools/call",
+  "params": { "name": "get_weather",
+              "arguments": { "location": "Paris, France" } } }
+                                           <span class="ann">← "arguments". The Messages API says "input"</span>
+
+← the result
+{ "jsonrpc": "2.0", "id": 2,
+  "result": { "content": [ { "type": "text", "text": "18°C, light rain" } ],
+              "isError": false } }         <span class="ann">← camelCase. The Messages API says is_error</span></code></pre>
+
+    <h4 class="part"><b>The translation table</b></h4>
+    <table class="map">
+      <tr><th>Concept</th><th>MCP (JSON-RPC)</th><th>Messages API</th></tr>
+      <tr><td>Tool's schema</td><td><code>inputSchema</code></td><td><code>input_schema</code></td></tr>
+      <tr><td>Call arguments</td><td><code>params.arguments</code></td><td><code>tool_use.input</code></td></tr>
+      <tr><td>Failure flag</td><td><code>isError</code></td><td><code>is_error</code></td></tr>
+      <tr><td>Correlation</td><td><code>id</code> (JSON-RPC, integer)</td><td><code>tool_use_id</code> (string)</td></tr>
+      <tr><td>Discovery</td><td><code>tools/list</code>, at connect time</td><td><code>tools[]</code>, on every request</td></tr>
+      <tr><td>Naming</td><td><code>get_weather</code></td><td><code>mcp__weather-mcp__get_weather</code> <span style="color:var(--dim)">(host-prefixed)</span></td></tr>
+    </table>
+
+    <div class="watch"><b>The point.</b> Two protocols, two vocabularies, camelCase on one side and
+    snake_case on the other — and the model sees only the right-hand column. Whether a tool came
+    from an MCP server, from your own code, or from a hosted Anthropic tool is invisible to it: it
+    receives a name, a description and a schema, and emits a <code>tool_use</code> block. Every
+    design decision in <a href="../D4-MCP-Skeletons/index.html" style="color:var(--acc2)">MCP
+    Skeletons</a> is about what lands in that right-hand column.</div>
+  </div>
+
+  <!-- ===================== 11 ===================== -->
+  <div class="ex" id="e11">
+    <div class="exnum">Entry 11 · the other endpoint</div>
+    <h3>Message Batches — envelope, <code>custom_id</code>, retrieval</h3>
+    <p class="scen"><b>Scenario.</b> Ten thousand support tickets to classify. Latency is
+    irrelevant; cost is not. The Batches API runs the same Messages requests asynchronously at
+    <b>50%</b> of standard price — the same request bodies, wrapped in an envelope.</p>
+
+    <h4 class="part"><b>Client code</b></h4>
+<pre><code>from anthropic.types.message_create_params import MessageCreateParamsNonStreaming
+from anthropic.types.messages.batch_create_params import Request
+
+batch = client.messages.batches.create(requests=[
+    Request(custom_id=f"ticket-{t.id}",
+            params=MessageCreateParamsNonStreaming(
+                model="claude-haiku-4-5", max_tokens=50,
+                messages=[{"role": "user", "content": f"Classify: {t.body}"}]))
+    for t in tickets
+])
+
+while client.messages.batches.retrieve(batch.id).processing_status != "ended":
+    time.sleep(60)
+
+for result in client.messages.batches.results(batch.id):
+    if result.result.type == "succeeded":
+        store(result.custom_id, result.result.message.content[0].text)</code></pre>
+
+    <h4 class="part"><b>Request JSON</b> — <code>POST /v1/messages/batches</code></h4>
+<pre><code>{
+  "requests": [
+    { "custom_id": "ticket-8814",          <span class="ann">← YOUR key. The ONLY way to match results back</span>
+      "params": {                          <span class="ann">← a complete, ordinary Messages API body</span>
+        "model": "claude-haiku-4-5",
+        "max_tokens": 50,
+        "messages": [ { "role": "user", "content": "Classify: my order never arrived" } ]
+      } },
+    { "custom_id": "ticket-8815",
+      "params": { "model": "claude-haiku-4-5", "max_tokens": 50,
+                  "messages": [ { "role": "user", "content": "Classify: love the new packaging" } ] } }
+  ]
+}                                          <span class="ann">up to 100,000 requests or 256 MB per batch</span></code></pre>
+
+    <h4 class="part"><b>Response JSON</b> — creation is immediate; the work is not</h4>
+<pre><code>{
+  "id": "msgbatch_013Zva2CMHLNnXjNJJKqJ2EF",
+  "type": "message_batch",
+  "processing_status": "in_progress",      <span class="ann">← in_progress → ended. Poll this, not the results</span>
+  "request_counts": {
+    "processing": 2, "succeeded": 0, "errored": 0, "canceled": 0, "expired": 0
+  },
+  "created_at": "2026-08-23T11:02:14.061162Z",
+  "expires_at": "2026-08-24T11:02:14.061162Z",
+                                           <span class="ann">← 24h ceiling; most batches finish within the hour</span>
+  "results_url": null                      <span class="ann">← populated only once processing_status is "ended"</span>
+}</code></pre>
+
+    <h4 class="part"><b>Results</b> — JSONL, one object per line</h4>
+<pre><code>{ "custom_id": "ticket-8815",              <span class="ann">← NOTE THE ORDER: 8815 came back before 8814</span>
+  "result": { "type": "succeeded",
+    "message": { "id": "msg_01…", "type": "message", "role": "assistant",
+                 "content": [ { "type": "text", "text": "positive" } ],
+                 "stop_reason": "end_turn",
+                 "usage": { "input_tokens": 19, "output_tokens": 2 } } } }
+
+{ "custom_id": "ticket-8814",
+  "result": { "type": "errored",
+    "error": { "type": "invalid_request",  <span class="ann">← invalid_request = your bug, do not retry blindly.</span>
+               "message": "…" } } }        <span class="ann">  Anything else is server-side and safe to retry</span></code></pre>
+
+    <div class="caveat"><b>Results arrive in ANY order.</b> That is the whole reason
+    <code>custom_id</code> exists, and the mistake the exam probes: zipping the results list
+    against your input list by position silently mis-labels your data, with no error anywhere. Key
+    by <code>custom_id</code>, always. And note that each result carries its own
+    <code>type</code> — <code>succeeded</code>, <code>errored</code>, <code>canceled</code>,
+    <code>expired</code> — so a batch that "ended" is not a batch that all worked.</div>
+
+    <div class="watch"><b>What batches do not change.</b> The <code>params</code> object is an
+    ordinary Messages body — tools, vision, caching, structured outputs all work. What you give up
+    is streaming and latency; what you get is half price. Results stay available for 29 days.</div>
+  </div>
+
+  <!-- ===================== GLOSSARY ===================== -->
+  <h2 class="sec" id="glossary">Field glossary — where everything lives</h2>
+  <div class="ex">
+    <table class="map">
+      <tr><th>Field</th><th>Where</th><th>Notes</th></tr>
+      <tr><td><code>model</code></td><td>request, top level</td><td>Exact ID, no date suffix. Echoed in the response.</td></tr>
+      <tr><td><code>max_tokens</code></td><td>request, top level</td><td><b>Required.</b> A ceiling the model is unaware of; hitting it gives <code>stop_reason: "max_tokens"</code>.</td></tr>
+      <tr><td><code>system</code></td><td>request, top level</td><td>Not a message. String, or an array of blocks when you need <code>cache_control</code>.</td></tr>
+      <tr><td><code>tools</code></td><td>request, top level</td><td>Rendered <em>first</em>, before <code>system</code>. Must stay present for the whole conversation.</td></tr>
+      <tr><td><code>tool_choice</code></td><td>request, top level</td><td><code>auto</code> / <code>any</code> / <code>tool</code> / <code>none</code>. Hosts <code>disable_parallel_tool_use</code>.</td></tr>
+      <tr><td><code>strict</code></td><td>request, on a <b>tool</b></td><td>Top-level on the tool object — not in <code>input_schema</code>, not in <code>tool_choice</code>.</td></tr>
+      <tr><td><code>output_config</code></td><td>request, top level</td><td>Holds <code>format</code> (JSON schema) and <code>effort</code>. Replaces the deprecated <code>output_format</code>.</td></tr>
+      <tr><td><code>content</code></td><td>both</td><td>String shorthand accepted inbound; <b>always an array</b> outbound.</td></tr>
+      <tr><td><code>tool_use.id</code></td><td>response block</td><td>Echo verbatim as <code>tool_use_id</code>. No positional fallback.</td></tr>
+      <tr><td><code>is_error</code></td><td>request, on a <code>tool_result</code></td><td>Your tool failed. Not an HTTP error.</td></tr>
+      <tr><td><code>stop_reason</code></td><td>response, top level</td><td>The loop router. Six values.</td></tr>
+      <tr><td><code>stop_details</code></td><td>response, top level</td><td>Populated <b>only</b> when <code>stop_reason == "refusal"</code>; <code>null</code> otherwise. Guard before reading.</td></tr>
+      <tr><td><code>usage</code></td><td>response, top level</td><td><code>input_tokens</code>, <code>output_tokens</code>, plus <code>cache_creation_input_tokens</code> / <code>cache_read_input_tokens</code>.</td></tr>
+      <tr><td><code>custom_id</code></td><td>batches only</td><td>Your correlation key. Results come back unordered.</td></tr>
+    </table>
+  </div>
+
+  <!-- ===================== CAPTURE ===================== -->
+  <h2 class="sec" id="capture">Capturing the real thing</h2>
+  <div class="ex">
+    <p>The shapes above are documented, not transcribed. To replace them with genuine captures from
+    your own account:</p>
+<pre><code>cd CCA-F/Wire-Format-Reference
+pip install anthropic
+export ANTHROPIC_API_KEY=sk-ant-...
+
+python capture.py            # all eight capturable scenarios
+python capture.py 03 07a     # or just these</code></pre>
+    <p>It POSTs each scenario with <code>client.messages.with_raw_response.create(...)</code> — the
+    raw HTTP body, not the parsed SDK object — and writes
+    <code>captured/&lt;id&gt;_&lt;name&gt;/request.json</code> and <code>response.json</code>. Total
+    cost is a few cents at the <code>max_tokens</code> it sets.</p>
+    <p>Entries 04, 05 and 09 need a tool to actually execute between calls, entry 10 needs a live
+    MCP server, and entry 11 is asynchronous — the script says so at the bottom and skips them
+    rather than faking them.</p>
+
+    <div class="watch"><b>Do this once if you can.</b> Reading a documented shape and seeing your
+    own <code>msg_01…</code> ID come back with your own token counts are different kinds of
+    knowing, and the second one survives exam pressure better.</div>
+  </div>
+
+  <!-- ===================== MAP ===================== -->
+  <h2 class="sec">What this maps to on the exam</h2>
+  <div class="ex">
+    <table class="map">
+      <tr><th>Entry</th><th>Domain</th><th>The question shape it answers</th></tr>
+      <tr><td>1 · Single turn</td><td>D1 · Messages API substrate</td><td>"What is in a request/response?"</td></tr>
+      <tr><td>2 · System + history</td><td>D1 · Statelessness</td><td>"Why do costs grow through a conversation?"</td></tr>
+      <tr><td>3 · <code>tool_use</code></td><td>D1 · Stop reasons · D4 · Tool definition</td><td>"What does the model return when it wants a tool?"</td></tr>
+      <tr><td>4 · <code>tool_result</code></td><td>D4 · The contract</td><td>"Why does this request 400?"</td></tr>
+      <tr><td>5 · Full loop</td><td>D1 · Loop mechanics</td><td>"Walk through an agentic turn"</td></tr>
+      <tr><td>6 · Parallel calls</td><td>D4 · Parallel tool use</td><td>"Claude stopped batching calls"</td></tr>
+      <tr><td>7 · <code>tool_choice</code></td><td>D4 · Tool choice control</td><td>"It called the tool with a made-up argument"</td></tr>
+      <tr><td>8 · Structured output</td><td>D3 · Structured outputs</td><td>"Guarantee parseable JSON"</td></tr>
+      <tr><td>9 · <code>is_error</code></td><td>D4 · Results &amp; errors</td><td>"How should a failing tool report?"</td></tr>
+      <tr><td>10 · MCP both sides</td><td>D4 · MCP fundamentals</td><td>"What does the model actually see from MCP?"</td></tr>
+      <tr><td>11 · Batches</td><td>D5 · Cost &amp; throughput</td><td>"10k items, latency irrelevant"</td></tr>
+    </table>
+    <p style="margin-top:14px">Pair this with
+    <a href="../D4-MCP-Skeletons/index.html">MCP Skeletons</a> — that page is about what to
+    <em>put</em> in the tool list; this one is about what the wire does with it. Then re-sit
+    <a href="../D1-Agentic-Architecture/quizzes/index.html">Domain 1</a> sets 2–3 and
+    <a href="../D4-Tool-Design-MCP/quizzes/index.html">Domain 4</a> sets 1 and 3.</p>
+  </div>
+
+</div>
+
+<footer>CCA-F · Wire-Format Reference · what goes to the model, and what comes back</footer>
+</body>
+</html>

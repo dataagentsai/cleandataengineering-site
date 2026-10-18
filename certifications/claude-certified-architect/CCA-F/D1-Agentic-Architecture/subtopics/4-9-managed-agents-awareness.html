@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.9 Managed Agents vs Self-Orchestrated · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 4 · Multi-Agent</div>
+    <h1>4.9 · Managed Agents vs. Self-Orchestrated</h1>
+    <div class="tag">Who hosts the loop — Anthropic or you?</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The one distinction that matters</h2>
+    <p>Everything in Cluster 4 so far assumed <strong>you</strong> host the agent loop — you call POST /v1/messages,
+    inspect <code>stop_reason</code>, run tools, and append <code>tool_result</code>s. That's the
+    <strong>self-orchestrated</strong> model ("Claude API + tool use"). <strong>Managed Agents</strong> flip the
+    hosting: <strong>Anthropic hosts the agent loop</strong> <em>and</em> a <strong>per-session container</strong>
+    where tools execute. You describe the agent once; Anthropic runs it.</p>
+
+    <div class="note">🔑 Awareness-level distinction: <strong>who hosts the loop and tool execution?</strong>
+    Self-orchestrated = <em>you</em>. Managed Agents = <em>Anthropic</em>, plus a hosted per-session container.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The Managed Agents shape</h2>
+    <p>Conceptually there are two objects:</p>
+    <ul>
+        <li><strong>Agent</strong> — a persisted, <strong>versioned</strong> object that holds the configuration:
+        model, system prompt, and tools live <em>on the Agent</em>. You create it once; it's referenced by id.</li>
+        <li><strong>Session</strong> — a run that <strong>references an Agent by id</strong>. Each session gets its
+        own per-session container where tools execute. The agent loop runs inside Anthropic's infrastructure.</li>
+    </ul>
+    <div class="warn">⚠️ Keep this conceptual for the exam. Know the <em>shape</em> — persisted versioned Agent →
+    Sessions that reference it, hosted loop + per-session container — not the full API surface.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Side-by-side</h2>
+    <table>
+        <tr><th>Aspect</th><th>Self-orchestrated (Claude API + tool use)</th><th>Managed Agents</th></tr>
+        <tr><td><strong>Who runs the loop</strong></td><td>You (your code drives the loop)</td><td>Anthropic hosts the loop</td></tr>
+        <tr><td><strong>Where tools execute</strong></td><td>Your infrastructure</td><td>An Anthropic-hosted per-session container</td></tr>
+        <tr><td><strong>Config location</strong></td><td>In your code each call</td><td>On a persisted, versioned Agent object</td></tr>
+        <tr><td><strong>How you run it</strong></td><td>Call POST /v1/messages in a loop</td><td>Create a Session that references the Agent by id</td></tr>
+        <tr><td><strong>Control vs. convenience</strong></td><td>Maximum control &amp; flexibility</td><td>Less to build/operate; Anthropic manages the loop &amp; container</td></tr>
+    </table>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Where the loop lives</h2>
+    <div class="mermaid">
+flowchart TB
+    subgraph SELF["Self-orchestrated — YOU host"]
+        direction LR
+        YC["Your code:<br/>loop + tool execution"] <-->|POST /v1/messages| API1["Claude API"]
+    end
+    subgraph MAN["Managed Agents — Anthropic hosts"]
+        direction LR
+        AG["📄 Agent (persisted, versioned)<br/>model · system · tools"] --> SESS["Session (references Agent by id)"]
+        SESS --> HOST["Anthropic-hosted loop<br/>+ per-session container (tools run here)"]
+    end
+    classDef y fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef a fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    class YC y; class AG a; class SESS a; class HOST a;
+    </div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Control vs. managed convenience</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Self-orchestrated</h4>
+            <ul><li>Full control over the loop and tool execution</li>
+            <li>Runs on your infrastructure, your environment</li>
+            <li>Maximum flexibility for custom orchestration</li></ul></div>
+        <div class="con"><h4>✅ Managed Agents</h4>
+            <ul><li>Anthropic hosts the loop + per-session container</li>
+            <li>Config lives on a persisted, versioned Agent</li>
+            <li>Less to build and operate yourself</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Confusing who hosts the loop. → In <b>Managed Agents, Anthropic</b> hosts the loop
+    and the per-session container. With "Claude API + tool use," <b>you</b> host the loop and run the tools.</div>
+    <div class="trap"><b>Trap:</b> Thinking a Session carries the model/system/tools. → Those live on the persisted,
+    <b>versioned Agent</b>. A Session just <b>references the Agent by id</b>.</div>
+    <div class="trap"><b>Trap:</b> Assuming Managed Agents means no tool sandbox. → Tools execute in an
+    Anthropic-hosted <b>per-session container</b>, not on your own machines.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · In one sentence, what's the core difference between Managed Agents and "Claude API + tool use"?</summary>
+    <p class="answer">In Managed Agents, <b>Anthropic</b> hosts the agent loop and a per-session container where tools
+    run; with "Claude API + tool use," <b>you</b> host the loop and execute the tools yourself.</p></details>
+    <details><summary>Q2 · Where do a Managed Agent's model, system prompt, and tools live?</summary>
+    <p class="answer">On the persisted, <b>versioned Agent</b> object. You create the Agent once, then create Sessions
+    that reference it by id to run it.</p></details>
+    <details><summary>Q3 · A team wants Anthropic to run the loop and provide a container for tool execution. Which option?</summary>
+    <p class="answer"><b>Managed Agents.</b> That's exactly the hosted-loop + per-session-container model, versus
+    self-hosting the loop with the plain Claude API + tool use.</p></details>
+
+    <div class="pager">
+        <a href="4-8-subagents-cost-cache.html"><span class="k">← Prev</span>4.8 · Sub-agents as a cost/cache tactic</a>
+        <a class="next" href="5-1-autonomy-levels.html"><span class="k">Next →</span>5.1 · Autonomy levels</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 4.9</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

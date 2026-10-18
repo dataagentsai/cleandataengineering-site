@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.2 Key Settings You Must Know · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 2 · Settings &amp; Configuration</div>
+    <h1>2.2 · Key Settings You Must Know</h1>
+    <div class="tag">model · env · permissions · hooks</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The high-value keys in settings.json</h2>
+    <p>Dozens of keys exist, but a handful come up constantly in real config and on the exam. Learn what each does
+    and which type of value it takes:</p>
+    <table>
+        <tr><th>Key</th><th>Type</th><th>What it does</th></tr>
+        <tr><td><code>model</code></td><td>string</td><td>Default model for the session (e.g. <code>"sonnet"</code>, <code>"opus"</code>); switch mid-session with <code>/model</code></td></tr>
+        <tr><td><code>env</code></td><td>object</td><td>Environment variables injected into every session</td></tr>
+        <tr><td><code>permissions</code></td><td>object</td><td>Tool <code>allow</code> / <code>deny</code> / <code>ask</code> rules, <code>defaultMode</code>, <code>additionalDirectories</code></td></tr>
+        <tr><td><code>hooks</code></td><td>object</td><td>Shell commands run at lifecycle events (e.g. <code>PreToolUse</code>, <code>PostToolUse</code>)</td></tr>
+        <tr><td><code>apiKeyHelper</code></td><td>string</td><td>Custom command that outputs the auth value / API key</td></tr>
+        <tr><td><code>includeCoAuthoredBy</code></td><td>boolean</td><td>Add the <code>Co-Authored-By: Claude</code> trailer to git commits (default <code>true</code>)</td></tr>
+        <tr><td><code>cleanupPeriodDays</code></td><td>number</td><td>Days to retain session transcripts (default <code>30</code>)</td></tr>
+        <tr><td><code>statusLine</code></td><td>object</td><td>Custom status-line command shown in the footer</td></tr>
+        <tr><td><code>outputStyle</code></td><td>string</td><td>Output rendering / response style</td></tr>
+        <tr><td><code>enableAllProjectMcpServers</code></td><td>boolean</td><td>Auto-approve every MCP server declared in the project <code>.mcp.json</code></td></tr>
+        <tr><td><code>forceLoginMethod</code></td><td>string</td><td>Restrict auth to <code>"claudeai"</code>, <code>"console"</code>, or <code>"gateway"</code></td></tr>
+        <tr><td><code>disableAllHooks</code></td><td>boolean</td><td>Turn off all hooks and the custom status line</td></tr>
+    </table>
+    <div class="note">🔑 <code>model</code>, <code>env</code>, <code>permissions</code>, and <code>hooks</code> are the
+    four you should be able to write from memory. The rest are recognition-level.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> permissions — allow, deny, ask</h2>
+    <p>The <code>permissions</code> object is where you shape autonomy. Rules are written as
+    <code>Tool(pattern)</code>, e.g. <code>Bash(npm run test:*)</code> or <code>Read(./.env)</code>.</p>
+    <table>
+        <tr><th>Sub-key</th><th>Effect</th></tr>
+        <tr><td><code>allow</code></td><td>Patterns Claude may run <em>without</em> asking</td></tr>
+        <tr><td><code>deny</code></td><td>Patterns Claude may <em>never</em> run (also blocks reads of secret files)</td></tr>
+        <tr><td><code>ask</code></td><td>Patterns that always prompt for confirmation first</td></tr>
+        <tr><td><code>defaultMode</code></td><td>Starting permission mode for the session</td></tr>
+        <tr><td><code>additionalDirectories</code></td><td>Extra directories outside the repo Claude may access</td></tr>
+    </table>
+    <div class="bad">🚫 <code>deny</code> is the strongest rule: it beats <code>allow</code>. Use it to hard-block
+    reads of <code>./.env</code>, <code>./secrets/**</code>, or dangerous commands like <code>Bash(curl:*)</code>.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Where each key takes effect</h2>
+    <div class="mermaid">
+flowchart TD
+    S["settings.json"] --> M["model → which model runs"]
+    S --> E["env → vars for every session"]
+    S --> P["permissions"]
+    S --> H["hooks → run shell at lifecycle events"]
+    P --> AL["allow: auto-run patterns"]
+    P --> DE["deny: never-run (wins over allow)"]
+    P --> AS["ask: confirm-first patterns"]
+    H --> PRE["PreToolUse → validate/block a tool call"]
+    H --> POST["PostToolUse → lint/format after a tool runs"]
+    classDef key fill:#cfe2ff,stroke:#3d7bfe,color:#0a3a9a;
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class M,E,P,H key; class AL,POST ok; class DE bad; class AS,PRE key;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A realistic project settings.json</h2>
+    <p>Model, injected env, permission rules, and a post-edit hook — the four heavy hitters in one file.</p>
+<pre>{
+  <span class="st">"$schema"</span>: <span class="st">"https://json.schemastore.org/claude-code-settings.json"</span>,
+  <span class="st">"model"</span>: <span class="st">"sonnet"</span>,
+  <span class="st">"includeCoAuthoredBy"</span>: <span class="kw">true</span>,
+  <span class="st">"cleanupPeriodDays"</span>: <span class="kw">20</span>,
+
+  <span class="st">"env"</span>: {
+    <span class="st">"NODE_ENV"</span>: <span class="st">"development"</span>,
+    <span class="st">"MAX_THINKING_TOKENS"</span>: <span class="st">"10000"</span>
+  },
+
+  <span class="st">"permissions"</span>: {
+    <span class="st">"allow"</span>: [<span class="st">"Bash(npm run test:*)"</span>, <span class="st">"Read(~/.zshrc)"</span>],
+    <span class="st">"deny"</span>:  [<span class="st">"Read(./.env)"</span>, <span class="st">"Read(./secrets/**)"</span>, <span class="st">"Bash(curl:*)"</span>],
+    <span class="st">"ask"</span>:   [<span class="st">"Bash(git push:*)"</span>],
+    <span class="st">"defaultMode"</span>: <span class="st">"acceptEdits"</span>
+  },
+
+  <span class="st">"hooks"</span>: {
+    <span class="st">"PostToolUse"</span>: [{
+      <span class="st">"matcher"</span>: <span class="st">"Edit|Write"</span>,
+      <span class="st">"hooks"</span>: [{ <span class="st">"type"</span>: <span class="st">"command"</span>, <span class="st">"command"</span>: <span class="st">"npm run lint --silent"</span> }]
+    }]
+  }
+}</pre>
+    <div class="warn">⚠️ Values in <code>env</code> are strings. A numeric-looking var like
+    <code>MAX_THINKING_TOKENS</code> must still be quoted as <code>"10000"</code>.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Broad allow-list vs. tight deny-list</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Curated allow + explicit deny</h4>
+            <ul><li>Fewer confirmation prompts for known-safe commands</li>
+            <li><code>deny</code> hard-blocks secrets and dangerous ops</li>
+            <li>Predictable, reviewable autonomy the team agrees on</li></ul></div>
+        <div class="con"><h4>⚠️ Wide-open allow (e.g. <code>Bash(*)</code>)</h4>
+            <ul><li>Zero friction — but zero guardrails</li>
+            <li>One bad model call can run anything</li>
+            <li>Only a <code>deny</code> rule can claw a pattern back</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "<code>allow</code> overrides <code>deny</code> if it's more specific." → No.
+    <b><code>deny</code> always wins</b> over <code>allow</code>. It's the safety backstop.</div>
+    <div class="trap"><b>Trap:</b> "Set the model with an <code>ANTHROPIC_MODEL</code> key inside settings.json." → The
+    settings.json key is <code>model</code>. <code>ANTHROPIC_MODEL</code> is an <em>environment variable</em>, not a
+    settings key (covered in 2.3).</div>
+    <div class="trap"><b>Trap:</b> "<code>env</code> takes numbers and booleans." → All <code>env</code> values are
+    <b>strings</b> — quote them.</div>
+    <div class="trap"><b>Trap:</b> "<code>includeCoAuthoredBy: false</code> disables commits." → It only removes the
+    <code>Co-Authored-By: Claude</code> trailer from commit messages; Claude can still commit.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A pattern is in both <code>allow</code> and <code>deny</code>. What happens?</summary>
+    <p class="answer">It is <b>denied</b>. <code>deny</code> takes precedence over <code>allow</code>, so the command
+    is blocked regardless of the allow rule.</p></details>
+    <details><summary>Q2 · Which key runs a linter automatically after every file edit?</summary>
+    <p class="answer"><code>hooks</code>, using a <b><code>PostToolUse</code></b> hook with a matcher like
+    <code>"Edit|Write"</code> whose command runs the linter. <code>PreToolUse</code> runs <em>before</em> a tool and
+    can block it; <code>PostToolUse</code> runs after.</p></details>
+    <details><summary>Q3 · How do you stop transcripts from piling up for months?</summary>
+    <p class="answer">Set <code>cleanupPeriodDays</code> to a smaller number (the default retention is 30 days). Claude
+    Code deletes session files older than that window.</p></details>
+
+    <div class="pager">
+        <a href="2-1-settings-json-hierarchy.html"><span class="k">← Back</span>2.1 · settings.json &amp; Precedence</a>
+        <a class="next" href="2-3-env-vars.html"><span class="k">Next →</span>2.3 · Environment Variables</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 2.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.1 Increasing Output Consistency · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 7 · Structured Outputs &amp; JSON</div>
+    <h1>7.1 · Increasing Output Consistency</h1>
+    <div class="tag">Make the shape repeatable</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Consistency is engineered, not hoped for</h2>
+    <p>Before reaching for any feature, you can make Claude's output far more predictable with plain
+    prompting. Anthropic's guidance lists four levers, roughly in order of strength:</p>
+    <table>
+        <tr><th>Lever</th><th>What it does</th><th>Example</th></tr>
+        <tr><td><strong>Specify the exact format</strong></td><td>Describe every field, its type, and the wrapper (JSON, XML, or a template) so nothing is left to interpretation</td><td>"Output JSON with keys <code>sentiment</code>, <code>key_issues</code> (list), <code>action_items</code> (list of {team, task})"</td></tr>
+        <tr><td><strong>Show an example of the shape</strong></td><td>A concrete filled-in example teaches the structure better than any abstract description</td><td>Include one worked <code>&lt;competitor&gt;…&lt;/competitor&gt;</code> block, then "Now do X"</td></tr>
+        <tr><td><strong>Use XML tags</strong></td><td>Named tags give Claude an unambiguous skeleton to fill and give you an easy parse target</td><td><code>&lt;report&gt;&lt;summary&gt;…&lt;/summary&gt;&lt;/report&gt;</code></td></tr>
+        <tr><td><strong>Constrain the values</strong></td><td>Enumerate allowed values so free-text drift can't happen</td><td>"<code>sentiment</code> is one of: positive / negative / neutral"</td></tr>
+    </table>
+
+    <div class="note">🔑 Two supporting techniques round this out: <strong>retrieval grounding</strong> (answer from a
+    fixed knowledge set so responses don't wander), and <strong>prompt chaining</strong> (break a complex task into
+    smaller subtasks, each of which Claude handles more consistently).</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Prefill is powerful — but model-gated now</h2>
+    <p>Historically the strongest lever was <strong>prefilling the assistant turn</strong>: you start the
+    <code>assistant</code> message with the opening of your desired structure (<code>{</code> or
+    <code>&lt;report&gt;</code>) and Claude continues from there, skipping any friendly preamble.</p>
+    <div class="warn">⚠️ <strong>Assistant prefill is not supported on current Claude models</strong> — Fable 5,
+    Opus 4.8 / 4.7 / 4.6, and Sonnet 4.6 <strong>reject</strong> a trailing <code>assistant</code> turn with a
+    <strong>400</strong>. On those models the format-locking job moves to <strong>structured outputs (7.4)</strong>,
+    <strong>tool use (7.3)</strong>, or a plain system-prompt instruction. Prefill (7.2) remains only for older
+    models that still allow it.</div>
+    <div class="good">Anthropic's own tip: <em>"For guaranteed JSON schema conformance, use Structured Outputs
+    instead of the prompt-engineering techniques."</em> Reach for prompting when you want flexibility beyond a
+    strict schema; reach for the feature when the shape must never drift.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The consistency escalation ladder</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Need a repeatable output shape"] --> Q{"How strict must it be?"}
+    Q -->|"loose / flexible"| P["🟢 Prompt techniques<br/>specify format · give an example<br/>XML tags · enums · retrieval"]
+    Q -->|"must parse as JSON<br/>every time"| F{"Feature available on this model?"}
+    F -->|"yes"| SO["🟢 Structured Outputs (7.4)<br/>or Tool Use (7.3)<br/>guaranteed conformance"]
+    F -->|"no / older model"| PF["🟠 Prefill + stop (7.2)<br/>or JSON-only + parse"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class P ok; class SO ok; class PF gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Vague prompt → specified prompt</h2>
+    <p>The same request, made repeatable by naming the format, showing the shape, and constraining the values.</p>
+<pre><span class="cm"># ❌ BAD — vague; every response is shaped differently</span>
+system = <span class="st">"Analyze this customer feedback."</span>
+
+<span class="cm"># ✅ GOOD — exact format + example shape + enum + XML skeleton</span>
+system = <span class="st">"""You are a Customer Insights AI. Analyze the feedback inside</span>
+<span class="st">&lt;feedback&gt; tags and reply with ONLY this XML — no preamble:</span>
+
+<span class="st">&lt;analysis&gt;</span>
+<span class="st">  &lt;sentiment&gt;positive | negative | neutral&lt;/sentiment&gt;</span>
+<span class="st">  &lt;key_issues&gt;</span>
+<span class="st">    &lt;issue&gt;one short phrase&lt;/issue&gt;</span>
+<span class="st">  &lt;/key_issues&gt;</span>
+<span class="st">  &lt;action_items&gt;</span>
+<span class="st">    &lt;item team="Product | UX | Marketing"&gt;task&lt;/item&gt;</span>
+<span class="st">  &lt;/action_items&gt;</span>
+<span class="st">&lt;/analysis&gt;"""</span>
+
+resp = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    system=system,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+               <span class="st">"content"</span>: <span class="st">"&lt;feedback&gt;The new UI is a scavenger hunt.&lt;/feedback&gt;"</span>}],
+)</pre>
+    <div class="note">The <code>&lt;sentiment&gt;</code> enum, the single worked <code>&lt;item&gt;</code>, and the
+    "reply with ONLY this XML" instruction together do most of the work — no feature required.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Prompt techniques vs. the feature</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Prompt-only techniques</h4>
+            <ul><li>Work on every model, no beta, no schema compiler</li>
+            <li>Flexible — mix prose + structure, partial structure, free-form fields</li>
+            <li>Zero added latency on the first call</li></ul></div>
+        <div class="con"><h4>⚠️ Prompt-only limits</h4>
+            <ul><li><strong>Best-effort</strong> — a stray token can still break the shape</li>
+            <li>You must validate and retry yourself</li>
+            <li>For hard JSON guarantees, escalate to 7.3 / 7.4</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Just tell Claude 'return JSON' and it will always be valid." → Plain instructions are
+    <b>best-effort</b>, not guaranteed. For a hard guarantee use <b>structured outputs</b> or <b>strict tool use</b>.</div>
+    <div class="trap"><b>Trap:</b> "Prefill the assistant turn to lock the format." → Prefill is <b>rejected with a 400</b>
+    on Fable 5 and the 4.6/4.7/4.8 family. It only works on older models — use the feature instead.</div>
+    <div class="trap"><b>Trap:</b> Abstract instructions over concrete examples. → Anthropic explicitly notes an
+    <b>example of the filled-in shape</b> teaches structure better than describing it in words.</div>
+    <div class="trap"><b>Trap:</b> Forgetting to constrain the values. → Naming an <b>enum</b> ("one of: A / B / C")
+    eliminates a whole class of free-text drift that format alone doesn't.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Name three prompt-only levers that increase output consistency.</summary>
+    <p class="answer">Any three of: <b>specify the exact format</b> (JSON/XML/template with every field named),
+    <b>give an example of the shape</b>, <b>use XML tags</b> as a skeleton, <b>constrain values with enums</b>,
+    <b>ground with retrieval</b>, and <b>chain prompts</b> into smaller subtasks.</p></details>
+    <details><summary>Q2 · Why is prefilling no longer the default answer for locking JSON?</summary>
+    <p class="answer">Assistant-turn prefill returns a <b>400 error</b> on current models (Fable 5, Opus 4.8/4.7/4.6,
+    Sonnet 4.6). The format-locking job has moved to <b>structured outputs</b> (7.4) or <b>tool use</b> (7.3), with
+    system-prompt instructions as the plain-text fallback.</p></details>
+    <details><summary>Q3 · When should you escalate from prompting to the Structured Outputs feature?</summary>
+    <p class="answer">When the output <b>must</b> parse as valid JSON conforming to a fixed schema <b>every time</b>.
+    Prompting is best-effort; the feature uses constrained decoding to <b>guarantee</b> conformance. Keep prompting
+    when you want flexibility beyond a strict schema.</p></details>
+
+    <div class="pager">
+        <a href="6-5-prefill-constraints.html"><span class="k">← Back</span>6.5 · Prefill Constraints</a>
+        <a class="next" href="7-2-json-prefill-stop.html"><span class="k">Next →</span>7.2 · JSON via Prefill + Stop Sequence</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 7.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

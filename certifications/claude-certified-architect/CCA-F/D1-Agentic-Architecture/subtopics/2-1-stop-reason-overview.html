@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.1 The Six stop_reason Values · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 2 · Stop Reasons</div>
+    <h1>2.1 · The Six <code>stop_reason</code> Values</h1>
+    <div class="tag">The router every agent loop hangs off</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Why <code>stop_reason</code> is the control signal</h2>
+    <p>The Messages API is <strong>stateless</strong>: every <code>POST /v1/messages</code> is a fresh request, and
+    the model tells you <em>why it stopped generating</em> via a single field — <code>response.stop_reason</code>.
+    That field is the branch point for your entire agent loop. Get the routing wrong and you either exit early,
+    loop forever, or crash reading <code>content[0]</code> on a turn that has no content.</p>
+
+    <div class="note">🔑 <strong>Branch on <code>stop_reason</code> BEFORE you read <code>content</code>.</strong> Some stops
+    (<code>refusal</code>, some errors) can arrive with <em>empty</em> content. Reading <code>content[0]</code> first
+    is a classic index-error bug.</div>
+
+    <p>There are <strong>six</strong> values you must handle. Two of them <em>exit</em> the loop; the rest mean
+    "do something, then call the API again."</p>
+
+    <table>
+        <tr><th><code>stop_reason</code></th><th>Meaning</th><th>What you do</th><th>Loop?</th></tr>
+        <tr><td><strong>end_turn</strong></td><td>Model finished its answer naturally.</td><td>Return the text; stop.</td><td>🟢 Exit</td></tr>
+        <tr><td><strong>tool_use</strong></td><td>Model wants to call one or more tools.</td><td>Run the tool(s) → append <code>tool_result</code> in a <strong>user</strong> turn → call again.</td><td>🔵 Continue</td></tr>
+        <tr><td><strong>max_tokens</strong></td><td>The <em>output</em> hit its cap and is <strong>truncated</strong>.</td><td>Raise <code>max_tokens</code>, stream, or continue the turn.</td><td>🟠 Depends</td></tr>
+        <tr><td><strong>stop_sequence</strong></td><td>Output hit a custom sequence you supplied.</td><td>Handle the delimiter/protocol boundary you defined.</td><td>🟠 Depends</td></tr>
+        <tr><td><strong>pause_turn</strong></td><td>A server-side tool ran its own loop and paused.</td><td>Re-send the assistant turn as-is; the server <strong>resumes</strong>.</td><td>🟣 Continue</td></tr>
+        <tr><td><strong>refusal</strong></td><td>Safety classifier/model declined. HTTP&nbsp;200.</td><td>Inspect <code>stop_details.category</code>; content may be empty/partial.</td><td>🔴 Exit</td></tr>
+    </table>
+
+    <div class="warn">⚠️ Some Claude 4.x models additionally emit <strong><code>model_context_window_exceeded</code></strong>
+    — the <em>context window</em> was exhausted. This is <strong>distinct from <code>max_tokens</code></strong> (which is
+    an output-cap truncation). Fix it by compaction or splitting the conversation, not by raising <code>max_tokens</code>.
+    See <a href="2-3-max-tokens-vs-context-window.html">2.3</a>.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The stop_reason router</h2>
+    <div class="mermaid">
+flowchart TD
+    R([response.stop_reason]) --> ET{end_turn?}
+    ET -->|Yes| X1["🟢 return text · STOP loop"]
+    ET -->|No| TU{tool_use?}
+    TU -->|Yes| K1["🔵 run tools → append tool_result → loop"]
+    TU -->|No| PT{pause_turn?}
+    PT -->|Yes| K2["🟣 re-send assistant turn as-is → loop"]
+    PT -->|No| MT{max_tokens?}
+    MT -->|Yes| K3["🟠 raise cap / stream / continue"]
+    MT -->|No| RF{refusal?}
+    RF -->|Yes| X2["🔴 handle decline · do NOT read content[0]"]
+    RF -->|No| SS["🟠 stop_sequence → handle your delimiter"]
+    classDef exit fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef stop fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef loop fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    class X1 exit; class X2 stop;
+    class K1,K2,K3 loop;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A router that branches before touching content</h2>
+    <p>Every robust agent loop starts here. Notice the branch on <code>stop_reason</code> comes <strong>before</strong>
+    any read of <code>resp.content</code>.</p>
+<pre><span class="cm"># Stateless: we resend the full `messages` list each turn.</span>
+resp = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">4096</span>,
+    tools=TOOLS, messages=messages,
+)
+
+<span class="cm"># Branch on WHY it stopped — before reading content[0].</span>
+<span class="kw">if</span> resp.stop_reason == <span class="st">"end_turn"</span>:
+    <span class="kw">return</span> resp.content            <span class="cm"># 🟢 done</span>
+<span class="kw">elif</span> resp.stop_reason == <span class="st">"tool_use"</span>:
+    handle_tool_use(resp, messages)  <span class="cm"># 🔵 run tools, append tool_result, loop (2.2)</span>
+<span class="kw">elif</span> resp.stop_reason == <span class="st">"pause_turn"</span>:
+    resume_server_tool(resp, messages) <span class="cm"># 🟣 re-send as-is, no "Continue." (2.4)</span>
+<span class="kw">elif</span> resp.stop_reason == <span class="st">"max_tokens"</span>:
+    handle_truncation(resp)          <span class="cm"># 🟠 raise cap / stream / continue (2.3)</span>
+<span class="kw">elif</span> resp.stop_reason == <span class="st">"refusal"</span>:
+    handle_refusal(resp)             <span class="cm"># 🔴 check stop_details, content may be empty (2.5)</span>
+<span class="kw">elif</span> resp.stop_reason == <span class="st">"stop_sequence"</span>:
+    handle_delimiter(resp)           <span class="cm"># 🟠 your custom protocol boundary (2.6)</span></pre>
+
+    <div class="good">A single <code>stop_reason</code> switch, evaluated <em>first</em>, is the backbone of every
+    correct agent loop. The rest of Cluster 2 is one page per non-trivial branch.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "There are four stop reasons." → The <b>4-value myth</b>. Older docs listed
+    <code>end_turn</code>, <code>max_tokens</code>, <code>stop_sequence</code>, <code>tool_use</code>. Modern agents
+    must also handle <b>pause_turn</b> and <b>refusal</b> (six total), plus <code>model_context_window_exceeded</code>
+    on some 4.x models. An answer that only handles four is incomplete.</div>
+    <div class="trap"><b>Trap:</b> Reading <code>resp.content[0].text</code> before checking <code>stop_reason</code>. →
+    On <b>refusal</b> the content can be <b>empty</b> → <code>IndexError</code>. Always branch first.</div>
+    <div class="trap"><b>Trap:</b> Treating <code>max_tokens</code> as "the conversation got too long." → It means the
+    <b>output</b> was truncated at its cap. Context exhaustion is a <em>different</em> signal
+    (<code>model_context_window_exceeded</code>). Don't conflate them (2.3).</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Your loop only handles end_turn, tool_use, and max_tokens. What breaks in production?</summary>
+    <p class="answer">Any <b>pause_turn</b> (server-side tool paused) and <b>refusal</b> (safety decline) fall through
+    your switch. The pause_turn case will look like a stall; the refusal case will often crash on
+    <code>content[0]</code> since content may be empty. You must handle all six.</p></details>
+    <details><summary>Q2 · Which two stop_reason values normally EXIT the loop, and which continue it?</summary>
+    <p class="answer">Exit: <b>end_turn</b> (done) and <b>refusal</b> (declined — stop and report). Continue:
+    <b>tool_use</b> and <b>pause_turn</b> always loop; <b>max_tokens</b> and <b>stop_sequence</b> depend on your design.</p></details>
+    <details><summary>Q3 · Why does statelessness make stop_reason the primary control signal?</summary>
+    <p class="answer">Because the server keeps no session, each response is self-describing: the model can only tell
+    you "why I stopped" via <code>stop_reason</code>. <em>Your</em> code owns the loop, so that field is the only
+    thing steering the next request.</p></details>
+
+    <div class="pager">
+        <a href="1-6-appending-whole-turn.html"><span class="k">← Prev</span>1.6 · Appending the whole turn</a>
+        <a class="next" href="2-2-tool-use-handling.html"><span class="k">Next →</span>2.2 · Handling tool_use</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 2.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

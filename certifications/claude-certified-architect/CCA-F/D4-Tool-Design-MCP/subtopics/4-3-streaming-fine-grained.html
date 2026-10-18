@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.3 Streaming &amp; Fine-Grained Tool Use · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 4 · Advanced Tool Use</div>
+    <h1>4.3 · Streaming &amp; Fine-Grained Tool Use</h1>
+    <div class="tag">Stream partial tool args</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Tool arguments stream as <code>input_json_delta</code> — accumulate before you parse</h2>
+    <p>When you stream a response that contains a tool call, the arguments don't arrive whole. The
+    <code>content_block_start</code> event carries a <strong>placeholder <code>input: {}</code></strong> (an empty
+    object — a slot marker). The real input arrives as a series of <code>content_block_delta</code> events of type
+    <strong><code>input_json_delta</code></strong>, each carrying a <strong><code>partial_json</code></strong> string
+    fragment. Your job is the <em>accumulation contract</em>:</p>
+    <ol>
+      <li>On <code>content_block_start</code> (type <code>tool_use</code>) → start an empty string.</li>
+      <li>On each <code>input_json_delta</code> → <strong>append</strong> <code>delta.partial_json</code>.</li>
+      <li>On <code>content_block_stop</code> → <strong>now</strong> parse the accumulated string with a JSON parser.</li>
+    </ol>
+    <div class="warn">⚠️ The type mismatch is by design: <code>input</code> starts as an empty <em>object</em>, the
+    deltas are <em>strings</em>. Never <code>json.loads()</code> a single fragment — a lone
+    <code>partial_json</code> like <code>{"loc</code> is not valid JSON. Concatenate first, parse last.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Fine-grained tool streaming: skip the buffer for big params</h2>
+    <p>By <strong>default</strong>, the API <em>buffers and validates</em> each parameter value server-side before
+    streaming it to you — so nothing appears for a large parameter (a document, a code block) until Claude finishes
+    generating it. <strong>Fine-grained tool streaming</strong> removes that buffer: fragments arrive
+    <strong>as Claude generates them</strong>, cutting time-to-first-fragment for large params.</p>
+    <ul>
+      <li><strong>How to turn it on:</strong> set <code>eager_input_streaming: true</code> on the specific
+      user-defined tool, and stream the request. This per-tool field is the current mechanism — it
+      <strong>replaces</strong> the legacy <code>fine-grained-tool-streaming-2025-05-14</code> beta header. All models
+      support it on the Claude API.</li>
+      <li><strong>The catch:</strong> because the API no longer buffers <em>or validates</em>, you can receive
+      <strong>partial or invalid JSON</strong> — and a response that stops at <code>max_tokens</code> can cut a
+      parameter off mid-value. So the same "accumulate + <em>guard the parse</em>" discipline is mandatory, and you
+      handle unparseable input by returning it to Claude as an error tool result.</li>
+    </ul>
+    <div class="note">🔑 Same event shape either way (<code>input_json_delta</code> / <code>partial_json</code>).
+    <code>eager_input_streaming</code> only changes <em>when</em> fragments arrive and <em>whether</em> they're
+    pre-validated — not the accumulation contract.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Fragments in, one guarded parse out</h2>
+    <div class="mermaid">
+flowchart TD
+    S["content_block_start<br/>tool_use, input: {}"] --> ACC["buf = ''"]
+    ACC --> D1["input_json_delta<br/>partial_json: '{\"file'"]
+    D1 --> D2["input_json_delta<br/>partial_json: 'name\":\"poem'"]
+    D2 --> D3["input_json_delta<br/>partial_json: '.txt\"}'"]
+    D3 --> STOP["content_block_stop"]
+    STOP --> P{"json.loads(buf)"}
+    P -->|"valid"| OK["🟢 run the tool"]
+    P -->|"invalid / truncated"| ERR["🟠 tool_result is_error:true<br/>{\"INVALID_JSON\": buf}"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class OK ok; class ERR gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Enable eager streaming, accumulate, guard the parse</h2>
+<pre><span class="kw">import</span> json
+tool_json = {}   <span class="cm"># block index -> accumulated string</span>
+
+<span class="kw">with</span> client.messages.<span class="fn">stream</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">16000</span>,
+    tools=[{
+        <span class="st">"name"</span>: <span class="st">"make_file"</span>,
+        <span class="st">"description"</span>: <span class="st">"Write text to a file"</span>,
+        <span class="st">"eager_input_streaming"</span>: <span class="kw">True</span>,   <span class="cm"># fine-grained: no server buffer/validate</span>
+        <span class="st">"input_schema"</span>: {<span class="st">"type"</span>: <span class="st">"object"</span>,
+            <span class="st">"properties"</span>: {<span class="st">"filename"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>},
+                           <span class="st">"body"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>}},
+            <span class="st">"required"</span>: [<span class="st">"filename"</span>, <span class="st">"body"</span>]},
+    }],
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Write a long poem to poem.txt"</span>}],
+) <span class="kw">as</span> stream:
+    <span class="kw">for</span> ev <span class="kw">in</span> stream:
+        <span class="kw">if</span> ev.type == <span class="st">"content_block_start"</span> <span class="kw">and</span> ev.content_block.type == <span class="st">"tool_use"</span>:
+            tool_json[ev.index] = <span class="st">""</span>                          <span class="cm"># 1) start empty</span>
+        <span class="kw">elif</span> ev.type == <span class="st">"content_block_delta"</span> <span class="kw">and</span> ev.delta.type == <span class="st">"input_json_delta"</span>:
+            tool_json[ev.index] += ev.delta.partial_json      <span class="cm"># 2) append fragment</span>
+        <span class="kw">elif</span> ev.type == <span class="st">"content_block_stop"</span> <span class="kw">and</span> ev.index <span class="kw">in</span> tool_json:
+            <span class="kw">try</span>:
+                args = json.<span class="fn">loads</span>(tool_json[ev.index])          <span class="cm"># 3) parse at STOP</span>
+            <span class="kw">except</span> json.JSONDecodeError:
+                <span class="cm"># invalid/truncated → hand it back as an error tool_result</span>
+                args = {<span class="st">"INVALID_JSON"</span>: tool_json[ev.index]}   <span class="cm"># is_error: True</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Default buffered vs. fine-grained streaming</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ <code>eager_input_streaming: true</code></h4>
+            <ul><li>Fragments arrive as generated — low time-to-first-token for big params</li>
+            <li>Longer chunks, fewer mid-word breaks; great for live-rendering a file/code</li>
+            <li>Latency-sensitive UIs (write-as-you-watch)</li></ul></div>
+        <div class="con"><h4>⚠️ What you give up</h4>
+            <ul><li>No server-side validation → <b>partial / invalid JSON possible</b></li>
+            <li><code>max_tokens</code> can truncate a parameter mid-value</li>
+            <li>You <b>must</b> guard the parse and return <code>is_error</code> on failure</li></ul></div>
+    </div>
+    <div class="good">Turn it on per-tool only where a param is large and latency matters. Small,
+    validation-sensitive args are fine on the default buffered path.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Parsing each <code>partial_json</code> fragment individually. → Fragments are
+    <b>not</b> standalone JSON. Accumulate across <code>input_json_delta</code> events, parse once at
+    <code>content_block_stop</code>.</div>
+    <div class="trap"><b>Trap:</b> Reading the tool args from the <code>content_block_start</code> <code>input</code>. →
+    That's a placeholder empty <code>{}</code>; the real value is built from the deltas.</div>
+    <div class="trap"><b>Trap:</b> Reaching for the <code>fine-grained-tool-streaming-2025-05-14</code> beta header. →
+    Legacy. The per-tool <code>eager_input_streaming: true</code> field replaces it; explicit
+    <code>false</code> keeps buffered streaming even if the old header is still sent.</div>
+    <div class="trap"><b>Trap:</b> Trusting eager-streamed input is valid JSON. → It isn't guaranteed. Guard the
+    parse; on failure return a <code>tool_result</code> with <code>is_error: true</code> wrapping the raw string.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Walk the three-step accumulation contract for streamed tool input.</summary>
+    <p class="answer">(1) On <code>content_block_start</code> with type <code>tool_use</code>, init an empty string.
+    (2) On each <code>input_json_delta</code>, append <code>delta.partial_json</code>. (3) On
+    <code>content_block_stop</code>, parse the accumulated string. The initial <code>input:{}</code> is only a
+    placeholder.</p></details>
+    <details><summary>Q2 · What does <code>eager_input_streaming: true</code> change, and what's the risk?</summary>
+    <p class="answer">It disables server-side buffering/validation so large-parameter fragments stream out as
+    Claude generates them (lower latency). The risk is that the accumulated input can be <b>partial or invalid
+    JSON</b> — including <code>max_tokens</code> truncation — so you must guard the parse and return
+    <code>is_error</code> when it fails.</p></details>
+    <details><summary>Q3 · Your accumulated string won't parse. What do you send back?</summary>
+    <p class="answer">A <code>tool_result</code> block with <code>is_error: true</code> whose <code>content</code>
+    wraps the raw string, e.g. <code>{"INVALID_JSON": "&lt;the unparseable input&gt;"}</code> — so Claude sees the
+    failure and can retry.</p></details>
+
+    <div class="pager">
+        <a href="4-2-structured-json-via-tools.html"><span class="k">← Back</span>4.2 · Forcing Structured JSON via Tools</a>
+        <a class="next" href="4-4-programmatic-code-execution.html"><span class="k">Next →</span>4.4 · Programmatic Tool Calling &amp; Code Execution</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 4.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

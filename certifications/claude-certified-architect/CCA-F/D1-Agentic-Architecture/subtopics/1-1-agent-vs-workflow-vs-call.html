@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1 Agent vs Workflow vs Single Call · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 1 · Foundations</div>
+    <h1>1.1 · Agent vs. Workflow vs. Single LLM Call</h1>
+    <div class="tag">When to build an agent — the tier decision</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The three tiers</h2>
+    <p>Before you design <em>how</em> an agent works, decide <em>whether</em> you need one. There are
+    three tiers of increasing power, cost, and unpredictability. <strong>The architect's job is to pick the
+    lowest tier that solves the problem</strong> — the exam consistently rewards this restraint.</p>
+
+    <table>
+        <tr><th>Tier</th><th>What it is</th><th>Who controls the flow</th><th>Use when</th></tr>
+        <tr><td><strong>Single LLM call</strong></td><td>One request → one response</td><td>N/A — no loop</td>
+            <td>Classification, summarization, extraction, Q&amp;A</td></tr>
+        <tr><td><strong>Workflow</strong></td><td>Multiple steps wired together in <em>your</em> code, LLM calls at fixed points</td><td><strong>You</strong> (deterministic code)</td>
+            <td>Multi-step but the steps are known in advance</td></tr>
+        <tr><td><strong>Agent</strong></td><td>A loop where the <em>model</em> decides the next action (which tool, when to stop)</td><td><strong>The model</strong> (dynamic)</td>
+            <td>Open-ended, hard-to-pre-script tasks needing tools</td></tr>
+    </table>
+
+    <div class="note">🔑 The dividing line between a <strong>workflow</strong> and an <strong>agent</strong> is
+    <em>who decides the control flow</em>. If your code decides the order of steps, it's a workflow. If the
+    <em>model</em> decides its own next step in a loop, it's an agent.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Choosing the tier</h2>
+    <div class="mermaid">
+flowchart TD
+    A([Task]) --> Q1{"Single request→response<br/>enough? (classify, summarize, extract)"}
+    Q1 -->|Yes| T1["🟢 Single LLM call<br/>cheapest · most predictable"]
+    Q1 -->|No| Q2{"Are the steps<br/>known in advance?"}
+    Q2 -->|Yes| T2["🔵 Workflow<br/>you orchestrate in code"]
+    Q2 -->|No| Q3{"Does it need tools &<br/>model-driven decisions?"}
+    Q3 -->|Yes| T3["🟣 Agent<br/>model drives the loop"]
+    Q3 -->|No| T2
+    classDef a fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef b fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef c fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    class T1 a; class T2 b; class T3 c;
+    </div>
+
+    <h2><span class="chip concept">CONCEPT</span> The 4-question agent gate</h2>
+    <p>Anthropic's guidance: only reach for the agent tier when <strong>all four</strong> hold. Any "no" → drop to a workflow or a single call.</p>
+    <table>
+        <tr><th>Check</th><th>Question</th><th>If "no"…</th></tr>
+        <tr><td><strong>Complexity</strong></td><td>Is the task multi-step and hard to fully specify up front?</td><td>A workflow or single call is simpler and cheaper.</td></tr>
+        <tr><td><strong>Value</strong></td><td>Does the outcome justify higher cost &amp; latency?</td><td>Not worth an agent's overhead.</td></tr>
+        <tr><td><strong>Viability</strong></td><td>Is Claude actually capable at this task type?</td><td>No amount of looping fixes a capability gap.</td></tr>
+        <tr><td><strong>Cost of error</strong></td><td>Can mistakes be caught &amp; recovered (tests, review, rollback)?</td><td>Too risky to let a model drive autonomously.</td></tr>
+    </table>
+
+    <h2><span class="chip code">CODE</span> The same task at each tier</h2>
+    <p>"Extract the invoice total from this text" — as a single call, then "answer a support question that may need a lookup" as a workflow vs. an agent.</p>
+
+    <h3>Tier 1 — single call (no loop)</h3>
+<pre><span class="cm"># One request, one response. No tools, no loop. Cheapest & most predictable.</span>
+resp = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">256</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+               <span class="st">"content"</span>: <span class="st">f"Extract the invoice total as JSON: {text}"</span>}],
+)</pre>
+
+    <h3>Tier 2 — workflow (your code decides the steps)</h3>
+<pre><span class="cm"># YOU control the order. The LLM is called at fixed points you chose.</span>
+docs   = retrieve(query)                 <span class="cm"># step 1: your code</span>
+ranked = rerank(docs, query)             <span class="cm"># step 2: your code</span>
+answer = client.messages.create(         <span class="cm"># step 3: one LLM call with context</span>
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    messages=[{<span class="st">"role"</span>:<span class="st">"user"</span>,<span class="st">"content"</span>: prompt(query, ranked)}],
+)</pre>
+
+    <h3>Tier 3 — agent (the model decides the next action)</h3>
+<pre><span class="cm"># The MODEL drives: it decides whether to look something up, then answers.</span>
+messages = [{<span class="st">"role"</span>:<span class="st">"user"</span>,<span class="st">"content"</span>: question}]
+<span class="kw">while</span> True:
+    resp = client.messages.create(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">4096</span>,
+                                  tools=TOOLS, messages=messages)
+    <span class="kw">if</span> resp.stop_reason == <span class="st">"end_turn"</span>: <span class="kw">break</span>          <span class="cm"># model decided it's done</span>
+    messages.append({<span class="st">"role"</span>:<span class="st">"assistant"</span>,<span class="st">"content"</span>: resp.content})
+    <span class="cm"># ...run the tool the MODEL chose, append tool_result, loop (see 1.3)</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Why not always use an agent?</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Agent gains</h4>
+            <ul><li>Handles open-ended tasks you can't fully script</li>
+            <li>Adapts step-by-step to what it finds</li>
+            <li>Composes tools dynamically</li></ul></div>
+        <div class="con"><h4>⚠️ Agent costs</h4>
+            <ul><li>More tokens &amp; latency (multiple round-trips)</li>
+            <li>Less predictable — harder to test &amp; guarantee</li>
+            <li>Bigger blast radius on error; needs guardrails</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb: <strong>single call → workflow → agent</strong>, and stop at the first tier
+    that works. Escalate a tier only when the task genuinely can't be pre-scripted.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Design an agent for &lt;simple, single-step task&gt;." → The right answer is often
+    <b>not</b> an agent. If one request answers it, that's the design. Watch for "cost-effective" / "least latency"
+    keywords steering you down a tier.</div>
+    <div class="trap"><b>Trap:</b> Calling any multi-step LLM pipeline an "agent." → If <b>your code</b> fixes the step
+    order, it's a <b>workflow</b>, not an agent. Agents let the <b>model</b> choose the next action.</div>
+    <div class="trap"><b>Trap:</b> Jumping to multi-agent. → That's a further escalation <em>within</em> the agent tier
+    (see 4.1); most agent problems are one agent + tools.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A client needs to classify 100k support emails/day into 5 categories, cheaply. Which tier?</summary>
+    <p class="answer"><b>Single LLM call</b> (batch it, likely on Haiku). It's one-step and high-volume — an agent
+    would add cost and latency for zero benefit. Reserve agents for tasks that can't be pre-scripted.</p></details>
+    <details><summary>Q2 · "Turn a design doc into a working PR" — agent or workflow, and why?</summary>
+    <p class="answer"><b>Agent.</b> The steps (which files to read, what to edit, how to fix test failures) can't be
+    fully specified in advance and require tool use + model-driven decisions — it passes all four gate checks
+    (complex, valuable, viable, recoverable via tests/review).</p></details>
+    <details><summary>Q3 · Your "agent" always runs retrieve → rerank → answer in that fixed order. Is it an agent?</summary>
+    <p class="answer">No — that's a <b>workflow</b>. Your code fixes the control flow. It only becomes an agent if the
+    model itself decides whether/when to retrieve. Naming it "agent" doesn't change the architecture.</p></details>
+
+    <div class="pager">
+        <a href="../index.html"><span class="k">← Back</span>D1 Curriculum Hub</a>
+        <a class="next" href="1-2-messages-api-substrate.html"><span class="k">Next →</span>1.2 · The Messages API substrate</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 1.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

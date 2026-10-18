@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.7 Result Merging / Aggregation · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 4 · Multi-Agent</div>
+    <h1>4.7 · Result Merging / Aggregation</h1>
+    <div class="tag">The coordinator synthesizes — and resolves conflicts</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Merging is the coordinator's final act</h2>
+    <p>After specialists return their outputs (whether from a fan-out or a pipeline), someone has to turn several
+    partial answers into one coherent result. That's the coordinator's <strong>merge</strong> job: it
+    <strong>aggregates</strong> the specialist outputs, <strong>synthesizes</strong> them into a single answer, and
+    <strong>resolves conflicts</strong> when specialists disagree. Because sub-agents are context-isolated (4.4),
+    only the coordinator sees all the results — so merging can only happen there.</p>
+
+    <table>
+        <tr><th>Sub-step</th><th>What the coordinator does</th></tr>
+        <tr><td><strong>Aggregate</strong></td><td>Collect every specialist's output into one place</td></tr>
+        <tr><td><strong>Synthesize</strong></td><td>Weave them into a unified, coherent answer (not a concatenation)</td></tr>
+        <tr><td><strong>Resolve conflicts</strong></td><td>When specialists disagree, decide which to trust / how to reconcile</td></tr>
+    </table>
+
+    <div class="note">🔑 Merging is <strong>synthesis, not concatenation</strong>. Stapling outputs together is not
+    merging — the coordinator must reconcile overlaps and contradictions into one answer.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Conflict resolution strategies</h2>
+    <ul>
+        <li><strong>Authority / role:</strong> trust the specialist whose domain owns the fact.</li>
+        <li><strong>Evidence:</strong> prefer the output backed by stronger sources or tool results.</li>
+        <li><strong>Consensus:</strong> where multiple specialists agree, weight that higher.</li>
+        <li><strong>Escalate:</strong> if unresolved and stakes are high, surface to a human (see 3.6).</li>
+    </ul>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Aggregate → synthesize → resolve</h2>
+    <div class="mermaid">
+flowchart TD
+    S1["🔵 Specialist A output"] --> AGG["📥 Aggregate<br/>(coordinator)"]
+    S2["🔵 Specialist B output"] --> AGG
+    S3["🔵 Specialist C output"] --> AGG
+    AGG --> CONF{"Conflicts?"}
+    CONF -->|no| SYN["🟣 Synthesize<br/>one coherent answer"]
+    CONF -->|yes| RES["⚖️ Resolve<br/>authority · evidence · consensus"]
+    RES --> SYN
+    SYN --> OUT(["✔ Final merged answer"])
+    classDef b fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef p fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    classDef g fill:#d4edda,stroke:#28a745,color:#155724;
+    class S1 b; class S2 b; class S3 b; class SYN p; class OUT g;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Merge specialist results with an LLM synthesis pass</h2>
+    <p>Aggregate the isolated outputs, then give the coordinator model an explicit synthesis + conflict-resolution
+    instruction.</p>
+<pre><span class="cm"># `results` = outputs collected from the (parallel or sequential) specialists.</span>
+results = {
+    <span class="st">"market"</span>: market_agent_output,
+    <span class="st">"technical"</span>: tech_agent_output,
+    <span class="st">"financial"</span>: finance_agent_output,
+}
+
+<span class="kw">import</span> json
+merge_prompt = (
+    <span class="st">"You are the coordinator. Synthesize the specialist outputs below into ONE "</span>
+    <span class="st">"coherent recommendation. Where they disagree, resolve the conflict and state "</span>
+    <span class="st">"which specialist you trusted and why. Do not just concatenate.\n\n"</span>
+    <span class="st">f"{json.dumps(results, indent=2)}"</span>
+)
+
+merged = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">2048</span>,   <span class="cm"># the strong model does the synthesis</span>
+    system=<span class="st">"Aggregate, synthesize, and resolve conflicts across specialist outputs."</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: merge_prompt}],
+)
+final = <span class="st">""</span>.join(b.text <span class="kw">for</span> b <span class="kw">in</span> merged.content <span class="kw">if</span> b.type == <span class="st">"text"</span>)</pre>
+
+    <div class="good">Using the strong model (<code>claude-opus-4-8</code>) for the merge is a common choice: synthesis
+    and conflict resolution are exactly the hard reasoning the coordinator exists for, even if specialists ran on
+    cheaper models.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Treating merge as concatenation. → Synthesis reconciles overlaps and
+    contradictions into one answer; stapling outputs together is not merging.</div>
+    <div class="trap"><b>Trap:</b> Expecting specialists to resolve conflicts among themselves. → They're
+    context-isolated and don't see each other. <b>Only the coordinator</b> sees all outputs, so it owns conflict
+    resolution.</div>
+    <div class="trap"><b>Trap:</b> Ignoring disagreement. → If two specialists contradict each other, the merge step
+    must decide (authority / evidence / consensus) or escalate — not silently pick one.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why can't the specialists merge their own results?</summary>
+    <p class="answer">They're context-isolated (4.4) and never see each other's outputs. Only the coordinator
+    aggregates all results, so synthesis and conflict resolution happen there.</p></details>
+    <details><summary>Q2 · The market and financial specialists give opposite go/no-go calls. What should the coordinator do?</summary>
+    <p class="answer">Resolve the conflict explicitly — weigh authority (whose domain owns the call), evidence, and
+    consensus — and state which it trusted and why. If stakes are high and it's unresolved, escalate to a human (3.6).</p></details>
+    <details><summary>Q3 · Why often run the merge on the strong model even when specialists used cheaper ones?</summary>
+    <p class="answer">Synthesis and conflict resolution are the hardest reasoning in the workflow. Specialists can be
+    cheap/fast on sub-tasks, but the coordinator's merge benefits from the strongest model.</p></details>
+
+    <div class="pager">
+        <a href="4-6-parallel-vs-sequential.html"><span class="k">← Prev</span>4.6 · Parallel vs. sequential</a>
+        <a class="next" href="4-8-subagents-cost-cache.html"><span class="k">Next →</span>4.8 · Sub-agents as a cost/cache tactic</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 4.7</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

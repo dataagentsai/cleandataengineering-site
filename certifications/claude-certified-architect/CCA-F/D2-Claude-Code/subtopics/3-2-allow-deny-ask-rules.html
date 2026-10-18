@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.2 Allow / Deny / Ask Rules · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 3 · Permissions &amp; Safety</div>
+    <h1>3.2 · Allow / Deny / Ask Rules</h1>
+    <div class="tag">Tool-scoped permission rules</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Three lists, one syntax: <code>Tool</code> or <code>Tool(specifier)</code></h2>
+    <p>Where <a href="3-1-permission-modes.html">modes</a> (3.1) set the baseline, <strong>permission rules</strong>
+    make it precise. Every rule targets a tool and optionally narrows it with a specifier in parentheses. Rules live
+    in the <code>permissions</code> block of a settings file (or you manage them live with <code>/permissions</code>):</p>
+    <ul>
+        <li><strong><code>allow</code></strong> — Claude uses the tool without asking.</li>
+        <li><strong><code>ask</code></strong> — Claude prompts for confirmation each time.</li>
+        <li><strong><code>deny</code></strong> — Claude is blocked from the tool entirely.</li>
+    </ul>
+
+    <table>
+        <tr><th>Rule</th><th>Effect</th></tr>
+        <tr><td><code>Bash</code></td><td>Matches all Bash commands (bare name = whole tool)</td></tr>
+        <tr><td><code>Bash(npm run build)</code></td><td>Matches the exact command <code>npm run build</code></td></tr>
+        <tr><td><code>Bash(npm run test:*)</code> / <code>Bash(npm run test *)</code></td><td>Matches commands starting with <code>npm run test</code> (trailing wildcard)</td></tr>
+        <tr><td><code>Read(./src/**)</code></td><td>Reads under <code>&lt;cwd&gt;/src/</code> (gitignore-style path)</td></tr>
+        <tr><td><code>Read(./.env)</code></td><td>Matches reading the <code>.env</code> file in the current dir</td></tr>
+        <tr><td><code>WebFetch(domain:example.com)</code></td><td>Fetch requests to <code>example.com</code></td></tr>
+        <tr><td><code>mcp__puppeteer__navigate</code></td><td>One tool from the <code>puppeteer</code> MCP server</td></tr>
+    </table>
+
+    <div class="note">🔑 <code>Bash(ls *)</code> (with the space) matches <code>ls -la</code> but not <code>lsof</code> —
+    the space enforces a word boundary. <code>Bash(ls*)</code> matches both. The <code>:*</code> suffix is
+    equivalent to a trailing <code>&nbsp;*</code>, so <code>Bash(npm run test:*)</code> == <code>Bash(npm run test *)</code>.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Deny wins — precedence is deny → ask → allow</h2>
+    <p>Rules are evaluated <strong>in order: deny first, then ask, then allow.</strong> The first match determines
+    the outcome, and rule specificity does <em>not</em> change the order. So a broad
+    <code>deny</code> like <code>Bash(aws *)</code> blocks even a call that also matches a narrow
+    <code>allow</code> like <code>Bash(aws s3 ls)</code> — <strong>a deny rule can't carry allowlist exceptions.</strong></p>
+
+    <div class="bad">🚫 Deny wins <em>across every settings scope too</em>: if user settings allow a tool and project
+    (or managed) settings deny it, the deny blocks it. If a tool is denied at any level, no other level — not even
+    <code>--allowedTools</code> on the CLI — can re-allow it.</div>
+
+    <div class="warn">⚠️ A <b>bare</b> deny like <code>Bash</code> removes the tool from Claude's context entirely
+    (Claude never sees it). A <b>scoped</b> deny like <code>Bash(rm *)</code> leaves the tool available and blocks
+    only matching calls. <code>Bash(*)</code> is equivalent to bare <code>Bash</code>.</div>
+
+    <div class="note">Rules are enforced by <strong>Claude Code, not the model</strong>. Instructions in your prompt
+    or <code>CLAUDE.md</code> shape what Claude <em>tries</em>, but they never change what the harness
+    <em>allows</em>. Read/Edit rules follow the <b>gitignore</b> spec: <code>//abs</code>, <code>~/home</code>,
+    <code>/settings-relative</code>, and <code>path</code>/<code>./path</code> = cwd-relative.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> A call is checked deny → ask → allow</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Claude attempts Tool(args)"] --> D{"Matches a DENY rule?"}
+    D -->|"yes"| BLOCK["🔴 Blocked — no override possible"]
+    D -->|"no"| K{"Matches an ASK rule?"}
+    K -->|"yes"| PROMPT["🟠 Prompt the user"]
+    K -->|"no"| AL{"Matches an ALLOW rule?"}
+    AL -->|"yes"| RUN["🟢 Run without asking"]
+    AL -->|"no"| MODE["↩ Fall back to the permission mode's default"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class RUN ok; class PROMPT gate; class MODE gate; class BLOCK bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A realistic <code>permissions</code> block</h2>
+<pre>{
+  <span class="st">"permissions"</span>: {
+    <span class="st">"allow"</span>: [
+      <span class="st">"Bash(npm run *)"</span>,
+      <span class="st">"Bash(git commit *)"</span>,
+      <span class="st">"Read(./src/**)"</span>,
+      <span class="st">"WebFetch(domain:docs.claude.com)"</span>
+    ],
+    <span class="st">"ask"</span>: [
+      <span class="st">"Bash(git push *)"</span>
+    ],
+    <span class="st">"deny"</span>: [
+      <span class="st">"Bash(curl *)"</span>,          <span class="cm">// block network shell tools</span>
+      <span class="st">"Read(./.env)"</span>,
+      <span class="st">"Read(./.env.*)"</span>,
+      <span class="st">"Read(./secrets/**)"</span>
+    ]
+  }
+}</pre>
+    <div class="good">Pattern to remember: <b>allow</b> the safe routine (build/test), <b>ask</b> on the risky-but-needed
+    (<code>git push</code>), <b>deny</b> the never-OK (reading <code>.env</code>, raw <code>curl</code>). Because deny
+    beats allow, the <code>Bash(curl *)</code> deny holds even if a broader Bash allow exists.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Broad allow vs. explicit rules</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Narrow, explicit rules</h4>
+            <ul><li>Least privilege — only the exact commands you meant</li>
+            <li>Check into version control, share across the team</li>
+            <li>Deny rules give a hard, un-overridable boundary</li></ul></div>
+        <div class="con"><h4>⚠️ Broad allow like <code>Bash</code> or <code>Bash(*)</code></h4>
+            <ul><li>Fewer prompts, but grants arbitrary shell</li>
+            <li>Argument-constraining patterns (<code>Bash(curl example.com *)</code>) are fragile — options,
+            redirects, and variables slip past</li>
+            <li>Better: deny the tool and use a scoped tool like <code>WebFetch(domain:…)</code></li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "A more specific allow beats a broad deny." → Never. Precedence is
+    <b>deny → ask → allow</b> and specificity is ignored. <code>Bash(aws *)</code> in deny blocks
+    <code>Bash(aws s3 ls)</code> even with an explicit allow for it.</div>
+    <div class="trap"><b>Trap:</b> "Putting the rule in <code>CLAUDE.md</code> enforces it." → No. Memory shapes
+    <em>intent</em>; only <code>/permissions</code>, settings rules, a permission mode, or a PreToolUse hook
+    <em>enforce</em>. Rules are enforced by the harness, not the model.</div>
+    <div class="trap"><b>Trap:</b> "<code>Bash(ls*)</code> and <code>Bash(ls *)</code> mean the same." → The space
+    matters. <code>Bash(ls *)</code> requires a word boundary (matches <code>ls -la</code>, not <code>lsof</code>);
+    <code>Bash(ls*)</code> matches both.</div>
+    <div class="trap"><b>Trap:</b> "A user-level allow overrides a project-level deny." → Deny from <em>any</em> scope
+    is evaluated before allow from any scope, so the deny wins. If denied anywhere, it stays denied.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You allow <code>Bash(aws *)</code> but deny <code>Bash(aws s3 rm *)</code>. Can Claude run <code>aws s3 rm s3://bucket/x</code>?</summary>
+    <p class="answer">No. Deny is checked first and wins regardless of the broader allow. The
+    <code>aws s3 rm</code> command is blocked; other <code>aws</code> commands still run via the allow.</p></details>
+    <details><summary>Q2 · Write a rule set that lets Claude read source but never read secrets, and lets it fetch only the docs site.</summary>
+    <p class="answer"><code>allow: ["Read(./src/**)", "WebFetch(domain:docs.claude.com)"]</code> and
+    <code>deny: ["Read(./.env)", "Read(./secrets/**)"]</code>. The deny guarantees secrets stay unreadable even if a
+    broader Read allow is added later.</p></details>
+    <details><summary>Q3 · Why is <code>Bash(curl https://safe.com *)</code> a weak way to restrict curl to one host?</summary>
+    <p class="answer">Argument patterns are fragile: <code>-X GET</code> before the URL, <code>https</code> vs
+    <code>http</code>, redirects, or a variable like <code>$URL</code> all evade it. Prefer denying
+    <code>Bash(curl *)</code> and granting <code>WebFetch(domain:safe.com)</code>, or use a PreToolUse hook.</p></details>
+
+    <div class="pager">
+        <a href="3-1-permission-modes.html"><span class="k">← Back</span>3.1 · Permission Modes</a>
+        <a class="next" href="3-3-directory-access.html"><span class="k">Next →</span>3.3 · Directory Access &amp; Working Dirs</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 3.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Mock 7 Simulator</title>
+<link rel="stylesheet" href="assets/exam.css">
+<style>
+.picker{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;font-size:13px;color:var(--dim)}
+.picker select{flex:1 1 280px;max-width:100%;background:var(--card2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font:inherit;font-size:14px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:16px}
+.card h2{margin:0 0 8px;font-size:16px;color:var(--acc2)}
+.brief{font-size:13px;color:var(--dim);margin:0 0 10px}
+.card h4{margin:14px 0 6px;font-size:14px}
+</style>
+</head>
+<body>
+<header class="page">
+  <div class="crumb"><a href="../CCA-F_Study_Guide.html">CCA-F</a> › <a href="index.html">Mock Exam #7</a> › Simulator</div>
+  <h1>See it run</h1>
+  <div class="tag">Revision view of the simulator that sits under every exam question · apply any option, then switch to World B to see the runner-up win</div>
+</header>
+
+<div class="wrap">
+  <label class="picker">Question <select id="pick"></select><span id="pos"></span></label>
+
+  <div class="card">
+    <h2 id="qobj"></h2>
+    <p class="brief" id="brief"></p>
+    <div class="qtext" id="qtext"></div>
+    <div id="sim"></div>
+  </div>
+
+  <div class="card">
+    <h2>Think it through</h2>
+    <div id="deep"></div>
+  </div>
+</div>
+
+<footer>CCA-F · Mock Exam #7 · scripted simulations: every trace is hand-written and deterministic, with no live model calls</footer>
+
+<script src="assets/questions.js"></script>
+<script src="assets/sims.js"></script>
+<script src="assets/sims-s1a.js"></script>
+<script src="assets/sims-s1b.js"></script>
+<script src="assets/sims-s3.js"></script>
+<script src="assets/sims-s4s6.js"></script>
+<script src="assets/sims-cfg.js"></script>
+<script src="assets/sims-ctx.js"></script>
+<script src="assets/sims-multi.js"></script>
+<script src="assets/sims-cli.js"></script>
+<script src="assets/sims-prompt.js"></script>
+<script src="assets/simview.js"></script>
+<script>
+(function () {
+  var QS = {}; window.EXAM.questions.forEach(function (q) { QS[q.id] = q; });
+  var SC = {}; window.EXAM.scenarios.forEach(function (s) { SC[s.id] = s; });
+  var ids = window.EXAM.questions.map(function (q) { return q.id; }).filter(function (id) { return window.SIMS[id]; });
+  var $ = function (id) { return document.getElementById(id); };
+  var esc = function (s) { return String(s).replace(/[&<>]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]; }); };
+
+  var groups = {}; ids.forEach(function (x) { (groups[QS[x].sid] = groups[QS[x].sid] || []).push(x); });
+  $('pick').innerHTML = Object.keys(groups).map(function (sid) {
+    return '<optgroup label="' + esc(SC[sid].title.replace(/<[^>]+>/g, '')) + '">' + groups[sid].map(function (x) {
+      return '<option value="' + x + '">' + x.replace('m7-', '') + ' · ' + esc(QS[x].obj) + '</option>'; }).join('') + '</optgroup>'; }).join('');
+
+  function pick(id) {
+    var q = QS[id];
+    try { history.replaceState(null, '', '#' + id); } catch (e) {}
+    $('pick').value = id;
+    $('pos').textContent = (ids.indexOf(id) + 1) + ' of ' + ids.length;
+    $('qobj').textContent = q.id + ' · ' + q.obj;
+    $('brief').innerHTML = SC[q.sid].brief;
+    $('qtext').innerHTML = q.question;
+    window.SimView.mount($('sim'), id, { qtextEl: $('qtext'), markClue: true });
+    $('deep').innerHTML = window.SimView.deep(q, function (i) { return String.fromCharCode(65 + i); });
+  }
+  $('pick').onchange = function () { pick(this.value); };
+  var h = location.hash.slice(1);
+  pick(window.SIMS[h] ? h : ids[0]);
+})();
+</script>
+</body>
+</html>

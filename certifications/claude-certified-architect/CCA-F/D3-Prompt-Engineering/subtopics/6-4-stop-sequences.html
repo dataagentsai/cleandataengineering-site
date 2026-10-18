@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.4 Stop Sequences as Output Control · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 6 · Prefill &amp; Output Control</div>
+    <h1>6.4 · Stop Sequences as Output Control</h1>
+    <div class="tag">Cut generation cleanly</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A delimiter that ends the turn</h2>
+    <p><code>stop_sequences</code> is a request parameter: a list of strings that, when Claude is about to
+    generate any of them, cause generation to <strong>stop immediately</strong>. Where prefill controls where
+    the response <em>starts</em> (6.1–6.3), stop sequences control where it <em>ends</em>. Together they bound the
+    output on both sides.</p>
+
+    <div class="note">🔑 The matched stop sequence is <strong>not included</strong> in the returned text. If you
+    stop on <code>&lt;/analysis&gt;</code>, the content ends right before it — you get the inside of the block,
+    not the closing tag.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Reading why it stopped: <code>stop_reason</code> + <code>stop_sequence</code></h2>
+    <p>Every response carries a <code>stop_reason</code>. When a stop sequence fired, it is
+    <code>"stop_sequence"</code>, and a companion field <code>stop_sequence</code> tells you <em>which</em> string
+    matched — useful when you pass several. Always branch on <code>stop_reason</code>; don't assume the response
+    ran to a natural end.</p>
+
+    <table>
+        <tr><th><code>stop_reason</code></th><th>Meaning</th></tr>
+        <tr><td><code>end_turn</code></td><td>Claude finished naturally</td></tr>
+        <tr><td><code>stop_sequence</code></td><td>Hit one of your <code>stop_sequences</code> — see <code>stop_sequence</code> for which</td></tr>
+        <tr><td><code>max_tokens</code></td><td>Hit the token cap — output may be truncated</td></tr>
+        <tr><td><code>tool_use</code></td><td>Claude wants to call a tool</td></tr>
+        <tr><td><code>refusal</code></td><td>Declined for safety — check <code>stop_details</code></td></tr>
+    </table>
+
+    <div class="good">The showcase combo: <strong>prefill <code>{</code> and stop on <code>}</code></strong>. The
+    response opens as JSON and halts the instant the first object closes — you get <strong>exactly one JSON
+    object</strong>, no trailing commentary.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Prefill <code>{</code> + stop on <code>}</code> → one object</h2>
+    <div class="mermaid">
+flowchart TD
+    START["assistant prefill: '{'"] --> GEN["Claude generates:<br/>&quot;name&quot;: &quot;Ada&quot;, &quot;id&quot;: 7"]
+    GEN --> HIT{"About to emit '}'?"}
+    HIT -->|"yes"| STOP["🟢 STOP before '}'<br/>stop_reason = 'stop_sequence'<br/>stop_sequence = '}'"]
+    HIT -->|"no"| GEN
+    STOP --> REBUILD["Rebuild object:<br/>'{' + content + '}'"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class STOP ok; class REBUILD ok; class HIT gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Exactly one JSON object: prefill <code>{</code>, stop <code>}</code></h2>
+<pre><span class="kw">import</span> anthropic, json
+client = anthropic.Anthropic()
+
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-5"</span>,
+    max_tokens=<span class="st">300</span>,
+    stop_sequences=[<span class="st">"}"</span>],                 <span class="cm"># ← halt at the first closing brace</span>
+    messages=[
+        {<span class="st">"role"</span>: <span class="st">"user"</span>,      <span class="st">"content"</span>: <span class="st">"Return {name, id} for user Ada as JSON."</span>},
+        {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: <span class="st">"{"</span>},           <span class="cm"># ← force straight into JSON</span>
+    ],
+)
+
+<span class="kw">print</span>(resp.stop_reason)        <span class="cm"># 'stop_sequence'</span>
+<span class="kw">print</span>(resp.stop_sequence)      <span class="cm"># '}'  ← which sequence matched</span>
+
+<span class="cm"># content excludes both the prefill '{' AND the matched '}' — add both back:</span>
+obj = json.<span class="fn">loads</span>(<span class="st">"{"</span> + resp.content[<span class="st">0</span>].text + <span class="st">"}"</span>)
+<span class="kw">print</span>(obj)                     <span class="cm"># {'name': 'Ada', 'id': 7}</span></pre>
+
+    <div class="bad">Both ends are missing from <code>content</code>: the prefill <code>{</code> was your text, and the
+    stop sequence <code>}</code> is excluded by design. Reconstruct with <code>"{" + text + "}"</code>.</div>
+
+    <div class="warn">⚠️ The prefill half is legacy-model-only (400 on Claude 4.6+). <code>stop_sequences</code>
+    itself is a normal parameter that works everywhere — it's independent of prefill and pairs equally well with
+    Structured Outputs or plain instructions.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Stop sequence vs. <code>max_tokens</code> to end output</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Stop sequence</h4>
+            <ul><li>Ends on a <em>semantic</em> boundary (a delimiter)</li>
+            <li><code>stop_reason: "stop_sequence"</code> confirms a clean cut</li>
+            <li>Great for one-object / one-block extraction</li></ul></div>
+        <div class="con"><h4>⚠️ max_tokens as a cutoff</h4>
+            <ul><li>Ends at an arbitrary token — often mid-word</li>
+            <li><code>stop_reason: "max_tokens"</code> = likely truncated</li>
+            <li>A safety cap, not an output-shaping tool</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The stop sequence appears at the end of the output." → It does <b>not</b> —
+    the matched sequence is excluded from <code>content</code>. Add it back if you need a complete structure.</div>
+    <div class="trap"><b>Trap:</b> Confusing <code>stop_reason: "stop_sequence"</code> with
+    <code>"max_tokens"</code>. → The first is a clean, intended cut at your delimiter; the second means the token
+    cap was hit and output may be truncated.</div>
+    <div class="trap"><b>Trap:</b> Ignoring the <code>stop_sequence</code> field with multiple sequences. → When
+    you pass several, that field tells you <b>which one</b> fired — you need it to know why generation ended.</div>
+    <div class="trap"><b>Trap:</b> "Stop sequences need prefill." → No. <code>stop_sequences</code> is an
+    independent parameter valid on all models; it just <i>pairs</i> nicely with a prefill for one-object
+    extraction.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · With <code>stop_sequences=["}"]</code> and a prefill of <code>{</code>, what's in <code>content</code>?</summary>
+    <p class="answer">Only the middle — e.g. <code>"name": "Ada", "id": 7</code>. The prefill <code>{</code> was your
+    own text (not echoed) and the stop sequence <code>}</code> is excluded from the output. Reconstruct valid JSON
+    with <code>"{" + content + "}"</code>.</p></details>
+    <details><summary>Q2 · How do you tell a clean stop from a truncated one?</summary>
+    <p class="answer">Check <code>stop_reason</code>: <code>"stop_sequence"</code> means it halted at your delimiter
+    as intended (and <code>stop_sequence</code> names which one); <code>"max_tokens"</code> means it ran out of
+    token budget and the output may be cut off mid-content.</p></details>
+    <details><summary>Q3 · Why pair a stop sequence with a tag prefill like <code>&lt;analysis&gt;</code>?</summary>
+    <p class="answer">The prefill makes the response open inside the tag, and a stop sequence of
+    <code>&lt;/analysis&gt;</code> ends generation right before the close. You extract exactly one clean block —
+    prefill bounds the start, the stop sequence bounds the end.</p></details>
+
+    <div class="pager">
+        <a href="6-3-prefill-character-steering.html"><span class="k">← Back</span>6.3 · Prefill to Steer &amp; Stay in Character</a>
+        <a class="next" href="6-5-prefill-constraints.html"><span class="k">Next →</span>6.5 · Prefill Constraints &amp; Gotchas</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 6.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

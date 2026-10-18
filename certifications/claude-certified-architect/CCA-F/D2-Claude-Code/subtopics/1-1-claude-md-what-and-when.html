@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1 What CLAUDE.md Is & When It Loads · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 1 · Memory &amp; CLAUDE.md</div>
+    <h1>1.1 · What CLAUDE.md Is &amp; When It Loads</h1>
+    <div class="tag">Auto-loaded project memory</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Persistent memory that survives the fresh context window</h2>
+    <p>Every Claude Code session <strong>starts with a fresh context window</strong> — Claude remembers nothing
+    from your last conversation. <strong>CLAUDE.md</strong> is the mechanism that carries knowledge across that
+    boundary: a plain-Markdown file you write with the standing instructions Claude should hold in <em>every</em>
+    session — build commands, coding conventions, project layout, "always do X" rules. You write it; Claude reads
+    it automatically at the start of each session.</p>
+
+    <p>The key word is <strong>auto-loaded</strong>. You don't attach it, reference it, or paste it in. When a
+    session launches, Claude Code discovers the relevant CLAUDE.md files and injects their full contents into the
+    context window before your first message. That's why it's called <em>memory</em> — it's the durable layer
+    beneath each ephemeral conversation.</p>
+
+    <div class="note">🔑 CLAUDE.md is delivered as a <strong>user message after the system prompt</strong>, not as
+    part of the system prompt itself. Claude reads it and tries to follow it, but there is <strong>no guarantee of
+    strict compliance</strong> — it is context, not enforced configuration.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Context, not enforcement — and how it loads</h2>
+    <p>This is the single most tested distinction in the cluster. CLAUDE.md <strong>shapes behavior</strong>; it
+    does not <strong>enforce</strong> it. If you need a rule that runs no matter what Claude decides — block a
+    command, run a linter before every commit — that belongs in a <strong>hook</strong> (a <code>PreToolUse</code>
+    hook executes as a shell command regardless of the model's choices), not in CLAUDE.md.</p>
+
+    <table>
+        <tr><th>Property</th><th>CLAUDE.md</th></tr>
+        <tr><td>Who writes it</td><td>You (and your team)</td></tr>
+        <tr><td>What it holds</td><td>Instructions, conventions, workflows, architecture</td></tr>
+        <tr><td>When it loads</td><td>Automatically, at the <b>start of every session</b></td></tr>
+        <tr><td>How much loads</td><td>The <b>full file</b>, regardless of length (shorter = better adherence)</td></tr>
+        <tr><td>Delivered as</td><td>A user message after the system prompt</td></tr>
+        <tr><td>Enforced?</td><td><b>No</b> — it is context. Use hooks for hard enforcement</td></tr>
+    </table>
+
+    <div class="good">Ancestor CLAUDE.md files (in your cwd and directories above it) load <strong>in full at
+    launch</strong>. Nested CLAUDE.md files in <em>sub</em>directories load <strong>on demand</strong> — only when
+    Claude reads a file in that subdirectory (covered in 1.6).</div>
+
+    <div class="warn">⚠️ Files over ~200 lines consume more context and <strong>reduce adherence</strong>. CLAUDE.md
+    loads in full no matter how long it is, so length costs you tokens on every single turn — keep it tight.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Fresh window → CLAUDE.md bridges the gap</h2>
+    <div class="mermaid">
+flowchart TD
+    S["New session starts<br/>(fresh context window)"] --> D{"Discover CLAUDE.md<br/>up the dir tree"}
+    D -->|"found"| L["🟢 Inject full contents<br/>as a user message"]
+    D -->|"none"| E["No memory loaded"]
+    L --> C["Claude reads it as context<br/>(not enforced config)"]
+    C --> U["Your first prompt runs<br/>with project memory present"]
+    C -.->|"need a hard rule?"| H["🟠 Use a PreToolUse hook<br/>— enforced regardless"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class L ok; class H gate; class E bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A minimal project CLAUDE.md</h2>
+    <p>Plain Markdown at your repo root. Create it by hand, or run <code>/init</code> to have Claude analyze the
+    codebase and generate a starting file.</p>
+<pre><span class="cm"># CLAUDE.md — loaded automatically at the start of every session</span>
+
+<span class="kw">## Build &amp; test</span>
+- Install deps with `npm ci`
+- Run `npm test` before committing
+- Use 2-space indentation (never tabs)
+
+<span class="kw">## Project layout</span>
+- API handlers live in `src/api/handlers/`
+- Shared types live in `src/types/`
+
+<span class="cm">&lt;!-- Maintainer note: HTML comments are stripped before injection,</span>
+<span class="cm">     so they cost zero context tokens. --&gt;</span></pre>
+
+    <div class="note">Run <code>/init</code> to auto-generate a starter CLAUDE.md. If one already exists,
+    <code>/init</code> suggests improvements rather than overwriting it.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> CLAUDE.md vs. a hook for a rule</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ CLAUDE.md (context)</h4>
+            <ul><li>Flexible, natural-language guidance</li>
+            <li>Zero-config: just write Markdown</li>
+            <li>Great for conventions, layout, "prefer X"</li>
+            <li>Loaded every session automatically</li></ul></div>
+        <div class="con"><h4>⚠️ Hook (enforcement)</h4>
+            <ul><li>Runs as a shell command at a fixed event</li>
+            <li>Applies regardless of what Claude decides</li>
+            <li>Needed when a rule <b>must</b> run (block/lint/gate)</li>
+            <li>More setup; not natural language</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb: <em>guidance</em> → CLAUDE.md; <em>guarantee</em> → hook.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "CLAUDE.md is part of the system prompt." → It is delivered as a
+    <b>user message after</b> the system prompt. That's why adherence isn't guaranteed. For system-prompt-level
+    text use <code>--append-system-prompt</code>.</div>
+    <div class="trap"><b>Trap:</b> "CLAUDE.md enforces rules." → It is <b>context, not enforcement</b>. To block or
+    force an action regardless of Claude's choice, use a <b>hook</b> (e.g. <code>PreToolUse</code>).</div>
+    <div class="trap"><b>Trap:</b> "Only the first N lines of CLAUDE.md load." → CLAUDE.md loads <b>in full</b>
+    regardless of length. The 200-line / 25KB truncation applies to <em>auto memory's</em> <code>MEMORY.md</code>,
+    not CLAUDE.md.</div>
+    <div class="trap"><b>Trap:</b> "You must attach or reference CLAUDE.md to use it." → It is
+    <b>auto-loaded</b> at session start by walking the directory tree — no manual attach needed.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · When exactly is a project's CLAUDE.md loaded into context?</summary>
+    <p class="answer">Automatically at the <b>start of every session</b>, before your first prompt. Ancestor files
+    (cwd and above) load in full at launch; nested subdirectory files load on demand when Claude reads files there.</p></details>
+    <details><summary>Q2 · You need "run the linter before every commit" to always happen. CLAUDE.md or a hook?</summary>
+    <p class="answer">A <b>hook</b>. CLAUDE.md is context and adherence isn't guaranteed. A hook runs as a shell
+    command at a fixed lifecycle event regardless of what Claude decides.</p></details>
+    <details><summary>Q3 · Where does CLAUDE.md sit relative to the system prompt, and why does it matter?</summary>
+    <p class="answer">It's injected as a <b>user message after</b> the system prompt. Because it's context rather
+    than system-level instruction, Claude may not comply strictly — especially with vague or conflicting rules.</p></details>
+
+    <div class="pager">
+        <a href="../index.html"><span class="k">← Back</span>Domain 2 hub</a>
+        <a class="next" href="1-2-memory-hierarchy.html"><span class="k">Next →</span>1.2 · The Memory Hierarchy</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 1.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.3 Prefill to Steer &amp; Stay in Character · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 6 · Prefill &amp; Output Control</div>
+    <h1>6.3 · Prefill to Steer &amp; Stay in Character</h1>
+    <div class="tag">Nudge the direction</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The opening word sets the trajectory</h2>
+    <p>Format prefills (6.2) seed a <em>syntax</em>. <strong>Steering prefills seed a <em>direction</em>.</strong>
+    Because Claude continues from your text, the first word or phrase biases everything after it — the tone, the
+    stance, the voice. Start the assistant turn with a persona tag and the reply stays in that persona; start it
+    with a decisive first word and the reply commits instead of hedging.</p>
+
+    <table>
+        <tr><th>You want</th><th>Prefill</th><th>What it nudges</th></tr>
+        <tr><td>Stay in a persona</td><td><code>[Sherlock]:</code></td><td>Response continues in that character's voice</td></tr>
+        <tr><td>A committed verdict</td><td><code>The answer is</code></td><td>Forces a direct claim, not "It depends…"</td></tr>
+        <tr><td>Continue a script/dialogue</td><td><code>Narrator:</code></td><td>Keeps the established turn-taking format</td></tr>
+        <tr><td>A specific opening stance</td><td><code>Yes —</code></td><td>Commits to an affirmative framing</td></tr>
+    </table>
+
+    <div class="note">🔑 A persona set in the system prompt (Cluster 2) says "be Sherlock." A persona
+    <em>prefill</em> makes the response literally begin <code>[Sherlock]:</code> — the character is entered from
+    token one, so there's no slip into a neutral assistant voice at the start.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Steering nudges, it doesn't override</h2>
+    <p>A prefill biases the continuation; it does not silence Claude's judgment. Prefilling <code>Yes —</code>
+    strongly steers toward an affirmative, but on a question where "yes" is wrong or unsafe, the model can still
+    walk it back in the following sentence. Treat steering prefills as a <strong>strong nudge on direction</strong>,
+    not a hard lock — for a hard lock on <em>shape</em> you want format prefills (6.2) or stop sequences (6.4).</p>
+
+    <div class="warn">⚠️ Historically, prefills were also used to <em>steer around refusals</em>. That use is
+    discouraged and unnecessary on modern models — they refuse appropriately, and clear user-turn prompting is
+    enough. Don't lean on prefill to bypass safety behavior.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Persona prefill keeps the voice from drifting</h2>
+    <div class="mermaid">
+flowchart TD
+    U["user: 'What do you make of the muddy boots?'"] --> P{"Persona prefill?"}
+    P -->|"prefill '[Sherlock]:'"| INCHAR["🟢 continues in character:<br/>'Elementary — the clay is from Hampstead...'"]
+    P -->|"no prefill"| DRIFT["Response may open neutrally:<br/>'As an assistant, the boots suggest...'"]
+    INCHAR --> STAY["Voice locked from token one"]
+    DRIFT -.->|"needs stronger framing"| STAY
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class INCHAR ok; class STAY ok; class DRIFT gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A persona-steering prefill</h2>
+<pre><span class="kw">import</span> anthropic
+client = anthropic.Anthropic()
+
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-5"</span>,
+    max_tokens=<span class="st">200</span>,
+    system=<span class="st">"You are Sherlock Holmes. Deduce sharply and stay in character."</span>,
+    messages=[
+        {<span class="st">"role"</span>: <span class="st">"user"</span>,      <span class="st">"content"</span>: <span class="st">"What do you make of the muddy boots?"</span>},
+        {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: <span class="st">"[Sherlock]:"</span>},   <span class="cm"># ← steer + lock the voice</span>
+    ],
+)
+
+<span class="cm"># The reply continues the character from the first token.</span>
+reply = <span class="st">"[Sherlock]:"</span> + resp.content[<span class="st">0</span>].text   <span class="cm"># prepend prefill for the full line</span>
+<span class="kw">print</span>(reply)</pre>
+
+    <div class="bad">Notice the prefill ends with <code>:</code>, not a space. A prefill must <strong>not</strong> end
+    with trailing whitespace — <code>"[Sherlock]: "</code> would be rejected. Full rule in 6.5.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> System-prompt persona vs. persona prefill</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ System prompt (Cluster 2)</h4>
+            <ul><li>Persists across the whole conversation</li>
+            <li>Survives on all current models (no 400)</li>
+            <li>Best for durable role &amp; rules</li></ul></div>
+        <div class="con"><h4>✅ Persona prefill (this page)</h4>
+            <ul><li>Locks the <em>opening</em> of a single reply</li>
+            <li>Prevents a neutral-voice slip at the start</li>
+            <li>But: last-turn only, legacy models only (6.5)</li></ul></div>
+    </div>
+    <div class="good">Use them together on legacy models: system prompt <em>declares</em> the persona; the prefill
+    <em>guarantees the first line</em> is already in it. On current models, rely on the system prompt (and a
+    strong instruction) since last-turn prefill is unavailable.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "A steering prefill forces the answer." → It <b>nudges direction strongly</b> but
+    doesn't override judgment; Claude can still correct course in the next sentence. Use format prefills / stop
+    sequences to hard-bound <i>shape</i>.</div>
+    <div class="trap"><b>Trap:</b> Using prefill to dodge a refusal. → Discouraged and unneeded on modern
+    models. Steer with clear user-turn prompting, not by putting words in Claude's mouth to bypass safety.</div>
+    <div class="trap"><b>Trap:</b> Ending a persona prefill with a space (<code>"Bot: "</code>). → Prefills
+    <b>cannot end in trailing whitespace</b>; end on the last non-space character (6.5).</div>
+    <div class="trap"><b>Trap:</b> Confusing a system-prompt persona with a persona prefill. → The system prompt
+    <b>declares</b> the role for the whole chat; the prefill <b>seeds the opening tokens</b> of one specific
+    reply.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · How does a persona prefill differ from setting the persona in the system prompt?</summary>
+    <p class="answer">The system prompt declares the role across the whole conversation but the reply can still
+    open in a neutral voice. A prefill like <code>[Sherlock]:</code> makes the specific reply <b>begin</b> in
+    character from the first token, eliminating the opening drift. On legacy models they're complementary.</p></details>
+    <details><summary>Q2 · Does prefilling <code>Yes —</code> guarantee an affirmative answer?</summary>
+    <p class="answer">No — it's a strong directional nudge, not a lock. Claude will usually continue
+    affirmatively, but on a question where "yes" is wrong it can still qualify or reverse in the following text.
+    Steering biases the trajectory; it doesn't override the model's judgment.</p></details>
+    <details><summary>Q3 · Why is prefilling to bypass refusals a bad pattern today?</summary>
+    <p class="answer">Modern models refuse appropriately, so it's unnecessary, and using prefill to override
+    safety behavior is discouraged. Clear prompting in the <code>user</code> turn achieves legitimate steering
+    without putting words in the model's mouth to sidestep guardrails.</p></details>
+
+    <div class="pager">
+        <a href="6-2-prefill-format-control.html"><span class="k">← Back</span>6.2 · Prefill to Control Format</a>
+        <a class="next" href="6-4-stop-sequences.html"><span class="k">Next →</span>6.4 · Stop Sequences as Output Control</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 6.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

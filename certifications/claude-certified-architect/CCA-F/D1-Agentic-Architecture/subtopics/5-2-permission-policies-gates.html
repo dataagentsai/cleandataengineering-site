@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.2 Permission Policies &amp; Confirmation Gates · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 5 · Autonomy</div>
+    <h1>5.2 · Permission Policies &amp; Confirmation Gates</h1>
+    <div class="tag">Gate the dangerous · confirm before execute · deny with reason</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The gate sits between decision and effect</h2>
+    <p>The model <em>decides</em> to call a tool by emitting a <code>tool_use</code> block. But the model
+    doesn't execute anything — <strong>your harness runs the tool</strong>. That gap is where a
+    <strong>permission gate</strong> lives: you intercept the <code>tool_use</code> <em>before</em> executing,
+    check it against a policy, and either run it or refuse. Because the manual loop (3.6) hands you every
+    <code>tool_use</code> before it acts, gating is a natural extension of the loop — not a new mechanism.</p>
+
+    <table>
+        <tr><th>Policy verdict</th><th>What the harness does</th><th>What the model sees next turn</th></tr>
+        <tr><td><strong>Allow</strong></td><td>Run the tool immediately</td><td>The real <code>tool_result</code></td></tr>
+        <tr><td><strong>Confirm</strong></td><td>Ask a human; run only on approval</td><td>Result if approved, else a denial <code>tool_result</code></td></tr>
+        <tr><td><strong>Deny</strong></td><td>Never run it</td><td>An <em>explanatory</em> <code>tool_result</code> so it can adapt</td></tr>
+    </table>
+
+    <div class="note">🔑 Gate <strong>side-effecting or irreversible</strong> tool calls behind confirmation.
+    Reads, globs, and greps flow through; <code>send_email</code>, <code>delete</code>, external POSTs, and
+    payments stop at the gate. Which is which is the reversibility axis of 5.4.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Deny with a reason, not with silence</h2>
+    <p>When you refuse a call, <strong>don't just drop it</strong>. Return a <code>tool_result</code> that
+    <em>explains</em> the denial. The agent is stateless — the only way it learns "that path is blocked" is by
+    reading the result you feed back. A good denial message lets the model <strong>adapt</strong>: pick a
+    different tool, ask the user, or finish gracefully. A silent failure makes it retry the same blocked call.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The confirmation gate</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Model emits tool_use"] --> P{"Policy check<br/>side-effecting?"}
+    P -->|"reversible (read/glob/grep)"| R["🟢 Run tool"]
+    P -->|"irreversible / side-effecting"| C{"Human confirms?"}
+    C -->|approve| R
+    C -->|deny| D["🟠 Explanatory tool_result<br/>'Denied: needs approval'"]
+    R --> RES["tool_result → append → loop"]
+    D --> RES
+    RES --> L["Re-send transcript (stateless)"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#fff3cd,stroke:#ffc107,color:#856404;
+    classDef deny fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class R ok; class C,P gate; class D deny;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A gate around tool execution</h2>
+    <p>Intercept each <code>tool_use</code>, consult the policy, and either execute, confirm, or deny with an
+    explanation. Note the denial still becomes a <code>tool_result</code> so the loop continues cleanly.</p>
+<pre><span class="cm"># Which tools are side-effecting / irreversible → must be gated (see 5.4).</span>
+GATED = {<span class="st">"send_email"</span>, <span class="st">"delete_file"</span>, <span class="st">"charge_card"</span>, <span class="st">"http_post"</span>}
+
+<span class="kw">def</span> <span class="fn">handle_tool</span>(block):
+    <span class="cm"># Intercept BEFORE executing — this is the gate.</span>
+    <span class="kw">if</span> block.name <span class="kw">in</span> GATED:
+        <span class="kw">if</span> <span class="kw">not</span> <span class="fn">confirm</span>(<span class="st">f"Approve {block.name}({block.input})?"</span>):
+            <span class="cm"># DENY WITH REASON so the agent can adapt, not silently drop it.</span>
+            <span class="kw">return</span> <span class="st">f"DENIED: '{block.name}' needs human approval and was refused. "</span> \
+                   <span class="st">"Try a reversible alternative or ask the user."</span>
+    <span class="kw">return</span> <span class="fn">run_tool</span>(block.name, block.input)          <span class="cm"># allowed → execute</span>
+
+<span class="cm"># In the manual loop: build tool_result blocks from the gate's verdict.</span>
+tool_results = []
+<span class="kw">for</span> block <span class="kw">in</span> resp.content:
+    <span class="kw">if</span> block.type == <span class="st">"tool_use"</span>:
+        tool_results.append({
+            <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+            <span class="st">"tool_use_id"</span>: block.id,
+            <span class="st">"content"</span>: <span class="fn">handle_tool</span>(block),
+        })
+messages.append({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: tool_results})   <span class="cm"># re-send, loop continues</span></pre>
+    <div class="good">Deny-by-default hardening: gate on an <em>allow-list</em> of safe tools instead of a
+    block-list of dangerous ones, so a newly added tool is gated until you explicitly clear it.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Where to draw the gate line</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Gate more aggressively</h4>
+            <ul><li>Smaller blast radius; nothing dangerous runs unreviewed</li>
+            <li>Clear audit trail of approvals</li>
+            <li>Safer for irreversible / regulated actions</li></ul></div>
+        <div class="con"><h4>⚠️ Gate more aggressively</h4>
+            <ul><li>More human interrupts → slower throughput</li>
+            <li>Approval fatigue; humans rubber-stamp</li>
+            <li>Loses the point of automation if over-applied</li></ul></div>
+    </div>
+    <div class="good">Balance: gate only the <strong>irreversible / side-effecting</strong> tools; let
+    reversible reads run free. Cross-reference 3.6 — the manual loop is what gives you the interception seam.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The model enforces the permission." → No. The <b>model only requests</b> a tool;
+    your <b>harness</b> enforces the gate before executing. Never rely on the prompt alone to stop a dangerous call.</div>
+    <div class="trap"><b>Trap:</b> On denial, dropping the call or raising an exception. → Return an
+    <b>explanatory <code>tool_result</code></b> so the stateless agent can adapt. A silent drop makes it retry.</div>
+    <div class="trap"><b>Trap:</b> Gating everything, including reads. → Over-gating kills throughput and breeds
+    rubber-stamping. Gate only <b>side-effecting / irreversible</b> actions.</div>
+    <div class="trap"><b>Trap:</b> Assuming an auto-managed loop lets you intercept. → Interception happens in the
+    <b>manual loop</b> — you must own the step where <code>tool_use</code> becomes execution.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Where exactly does a confirmation gate intercept the call?</summary>
+    <p class="answer">Between the model's <code>tool_use</code> block and your harness executing that tool — in the
+    <b>manual loop</b>, <em>before</em> <code>run_tool</code> runs. That's the only point where you can approve,
+    deny, or modify the action before it takes effect.</p></details>
+    <details><summary>Q2 · A gate denies <code>send_email</code>. What must you send back, and why?</summary>
+    <p class="answer">An <b>explanatory <code>tool_result</code></b> tied to the same <code>tool_use_id</code>, e.g.
+    "Denied: email requires approval." Because the API is stateless, the model only learns the action was blocked
+    by reading that result — enabling it to adapt instead of blindly retrying.</p></details>
+    <details><summary>Q3 · Allow-list vs. block-list for the gate — which is safer, and why?</summary>
+    <p class="answer"><b>Allow-list</b> (deny-by-default). With a block-list, any newly added tool you forget to
+    list runs unguarded. With an allow-list, an unclassified tool is gated until you explicitly approve it — a
+    forgotten tool fails safe.</p></details>
+
+    <div class="pager">
+        <a href="5-1-autonomy-levels.html"><span class="k">← Back</span>5.1 · Autonomy Levels</a>
+        <a class="next" href="5-3-loop-termination.html"><span class="k">Next →</span>5.3 · Loop Termination</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 5.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

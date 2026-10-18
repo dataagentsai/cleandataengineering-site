@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.1 The System Parameter vs the User Turn · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 2 · Roles &amp; System Prompts</div>
+    <h1>2.1 · The System Parameter vs the User Turn</h1>
+    <div class="tag">Where the role lives in the API</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Two channels: the system prompt and the conversation</h2>
+    <p>Every Messages API request has <strong>two distinct places to put text</strong>. The top-level
+    <code>system</code> parameter holds the <strong>role, standing instructions, and context</strong> that apply
+    to the whole conversation. The <code>messages</code> array holds the <strong>turns</strong> — the
+    back-and-forth of <code>user</code> and <code>assistant</code> messages that carries the actual task and data.</p>
+    <p><code>system</code> is <strong>not</strong> a message with <code>"role": "system"</code> inside the
+    <code>messages</code> list (that's the OpenAI shape). In Anthropic's API it is a <strong>separate top-level
+    field</strong>, and it accepts either a <strong>plain string</strong> or a <strong>list of content
+    blocks</strong> (text blocks, optionally with <code>cache_control</code>).</p>
+
+    <table>
+        <tr><th>Field</th><th>Where</th><th>Holds</th><th>Changes how often</th></tr>
+        <tr><td><code>system</code></td><td>Top-level parameter</td><td>Role / persona, standing instructions, stable context</td><td>Rarely — same across many requests</td></tr>
+        <tr><td><code>messages[]</code> (user)</td><td>Conversation array</td><td>The task, the data, the question this turn</td><td>Every turn</td></tr>
+        <tr><td><code>messages[]</code> (assistant)</td><td>Conversation array</td><td>Claude's replies (echoed back for history)</td><td>Every turn</td></tr>
+    </table>
+
+    <div class="note">🔑 The API is <strong>stateless</strong>: there is no server-side memory. You resend
+    <code>system</code> + the full <code>messages</code> history on every call. The <code>system</code> string is
+    the same each time; the <code>messages</code> array grows.</div>
+
+    <div class="good">Render order on the wire is <code>tools</code> → <code>system</code> → <code>messages</code>.
+    Because <code>system</code> sits near the front and rarely changes, it's the ideal place for a
+    <code>cache_control</code> breakpoint (prompt caching keys off a stable prefix).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> One request, two channels</h2>
+    <div class="mermaid">
+flowchart TD
+    REQ["messages.create( … )"] --> SYS["system= (top-level)<br/>role · standing instructions · context"]
+    REQ --> MSG["messages=[ … ]<br/>the turns"]
+    MSG --> U["user: the task / data<br/>(this turn)"]
+    MSG --> A["assistant: Claude's reply<br/>(echoed for history)"]
+    SYS --> CLAUDE["Claude reads system first,<br/>then the conversation"]
+    U --> CLAUDE
+    A --> CLAUDE
+    classDef sys fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef turn fill:#e7f0fd,stroke:#4a90d9,color:#1a3d6d;
+    class SYS,CLAUDE sys; class MSG,U,A turn;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A real <code>anthropic</code> call with <code>system=</code></h2>
+    <p>The role goes in <code>system</code>; the task goes in a <code>user</code> message. This is the exact shape
+    from the official docs.</p>
+<pre><span class="kw">import</span> anthropic
+
+client = anthropic.<span class="fn">Anthropic</span>()
+
+message = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">1024</span>,
+    system=<span class="st">"You are a helpful coding assistant specializing in Python."</span>,  <span class="cm"># the role / standing instructions</span>
+    messages=[
+        {<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"How do I sort a list of dictionaries by key?"</span>},  <span class="cm"># the task, this turn</span>
+    ],
+)
+<span class="fn">print</span>(message.content)
+
+<span class="cm"># system can also be a LIST of blocks — useful for a cache breakpoint:</span>
+system=[
+    {<span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: LONG_STABLE_PROMPT,
+     <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>}},
+]</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> String system prompt vs. list of blocks</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Plain string</h4>
+            <ul><li>Simplest — one line for a role</li>
+            <li>Perfect for short personas &amp; scripts</li>
+            <li>No block bookkeeping</li></ul></div>
+        <div class="con"><h4>✅ List of text blocks</h4>
+            <ul><li>Lets you attach <code>cache_control</code> to cache a large stable prompt</li>
+            <li>Can split stable vs. volatile sections</li>
+            <li>Slightly more verbose</li></ul></div>
+    </div>
+    <div class="note">Both are valid values of the same <code>system</code> parameter. Reach for the list form only
+    when you need caching or per-block control; otherwise a string is fine.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Putting <code>{"role": "system", …}</code> inside <code>messages</code> as the
+    primary system prompt. → In the Anthropic Messages API the standing role goes in the <b>top-level
+    <code>system</code> parameter</b>, not as a message role. (A mid-conversation <code>role:"system"</code>
+    <i>message</i> exists on newer models, but it's an operator-instruction channel, not where you set the initial
+    role.)</div>
+    <div class="trap"><b>Trap:</b> "The <code>system</code> parameter must be a string." → It accepts a
+    <b>string OR a list of content blocks</b>. The list form is how you add a <code>cache_control</code> breakpoint.</div>
+    <div class="trap"><b>Trap:</b> Assuming the API remembers the system prompt between calls. → The API is
+    <b>stateless</b>. You resend <code>system</code> and the full history every request.</div>
+    <div class="trap"><b>Trap:</b> Stuffing the per-request question into <code>system</code>. → That belongs in the
+    <b>user turn</b>. Volatile, per-call content in <code>system</code> also breaks prompt caching (2.5, and the
+    caching cluster).</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Where does the role/persona go, and where does the task go?</summary>
+    <p class="answer">The <b>role/persona</b> goes in the top-level <code>system</code> parameter (stable across the
+    conversation). The <b>task/data</b> goes in a <code>user</code> message inside the <code>messages</code> array
+    (changes every turn).</p></details>
+    <details><summary>Q2 · What two types can the <code>system</code> parameter be?</summary>
+    <p class="answer">A plain <b>string</b>, or a <b>list of content blocks</b> (text blocks that can each carry
+    <code>cache_control</code>). Use the list form when you want to cache a large stable prompt.</p></details>
+    <details><summary>Q3 · Why is <code>system</code> the natural place for a cache breakpoint?</summary>
+    <p class="answer">Render order is <code>tools</code> → <code>system</code> → <code>messages</code>, and
+    <code>system</code> rarely changes. A stable prefix is exactly what prompt caching needs — a byte change early
+    in the prefix invalidates everything after it, so keep the volatile content in later user turns.</p></details>
+
+    <div class="pager">
+        <a href="1-5-prompt-anatomy.html"><span class="k">← Back</span>1.5 · Prompt Anatomy</a>
+        <a class="next" href="2-2-role-prompting.html"><span class="k">Next →</span>2.2 · Giving Claude a Role</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 2.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

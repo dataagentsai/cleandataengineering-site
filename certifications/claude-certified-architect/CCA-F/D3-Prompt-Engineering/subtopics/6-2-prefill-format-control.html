@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.2 Prefill to Control Format · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 6 · Prefill &amp; Output Control</div>
+    <h1>6.2 · Prefill to Control Format</h1>
+    <div class="tag">Skip preamble · force JSON with {</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The opening character decides the format</h2>
+    <p>An LLM continues the most probable path from where the text stops. If the transcript already ends in
+    <code>{</code>, the only sensible continuation is more JSON — Claude will not backtrack to write
+    <em>"Here is the JSON you asked for:"</em>. That is the whole trick behind format-control prefills:
+    <strong>seed the first character(s) of the shape you want, and the rest follows.</strong></p>
+
+    <table>
+        <tr><th>Want</th><th>Prefill</th><th>Why it works</th></tr>
+        <tr><td>One JSON object, no prose</td><td><code>{</code></td><td>Continuation must complete a JSON object</td></tr>
+        <tr><td>A JSON array</td><td><code>[</code></td><td>Continuation must complete a JSON array</td></tr>
+        <tr><td>Content inside a tag</td><td><code>&lt;summary&gt;</code></td><td>Response opens inside your XML structure</td></tr>
+        <tr><td>A code block only</td><td><code>```python</code></td><td>Response starts as fenced code, no explanation</td></tr>
+    </table>
+
+    <div class="good">The classic move: <strong>prefill <code>{</code> to force straight-into-JSON.</strong> It
+    kills the preamble (<em>"Sure! Here's…"</em>) that otherwise breaks a downstream <code>json.loads()</code>.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Prefill a tag to enforce structure</h2>
+    <p>Prefilling an opening XML tag such as <code>&lt;analysis&gt;</code> forces the response to begin inside a
+    named section. Combined with a stop sequence on the closing tag (6.4), you extract exactly one clean block —
+    no wrapper text, no trailing commentary. This is a reliable way to carve a specific field out of a longer
+    reasoning turn.</p>
+
+    <div class="note">🔑 Prefill sets where generation <em>starts</em>; a stop sequence sets where it
+    <em>ends</em>. Together they bound the output on both sides — 6.4 completes the pair.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> BAD (no prefill) vs. GOOD (prefill <code>{</code>)</h2>
+    <div class="mermaid">
+flowchart TD
+    Q["user: 'Return {name, id} for Ada as JSON'"] --> B{"Prefill the assistant turn?"}
+    B -->|"no prefill"| PRE["🔴 'Sure! Here is the JSON:<br/>{&quot;name&quot;: &quot;Ada&quot;, &quot;id&quot;: 7}'"]
+    PRE --> STRIP["Must regex/strip the preamble<br/>before json.loads()"]
+    B -->|"prefill '{'"| CLEAN["🟢 continues: '&quot;name&quot;: &quot;Ada&quot;, &quot;id&quot;: 7}'"]
+    CLEAN --> PARSE["Prepend '{' → parse directly"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class CLEAN ok; class PARSE ok; class PRE bad; class STRIP gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Force JSON with <code>{</code>, then reconstruct</h2>
+<pre><span class="kw">import</span> anthropic, json
+client = anthropic.Anthropic()
+
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-5"</span>,
+    max_tokens=<span class="st">300</span>,
+    messages=[
+        {<span class="st">"role"</span>: <span class="st">"user"</span>,
+         <span class="st">"content"</span>: <span class="st">"Return {name, id} for user Ada as a single JSON object."</span>},
+        {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: <span class="st">"{"</span>},   <span class="cm"># ← force straight into JSON</span>
+    ],
+)
+
+<span class="cm"># content holds ONLY the continuation: '"name": "Ada", "id": 7}'</span>
+data = json.<span class="fn">loads</span>(<span class="st">"{"</span> + resp.content[<span class="st">0</span>].text)   <span class="cm"># prepend prefill, then parse</span>
+<span class="kw">print</span>(data[<span class="st">"name"</span>])                             <span class="cm"># Ada</span></pre>
+
+    <div class="warn">⚠️ On Claude 4.6-and-newer models this exact request returns a <strong>400</strong> — prefill
+    the last turn is unsupported there. Use <strong>Structured Outputs</strong>
+    (<code>output_config.format</code> with a JSON schema) for the same guarantee. The prefill technique itself
+    is examinable, and still valid on earlier models. See 6.5.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Prefill <code>{</code> vs. Structured Outputs</h2>
+    <table>
+        <tr><th></th><th>Prefill <code>{</code></th><th>Structured Outputs</th></tr>
+        <tr><td>Guarantee</td><td>Opening is <code>{</code>; body still free-form</td><td>Whole response validates against a schema</td></tr>
+        <tr><td>Model support</td><td>Earlier models only (400 on 4.6+)</td><td>Current models</td></tr>
+        <tr><td>Parsing</td><td>You prepend the prefill by hand</td><td>SDK can parse into a typed object</td></tr>
+        <tr><td>Best for</td><td>Quick format nudge, skip preamble</td><td>Strict, schema-validated JSON</td></tr>
+    </table>
+    <div class="good">Same intent, two eras: on legacy models prefill <code>{</code>; on current models reach for
+    Structured Outputs. Both answer "give me clean JSON, no chatter."</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Prefill <code>{</code> guarantees valid JSON." → It guarantees the response
+    <b>starts</b> as JSON and skips preamble. The body can still be malformed or run past <code>max_tokens</code> —
+    for a hard schema guarantee use Structured Outputs.</div>
+    <div class="trap"><b>Trap:</b> Forgetting the prefill when parsing. → <code>content[0].text</code> begins
+    <b>after</b> your <code>{</code>. Prepend it, or <code>json.loads()</code> raises.</div>
+    <div class="trap"><b>Trap:</b> "Prefill only does JSON." → Any opening works — <code>[</code>, an XML tag,
+    a code fence, a first word. Prefill controls <b>whatever shape you seed</b>.</div>
+    <div class="trap"><b>Trap:</b> Prefilling a tag but never closing it. → The response opens inside
+    <code>&lt;summary&gt;</code> but keeps going; pair the tag prefill with a <b>stop sequence</b> on the closing
+    tag (6.4) to get exactly one block.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why does prefilling <code>{</code> remove the "Here is the JSON:" preamble?</summary>
+    <p class="answer">The transcript already ends in <code>{</code>, so the most probable continuation is more
+    JSON, not a fresh sentence of prose. Claude can only continue forward from the seeded character — it cannot
+    prepend a preamble before text that already exists.</p></details>
+    <details><summary>Q2 · What is the modern replacement for a "force JSON" prefill on new models?</summary>
+    <p class="answer"><b>Structured Outputs</b> — <code>output_config.format</code> with a JSON schema. It
+    constrains the entire response to the schema (not just the opening character) and is supported on current
+    models where last-turn prefill returns a 400.</p></details>
+    <details><summary>Q3 · How do you extract exactly one <code>&lt;analysis&gt;…&lt;/analysis&gt;</code> block?</summary>
+    <p class="answer">Prefill the opening tag <code>&lt;analysis&gt;</code> so the response starts inside it, and
+    set a <b>stop sequence</b> of <code>&lt;/analysis&gt;</code> so generation ends at the close (6.4). Prefill
+    bounds the start; the stop sequence bounds the end.</p></details>
+
+    <div class="pager">
+        <a href="6-1-prefilling-basics.html"><span class="k">← Back</span>6.1 · Prefilling the Assistant Turn</a>
+        <a class="next" href="6-3-prefill-character-steering.html"><span class="k">Next →</span>6.3 · Prefill to Steer &amp; Stay in Character</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 6.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

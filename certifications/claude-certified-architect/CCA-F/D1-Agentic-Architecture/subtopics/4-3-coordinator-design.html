@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.3 Coordinator / Orchestrator Design · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 4 · Multi-Agent</div>
+    <h1>4.3 · Coordinator / Orchestrator Design</h1>
+    <div class="tag">Route, delegate, merge</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The coordinator's three jobs</h2>
+    <p>In the coordinator/sub-agent pattern, one central agent owns the top-level goal and does three things:
+    <strong>route</strong> (decide which specialist should handle a piece of work), <strong>delegate</strong>
+    (hand that specialist an explicit, self-contained task), and <strong>merge</strong> (aggregate and synthesize
+    the specialists' outputs into one answer). The specialists never talk to each other or to the user — everything
+    flows through the coordinator.</p>
+
+    <table>
+        <tr><th>Job</th><th>What the coordinator does</th><th>Detail in…</th></tr>
+        <tr><td><strong>Route</strong></td><td>Reads the goal and picks which specialist(s) apply</td><td>4.2 (router pattern)</td></tr>
+        <tr><td><strong>Delegate</strong></td><td>Sends each specialist an explicit task with the state it needs</td><td>4.4, 4.5</td></tr>
+        <tr><td><strong>Merge</strong></td><td>Aggregates/synthesizes outputs, resolves conflicts</td><td>4.7</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> Sub-agents-as-tools</h2>
+    <p>A clean way to build a coordinator: expose each specialist to the coordinator as a <strong>tool</strong>.
+    From the coordinator's point of view, "ask the research specialist" is just another tool call — the model
+    decides <em>when</em> and <em>with what input</em> to invoke it. Under the hood, that tool spins up a
+    context-isolated sub-agent (its own model loop and context window; see 4.4), runs it, and returns the result
+    as the tool_result. This keeps the coordinator's own loop simple: it reasons, calls "tools" (some of which are
+    whole agents), and integrates results.</p>
+
+    <div class="note">🔑 <strong>Sub-agents-as-tools</strong> lets the coordinator use the same tool-use loop it
+    already knows. The model chooses which specialist to invoke — that's the routing decision, made dynamically.</div>
+
+    <div class="warn">⚠️ Because each specialist is context-isolated, the coordinator must pass everything the
+    specialist needs <em>in the delegated message</em>. The sub-agent does not see the coordinator's history (4.4/4.5).</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Coordinator flow</h2>
+    <div class="mermaid">
+flowchart TD
+    U([User goal]) --> C["🟣 Coordinator<br/>(owns the goal)"]
+    C -->|route + delegate<br/>explicit task| S1["🔵 Research specialist<br/>own context"]
+    C -->|route + delegate<br/>explicit task| S2["🔵 Analysis specialist<br/>own context"]
+    S1 -->|result| C
+    S2 -->|result| C
+    C -->|merge + synthesize| A(["✔ Final answer"])
+    classDef p fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    classDef b fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef g fill:#d4edda,stroke:#28a745,color:#155724;
+    class C p; class S1 b; class S2 b; class A g;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Coordinator sketch (delegate → collect → merge)</h2>
+    <p>Specialists exposed as tools. The coordinator's loop lets the <em>model</em> decide which specialist to call;
+    each call runs a context-isolated sub-agent and returns its output as a tool_result.</p>
+<pre><span class="cm"># Each specialist = a context-isolated sub-agent with its OWN messages list.</span>
+<span class="kw">def</span> <span class="fn">run_specialist</span>(system, task, model=<span class="st">"claude-sonnet-4-6"</span>):
+    <span class="cm"># Fresh context: the sub-agent does NOT see the coordinator's history.</span>
+    r = client.messages.create(
+        model=model, max_tokens=<span class="st">2048</span>, system=system,
+        messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: task}],   <span class="cm"># explicit, self-contained</span>
+    )
+    <span class="kw">return</span> <span class="st">""</span>.join(b.text <span class="kw">for</span> b <span class="kw">in</span> r.content <span class="kw">if</span> b.type == <span class="st">"text"</span>)
+
+<span class="cm"># Specialists surfaced to the coordinator AS TOOLS (sub-agents-as-tools).</span>
+TOOLS = [
+    {<span class="st">"name"</span>: <span class="st">"research"</span>, <span class="st">"description"</span>: <span class="st">"Gather facts on a topic."</span>,
+     <span class="st">"input_schema"</span>: {<span class="st">"type"</span>: <span class="st">"object"</span>,
+         <span class="st">"properties"</span>: {<span class="st">"topic"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>}}, <span class="st">"required"</span>: [<span class="st">"topic"</span>]}},
+    {<span class="st">"name"</span>: <span class="st">"analyze"</span>, <span class="st">"description"</span>: <span class="st">"Analyze given findings."</span>,
+     <span class="st">"input_schema"</span>: {<span class="st">"type"</span>: <span class="st">"object"</span>,
+         <span class="st">"properties"</span>: {<span class="st">"findings"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>}}, <span class="st">"required"</span>: [<span class="st">"findings"</span>]}},
+]
+
+<span class="kw">def</span> <span class="fn">dispatch</span>(name, args):
+    <span class="kw">if</span> name == <span class="st">"research"</span>:
+        <span class="kw">return</span> run_specialist(<span class="st">"You are a research specialist."</span>,
+                              <span class="st">f"Research: {args['topic']}"</span>)
+    <span class="kw">if</span> name == <span class="st">"analyze"</span>:
+        <span class="kw">return</span> run_specialist(<span class="st">"You are an analysis specialist."</span>,
+                              <span class="st">f"Analyze these findings:\n{args['findings']}"</span>)
+
+<span class="cm"># Coordinator loop: the MODEL routes by choosing which specialist-tool to call.</span>
+messages = [{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: goal}]
+<span class="kw">while</span> True:
+    resp = client.messages.create(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">4096</span>,
+                                  system=<span class="st">"You are a coordinator. Delegate to specialists, then merge."</span>,
+                                  tools=TOOLS, messages=messages)
+    messages.append({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content})
+    <span class="kw">if</span> resp.stop_reason != <span class="st">"tool_use"</span>: <span class="kw">break</span>          <span class="cm"># coordinator produced the merged answer</span>
+    results = []
+    <span class="kw">for</span> block <span class="kw">in</span> resp.content:
+        <span class="kw">if</span> block.type == <span class="st">"tool_use"</span>:
+            out = dispatch(block.name, block.input)      <span class="cm"># run the specialist sub-agent</span>
+            results.append({<span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+                            <span class="st">"tool_use_id"</span>: block.id, <span class="st">"content"</span>: out})
+    messages.append({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: results})   <span class="cm"># feed results back; coordinator merges</span></pre>
+
+    <div class="good">The coordinator uses the ordinary tool-use loop. "Which specialist?" is answered by the
+    model choosing a tool; "with what input?" is the explicit state it passes (4.5); "how to combine?" is the final
+    merge turn (4.7).</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Letting specialists call each other or the user directly. → In this pattern
+    <b>everything routes through the coordinator</b>. Specialists return to the coordinator; it merges and responds.</div>
+    <div class="trap"><b>Trap:</b> Assuming the sub-agent sees the coordinator's conversation. → It doesn't — it's
+    context-isolated. The coordinator must pass needed state in the delegated task (4.4/4.5).</div>
+    <div class="trap"><b>Trap:</b> Thinking the coordinator must be hard-coded to route. → With sub-agents-as-tools,
+    the <b>model</b> routes dynamically by choosing which specialist-tool to invoke.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why expose specialists as tools rather than hand-writing routing logic?</summary>
+    <p class="answer">It reuses the coordinator's existing tool-use loop and lets the <b>model</b> route dynamically,
+    picking the right specialist (and its input) based on the goal — no brittle hand-coded dispatch tree.</p></details>
+    <details><summary>Q2 · The analysis specialist needs the research findings. How does it get them?</summary>
+    <p class="answer">The coordinator passes them <b>explicitly</b> — here, as the <code>findings</code> tool input.
+    The specialist is context-isolated and can't see the research turn otherwise (4.5).</p></details>
+    <details><summary>Q3 · Which of the coordinator's three jobs does the final loop iteration perform?</summary>
+    <p class="answer"><b>Merge.</b> After the last tool_result is fed back, the coordinator synthesizes the specialists'
+    outputs into one answer and stops (stop_reason ≠ tool_use). Conflict resolution happens here too (4.7).</p></details>
+
+    <div class="pager">
+        <a href="4-2-orchestration-patterns.html"><span class="k">← Prev</span>4.2 · Orchestration patterns</a>
+        <a class="next" href="4-4-subagent-context-isolation.html"><span class="k">Next →</span>4.4 · Sub-agent context isolation</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 4.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

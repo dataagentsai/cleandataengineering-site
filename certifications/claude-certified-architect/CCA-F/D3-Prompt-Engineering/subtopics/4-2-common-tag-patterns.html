@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.2 Common Tag Patterns · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 4 · Structure with XML Tags</div>
+    <h1>4.2 · Common Tag Patterns</h1>
+    <div class="tag">&lt;document&gt; · &lt;instructions&gt; · &lt;example&gt;</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A small, reusable vocabulary of tags</h2>
+    <p>Because no tag names are reserved (4.1), teams converge on a handful of <strong>conventional, descriptive
+    tags</strong> simply because they read clearly. You don't have to use these exact names — but they're a solid
+    default set, and staying close to convention makes prompts easier for humans to review too.</p>
+    <table>
+        <tr><th>Tag</th><th>What it holds</th></tr>
+        <tr><td><code>&lt;document&gt;</code> / <code>&lt;documents&gt;</code></td><td>Source material Claude should read — reports, transcripts, pasted text.</td></tr>
+        <tr><td><code>&lt;instructions&gt;</code></td><td>The task itself: what Claude should do, step by step.</td></tr>
+        <tr><td><code>&lt;example&gt;</code> / <code>&lt;examples&gt;</code></td><td>Few-shot demonstrations of the desired input→output behavior.</td></tr>
+        <tr><td><code>&lt;context&gt;</code></td><td>Background the task depends on but that isn't the primary data.</td></tr>
+        <tr><td><code>&lt;formatting&gt;</code></td><td>Rules for how the answer should be shaped/structured.</td></tr>
+        <tr><td><code>&lt;input&gt;</code> / <code>&lt;query&gt;</code></td><td>The specific variable input or question for this call.</td></tr>
+    </table>
+
+    <div class="note">🔑 These are conventions, not keywords. <code>&lt;source_text&gt;</code> would work just as
+    well as <code>&lt;document&gt;</code> — as long as you use it consistently.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Consistency + referencing the tag by name</h2>
+    <p>Two habits turn a pile of tags into a reliable structure:</p>
+    <ul>
+        <li><strong>Be consistent.</strong> Use the same tag name for the same kind of content in every prompt and
+        every call. Don't switch between <code>&lt;doc&gt;</code>, <code>&lt;document&gt;</code>, and
+        <code>&lt;text&gt;</code> for the same thing — inconsistency reintroduces the ambiguity tags were meant to
+        remove.</li>
+        <li><strong>Refer to tags by name in your instructions.</strong> Instead of "use the text above," write
+        <em>"Using the contract in <code>&lt;document&gt;</code>, answer the question in
+        <code>&lt;query&gt;</code>."</em> Naming the tag ties the instruction to an exact region of the prompt so
+        Claude knows precisely what you mean.</li>
+    </ul>
+    <div class="good">The instruction and the container share the same word. "Summarize the article in
+    <code>&lt;document&gt;</code>" is unambiguous; "summarize the article" leaves Claude to hunt for it.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> A conventional prompt skeleton</h2>
+    <div class="mermaid">
+flowchart TD
+    P["Prompt"] --> C["&lt;context&gt;<br/>background"]
+    P --> D["&lt;document&gt;<br/>source material"]
+    P --> E["&lt;example&gt;<br/>few-shot demo"]
+    P --> F["&lt;formatting&gt;<br/>output shape"]
+    P --> I["&lt;instructions&gt;<br/>the task — refers back to<br/>&lt;document&gt; &amp; &lt;example&gt; by name"]
+    classDef data fill:#e7f0ff,stroke:#4a90d9,color:#123;
+    classDef task fill:#d4edda,stroke:#28a745,color:#155724;
+    class C,D,E,F data; class I task;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A prompt built from conventional tags</h2>
+    <p>Each content type gets its own tag, names stay consistent, and the <code>&lt;instructions&gt;</code> block
+    refers to the other tags by name.</p>
+<pre><span class="cm"># System / user prompt content</span>
+&lt;context&gt;
+You are reviewing support tickets for a SaaS billing product.
+&lt;/context&gt;
+
+&lt;example&gt;
+  Ticket: "Charged twice this month." → Category: billing_error; Priority: high
+&lt;/example&gt;
+
+&lt;document&gt;
+Ticket #4821: I was billed for the Pro plan but I'm on the Free tier.
+&lt;/document&gt;
+
+&lt;formatting&gt;
+Reply as JSON with keys: category, priority, one_line_summary.
+&lt;/formatting&gt;
+
+&lt;instructions&gt;
+Using the ticket in &lt;document&gt; and the pattern shown in &lt;example&gt;,
+classify the ticket. Follow the shape in &lt;formatting&gt; exactly.
+&lt;/instructions&gt;</pre>
+
+    <div class="note">🔑 Notice how <code>&lt;instructions&gt;</code> names <code>&lt;document&gt;</code>,
+    <code>&lt;example&gt;</code>, and <code>&lt;formatting&gt;</code> — the instruction is wired to exact regions,
+    not to "the stuff above."</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> House conventions vs. ad-hoc tags</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ A shared tag vocabulary</h4>
+            <ul><li>Prompts across a team look and parse the same way</li>
+            <li>Templates and post-processing code can rely on stable names</li>
+            <li>Easier to review, diff, and hand off</li></ul></div>
+        <div class="con"><h4>⚠️ A new tag name every time</h4>
+            <ul><li>Maximum flexibility for a one-off</li>
+            <li>But: no shared parser, no muscle memory, easy to drift</li>
+            <li>Referencing "the text above" breaks when layout changes</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "You must use &lt;document&gt;, &lt;instructions&gt;, &lt;example&gt; exactly."
+    → These are <b>common conventions, not required keywords</b>. Any descriptive name works if used consistently.</div>
+    <div class="trap"><b>Trap:</b> Writing "use the text above" instead of naming the tag. → <b>Refer to tags by
+    name</b> (e.g. "the article in &lt;document&gt;") so the instruction points at an exact region.</div>
+    <div class="trap"><b>Trap:</b> Mixing <code>&lt;doc&gt;</code> and <code>&lt;document&gt;</code> for the same
+    content across calls. → Inconsistency undoes the benefit; pick one name and keep it.</div>
+    <div class="trap"><b>Trap:</b> Assuming <code>&lt;formatting&gt;</code> guarantees strict output. → It steers
+    strongly, but for hard guarantees use prefill, structured outputs, or post-validation (covered elsewhere in
+    D3).</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Name four commonly used prompt tags and what each holds.</summary>
+    <p class="answer"><b>&lt;document&gt;</b> — source material to read; <b>&lt;instructions&gt;</b> — the task;
+    <b>&lt;example&gt;</b> — few-shot demonstrations; <b>&lt;formatting&gt;</b> — rules for the output shape.
+    (<b>&lt;context&gt;</b> and <b>&lt;input&gt;/&lt;query&gt;</b> are also common.)</p></details>
+    <details><summary>Q2 · Why refer to a tag by name inside the instructions?</summary>
+    <p class="answer">It ties the instruction to an exact region of the prompt. "Summarize the article in
+    &lt;document&gt;" removes any doubt about which text Claude should act on, versus a vague "summarize the
+    article."</p></details>
+    <details><summary>Q3 · Is &lt;source_text&gt; a valid substitute for &lt;document&gt;?</summary>
+    <p class="answer">Yes. No tag names are reserved, so <b>&lt;source_text&gt;</b> is fine — provided it's
+    descriptive and you use it consistently and reference it by that same name in the instructions.</p></details>
+
+    <div class="pager">
+        <a href="4-1-why-xml-tags.html"><span class="k">← Back</span>4.1 · Why XML Tags Reduce Ambiguity</a>
+        <a class="next" href="4-3-separating-data-instructions.html"><span class="k">Next →</span>4.3 · Separating Data from Instructions</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 4.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

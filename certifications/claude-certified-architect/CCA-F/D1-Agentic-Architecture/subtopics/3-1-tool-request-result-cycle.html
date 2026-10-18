@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.1 The Tool Request/Result Cycle · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 3 · Tool Use</div>
+    <h1>3.1 · The Tool Request/Result Cycle</h1>
+    <div class="tag">The full round-trip: tool_use → run → tool_result → follow-up call</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> One tool call is a round-trip, not an event</h2>
+    <p>Tool use is <strong>not</strong> the model "running a function." The Messages API is <strong>stateless</strong>:
+    Claude never executes anything. It <em>asks</em> for a tool by emitting a <code>tool_use</code> block; <strong>your
+    code</strong> runs the actual function and sends the answer back on the next call. A single tool invocation is a
+    four-step round-trip that spans <em>two</em> API requests.</p>
+
+    <table>
+        <tr><th>Step</th><th>Who</th><th>What happens</th></tr>
+        <tr><td><strong>1 · Request</strong></td><td>You</td><td>POST <code>/v1/messages</code> with the user turn plus a <code>tools</code> list.</td></tr>
+        <tr><td><strong>2 · tool_use</strong></td><td>Claude</td><td>Responds with <code>stop_reason: "tool_use"</code> and a <code>tool_use</code> block <code>{id, name, input}</code>.</td></tr>
+        <tr><td><strong>3 · Run</strong></td><td>You</td><td>Execute the real function with <code>input</code>; capture its output.</td></tr>
+        <tr><td><strong>4 · tool_result</strong></td><td>You</td><td>Append the assistant turn, then POST again with a <code>user</code> turn carrying a <code>tool_result</code>.</td></tr>
+    </table>
+
+    <div class="note">🔑 Because the API is stateless, you must <strong>append the whole <code>response.content</code></strong>
+    (the assistant's <code>tool_use</code> block and any text) to <code>messages</code> before you send the result. Drop it
+    and the next call has no memory of what Claude asked for.</div>
+
+    <div class="warn">The tool description is the single most important field for reliability. <strong>Claude reads the
+    <code>description</code> to decide <em>when</em> to call the tool</strong> — be prescriptive about the trigger condition,
+    the inputs, and what it returns. A vague description is the #1 cause of missed or spurious tool calls.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The round-trip in sequence</h2>
+    <div class="mermaid">
+sequenceDiagram
+    participant App as Your code
+    participant API as Messages API
+    participant Tool as get_weather()
+    App->>API: POST /v1/messages<br/>messages + tools
+    API-->>App: stop_reason: "tool_use"<br/>tool_use {id, name, input}
+    Note over App: append WHOLE response.content
+    App->>Tool: run get_weather(input)
+    Tool-->>App: "18°C, clear"
+    App->>API: POST again (user turn)<br/>tool_result {tool_use_id, content}
+    API-->>App: stop_reason: "end_turn"<br/>final text answer
+    </div>
+
+    <h2><span class="chip code">CODE</span> A single-tool round-trip, end to end</h2>
+    <p>One tool, one round-trip. Note the two <code>create()</code> calls and the whole-content append between them.</p>
+<pre><span class="cm"># The tool DEFINITION — description tells Claude WHEN to call it.</span>
+TOOLS = [{
+    <span class="st">"name"</span>: <span class="st">"get_weather"</span>,
+    <span class="st">"description"</span>: <span class="st">"Get the current weather for a city. "</span>
+                   <span class="st">"Call this whenever the user asks about weather, "</span>
+                   <span class="st">"temperature, or conditions in a named place."</span>,
+    <span class="st">"input_schema"</span>: {
+        <span class="st">"type"</span>: <span class="st">"object"</span>,
+        <span class="st">"properties"</span>: {<span class="st">"city"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>}},
+        <span class="st">"required"</span>: [<span class="st">"city"</span>],
+    },
+}]
+
+messages = [{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"What's the weather in Paris?"</span>}]
+
+<span class="cm"># --- Request 1: Claude asks for the tool ---</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=TOOLS, messages=messages,
+)
+<span class="cm"># resp.stop_reason == "tool_use"</span>
+
+<span class="cm"># Append the WHOLE assistant turn (stateless API — it has no memory).</span>
+messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content})
+
+<span class="cm"># --- Step 3: YOU run the tool the model chose ---</span>
+tool_use = <span class="fn">next</span>(b <span class="kw">for</span> b <span class="kw">in</span> resp.content <span class="kw">if</span> b.type == <span class="st">"tool_use"</span>)
+result = <span class="fn">get_weather</span>(**tool_use.input)     <span class="cm"># -> "18°C, clear"</span>
+
+<span class="cm"># --- Step 4: return the result in a USER turn ---</span>
+messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: [{
+    <span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+    <span class="st">"tool_use_id"</span>: tool_use.id,        <span class="cm"># MUST match the tool_use id</span>
+    <span class="st">"content"</span>: result,
+}]})
+
+<span class="cm"># --- Request 2: Claude turns the result into a final answer ---</span>
+final = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=TOOLS, messages=messages,
+)
+<span class="cm"># final.stop_reason == "end_turn"; text = "It's 18°C and clear in Paris."</span></pre>
+
+    <div class="good">The agent loop (1.3) is just this round-trip repeated: keep calling until
+    <code>stop_reason</code> is <code>end_turn</code> instead of <code>tool_use</code>.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Thinking Claude "runs" the tool. → Claude only <b>emits a request</b>. The API is stateless;
+    <b>your code executes</b> the function and returns the result. Nothing runs server-side.</div>
+    <div class="trap"><b>Trap:</b> Forgetting to append the assistant's <code>tool_use</code> before sending the result. →
+    The stateless API needs the <b>whole <code>response.content</code></b> in <code>messages</code>, or the follow-up
+    call has no context and 400s / drifts.</div>
+    <div class="trap"><b>Trap:</b> Under-writing the <code>description</code>. → It's the text Claude reads to decide
+    <b>when</b> to call the tool. Vague descriptions cause missed or spurious calls — no code change fixes that.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · How many API requests does one tool call take, and why?</summary>
+    <p class="answer"><b>Two.</b> Request 1 returns the <code>tool_use</code> block; you run the tool locally; request 2
+    sends the <code>tool_result</code> so Claude can produce the final answer. The statelessness is why both requests must
+    carry the full running <code>messages</code> history.</p></details>
+    <details><summary>Q2 · Your follow-up call keeps behaving as if the tool was never requested. What did you likely skip?</summary>
+    <p class="answer">You skipped appending the <b>assistant turn</b> (<code>response.content</code> with the
+    <code>tool_use</code> block) before adding the <code>tool_result</code>. The API is stateless — without that block the
+    <code>tool_result</code> references nothing.</p></details>
+    <details><summary>Q3 · Claude never calls your perfectly-coded tool. First thing to check?</summary>
+    <p class="answer">The <b>description</b>. Claude decides whether to call based on the description text, not the
+    function body. Make it prescriptive about <em>when</em> to call it.</p></details>
+
+    <div class="pager">
+        <a href="2-6-stop-sequence.html"><span class="k">← Prev</span>2.6 · Stop sequences</a>
+        <a class="next" href="3-2-tool-result-contract.html"><span class="k">Next →</span>3.2 · The tool_result Contract</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 3.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

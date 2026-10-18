@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.1 Reducing Hallucinations · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 8 · Reliability, Hallucination &amp; Iteration</div>
+    <h1>8.1 · Reducing Hallucinations</h1>
+    <div class="tag">Give Claude an out</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Lower the pressure to always answer</h2>
+    <p>A <strong>hallucination</strong> is confident text that is factually wrong or unsupported by the context you
+    gave. The root cause is often <em>social pressure baked into the prompt</em>: if the only acceptable-looking
+    output is a complete answer, the model will manufacture one rather than appear unhelpful. The single most
+    effective fix is to <strong>explicitly permit uncertainty</strong> — tell Claude it is allowed, and expected,
+    to say <em>"I don't know"</em> or <em>"I don't have enough information to confidently assess this."</em></p>
+
+    <div class="good">🔑 Anthropic's #1 documented technique: <strong>allow Claude to say "I don't know."</strong>
+    A single sentence granting permission to admit uncertainty drastically reduces false information.</div>
+
+    <p>The other three basic strategies all work by <strong>grounding the answer in the source text</strong> rather
+    than the model's parametric memory:</p>
+    <table>
+        <tr><th>Technique</th><th>What you ask Claude to do</th><th>Why it reduces hallucination</th></tr>
+        <tr><td>Allow "I don't know"</td><td>Admit uncertainty instead of guessing</td><td>Removes the pressure that forces a fabricated answer</td></tr>
+        <tr><td>Answer only from context</td><td>Use <em>only</em> the provided documents, not general knowledge</td><td>Cuts off the parametric-memory path where hallucinations originate</td></tr>
+        <tr><td>Extract quotes first</td><td>Pull word-for-word quotes before analyzing (esp. docs &gt;20k tokens)</td><td>Anchors the response to the actual text</td></tr>
+        <tr><td>Verify with citations</td><td>Cite a supporting quote per claim; retract if none exists</td><td>Makes each claim auditable and self-checking</td></tr>
+    </table>
+
+    <div class="note">⚠️ These techniques <em>reduce</em> hallucinations; they do not eliminate them. Always
+    validate critical information for high-stakes decisions.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Advanced verification techniques</h2>
+    <p>Beyond the basics, four techniques catch hallucinations that slip through:</p>
+    <ul>
+        <li><strong>Chain-of-thought verification</strong> — ask Claude to reason step-by-step <em>before</em>
+        the final answer, exposing faulty logic or assumptions.</li>
+        <li><strong>Best-of-N verification</strong> — run the same prompt several times; inconsistent answers
+        across runs signal a hallucination.</li>
+        <li><strong>Iterative refinement</strong> — feed Claude's output back and ask it to verify or expand
+        earlier statements, catching inconsistencies.</li>
+        <li><strong>External-knowledge restriction</strong> — instruct Claude to use <em>only</em> the provided
+        documents and not its general knowledge.</li>
+    </ul>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Route the request through a grounding gate</h2>
+    <div class="mermaid">
+flowchart TD
+    Q["User question + source docs"] --> P{"Prompt gives Claude<br/>an out?"}
+    P -->|"no — 'you must answer'"| H["🔴 Model invents an answer<br/>(hallucination risk)"]
+    P -->|"yes — 'say I don't know'"| G["Answer only from context"]
+    G --> E{"Supporting quote<br/>found in source?"}
+    E -->|"yes"| A["🟢 Claim, cited to the quote"]
+    E -->|"no"| I["🟠 'I don't know' /<br/>retract the claim"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class A ok; class I gate; class H bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> BAD → GOOD prompt contrast</h2>
+    <p>The bad prompt demands an answer with no escape hatch and no grounding. The good prompt grants permission
+    to be uncertain, restricts Claude to the source, and requires quote-backed claims.</p>
+<pre><span class="cm"># ❌ BAD — no out, no grounding: invites confident fabrication</span>
+As our M&amp;A advisor, analyze this report on the acquisition of AcmeCo.
+&lt;report&gt;{{REPORT}}&lt;/report&gt;
+Give me the financial projections, integration risks, and regulatory hurdles.
+
+<span class="cm"># ✅ GOOD — permission to be uncertain + answer only from context + quote-first</span>
+As our M&amp;A advisor, analyze this report on the acquisition of AcmeCo.
+&lt;report&gt;{{REPORT}}&lt;/report&gt;
+
+1. First, extract exact word-for-word quotes from the report that are most
+   relevant to financials, integration risk, and regulatory hurdles.
+   If you cannot find relevant quotes, state <span class="st">"No relevant quotes found."</span>
+2. Base your analysis ONLY on the extracted quotes, referencing each by number.
+   Use only the report — do not use outside knowledge.
+3. If the report lacks the information, say
+   <span class="st">"I don't have enough information to confidently assess this."</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Grounding vs. fluency</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Grounded, quote-first prompting</h4>
+            <ul><li>Auditable — every claim traces to a quote</li>
+            <li>Far fewer fabrications on long documents</li>
+            <li>"I don't know" is an acceptable, honest output</li></ul></div>
+        <div class="con"><h4>⚠️ Costs you pay</h4>
+            <ul><li>Longer outputs and more tokens (quotes + analysis)</li>
+            <li>More reserved, less fluent-sounding answers</li>
+            <li>Extra latency from CoT / best-of-N verification</li></ul></div>
+    </div>
+    <div class="good">Reserve the heaviest verification (best-of-N, iterative refinement) for high-stakes,
+    accuracy-critical tasks; a simple "you may say I don't know" line is cheap enough to add everywhere.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Raise the stakes — tell it accuracy is CRITICAL and it MUST answer." → This
+    <em>increases</em> hallucination by removing the escape hatch. The fix is the opposite: <b>give Claude
+    permission to say "I don't know."</b></div>
+    <div class="trap"><b>Trap:</b> Assuming lower temperature eliminates hallucinations. → Temperature affects
+    variance, not grounding. A confident wrong answer is still wrong at temp 0. Ground in the source and permit
+    uncertainty instead. (On current models temperature isn't even a tunable parameter.)</div>
+    <div class="trap"><b>Trap:</b> Treating quote extraction as optional formatting. → For long docs (&gt;20k
+    tokens), <b>extract-quotes-first is the mechanism</b> that anchors the answer to real text — it's the
+    technique, not decoration.</div>
+    <div class="trap"><b>Trap:</b> Believing these techniques make output trustworthy enough to skip review. →
+    They reduce but never eliminate hallucination; <b>validate critical facts</b> before acting on them.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A summarizer keeps inventing statistics not in the source. What is the first, cheapest fix?</summary>
+    <p class="answer">Add an explicit <b>out</b> and a <b>grounding restriction</b>: tell Claude to use only the
+    provided document and to say "I don't have enough information" when the source doesn't cover something. Granting
+    permission to admit uncertainty is the single most effective, lowest-cost technique.</p></details>
+    <details><summary>Q2 · Why ask Claude to extract quotes <em>before</em> analyzing a 50-page contract?</summary>
+    <p class="answer">Quote-first <b>grounds</b> the analysis in the actual text rather than the model's memory,
+    which is where hallucinations originate. Referencing each claim back to a numbered quote also makes the output
+    auditable and lets Claude retract claims it can't support.</p></details>
+    <details><summary>Q3 · You run the same factual prompt 5 times and get 3 different answers. What does that tell you, and what is the technique called?</summary>
+    <p class="answer">The inconsistency across runs is a strong signal of <b>hallucination</b> — the model is
+    guessing, not retrieving. This is <b>best-of-N verification</b>: comparing multiple outputs of the same prompt
+    to surface unreliable claims.</p></details>
+
+    <div class="pager">
+        <a href="7-5-streaming-parsing-json.html"><span class="k">← Back</span>7.5 · Streaming &amp; Parsing</a>
+        <a class="next" href="8-2-grounding-citations.html"><span class="k">Next →</span>8.2 · Grounding &amp; Citations</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 8.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

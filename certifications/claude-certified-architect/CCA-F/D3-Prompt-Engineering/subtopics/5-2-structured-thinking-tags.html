@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.2 · Structured Thinking with Tags · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 5 · Chain of Thought &amp; Extended Thinking</div>
+    <h1>5.2 · Structured Thinking with Tags</h1>
+    <div class="tag">&lt;thinking&gt; then &lt;answer&gt;</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Separate the reasoning from the deliverable</h2>
+    <p>Plain CoT (5.1) improves accuracy but leaves the reasoning <strong>mixed into the visible response</strong>.
+    That's fine when a human reads the whole thing — but in an application you usually want to <em>ship the answer
+    and drop the scratch work</em>. <strong>Structured CoT</strong> solves this: instruct Claude to do its reasoning
+    inside <code>&lt;thinking&gt;</code> tags and put the final result inside <code>&lt;answer&gt;</code> tags. Now the
+    two are on clearly labelled seams, so your code can <strong>parse out the answer and strip the reasoning</strong>.</p>
+
+    <div class="note">🔑 The tags are a <em>contract</em> between prompt and parser. The model gets its reasoning
+    room; your pipeline gets a clean, extractable deliverable. Same request, two consumers.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Why XML tags specifically</h2>
+    <p>Claude is trained to respect XML-style tags as structural delimiters, so a <code>&lt;thinking&gt;…&lt;/thinking&gt;</code>
+    block is unambiguous to a regex or XML parser — far more robust than trying to guess where "the reasoning" ends
+    and "the answer" begins in free prose. The same tag discipline shows up in few-shot examples: wrap the reasoning
+    of each example in <code>&lt;thinking&gt;</code> and Claude generalizes that pattern to its own responses.</p>
+
+    <div class="good">Design move: name the tags in the prompt, and make your extractor read only the
+    <code>&lt;answer&gt;</code> block. The <code>&lt;thinking&gt;</code> block is retained for debugging/logging but
+    never shown to the user.</div>
+
+    <div class="warn">⚠️ Structured-tag CoT is <em>prompted</em> reasoning in the normal response body — it is
+    <strong>not</strong> the native <code>thinking</code> parameter. Native extended thinking (5.3) returns reasoning
+    in <em>separate content blocks</em> you never have to tag or regex out. Don't conflate the two.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> One response, two extraction paths</h2>
+    <div class="mermaid">
+flowchart TD
+    P["Prompt: 'reason in &lt;thinking&gt;,<br/>answer in &lt;answer&gt;'"] --> R["Model response<br/>&lt;thinking&gt;…&lt;/thinking&gt;&lt;answer&gt;…&lt;/answer&gt;"]
+    R --> PARSE{"Parser splits<br/>on tags"}
+    PARSE -->|"&lt;answer&gt; block"| SHIP["🟢 Ship to user"]
+    PARSE -->|"&lt;thinking&gt; block"| LOG["🔵 Log / debug only<br/>(stripped from output)"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef mid fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class SHIP ok; class LOG mid; class PARSE gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Prompt + extract the answer, drop the reasoning</h2>
+    <p>The prompt fixes the output shape; a small parser reads the <code>&lt;answer&gt;</code> block and discards
+    the rest.</p>
+<pre><span class="cm"># Prompt tells Claude exactly where to reason and where to answer.</span>
+system = <span class="st">"""Solve the problem. Do all reasoning inside &lt;thinking&gt; tags.
+Put ONLY the final result inside &lt;answer&gt; tags. Nothing outside the tags."""</span>
+
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">2000</span>,
+    system=system,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"A train leaves at 2pm going 60mph..."</span>}],
+)
+text = resp.content[<span class="st">0</span>].text
+
+<span class="cm"># Strip the reasoning: keep only what's inside &lt;answer&gt;…&lt;/answer&gt;.</span>
+<span class="kw">import</span> re
+m = re.<span class="fn">search</span>(<span class="st">r"&lt;answer&gt;(.*?)&lt;/answer&gt;"</span>, text, re.DOTALL)
+final = m.<span class="fn">group</span>(<span class="st">1</span>).<span class="fn">strip</span>() <span class="kw">if</span> m <span class="kw">else</span> text   <span class="cm"># ship 'final'; log the thinking block</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Structured tags vs. plain CoT vs. native thinking</h2>
+    <table>
+        <tr><th></th><th>Plain CoT (5.1)</th><th>Structured tags (5.2)</th><th>Extended thinking (5.3)</th></tr>
+        <tr><td>Reasoning location</td><td>Mixed into response</td><td>In <code>&lt;thinking&gt;</code> in the response body</td><td>Separate <code>thinking</code> content blocks</td></tr>
+        <tr><td>How you strip it</td><td>Hard — no clean seam</td><td>Parse/regex the tags</td><td>Ignore the thinking blocks — already separate</td></tr>
+        <tr><td>Extra tokens billed</td><td>Yes (reasoning)</td><td>Yes (reasoning)</td><td>Yes (thinking tokens)</td></tr>
+        <tr><td>Requires prompt engineering</td><td>Yes</td><td>Yes (tag contract)</td><td>No — native <code>thinking</code> param</td></tr>
+    </table>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Believing <code>&lt;thinking&gt;</code> tags equal the native thinking feature. →
+    They're a <b>prompting convention</b> in the normal response. Native extended thinking uses the
+    <code>thinking</code> parameter and returns <b>separate blocks</b>.</div>
+    <div class="trap"><b>Trap:</b> "The tags hide the reasoning from the user automatically." → No. The reasoning is
+    still generated and billed; <b>you</b> must parse it out and choose not to display it.</div>
+    <div class="trap"><b>Trap:</b> Putting text outside the tags. → Instruct the model to emit
+    <b>nothing outside</b> <code>&lt;thinking&gt;</code>/<code>&lt;answer&gt;</code>, or your parser will miss stray
+    preamble.</div>
+    <div class="trap"><b>Trap:</b> Using structured tags on a trivial task. → If there's no complex reasoning to
+    strip, the tags add tokens for nothing — this pattern earns its keep only when CoT itself does (5.1).</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why wrap reasoning in <code>&lt;thinking&gt;</code> and the result in <code>&lt;answer&gt;</code>?</summary>
+    <p class="answer">So the two are on labelled seams your code can parse. You extract the <code>&lt;answer&gt;</code>
+    block to ship and strip the <code>&lt;thinking&gt;</code> block from what the user sees — reasoning room for the
+    model, a clean deliverable for the app.</p></details>
+    <details><summary>Q2 · Does the tag pattern stop the reasoning tokens from being billed?</summary>
+    <p class="answer">No. The reasoning is still generated and billed as output tokens; the tags only make it
+    easy to <b>separate and discard</b> from the shown response. To keep reasoning in dedicated blocks entirely,
+    use native extended thinking (5.3).</p></details>
+    <details><summary>Q3 · How is structured-tag CoT different from the <code>thinking</code> parameter?</summary>
+    <p class="answer">Structured tags are <b>prompted</b> — reasoning lives in the normal response body inside XML
+    tags you defined. The <code>thinking</code> parameter is a <b>native capability</b> that returns reasoning in
+    separate <code>thinking</code> content blocks, no tagging or regex required.</p></details>
+
+    <div class="pager">
+        <a href="5-1-let-claude-think.html"><span class="k">← Back</span>5.1 · Let Claude Think (CoT)</a>
+        <a class="next" href="5-3-extended-thinking.html"><span class="k">Next →</span>5.3 · Extended Thinking vs Prompted CoT</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 5.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

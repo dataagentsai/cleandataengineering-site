@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.2 JSON via Prefill + Stop Sequence · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 7 · Structured Outputs &amp; JSON</div>
+    <h1>7.2 · JSON via Prefill + Stop Sequence</h1>
+    <div class="tag">The no-feature classic</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The classic two-part trick</h2>
+    <p>Before structured outputs existed, the standard way to coax clean JSON out of Claude with <em>no
+    feature at all</em> combined two Messages-API mechanics:</p>
+    <ol>
+        <li><strong>Prefill the opening brace.</strong> End your request with an <code>assistant</code> turn
+        containing just <code>{</code>. Claude continues <em>from</em> that character, so it never emits a
+        "Here's the JSON:" preamble — the very first token is already inside the object.</li>
+        <li><strong>Stop on the closing brace.</strong> Pass <code>stop_sequences: ["}"]</code>. The moment Claude
+        would emit <code>}</code>, generation halts with <code>stop_reason: "stop_sequence"</code>. The stop text
+        itself is <em>not</em> included in the output, so you re-add the braces yourself when parsing.</li>
+    </ol>
+    <div class="note">🔑 <code>stop_sequences</code> is a plain Messages-API parameter (a list of strings). When one
+    fires, <code>stop_reason</code> is <code>"stop_sequence"</code> and the matched string appears in
+    <code>response.stop_sequence</code> — and is stripped from the generated text.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Prefill is now model-gated — know the caveat</h2>
+    <div class="warn">⚠️ <strong>Assistant-turn prefill returns a 400 on current models</strong> (Fable 5, Opus 4.8 /
+    4.7 / 4.6, Sonnet 4.6). The prefill half of this trick therefore only runs on <strong>older models</strong>
+    that still accept a trailing <code>assistant</code> message. On current models, use tool use (7.3) or the
+    structured-outputs feature (7.4) instead.</div>
+    <p>The still-portable no-feature approach on <em>any</em> model is the second flavor: <strong>ask for JSON only
+    and parse</strong>. Instruct "reply with only valid JSON, no prose", optionally add a stop sequence to trim any
+    trailing chatter, then <code>json.loads()</code> the text with a try/except and a retry on failure.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> How the two mechanics combine</h2>
+    <div class="mermaid">
+flowchart TD
+    U["User request + schema hint"] --> PRE{"Model allows<br/>assistant prefill?"}
+    PRE -->|"older model: yes"| A["🟢 Prefill assistant turn with '{'<br/>+ stop_sequences=['}']"]
+    A --> OUT["Claude emits object body,<br/>halts at '}' (stripped)"]
+    OUT --> WRAP["Re-add braces → json.loads()"]
+    PRE -->|"current model: no (400)"| B["🟠 Ask for JSON-only + parse<br/>(or escalate to 7.3 / 7.4)"]
+    B --> WRAP
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class A ok; class B gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> The classic trick vs. the portable fallback</h2>
+<pre><span class="cm"># ── Classic prefill + stop (OLDER models only — 400 on 4.6/4.7/4.8/Fable 5) ──</span>
+resp = client.messages.create(
+    model=<span class="st">"claude-3-5-sonnet-20241022"</span>,   <span class="cm"># a model that still allows prefill</span>
+    max_tokens=<span class="st">1024</span>,
+    stop_sequences=[<span class="st">"}"</span>],                     <span class="cm"># halt at the closing brace</span>
+    messages=[
+        {<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Extract name and email as JSON."</span>},
+        {<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: <span class="st">"{"</span>},      <span class="cm"># prefill the opening brace</span>
+    ],
+)
+<span class="cm"># stop_reason == "stop_sequence"; braces are stripped, so wrap them back:</span>
+raw  = resp.content[<span class="st">0</span>].text          <span class="cm"># e.g.  "name": "Jane", "email": "j@co.com"</span>
+data = json.loads(<span class="st">"{"</span> + raw + <span class="st">"}"</span>)
+
+<span class="cm"># ── Portable fallback (ANY model): ask for JSON-only, then parse defensively ──</span>
+resp = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    system=<span class="st">"Reply with ONLY a valid JSON object. No prose, no code fences."</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Extract name and email as JSON."</span>}],
+)
+<span class="kw">try</span>:
+    data = json.loads(resp.content[<span class="st">0</span>].text)
+<span class="kw">except</span> json.JSONDecodeError:
+    data = <span class="fn">retry_or_repair</span>(resp)      <span class="cm"># re-ask, or escalate to 7.4</span></pre>
+    <div class="bad">Do not run the prefill variant against Opus 4.8 / Sonnet 4.6 / Fable 5 — the trailing
+    <code>assistant</code> turn is rejected before generation even starts.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> No-feature JSON vs. the real feature</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Prefill + stop / JSON-only</h4>
+            <ul><li>Zero setup — no schema, no beta, no compile step</li>
+            <li>Prefill kills the preamble on models that allow it</li>
+            <li>Portable JSON-only variant works everywhere</li></ul></div>
+        <div class="con"><h4>⚠️ The cost</h4>
+            <ul><li><strong>Not guaranteed</strong> — output can still be malformed</li>
+            <li>You own parsing, validation, and retries</li>
+            <li>Prefill path is <strong>dead on current models</strong></li>
+            <li>Nested <code>}</code> in strings can trip a naive <code>["}"]</code> stop</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The stop sequence is part of the output." → It is <b>not</b> — the matched string
+    is stripped from the text and reported separately in <code>response.stop_sequence</code>. That's why you re-add
+    the closing brace.</div>
+    <div class="trap"><b>Trap:</b> Using prefill on Opus 4.8 / Sonnet 4.6 / Fable 5. → Those models <b>reject</b>
+    a trailing assistant turn with a 400. Prefill is an older-model-only technique.</div>
+    <div class="trap"><b>Trap:</b> Treating this trick as a guarantee. → It's <b>best-effort</b>. When you need
+    valid JSON every time, that's structured outputs (7.4) or strict tool use (7.3).</div>
+    <div class="trap"><b>Trap:</b> A bare <code>stop_sequences=["}"]</code> on nested JSON. → It fires on the
+    <b>first</b> <code>}</code>, which may be inside a nested object — truncating the response. The trick suits flat
+    objects; for nested shapes, prefer the JSON-only + parse variant.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Describe the classic no-feature JSON trick in two moves.</summary>
+    <p class="answer">Prefill the <code>assistant</code> turn with <code>{</code> so Claude skips the preamble and
+    starts inside the object, and set <code>stop_sequences=["}"]</code> so generation halts at the closing brace.
+    Because the stop string is stripped, you re-wrap the result: <code>json.loads("{" + text + "}")</code>.</p></details>
+    <details><summary>Q2 · Why can't you use the prefill half on Claude Opus 4.8?</summary>
+    <p class="answer">Assistant-turn prefill is <b>not supported</b> on Fable 5 and the 4.6/4.7/4.8 family — a trailing
+    <code>assistant</code> message returns a <b>400</b>. Use tool use, structured outputs, or a JSON-only system
+    instruction instead.</p></details>
+    <details><summary>Q3 · What is the portable, any-model version of this technique?</summary>
+    <p class="answer">Instruct the model to "reply with only valid JSON, no prose", optionally add a stop sequence
+    to trim trailing text, then <code>json.loads()</code> defensively with a try/except and a retry or repair path.
+    It's still best-effort — escalate to structured outputs for a hard guarantee.</p></details>
+
+    <div class="pager">
+        <a href="7-1-output-consistency.html"><span class="k">← Back</span>7.1 · Increasing Output Consistency</a>
+        <a class="next" href="7-3-tool-use-for-json.html"><span class="k">Next →</span>7.3 · Tool Use to Force a Schema</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 7.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

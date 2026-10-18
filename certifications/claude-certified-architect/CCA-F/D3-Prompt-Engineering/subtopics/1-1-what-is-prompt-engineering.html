@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.1 What Prompt Engineering Is & When to Use It · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 1 · Foundations &amp; Being Clear</div>
+    <h1>1.1 · What Prompt Engineering Is &amp; When to Use It</h1>
+    <div class="tag">Prompt before you fine-tune</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Prompt engineering is the fastest, cheapest lever</h2>
+    <p><strong>Prompt engineering</strong> is the practice of shaping a model's behaviour by editing the words you
+    send it — the instructions, context, examples, and structure of the prompt — rather than changing the model's
+    weights. For most use cases it is the <strong>first lever you should reach for</strong>, because it is far
+    faster and cheaper to iterate on than the alternatives.</p>
+    <p>Set against <strong>fine-tuning</strong>, the contrast is stark. A prompt edit gives you a new result in
+    <em>seconds</em>; a fine-tune requires curating a training dataset, running a training job, and evaluating a
+    new checkpoint — hours to days and real compute cost per iteration. Prompting also <strong>preserves the
+    model's general capabilities</strong> (fine-tuning can narrow them), needs no labelled data, and adapts
+    instantly when requirements change. That is why the standard guidance is: exhaust prompt engineering first,
+    and only move to fine-tuning when prompting genuinely can't close the gap.</p>
+
+    <div class="note">🔑 Mental model: prompting steers a capable model you already have; fine-tuning bakes a new
+    model. Steering is cheap, reversible, and instantaneous — start there.</div>
+
+    <table>
+        <tr><th>Lever</th><th>Iteration speed</th><th>Cost</th><th>Reach for it when…</th></tr>
+        <tr><td><strong>Prompt engineering</strong></td><td>Seconds</td><td>~None (just tokens)</td><td>Almost always — the default first move</td></tr>
+        <tr><td>Few-shot examples in prompt</td><td>Minutes</td><td>Extra input tokens</td><td>Format/tone/structure need pinning down</td></tr>
+        <tr><td>Model selection</td><td>Minutes</td><td>Per-token price delta</td><td>Latency or cost is the real problem, not quality</td></tr>
+        <tr><td>Fine-tuning</td><td>Hours–days</td><td>Data + training compute</td><td>Prompting truly can't reach the behaviour, and you have data</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> When prompt engineering is <em>not</em> the answer</h2>
+    <p>Prompting is powerful but not universal. Anthropic's own guidance is explicit: <em>"Not every success
+    criteria or failing eval is best solved by prompt engineering. For example, latency and cost can sometimes be
+    more easily improved by selecting a different model."</em> A prompt cannot make a model faster or cheaper — those
+    are properties of the <strong>model tier</strong> you choose. If your failing metric is speed or price, the fix
+    is a smaller/faster model (or fast mode), not a cleverer prompt.</p>
+    <p>Likewise, before you even start tuning, Anthropic assumes you have three things in place. Missing any of them
+    means you're optimizing blind:</p>
+    <div class="warn">Prompt engineering assumes you already have: <strong>(1)</strong> a clear definition of
+    success criteria, <strong>(2)</strong> a way to empirically test against those criteria, and <strong>(3)</strong>
+    a first-draft prompt to improve. Without these, establish them first (that's subtopic 1.2).</div>
+    <div class="good">Right tool per problem: quality &amp; behaviour → <strong>prompt engineering</strong>;
+    latency &amp; cost → <strong>model choice</strong>; a durable capability prompting can't reach → fine-tuning.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Which lever fixes this failing eval?</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Failing eval / gap in behaviour"] --> Q{"What kind of gap?"}
+    Q -->|"Quality, format, tone, following instructions"| P["🟢 Prompt engineering<br/>edit the prompt — seconds"]
+    Q -->|"Too slow / too expensive"| M["🔵 Change the model tier<br/>not the prompt"]
+    Q -->|"Durable capability prompting can't reach"| F{"Have data + eval budget?"}
+    F -->|"yes"| FT["🟠 Fine-tune<br/>hours–days, real cost"]
+    F -->|"no"| P
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef alt fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class P ok; class M alt; class FT gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> The same behaviour: prompt tweak vs. the fine-tune you avoided</h2>
+    <p>A behaviour that <em>looks</em> like it needs training — "always answer as a terse SRE" — is usually one
+    prompt away. This is the whole argument for reaching for prompting first: no dataset, no training run, instant
+    result.</p>
+<pre><span class="cm"># ❌ The instinct: "the model won't behave, let's fine-tune."</span>
+<span class="cm">#    → curate 1000s of examples, run a training job, eval a new checkpoint.</span>
+<span class="cm">#    → hours-to-days, real compute cost, PER iteration.</span>
+
+<span class="cm"># ✅ The lever to try FIRST: a system prompt. New behaviour in seconds.</span>
+resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">1024</span>,
+    system=(
+        <span class="st">"You are a senior SRE. Answer in at most 3 sentences. "</span>
+        <span class="st">"Lead with the action to take, then the one-line reason. "</span>
+        <span class="st">"No preamble, no pleasantries."</span>
+    ),
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Disk is 95% full on prod-db-1. What now?"</span>}],
+)
+<span class="cm"># Edit the system string → re-run → new behaviour. That loop is the point.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Prompt engineering vs. fine-tuning</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Prompt engineering (start here)</h4>
+            <ul><li>Iterate in seconds; no training pipeline</li>
+            <li>No labelled dataset required</li>
+            <li>Preserves the model's general capabilities</li>
+            <li>Reversible — just edit the text back</li>
+            <li>Adapts instantly when requirements change</li></ul></div>
+        <div class="con"><h4>⚠️ Fine-tuning (last resort)</h4>
+            <ul><li>Needs curated data + training compute</li>
+            <li>Hours-to-days per iteration</li>
+            <li>Can narrow general capability</li>
+            <li>Locks behaviour into a checkpoint you must maintain</li>
+            <li>Worth it only when prompting genuinely can't reach the behaviour</li></ul></div>
+    </div>
+    <div class="note">🔑 And remember the third door: if the failing metric is <em>latency or cost</em>, neither
+    prompting nor fine-tuning is the fix — <strong>change the model</strong>.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "The model is too slow, let's engineer a better prompt." → A prompt can't change
+    inference speed. <b>Latency and cost are model-tier problems</b> — pick a faster/cheaper model.</div>
+    <div class="trap"><b>Trap:</b> "Reach for fine-tuning to change behaviour." → Fine-tuning is the <b>last</b>
+    resort. Try prompt engineering first — it's faster, cheaper, needs no data, and is reversible.</div>
+    <div class="trap"><b>Trap:</b> Starting to tune with no success criteria or eval. → Anthropic assumes you have
+    <b>clear success criteria + an empirical test + a draft prompt</b> before prompt engineering. Establish those first.</div>
+    <div class="trap"><b>Trap:</b> Thinking prompting and fine-tuning are interchangeable knobs. → They aren't.
+    Prompting <b>steers</b> a fixed model; fine-tuning <b>bakes a new one</b>. Different cost, speed, and reversibility.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why is prompt engineering usually the first lever to pull?</summary>
+    <p class="answer">Because it's the <b>fastest and cheapest</b> way to change behaviour: you edit text and get a
+    new result in seconds, with no training data, no compute cost, and no risk to the model's general
+    capabilities. It's also fully reversible — just change the words back.</p></details>
+    <details><summary>Q2 · Your only problem is that responses take too long. Is a better prompt the fix?</summary>
+    <p class="answer">No. Latency (and cost) are properties of the model, not the prompt. Anthropic explicitly notes
+    these "can sometimes be more easily improved by selecting a different model." <b>Change the model tier</b>,
+    don't rewrite the prompt.</p></details>
+    <details><summary>Q3 · What three things does Anthropic assume you have before prompt engineering?</summary>
+    <p class="answer">(1) A clear definition of your <b>success criteria</b>, (2) a way to <b>empirically test</b>
+    against those criteria, and (3) a <b>first-draft prompt</b> to improve. Without them you're tuning blind — set
+    them up first.</p></details>
+
+    <div class="pager">
+        <a href="../index.html"><span class="k">← Back</span>Domain 3 hub</a>
+        <a class="next" href="1-2-empirical-iterative-loop.html"><span class="k">Next →</span>1.2 · The Empirical, Iterative Loop</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 1.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

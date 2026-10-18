@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.1 Headless Mode &amp; Scripting · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 8 · Automation, MCP &amp; Integrations</div>
+    <h1>8.1 · Headless Mode &amp; Scripting</h1>
+    <div class="tag">claude -p for automation</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> <code>-p</code> turns Claude Code into a Unix filter</h2>
+    <p>Add the <code>-p</code> (or <code>--print</code>) flag to any <code>claude</code> command and it runs
+    <strong>non-interactively</strong>: it takes your prompt, does the work, prints a result, and exits. No TUI, no
+    turn-by-turn chat. This is the <strong>headless</strong> mode that makes Claude Code scriptable — you can drop it
+    into a shell pipeline, a <code>package.json</code> script, a git hook, or a CI job like any other command-line
+    tool.</p>
+    <p>Because it reads <strong>stdin</strong> and writes <strong>stdout</strong>, headless mode composes with the
+    rest of your toolchain. Pipe a build log in, redirect an explanation out:</p>
+    <div class="note">🔑 The docs describe <code>claude -p</code> as running the same Agent SDK loop, tools, and
+    context management that power the interactive CLI — just without the interactive shell. Everything you configure
+    (CLAUDE.md, hooks, MCP servers) still loads unless you opt out with <code>--bare</code>.</div>
+    <div class="warn">Piped stdin is capped at <strong>10&nbsp;MB</strong> (as of v2.1.128). For larger inputs, write
+    to a file and reference its path in the prompt instead of piping.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Structured output &amp; pre-approved tools make it safe to script</h2>
+    <p>Two flags make headless runs deterministic enough for automation:</p>
+    <table>
+        <tr><th>Flag</th><th>What it does</th></tr>
+        <tr><td><code>--output-format text</code></td><td>Default — plain text on stdout.</td></tr>
+        <tr><td><code>--output-format json</code></td><td>One JSON object with the answer in <code>.result</code>, plus <code>session_id</code>, usage, and <code>total_cost_usd</code>. Parse with <code>jq</code>.</td></tr>
+        <tr><td><code>--output-format stream-json</code></td><td>Newline-delimited JSON events, streamed. Requires <code>--verbose</code> (and <code>--include-partial-messages</code> for token deltas).</td></tr>
+        <tr><td><code>--allowedTools "Bash,Read,Edit"</code></td><td>Auto-approves those tools so the run doesn't block on a permission prompt. Accepts <a>permission-rule syntax</a>, e.g. <code>Bash(git diff *)</code>.</td></tr>
+        <tr><td><code>--permission-mode acceptEdits</code></td><td>Session-wide baseline instead of listing tools. <code>dontAsk</code> locks a run down to allow-listed + read-only commands.</td></tr>
+        <tr><td><code>--append-system-prompt "…"</code></td><td>Adds instructions on top of the default prompt (use <code>--system-prompt</code> to fully replace it).</td></tr>
+        <tr><td><code>--continue</code> / <code>--resume &lt;id&gt;</code></td><td>Continue the most recent conversation, or resume a captured <code>session_id</code>.</td></tr>
+    </table>
+    <div class="good">In an unattended run there's no human to answer a permission prompt. <strong>Pre-approve every
+    tool the task needs</strong> with <code>--allowedTools</code> (or a permission mode), or the run aborts the
+    first time Claude reaches for an un-allowed tool.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> How a headless call flows through a pipeline</h2>
+    <div class="mermaid">
+flowchart TD
+    STDIN["stdin (piped data)<br/>e.g. git diff, build log"] --> CLI["claude -p 'prompt'<br/>--allowedTools --output-format json"]
+    CLI --> LOOP["Agent loop runs<br/>tools auto-approved, no TUI"]
+    LOOP --> Q{"--output-format?"}
+    Q -->|"text (default)"| TXT["🟢 Plain text on stdout"]
+    Q -->|"json"| JSON["🔵 {result, session_id,<br/>total_cost_usd} → jq"]
+    Q -->|"stream-json"| STREAM["🟠 NDJSON events<br/>(needs --verbose)"]
+    TXT --> OUT["&gt; output.txt / exit code"]
+    JSON --> OUT
+    STREAM --> OUT
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef info fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    classDef warn fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class TXT ok; class JSON info; class STREAM warn;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Headless in a pipe, a script, and JSON parsing</h2>
+    <p>Three real patterns straight from the docs: pipe a build error in, wire a linter into
+    <code>package.json</code>, and capture a session id to resume.</p>
+<pre><span class="cm"># 1) Pipe stdin in, redirect the answer out — Claude as a filter</span>
+cat build-error.txt | claude -p <span class="st">'concisely explain the root cause of this build error'</span> &gt; output.txt
+
+<span class="cm"># 2) Run a task with pre-approved tools and get JSON back, then parse with jq</span>
+claude -p <span class="st">"Run the test suite and fix any failures"</span> \
+  --allowedTools <span class="st">"Bash,Read,Edit"</span> \
+  --output-format json | jq -r <span class="st">'.result'</span>
+
+<span class="cm"># 3) Capture the session id, then resume that exact conversation later</span>
+session_id=$(claude -p <span class="st">"Start a review"</span> --output-format json | jq -r <span class="st">'.session_id'</span>)
+claude -p <span class="st">"Continue that review"</span> --resume <span class="st">"$session_id"</span></pre>
+    <p>And as a project-local linter in <code>package.json</code> — piping the diff means Claude needs no Bash
+    permission to read it:</p>
+<pre>{
+  <span class="st">"scripts"</span>: {
+    <span class="st">"lint:claude"</span>: <span class="st">"git diff main | claude -p \"you are a typo linter. report filename:line then the issue. return nothing else.\""</span>
+  }
+}</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Headless (<code>-p</code>) vs. interactive session</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Headless <code>claude -p</code></h4>
+            <ul><li>Scriptable: pipes, CI jobs, cron, git hooks</li>
+            <li>Machine-readable output (<code>--output-format json</code>)</li>
+            <li>Deterministic surface via <code>--allowedTools</code> / <code>--bare</code></li>
+            <li>Cost visible per run (<code>total_cost_usd</code> in JSON)</li></ul></div>
+        <div class="con"><h4>⚠️ Interactive CLI</h4>
+            <ul><li>Human answers permission prompts live</li>
+            <li>Better for exploration &amp; back-and-forth</li>
+            <li>Full slash-command surface, tab completion</li>
+            <li>No unattended run — needs someone at the keyboard</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb from the docs: <strong>CLI for interactive/one-off work, headless (SDK) for
+    CI/CD and production automation.</strong> Many teams use both.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Headless mode still pops permission prompts, so scripts hang." → In an unattended
+    run there's nobody to answer. <b>Pre-approve tools</b> with <code>--allowedTools</code> or a permission mode
+    (<code>acceptEdits</code>, <code>dontAsk</code>); otherwise the run aborts at the first un-allowed tool.</div>
+    <div class="trap"><b>Trap:</b> "<code>--output-format stream-json</code> just works." → It requires
+    <code>--verbose</code> (and <code>--include-partial-messages</code> for text deltas). Plain <code>json</code>
+    returns a single object with the answer in the <code>.result</code> field.</div>
+    <div class="trap"><b>Trap:</b> "Pipe as much data as you want into <code>claude -p</code>." → Piped stdin is
+    capped at <b>10&nbsp;MB</b>. For bigger inputs, write to a file and reference the path in the prompt.</div>
+    <div class="trap"><b>Trap:</b> "<code>-p</code> and interactive are different products." → Same agent loop, tools,
+    and context management. <code>-p</code> is the non-interactive interface to the same Claude Code, exposed through
+    the Agent SDK CLI.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A cron job runs <code>claude -p "fix failing tests"</code> and stalls. Why, and what's the fix?</summary>
+    <p class="answer">The task needs Bash/Edit, and with no human present the permission prompt has no one to answer,
+    so the run aborts. Fix: pass <code>--allowedTools "Bash,Read,Edit"</code> (or a permission mode like
+    <code>acceptEdits</code> / <code>dontAsk</code>) to pre-approve the tools.</p></details>
+    <details><summary>Q2 · How do you get a script to read Claude's answer as a single machine-parseable value?</summary>
+    <p class="answer">Use <code>--output-format json</code>; the answer is in the <code>.result</code> field of the
+    returned object (alongside <code>session_id</code> and <code>total_cost_usd</code>). Extract it with
+    <code>jq -r '.result'</code>. <code>stream-json</code> is for live token streaming and needs
+    <code>--verbose</code>.</p></details>
+    <details><summary>Q3 · You want a second headless call to continue the first one's context. How?</summary>
+    <p class="answer">Capture the <code>session_id</code> from the first run's JSON output, then pass
+    <code>--resume "$session_id"</code> on the next call (from the same project directory). <code>--continue</code>
+    resumes the most recent conversation without needing the id.</p></details>
+
+    <div class="pager">
+        <a href="7-5-subagents-vs-others.html"><span class="k">← Back</span>7.5 · Subagents vs Others</a>
+        <a class="next" href="8-2-mcp-in-claude-code.html"><span class="k">Next →</span>8.2 · Adding MCP Servers</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 8.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

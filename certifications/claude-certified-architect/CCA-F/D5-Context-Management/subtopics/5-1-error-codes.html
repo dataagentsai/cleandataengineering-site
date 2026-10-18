@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.1 API Error Codes · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 5 · Reliability: Errors &amp; Retries</div>
+    <h1>5.1 · API Error Codes (4xx vs 5xx, 429, 529)</h1>
+    <div class="tag">Read the status before reacting</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The HTTP status is the whole diagnosis</h2>
+    <p>Every non-2xx response from the Messages API carries an <strong>HTTP status code</strong> and a JSON body with
+    a stable <code>error.type</code>. The status splits cleanly into two families that demand opposite reactions:
+    <strong>4xx = you sent something wrong</strong> (fix the request — retrying the identical bytes will fail
+    forever), and <strong>5xx = Anthropic had a problem</strong> (the request was fine; retry with backoff).
+    The one 4xx that breaks this rule is <strong>429</strong> — the request was valid, you just sent too many, so
+    it <em>is</em> retryable. Read the code first; it tells you whether to fix, retry, or give up.</p>
+
+    <table>
+        <tr><th>Code</th><th><code>error.type</code></th><th>Meaning</th><th>Retryable?</th></tr>
+        <tr><td>400</td><td><code>invalid_request_error</code></td><td>Malformed request — bad JSON, missing field, roles don't alternate</td><td>🔴 No — fix it</td></tr>
+        <tr><td>401</td><td><code>authentication_error</code></td><td>API key missing, malformed, or revoked</td><td>🔴 No</td></tr>
+        <tr><td>403</td><td><code>permission_error</code></td><td>Key valid but lacks access to that model/resource</td><td>🔴 No</td></tr>
+        <tr><td>404</td><td><code>not_found_error</code></td><td>Bad endpoint or model ID (e.g. <code>claude-opus-4.8</code> vs <code>-4-8</code>)</td><td>🔴 No</td></tr>
+        <tr><td>413</td><td><code>request_too_large</code></td><td>Body exceeds the limit (Messages API: 32 MB)</td><td>🔴 No — shrink it</td></tr>
+        <tr><td>429</td><td><code>rate_limit_error</code></td><td>Too many requests/tokens per minute</td><td>🟢 <b>Yes</b> — honor <code>retry-after</code></td></tr>
+        <tr><td>500</td><td><code>api_error</code></td><td>Unexpected internal error at Anthropic</td><td>🟢 Yes — backoff</td></tr>
+        <tr><td>529</td><td><code>overloaded_error</code></td><td>API temporarily overloaded (high traffic across all users)</td><td>🟢 Yes — backoff</td></tr>
+    </table>
+
+    <div class="note">🔑 The error body is always JSON: <code>{"type":"error","error":{"type":"…","message":"…"},"request_id":"req_…"}</code>.
+    Log the <code>request_id</code> (also returned as the <code>request-id</code> response header) — it's what Anthropic support traces.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> 429 vs 529 — two very different overloads</h2>
+    <p>These are the two codes the exam loves to confuse. <strong>429 <code>rate_limit_error</code></strong> is
+    <em>your</em> ceiling — you exceeded your organization's requests- or tokens-per-minute limit (or hit an
+    acceleration limit from ramping traffic too fast). <strong>529 <code>overloaded_error</code></strong> is
+    <em>Anthropic's</em> ceiling — the whole API is saturated across all users, nothing to do with your quota.
+    Both are retryable, but 429 comes with a <code>retry-after</code> header telling you exactly how long to wait,
+    while 529 just needs exponential backoff. A couple of edge codes also appear: <strong>402</strong>
+    <code>billing_error</code>, <strong>408/504</strong> <code>timeout_error</code>, and <strong>409</strong>
+    <code>conflict_error</code> (resolve the conflict, then retry).</p>
+
+    <div class="warn">⚠️ Don't retry a 4xx (except 429). A 400 or 404 is a bug in <em>your</em> request — retrying
+    the same bytes burns quota and never succeeds. Fix the payload instead.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The status routes the reaction</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Non-2xx response"] --> C{"Which family?"}
+    C -->|"4xx (except 429)"| FIX["🔴 Fix the request<br/>400/401/403/404/413"]
+    C -->|"429 rate_limit"| WAIT["🟠 Wait retry-after,<br/>then retry"]
+    C -->|"5xx: 500 / 529"| BACK["🟢 Retry with<br/>exponential backoff"]
+    FIX -.->|"retrying won't help"| DEAD["Surface to caller"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class BACK ok; class WAIT gate; class FIX bad; class DEAD bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Branch on the status, not the message string</h2>
+    <p>Use the SDK's typed exceptions — never <code>grep</code> the error text. Catch most-specific first, and
+    separate the retryable branch from the terminal one.</p>
+<pre><span class="kw">import</span> anthropic
+
+client = anthropic.<span class="fn">Anthropic</span>()
+
+<span class="kw">try</span>:
+    msg = client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+                                  messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Hi"</span>}])
+<span class="kw">except</span> anthropic.NotFoundError:               <span class="cm"># 404 — bad model id; DON'T retry</span>
+    <span class="kw">raise</span>
+<span class="kw">except</span> anthropic.RateLimitError <span class="kw">as</span> e:         <span class="cm"># 429 — retryable</span>
+    wait = <span class="fn">int</span>(e.response.headers.get(<span class="st">"retry-after"</span>, <span class="st">"60"</span>))
+    <span class="fn">backoff_and_retry</span>(wait)
+<span class="kw">except</span> anthropic.APIStatusError <span class="kw">as</span> e:         <span class="cm"># any other non-2xx</span>
+    <span class="kw">if</span> e.status_code &gt;= <span class="st">500</span>:                    <span class="cm"># 500 / 529 — retryable</span>
+        <span class="fn">backoff_and_retry</span>()
+    <span class="kw">else</span>:                                     <span class="cm"># 400 / 401 / 403 / 413 — terminal</span>
+        <span class="fn">log</span>(e.request_id, e.message); <span class="kw">raise</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Retry-everything vs. classify-then-retry</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Classify by status, then retry</h4>
+            <ul><li>4xx fails fast — user sees the real bug</li>
+            <li>Only 429/5xx consume retry budget</li>
+            <li>Honors <code>retry-after</code> so you back off correctly</li></ul></div>
+        <div class="con"><h4>⚠️ Blindly retry every error</h4>
+            <ul><li>Simpler code, one catch-all</li>
+            <li>But: a 400/404 retries forever, burning quota</li>
+            <li>Hides the real fix (bad model id, oversized body)</li></ul></div>
+    </div>
+    <div class="good">Let the SDK do the retrying it's good at (transient 429/5xx with backoff), and reserve your
+    own handling for the terminal 4xx it correctly refuses to retry.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Retry the 400 a few times." → A 400 <code>invalid_request_error</code> is a bug in
+    your request (bad JSON, non-alternating roles). Retrying identical bytes never succeeds — <b>fix the payload</b>.</div>
+    <div class="trap"><b>Trap:</b> Treating 429 and 529 as the same thing. → <b>429 = your rate limit</b> (comes with
+    <code>retry-after</code>); <b>529 = Anthropic overloaded</b> across all users. Both retry, but they're different causes.</div>
+    <div class="trap"><b>Trap:</b> "429 is a 4xx, so it's a client error I can't retry." → 429 is the <b>only retryable
+    4xx</b>. The request was valid; you just sent too many. Wait and retry.</div>
+    <div class="trap"><b>Trap:</b> String-matching <code>error.message</code> to classify. → Message text can change.
+    Branch on the <b>HTTP status</b> / typed exception class and the stable <code>error.type</code>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Which of 400, 429, 500, 529 should you retry, and how?</summary>
+    <p class="answer"><b>Retry 429, 500, 529.</b> For 429, wait the <code>retry-after</code> seconds. For 500/529, use
+    exponential backoff. <b>400 is not retryable</b> — it's a malformed request you must fix.</p></details>
+    <details><summary>Q2 · A request returns 404 <code>not_found_error</code>. First thing to check?</summary>
+    <p class="answer">The <b>model ID</b> (and endpoint path). 404 usually means a typo like <code>claude-opus-4.8</code>
+    instead of <code>claude-opus-4-8</code>, or a deprecated/removed model. Retrying won't help — correct the string.</p></details>
+    <details><summary>Q3 · You're getting 529s in a burst. What does it mean and what do you do?</summary>
+    <p class="answer">529 <code>overloaded_error</code> means the API is temporarily overloaded across all users — not
+    your quota. <b>Back off exponentially and retry</b>; optionally shift some load to a less-loaded model. (If you
+    instead saw 429 from a sharp usage spike, ramp traffic up gradually to avoid acceleration limits.)</p></details>
+
+    <div class="pager">
+        <a href="4-5-chunking-assembly.html"><span class="k">← Back</span>4.5 · Chunking &amp; Assembly</a>
+        <a class="next" href="5-2-retryable-idempotency.html"><span class="k">Next →</span>5.2 · Retryable vs Not &amp; Idempotency</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 5.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

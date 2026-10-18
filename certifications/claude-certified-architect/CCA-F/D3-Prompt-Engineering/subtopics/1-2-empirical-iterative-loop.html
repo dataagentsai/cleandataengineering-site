@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.2 The Empirical, Iterative Loop · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 1 · Foundations &amp; Being Clear</div>
+    <h1>1.2 · The Empirical, Iterative Loop</h1>
+    <div class="tag">Define success · test · refine</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Prompt engineering is empirical, not vibes</h2>
+    <p>Good prompting is an <strong>empirical discipline</strong>, not a matter of taste. You don't "know" a prompt
+    is better — you <em>measure</em> it. Anthropic's guidance assumes you arrive with three prerequisites before
+    you ever tune a word:</p>
+    <table>
+        <tr><th>Prerequisite</th><th>What it means</th><th>Why it must come first</th></tr>
+        <tr><td><strong>1. Success criteria</strong></td><td>A clear, specific definition of what "good output" is</td><td>You can't improve toward an undefined target</td></tr>
+        <tr><td><strong>2. Empirical test</strong></td><td>A way to score outputs against those criteria (an eval)</td><td>Turns "feels better" into a number you can compare</td></tr>
+        <tr><td><strong>3. First-draft prompt</strong></td><td>Something concrete to improve</td><td>The loop refines a draft; it doesn't invent from nothing</td></tr>
+    </table>
+    <div class="warn">If you're missing any of these, <em>stop and establish them first</em>. Tuning a prompt with
+    no eval is guessing — you'll chase one example and regress on ten others you never checked.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The loop: define → test → refine → repeat</h2>
+    <p>With the prerequisites in place, prompt engineering becomes a tight feedback loop. You <strong>define</strong>
+    success, build a set of <strong>test cases</strong> that cover real and edge inputs, run the current prompt,
+    <strong>score</strong> against the criteria, then <strong>refine</strong> and run again. Each turn of the loop
+    is cheap (seconds), which is exactly why prompting is the lever you iterate on.</p>
+    <p>Make your <strong>success criteria specific and measurable</strong>. "Good summary" is unscorable; "≤ 3
+    sentences, names every party, no invented facts" is a rubric an eval can check. And build a <strong>diverse
+    test set</strong> — cover the common case <em>and</em> the edge cases, so a prompt that helps one input doesn't
+    silently break another.</p>
+    <div class="good">The empirical loop is what makes prompt engineering trustworthy: every change is validated
+    against the same test set, so improvements are real and regressions are caught immediately.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The define → test → refine cycle</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Define success criteria<br/>(specific, measurable)"] --> B["Build test cases<br/>(common + edge)"]
+    B --> C["Draft / edit the prompt"]
+    C --> D["Run prompt on test set"]
+    D --> E{"Meets criteria<br/>across cases?"}
+    E -->|"no"| F["🟠 Refine prompt<br/>one change at a time"]
+    F --> D
+    E -->|"yes"| G["🟢 Ship it<br/>keep the eval as a regression net"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef start fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    class G ok; class F gate; class A start;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A minimal eval harness — the loop in code</h2>
+    <p>The refine step is just editing <code>PROMPT</code>; everything else stays fixed. Note how the criteria are
+    <em>encoded as checks</em>, not judged by eye — that's what makes each iteration comparable.</p>
+<pre><span class="cm"># 1. SUCCESS CRITERIA, encoded as scorable checks.</span>
+<span class="kw">def</span> <span class="fn">score</span>(output, case):
+    ok  = <span class="fn">len</span>(<span class="fn">sent_split</span>(output)) &lt;= <span class="st">3</span>          <span class="cm"># ≤ 3 sentences</span>
+    ok &amp;= <span class="fn">all</span>(p <span class="kw">in</span> output <span class="kw">for</span> p <span class="kw">in</span> case[<span class="st">"must_name"</span>])  <span class="cm"># names all parties</span>
+    ok &amp;= <span class="kw">not</span> <span class="fn">has_hallucination</span>(output, case[<span class="st">"source"</span>])   <span class="cm"># no invented facts</span>
+    <span class="kw">return</span> ok
+
+<span class="cm"># 2. TEST CASES: common + edge (short doc, missing party, adversarial).</span>
+CASES = <span class="fn">load_cases</span>(<span class="st">"summary_eval.jsonl"</span>)
+
+<span class="cm"># 3. The only thing you edit between iterations:</span>
+PROMPT = <span class="st">"Summarize in ≤3 sentences. Name every party. Use only the source text."</span>
+
+<span class="cm"># 4. RUN + SCORE the whole set — one number to compare against last run.</span>
+passed = <span class="fn">sum</span>(<span class="fn">score</span>(<span class="fn">run</span>(PROMPT, c), c) <span class="kw">for</span> c <span class="kw">in</span> CASES)
+<span class="fn">print</span>(<span class="st">f"{passed}/{len(CASES)} passed"</span>)   <span class="cm"># refine PROMPT, re-run, compare</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Empirical loop vs. eyeballing one output</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Test-driven loop</h4>
+            <ul><li>Improvements are measured, not felt</li>
+            <li>Regressions on edge cases caught instantly</li>
+            <li>The eval doubles as a permanent regression net</li>
+            <li>Changes are comparable run-to-run</li></ul></div>
+        <div class="con"><h4>⚠️ Eyeballing a single example</h4>
+            <ul><li>Fast to start, but you optimize one input</li>
+            <li>Silent regressions on cases you didn't look at</li>
+            <li>"Better" is subjective and non-reproducible</li>
+            <li>No safety net when you change the prompt later</li></ul></div>
+    </div>
+    <div class="note">🔑 Upfront cost of building an eval pays back on every iteration — and every iteration after
+    that, forever. It's the highest-leverage thing you build in prompt engineering.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Refining a prompt against a single hand-picked example. → You'll improve that
+    case and regress others. <b>Build a diverse test set</b> and score the whole thing every iteration.</div>
+    <div class="trap"><b>Trap:</b> Vague success criteria like "make it good." → Unscorable. Criteria must be
+    <b>specific and measurable</b> so an eval can check them automatically.</div>
+    <div class="trap"><b>Trap:</b> Skipping straight to prompt tweaks with no eval. → That's guessing. The three
+    prerequisites — <b>criteria, test, draft</b> — come <em>before</em> tuning.</div>
+    <div class="trap"><b>Trap:</b> Changing five things at once, then not knowing what helped. → Iterate <b>one
+    change at a time</b> against the fixed test set so each delta is attributable.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What are the three prerequisites before prompt engineering?</summary>
+    <p class="answer">(1) A clear, specific definition of <b>success criteria</b>; (2) a way to <b>empirically test</b>
+    outputs against them (an eval); and (3) a <b>first-draft prompt</b> to improve. The loop refines a draft against
+    a measurable target — all three must exist first.</p></details>
+    <details><summary>Q2 · Why build a <em>diverse</em> test set instead of one example?</summary>
+    <p class="answer">Because a prompt change that helps one input can silently break another. A diverse set covering
+    common and edge cases turns each iteration into a full regression check, so improvements are real and
+    regressions surface immediately.</p></details>
+    <details><summary>Q3 · What makes success criteria usable in the loop?</summary>
+    <p class="answer">They must be <b>specific and measurable</b> — encodable as checks (e.g. "≤ 3 sentences, names
+    all parties, no invented facts") rather than subjective ("good"). Only measurable criteria let you score runs
+    and compare iterations objectively.</p></details>
+
+    <div class="pager">
+        <a href="1-1-what-is-prompt-engineering.html"><span class="k">← Back</span>1.1 · What Prompt Engineering Is</a>
+        <a class="next" href="1-3-be-clear-and-direct.html"><span class="k">Next →</span>1.3 · Be Clear and Direct</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 1.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

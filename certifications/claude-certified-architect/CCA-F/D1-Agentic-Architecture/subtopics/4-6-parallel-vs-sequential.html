@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.6 Parallel vs Sequential Execution · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 4 · Multi-Agent</div>
+    <h1>4.6 · Parallel vs. Sequential Execution</h1>
+    <div class="tag">Independent → parallel · dependent → sequential</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Dependency decides the shape</h2>
+    <p>Whether sub-agents run at the same time or one-after-another is dictated by <strong>dependency</strong>, not
+    preference. If a sub-task needs another's output, it must wait — that's sequential. If sub-tasks are
+    <strong>independent</strong>, run them <strong>in parallel</strong> to cut wall-clock time. Sequential agents add
+    latency <em>additively</em>; parallel agents overlap, so the total is roughly the slowest one.</p>
+
+    <table>
+        <tr><th>Case</th><th>Run how</th><th>Wall-clock</th><th>Example</th></tr>
+        <tr><td><strong>Independent sub-tasks</strong></td><td>Parallel (fan-out)</td><td>≈ max(sub-tasks)</td><td>Research 8 companies at once</td></tr>
+        <tr><td><strong>Dependent sub-tasks</strong></td><td>Sequential (pipeline)</td><td>≈ sum(sub-tasks)</td><td>research → outline → draft → edit</td></tr>
+    </table>
+
+    <div class="note">🔑 <strong>Parallelise independent agents to cut wall-clock.</strong> You can't parallelise a
+    dependency — if step B needs step A's output, B waits for A regardless.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The latency math</h2>
+    <p>Say three sub-tasks take 4s, 6s, and 5s.</p>
+    <ul>
+        <li><strong>Sequential:</strong> latency ≈ 4 + 6 + 5 = <strong>15s</strong> (additive).</li>
+        <li><strong>Parallel:</strong> latency ≈ max(4, 6, 5) = <strong>6s</strong> (overlap; bounded by the slowest).</li>
+    </ul>
+    <p>Parallel only helps if the sub-tasks are truly independent. If B depends on A, you're forced into A-then-B
+    and pay 4 + 6 no matter what. Token <em>cost</em> is the same either way (same work) — parallelism buys
+    <strong>time</strong>, not tokens.</p>
+    <div class="warn">⚠️ Parallel fan-out saves wall-clock but not money: you still run every sub-agent, so total
+    tokens are unchanged. Choose parallel for latency, not to reduce cost.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Both shapes side by side</h2>
+    <div class="mermaid">
+flowchart TB
+    subgraph SEQ["Sequential (dependent) — Σ ≈ 15s"]
+        direction LR
+        A1["A · 4s"] --> B1["B · 6s"] --> C1["C · 5s"] --> D1(["done ~15s"])
+    end
+    subgraph PAR["Parallel (independent) — max ≈ 6s"]
+        direction TB
+        S(["start"]) --> A2["A · 4s"]
+        S --> B2["B · 6s"]
+        S --> C2["C · 5s"]
+        A2 --> M(["merge ~6s"])
+        B2 --> M
+        C2 --> M
+    end
+    classDef p fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    classDef g fill:#d4edda,stroke:#28a745,color:#155724;
+    class A1,B1,C1,A2,B2,C2 p; class D1,M g;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Fan-out independent sub-agents concurrently</h2>
+    <p>Independent specialist calls run in threads; wall-clock collapses to the slowest one.</p>
+<pre><span class="kw">from</span> concurrent.futures <span class="kw">import</span> ThreadPoolExecutor
+
+<span class="kw">def</span> <span class="fn">research</span>(company):
+    r = client.messages.create(
+        model=<span class="st">"claude-sonnet-4-6"</span>, max_tokens=<span class="st">1024</span>,
+        system=<span class="st">"You are a research specialist."</span>,
+        messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">f"Profile: {company}"</span>}],
+    )
+    <span class="kw">return</span> company, <span class="st">""</span>.join(b.text <span class="kw">for</span> b <span class="kw">in</span> r.content <span class="kw">if</span> b.type == <span class="st">"text"</span>)
+
+companies = [<span class="st">"Acme"</span>, <span class="st">"Globex"</span>, <span class="st">"Initech"</span>, <span class="st">"Umbrella"</span>]   <span class="cm"># independent → parallel</span>
+
+<span class="cm"># Parallel: wall-clock ≈ the single slowest call, not the sum.</span>
+<span class="kw">with</span> ThreadPoolExecutor(max_workers=len(companies)) <span class="kw">as</span> pool:
+    findings = dict(pool.map(research, companies))
+
+<span class="cm"># Sequential would be: for c in companies: research(c)  → latency adds up.</span>
+<span class="cm"># A DEPENDENT step (needs all findings) must wait — run it after the fan-out.</span>
+summary = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">2048</span>,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+               <span class="st">"content"</span>: <span class="st">f"Synthesize these profiles:\n{findings}"</span>}],   <span class="cm"># depends on all → sequential</span>
+)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Parallel vs. sequential</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Parallel (independent)</h4>
+            <ul><li>Cuts wall-clock to ≈ the slowest sub-task</li>
+            <li>Great for wide, independent fan-out</li>
+            <li>Same token cost, far less waiting</li></ul></div>
+        <div class="con"><h4>⚠️ Sequential (dependent)</h4>
+            <ul><li>Latency is additive — sums up across stages</li>
+            <li>Required when a stage needs a prior output</li>
+            <li>Simpler to reason about and trace</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Parallelise everything for speed." → Only <b>independent</b> sub-tasks parallelise.
+    A dependent step must wait for its input; parallelism can't beat a data dependency.</div>
+    <div class="trap"><b>Trap:</b> Thinking parallel fan-out saves money. → It saves <b>wall-clock, not tokens</b>. You
+    still run every sub-agent; cost is unchanged.</div>
+    <div class="trap"><b>Trap:</b> Forgetting sequential latency is <b>additive</b>. → A 4-stage pipeline pays the sum
+    of all stages. If the stages were independent, fan-out would collapse that to the slowest one.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Three sub-tasks take 3s, 8s, 4s and are independent. Parallel wall-clock?</summary>
+    <p class="answer">≈ <b>8s</b> — the slowest one. Sequential would be 3 + 8 + 4 = 15s. Independence lets them overlap.</p></details>
+    <details><summary>Q2 · A pipeline is research → outline → draft. Can you parallelise it to go faster?</summary>
+    <p class="answer">No — each stage depends on the previous one's output, so it must run sequentially. Latency stays
+    additive; there's no independence to exploit.</p></details>
+    <details><summary>Q3 · A manager wants parallel fan-out "to lower our bill." Right reason?</summary>
+    <p class="answer">No. Fan-out reduces <b>latency</b>, not token cost — the same sub-agents run either way. Use it to
+    cut wall-clock, not spend.</p></details>
+
+    <div class="pager">
+        <a href="4-5-state-passing.html"><span class="k">← Prev</span>4.5 · Explicit state passing</a>
+        <a class="next" href="4-7-result-merging.html"><span class="k">Next →</span>4.7 · Result merging</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 4.6</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

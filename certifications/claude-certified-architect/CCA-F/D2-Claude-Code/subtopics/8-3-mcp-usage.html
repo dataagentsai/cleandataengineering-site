@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.3 Using MCP in Claude Code · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 8 · Automation, MCP &amp; Integrations</div>
+    <h1>8.3 · Using MCP in Claude Code</h1>
+    <div class="tag">Resources · prompts · /mcp</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <div class="note">🔑 8.2 was about <em>configuring</em> servers; this page is about <em>using</em> them inside a
+    session. (Designing the tools an MCP server exposes is a D4 topic — here we stay on the Claude Code client
+    side.)</div>
+
+    <h2><span class="chip concept">CONCEPT</span> An MCP server surfaces in three ways</h2>
+    <p>Once a server is connected, its capabilities show up in Claude Code through three distinct UI affordances.
+    Knowing which is which is the whole exam point:</p>
+    <table>
+        <tr><th>Capability</th><th>How you invoke it</th><th>Example</th></tr>
+        <tr><td><strong>Tools</strong></td><td>Claude calls them automatically when a task needs them</td><td>"Review PR #456" → GitHub tool runs</td></tr>
+        <tr><td><strong>Resources</strong></td><td><code>@</code>-mention, like referencing a file</td><td><code>@github:issue://123</code></td></tr>
+        <tr><td><strong>Prompts</strong></td><td>Slash commands, namespaced by server</td><td><code>/mcp__github__pr_review 456</code></td></tr>
+    </table>
+    <p><strong>Resources</strong> use the format <code>@server:protocol://resource/path</code>. Type <code>@</code>
+    and connected servers' resources appear in the autocomplete alongside your files; they're fetched and attached
+    when referenced. <strong>Prompts</strong> appear when you type <code>/</code>, in the form
+    <code>/mcp__servername__promptname</code>, and accept space-separated arguments. Server and prompt names are
+    normalized (spaces become underscores).</p>
+
+    <h2><span class="chip concept">CONCEPT</span> <code>/mcp</code> is the control panel</h2>
+    <p>The <code>/mcp</code> slash command opens the MCP management panel inside a session. From it you can:</p>
+    <ul>
+        <li>See each connected server's <strong>status</strong> and its <strong>tool count</strong>;</li>
+        <li><strong>Authenticate</strong> remote servers over OAuth 2.0 — the panel flags a server that returned
+        <code>401</code>/<code>403</code>, and you complete sign-in in the browser;</li>
+        <li><strong>Enable / disable / reconnect</strong> a server, and clear stored auth.</li>
+    </ul>
+    <div class="good">For OAuth you can also sign in from the shell without opening a session:
+    <code>claude mcp login &lt;name&gt;</code> (and <code>claude mcp logout &lt;name&gt;</code> to clear
+    credentials). Tokens are stored securely and refreshed automatically.</div>
+    <div class="warn">In headless mode (<code>claude -p</code>) there's no <code>/mcp</code> panel, so Claude Code
+    can't run the interactive OAuth flow. Authenticate first from an interactive session or with
+    <code>claude mcp login</code>; otherwise the server's tools are reported as unavailable until you sign in.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Three surfaces of a connected server</h2>
+    <div class="mermaid">
+flowchart TD
+    SRV["Connected MCP server<br/>(e.g. github)"] --> TOOLS["🟢 Tools<br/>Claude calls automatically"]
+    SRV --> RES["🔵 Resources<br/>@server:protocol://path"]
+    SRV --> PR["🟠 Prompts<br/>/mcp__server__prompt"]
+    TOOLS --> USE["Ask in natural language:<br/>'Review PR #456'"]
+    RES --> AT["Type @ → autocomplete →<br/>@github:issue://123"]
+    PR --> SL["Type / → pick →<br/>/mcp__github__pr_review 456"]
+    MCP["/mcp panel"] -.->|"status · tool count ·<br/>OAuth · enable/disable"| SRV
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef info fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    classDef warn fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class TOOLS ok; class RES info; class PR warn;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Referencing resources, running prompts, authenticating</h2>
+    <p>These are in-session inputs, not shell commands — what you actually type into the Claude Code prompt.</p>
+<pre><span class="cm"># Reference an MCP resource with @server:protocol://path (like an @file)</span>
+Can you analyze @github:issue://123 and suggest a fix?
+
+<span class="cm"># Reference several at once</span>
+Compare @postgres:schema://users with @docs:file://database/user-model
+
+<span class="cm"># Run an MCP prompt (surfaces as a slash command), with arguments</span>
+/mcp__github__pr_review 456
+/mcp__jira__create_issue <span class="st">"Bug in login flow"</span> high
+
+<span class="cm"># Open the MCP panel: status, tool counts, OAuth sign-in, enable/disable</span>
+/mcp</pre>
+    <p>Sign in to an OAuth server without leaving the shell:</p>
+<pre><span class="cm"># From your terminal (no interactive session needed)</span>
+claude mcp login sentry        <span class="cm"># run the OAuth flow</span>
+claude mcp logout sentry       <span class="cm"># clear stored credentials</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Resource <code>@</code>-mention vs. letting Claude call a tool</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ <code>@</code>-mention a resource</h4>
+            <ul><li>You pin exactly which data enters context</li>
+            <li>Deterministic — fetched and attached immediately</li>
+            <li>Good when you already know the issue/schema id</li></ul></div>
+        <div class="con"><h4>⚙️ Let Claude call the server's tools</h4>
+            <ul><li>Claude decides what to fetch and when</li>
+            <li>Handles multi-step work ("find, then act")</li>
+            <li>With tool search, tools load on demand to save context</li></ul></div>
+    </div>
+    <div class="note">🔑 Resources and prompts are <em>client-driven</em> (you reference/invoke them); tools are
+    <em>model-driven</em> (Claude decides). Same server, different control surfaces.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "MCP prompts are typed like <code>@server:prompt</code>." → No. <b>Prompts</b> are
+    slash commands: <code>/mcp__servername__promptname</code>. The <code>@server:protocol://path</code> syntax is for
+    <b>resources</b>.</div>
+    <div class="trap"><b>Trap:</b> "<code>/mcp</code> adds a new server." → <code>/mcp</code> <b>manages existing</b>
+    servers (status, OAuth, enable/disable). You <em>add</em> servers with <code>claude mcp add</code> (8.2).</div>
+    <div class="trap"><b>Trap:</b> "OAuth just works in <code>claude -p</code>." → Headless mode has no
+    <code>/mcp</code> panel to run the browser flow. Authenticate first in an interactive session or via
+    <code>claude mcp login &lt;name&gt;</code>.</div>
+    <div class="trap"><b>Trap:</b> "Resources and prompts are the same thing." → Resources are data you attach with
+    <code>@</code>; prompts are reusable server-defined commands that expand into the conversation via
+    <code>/mcp__…</code>.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You know a GitHub issue is #123. What's the fastest way to pull it into context?</summary>
+    <p class="answer">Reference it as an MCP <b>resource</b> with an <code>@</code>-mention:
+    <code>@github:issue://123</code>. The format is <code>@server:protocol://resource/path</code>; Claude Code
+    fetches and attaches it immediately.</p></details>
+    <details><summary>Q2 · A connected server shows unauthenticated. Two ways to sign in?</summary>
+    <p class="answer">(1) Run <code>/mcp</code> inside a session and complete the OAuth flow in the browser; or
+    (2) from the shell, run <code>claude mcp login &lt;name&gt;</code>. Tokens are stored securely and refreshed
+    automatically.</p></details>
+    <details><summary>Q3 · How does an MCP <em>prompt</em> named <code>pr_review</code> on server <code>github</code> appear, and how do you pass it a PR number?</summary>
+    <p class="answer">It surfaces as a slash command <code>/mcp__github__pr_review</code>. Pass arguments
+    space-separated: <code>/mcp__github__pr_review 456</code>. Its result is injected into the conversation.</p></details>
+
+    <div class="pager">
+        <a href="8-2-mcp-in-claude-code.html"><span class="k">← Back</span>8.2 · Adding MCP Servers</a>
+        <a class="next" href="8-4-ci-github-actions.html"><span class="k">Next →</span>8.4 · CI &amp; GitHub Actions</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 8.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

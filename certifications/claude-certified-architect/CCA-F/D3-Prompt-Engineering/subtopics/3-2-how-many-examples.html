@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.2 How Many Examples & Choosing Them · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 3 · Examples (Multishot)</div>
+    <h1>3.2 · How Many Examples &amp; Choosing Them</h1>
+    <div class="tag">3–5 relevant, diverse examples</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A few, chosen for relevance and diversity</h2>
+    <p>Anthropic's guidance is specific: <strong>include 3–5 examples for best results</strong>, and scale up
+    for more complex tasks. The count is not the important part on its own — <em>which</em> examples you pick is.
+    Two properties decide whether examples help or mislead:</p>
+
+    <ul>
+        <li><strong>Relevant</strong> — each example should <em>mirror your actual use case closely</em>. Examples
+        drawn from a different domain, format, or difficulty than your real inputs teach Claude the wrong
+        pattern.</li>
+        <li><strong>Diverse</strong> — examples should <em>vary enough that Claude doesn't pick up unintended
+        patterns</em>, and should <em>cover edge cases</em>. If all three examples happen to share an incidental
+        trait (all short, all positive, all one category), Claude may latch onto that accident instead of the
+        real rule.</li>
+    </ul>
+
+    <div class="note">🔑 Relevance points the examples <em>at your task</em>; diversity spreads them <em>across
+    its range</em>. You need both — relevant-but-narrow over-fits; diverse-but-off-topic teaches the wrong
+    function.</div>
+
+    <table>
+        <tr><th>Situation</th><th>How many</th><th>Why</th></tr>
+        <tr><td>Simple, well-defined task</td><td>3</td><td>Enough to lock format + show a little range</td></tr>
+        <tr><td>Typical task</td><td>3–5</td><td>Anthropic's recommended sweet spot</td></tr>
+        <tr><td>Complex task, many categories/edge cases</td><td>More (scale up)</td><td>Each category/edge case needs representation</td></tr>
+        <tr><td>Very few examples, all similar</td><td>⚠️ risky</td><td>Over-fits to their surface form (see 3.5)</td></tr>
+    </table>
+
+    <div class="good">Let Claude help curate. You can <strong>ask Claude to evaluate your examples for relevance
+    and diversity</strong>, or to <strong>generate additional examples</strong> based on your initial set — a
+    fast way to broaden coverage before you finalize the prompt.</div>
+
+    <div class="warn">More is not automatically better. Each example costs input tokens on every call, and a
+    redundant fourth example that repeats the first two adds cost without adding coverage. Add examples to fill
+    <em>gaps in range</em>, not to pad the count.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Picking a set that covers the range</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Draft an example set"] --> R{"Each example relevant<br/>to the real inputs?"}
+    R -->|"no — off-domain / wrong format"| FIX1["🟠 Replace with<br/>use-case-mirroring examples"]
+    R -->|"yes"| D{"Set diverse enough?<br/>edge cases + categories covered?"}
+    D -->|"no — all similar"| FIX2["🟠 Add variety<br/>ask Claude to generate more"]
+    D -->|"yes, 3–5 (more if complex)"| GOOD["🟢 Ship the set"]
+    FIX1 --> D
+    FIX2 --> GOOD
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class GOOD ok; class FIX1 gate; class FIX2 gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A relevant + diverse set, and asking Claude to extend it</h2>
+    <p>Four examples that mirror the task (short product reviews → sentiment) while spanning categories
+    <em>and</em> a tricky mixed case — that's diversity doing real work, not four near-duplicates.</p>
+<pre><span class="cm"># Relevant (all short product reviews) AND diverse (pos / neg / neutral / mixed)</span>
+system = <span class="st">"Label each review's sentiment: positive, negative, neutral, or mixed."</span>
+examples = <span class="st">"""&lt;examples&gt;
+&lt;example&gt;&lt;review&gt;Battery lasts all day, love it.&lt;/review&gt;&lt;label&gt;positive&lt;/label&gt;&lt;/example&gt;
+&lt;example&gt;&lt;review&gt;Screen cracked on day two.&lt;/review&gt;&lt;label&gt;negative&lt;/label&gt;&lt;/example&gt;
+&lt;example&gt;&lt;review&gt;It's a phone. Does phone things.&lt;/review&gt;&lt;label&gt;neutral&lt;/label&gt;&lt;/example&gt;
+&lt;example&gt;&lt;review&gt;Camera is stunning but it overheats badly.&lt;/review&gt;&lt;label&gt;mixed&lt;/label&gt;&lt;/example&gt;
+&lt;/examples&gt;"""</span>
+
+<span class="cm"># Let Claude broaden coverage before you finalize</span>
+audit = client.messages.create(
+    model=<span class="st">"claude-opus-4-8"</span>,
+    max_tokens=<span class="st">16000</span>,
+    system=system,
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>:
+        <span class="st">f"{examples}\n\nAre these examples relevant and diverse? "</span>
+        <span class="st">"Suggest 2 more that cover edge cases my set is missing."</span>}],
+)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Too few vs. too many</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ 3–5 relevant, diverse</h4>
+            <ul><li>Locks format and shows the range</li>
+            <li>Covers the common categories + a couple of edge cases</li>
+            <li>Modest, predictable token cost</li></ul></div>
+        <div class="con"><h4>⚠️ Too few / all similar / too many</h4>
+            <ul><li>Too few + narrow → over-fits their surface form (3.5)</li>
+            <li>Off-domain examples → teaches the wrong pattern</li>
+            <li>Many near-duplicates → pure token cost, no coverage gain</li></ul></div>
+    </div>
+    <div class="good">Optimize for <em>coverage per example</em>: fewer examples that each add a distinct
+    category or edge case beat a long list of look-alikes.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Always use exactly N examples." → Anthropic recommends <b>3–5</b> for best
+    results and to <b>scale up for complex tasks</b>. It's a guideline tied to task complexity, not a fixed
+    number.</div>
+    <div class="trap"><b>Trap:</b> "Relevance is enough." → Relevant-but-narrow examples <b>over-fit</b>. You
+    also need <b>diversity</b> so Claude doesn't latch onto an incidental shared trait.</div>
+    <div class="trap"><b>Trap:</b> "Diversity means unrelated examples." → Diverse examples still must
+    <b>mirror your actual use case</b>. Off-domain variety teaches the wrong function.</div>
+    <div class="trap"><b>Trap:</b> "I have to write all examples myself." → You can <b>ask Claude to evaluate
+    your set for relevance/diversity</b> and to <b>generate additional examples</b> from your seeds.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · How many examples does Anthropic recommend, and when do you add more?</summary>
+    <p class="answer"><b>3–5</b> for best results, scaling up for more complex tasks (more categories, more
+    edge cases). The count follows task complexity — add examples to fill genuine gaps in coverage.</p></details>
+    <details><summary>Q2 · Why isn't relevance alone sufficient?</summary>
+    <p class="answer">If every relevant example shares an incidental trait (all short, all one category), Claude
+    can pick up that <b>unintended pattern</b> and over-fit. <b>Diversity</b> — varying the examples and
+    covering edge cases — prevents that while keeping them relevant.</p></details>
+    <details><summary>Q3 · How can Claude itself help you choose examples?</summary>
+    <p class="answer">You can ask Claude to <b>evaluate your examples for relevance and diversity</b>, and to
+    <b>generate additional examples</b> based on your initial set — a quick way to broaden coverage and catch
+    missing edge cases before finalizing the prompt.</p></details>
+
+    <div class="pager">
+        <a href="3-1-why-examples-work.html"><span class="k">← Back</span>3.1 · Why Examples Work</a>
+        <a class="next" href="3-3-formatting-examples.html"><span class="k">Next →</span>3.3 · Formatting Examples</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 3.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

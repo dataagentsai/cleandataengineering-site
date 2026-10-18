@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.4 CI &amp; GitHub Actions · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 8 · Automation, MCP &amp; Integrations</div>
+    <h1>8.4 · CI &amp; GitHub Actions</h1>
+    <div class="tag">Claude in your pipeline</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> <code>@claude</code> in a PR or issue triggers the action</h2>
+    <p>Claude Code GitHub Actions brings the same headless Claude Code (8.1) into your GitHub workflow. Once set up,
+    a plain <strong><code>@claude</code> mention</strong> in any pull-request or issue comment lets Claude analyze
+    code, implement features, fix bugs, and open PRs — all on GitHub's runners, following your <code>CLAUDE.md</code>.
+    The engine is the <strong><code>anthropics/claude-code-action</code></strong> GitHub Action, which is itself
+    built on top of the Claude Agent SDK (8.5).</p>
+    <div class="good">Fastest setup: run <code>/install-github-app</code> in the Claude Code terminal. It installs
+    the Claude GitHub App on your repo, then walks you through adding the workflow files and the
+    <code>ANTHROPIC_API_KEY</code> secret. (You must be a repo admin.)</div>
+    <p>Manual setup is three steps: install the app at <code>github.com/apps/claude</code>, add
+    <code>ANTHROPIC_API_KEY</code> to repository secrets, and copy the example workflow into
+    <code>.github/workflows/</code>. The app needs read &amp; write on Contents, Issues, and Pull requests.</p>
+
+    <h2><span class="chip concept">CONCEPT</span> Two modes, one v1 action</h2>
+    <p>The v1 action auto-detects how to run based on your config — you no longer set a <code>mode</code>:</p>
+    <table>
+        <tr><th>Mode</th><th>When</th><th>Behavior</th></tr>
+        <tr><td>Interactive</td><td>Triggered by a comment, no <code>prompt</code> set</td><td>Responds to <code>@claude</code> mentions in the thread</td></tr>
+        <tr><td>Automation</td><td>A <code>prompt</code> input is supplied</td><td>Runs immediately — e.g. scheduled reports, auto-review on every PR</td></tr>
+    </table>
+    <p>Key v1 inputs on <code>anthropics/claude-code-action@v1</code>:</p>
+    <table>
+        <tr><th>Input</th><th>Purpose</th></tr>
+        <tr><td><code>anthropic_api_key</code></td><td>Your Claude API key — always from <code>${{ secrets.ANTHROPIC_API_KEY }}</code>, never hardcoded.</td></tr>
+        <tr><td><code>prompt</code></td><td>Instructions (plain text or a skill name). Omit for pure <code>@claude</code>-reply mode.</td></tr>
+        <tr><td><code>claude_args</code></td><td>Any Claude Code CLI flags passed through, e.g. <code>--max-turns 10</code>, <code>--model</code>, <code>--allowedTools</code>, <code>--mcp-config</code>.</td></tr>
+        <tr><td><code>trigger_phrase</code></td><td>Custom trigger (default <code>@claude</code>).</td></tr>
+        <tr><td><code>use_bedrock</code> / <code>use_vertex</code></td><td>Use Amazon Bedrock / Google Cloud instead of the Claude API (enterprise, OIDC auth).</td></tr>
+    </table>
+    <div class="warn">Upgrading from the beta: change <code>@beta</code> → <code>@v1</code>, delete
+    <code>mode:</code> (now auto-detected), rename <code>direct_prompt</code> → <code>prompt</code>, and move
+    <code>max_turns</code> / <code>model</code> / <code>allowed_tools</code> into <code>claude_args</code>.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> The @claude round-trip</h2>
+    <div class="mermaid">
+flowchart TD
+    DEV["You comment @claude<br/>in a PR or issue"] --> GH["GitHub event fires<br/>(issue_comment, PR review comment)"]
+    GH --> WF[".github/workflows/*.yml<br/>if: contains(body, '@claude')"]
+    WF --> ACT["anthropics/claude-code-action@v1<br/>uses ANTHROPIC_API_KEY secret"]
+    ACT --> RUN["🟢 Claude runs on GitHub runner<br/>reads CLAUDE.md, edits code"]
+    RUN --> OUT["🔵 Comments back / pushes a branch / opens PR"]
+    OUT --> REV["👤 You review & merge"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef info fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    class RUN ok; class OUT info;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A minimal workflow &amp; an automation workflow</h2>
+    <p>Left: reply to <code>@claude</code> mentions. Right pattern: run a prompt on a schedule. Both use the v1
+    action and a secret-held key.</p>
+<pre><span class="cm"># .github/workflows/claude.yml — responds to @claude in comments</span>
+<span class="kw">name</span>: Claude Code
+<span class="kw">on</span>:
+  <span class="kw">issue_comment</span>:
+    <span class="kw">types</span>: [created]
+  <span class="kw">pull_request_review_comment</span>:
+    <span class="kw">types</span>: [created]
+<span class="kw">jobs</span>:
+  <span class="kw">claude</span>:
+    <span class="kw">runs-on</span>: ubuntu-latest
+    <span class="kw">steps</span>:
+      - <span class="kw">uses</span>: anthropics/claude-code-action@v1
+        <span class="kw">with</span>:
+          <span class="kw">anthropic_api_key</span>: ${{ secrets.ANTHROPIC_API_KEY }}
+          <span class="cm"># no prompt → interactive: replies to @claude mentions</span></pre>
+<pre><span class="cm"># Automation: scheduled daily report — a prompt makes it run immediately</span>
+<span class="kw">on</span>:
+  <span class="kw">schedule</span>:
+    - <span class="kw">cron</span>: <span class="st">"0 9 * * *"</span>
+<span class="kw">jobs</span>:
+  <span class="kw">report</span>:
+    <span class="kw">runs-on</span>: ubuntu-latest
+    <span class="kw">steps</span>:
+      - <span class="kw">uses</span>: anthropics/claude-code-action@v1
+        <span class="kw">with</span>:
+          <span class="kw">anthropic_api_key</span>: ${{ secrets.ANTHROPIC_API_KEY }}
+          <span class="kw">prompt</span>: <span class="st">"Generate a summary of yesterday's commits and open issues"</span>
+          <span class="kw">claude_args</span>: <span class="st">"--model opus --max-turns 10"</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> GitHub Action vs. rolling your own <code>claude -p</code> in CI</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ <code>claude-code-action@v1</code></h4>
+            <ul><li>Turnkey: <code>@claude</code> mentions, auto mode detection</li>
+            <li>GitHub App handles PR/issue permissions &amp; commits</li>
+            <li>Bedrock/Vertex support via OIDC for enterprise</li>
+            <li><code>claude_args</code> exposes the full CLI when needed</li></ul></div>
+        <div class="con"><h4>⚙️ Raw <code>claude -p</code> in a CI step</h4>
+            <ul><li>Works on any CI (GitLab, Jenkins, etc.)</li>
+            <li>Full control over the shell pipeline</li>
+            <li>But: you wire up triggers, comments, and auth yourself</li>
+            <li>No built-in <code>@claude</code> mention handling</li></ul></div>
+    </div>
+    <div class="warn">CI has two cost lines: <strong>GitHub Actions minutes</strong> (runners) and <strong>API
+    tokens</strong>. Cap runaway jobs with <code>--max-turns</code> in <code>claude_args</code>, workflow timeouts,
+    and concurrency limits.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Trigger Claude with <code>/claude</code>." → The default trigger is
+    <b><code>@claude</code></b> (a mention), not a slash command. If it's not responding, confirm the comment says
+    <code>@claude</code> and the App is installed.</div>
+    <div class="trap"><b>Trap:</b> "In v1 you set <code>mode: tag</code> and <code>max_turns</code> directly." → v1
+    <b>auto-detects</b> the mode (drop <code>mode:</code>) and CLI options like <code>max_turns</code> move into
+    <code>claude_args</code> (e.g. <code>--max-turns 10</code>). <code>direct_prompt</code> became
+    <code>prompt</code>.</div>
+    <div class="trap"><b>Trap:</b> "Put the API key in the workflow file." → Never. Store it as the
+    <code>ANTHROPIC_API_KEY</code> repository secret and reference
+    <code>${{ secrets.ANTHROPIC_API_KEY }}</code>.</div>
+    <div class="trap"><b>Trap:</b> "The Action is a separate product from the SDK." → The GitHub Action is
+    <b>built on top of the Claude Agent SDK</b> — same engine as <code>claude -p</code>, wrapped for GitHub
+    events.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · What's the quickest way to set up the GitHub integration, and what does it do?</summary>
+    <p class="answer">Run <code>/install-github-app</code> in the Claude Code terminal (as a repo admin). It installs
+    the Claude GitHub App on the repo, then walks you through adding the workflow files and the
+    <code>ANTHROPIC_API_KEY</code> secret.</p></details>
+    <details><summary>Q2 · A beta workflow sets <code>mode: "tag"</code> and <code>max_turns: "10"</code>. Convert it to v1.</summary>
+    <p class="answer">Use <code>anthropics/claude-code-action@v1</code>, delete the <code>mode</code> line (auto-detected),
+    and move the turn cap into <code>claude_args: "--max-turns 10"</code>. Also rename any
+    <code>direct_prompt</code> to <code>prompt</code>.</p></details>
+    <details><summary>Q3 · You want Claude to run on a cron schedule with no human mention. What must the workflow include?</summary>
+    <p class="answer">Supply a <code>prompt</code> input (which puts the action in automation mode so it runs
+    immediately) under an <code>on: schedule</code> cron trigger, plus the <code>anthropic_api_key</code> secret.
+    Add <code>claude_args</code> like <code>--max-turns</code> to bound cost.</p></details>
+
+    <div class="pager">
+        <a href="8-3-mcp-usage.html"><span class="k">← Back</span>8.3 · Using MCP in Claude Code</a>
+        <a class="next" href="8-5-ide-integrations.html"><span class="k">Next →</span>8.5 · IDE Integrations &amp; the SDK</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 8.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

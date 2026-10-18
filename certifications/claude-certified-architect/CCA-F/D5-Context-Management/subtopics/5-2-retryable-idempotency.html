@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.2 Retryable vs Not &amp; Idempotency · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 5 · Reliability: Errors &amp; Retries</div>
+    <h1>5.2 · Retryable vs Not &amp; Idempotency</h1>
+    <div class="tag">Only retry what's safe</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Two questions gate every retry</h2>
+    <p>Before your code re-sends a failed request it must answer <strong>two</strong> separate questions, and both
+    must be "yes":</p>
+    <ol>
+    <li><strong>Is the error retryable?</strong> Transient failures — <code>408</code> request timeout,
+    <code>409</code> conflict, <code>429</code> rate limit, and all <code>5xx</code> (500, 529) plus raw connection
+    errors — can succeed on a second try. Terminal 4xx (<code>400</code>, <code>401</code>, <code>403</code>,
+    <code>404</code>, <code>413</code>) cannot; retrying is wasted. Among the headline Messages-API codes,
+    <strong>429 is the only retryable 4xx</strong>.</li>
+    <li><strong>Is the operation safe to repeat?</strong> This is <em>idempotency</em>. A read (or a request that
+    never landed) is safe to replay. But a request with a <strong>side effect</strong> that may have partially
+    succeeded — you got a timeout <em>after</em> the server did the work — could double-charge or duplicate if you
+    blindly resend.</li>
+    </ol>
+
+    <div class="note">🔑 Retryability is about the <em>error</em>; idempotency is about the <em>operation</em>. A
+    retryable error on a non-idempotent operation is the dangerous case — the one that double-charges.</div>
+
+    <table>
+        <tr><th>Code</th><th>Retryable?</th><th>Why</th></tr>
+        <tr><td>400 / 401 / 403 / 404 / 413</td><td>🔴 No</td><td>Your request is wrong — same bytes fail again</td></tr>
+        <tr><td>408 request timeout</td><td>🟢 Yes</td><td>Transient — connection/processing timed out</td></tr>
+        <tr><td>409 conflict</td><td>🟢 Yes</td><td>Resolve the conflicting state, then retry</td></tr>
+        <tr><td>429 rate_limit</td><td>🟢 Yes</td><td>Valid request, over the per-minute limit</td></tr>
+        <tr><td>500 / 529</td><td>🟢 Yes</td><td>Anthropic-side; the request itself was fine</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> Idempotency: the double-charge trap</h2>
+    <p>A pure Messages API call is read-like — replaying it just costs you tokens twice, no lasting harm. The trap
+    appears when a <strong>tool the model triggered</strong> has a side effect: <code>charge_card</code>,
+    <code>send_email</code>, <code>create_order</code>. If your harness times out <em>after</em> the payment
+    processor charged the card but <em>before</em> you saw the response, a naive retry runs the charge a second
+    time. The fix is an <strong>idempotency key</strong>: attach a stable, unique ID to the side-effecting request
+    so the downstream service dedupes replays — the second attempt with the same key returns the first result
+    instead of charging again. Anthropic's own SDKs auto-retry the transient errors above with backoff, and support
+    idempotency keys so those retries stay safe.</p>
+
+    <div class="good">Reversible / read-only ops (Messages calls, <code>GET</code>s, retrieval) → retry freely.
+    Irreversible side effects → gate the retry behind an idempotency key, or don't auto-retry at all.</div>
+    <div class="bad">Auto-retrying a non-idempotent <code>charge_card</code> tool on a 429/timeout with no
+    idempotency key → the customer gets billed twice. Retryable error + unsafe operation = the double-charge.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Both gates must pass</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Request failed"] --> Q1{"Retryable error?<br/>408/409/429/5xx"}
+    Q1 -->|"no — 400/401/403/404/413"| STOP["🔴 Surface it<br/>don't retry"]
+    Q1 -->|"yes"| Q2{"Operation idempotent?"}
+    Q2 -->|"yes: read / Messages call"| GO["🟢 Retry with backoff"]
+    Q2 -->|"no: side effect"| KEY{"Idempotency key set?"}
+    KEY -->|"yes"| GO
+    KEY -->|"no"| DANGER["🔴 Don't blind-retry<br/>(may double-charge)"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class GO ok; class KEY gate; class STOP bad; class DANGER bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A retry predicate that respects both gates</h2>
+    <p>Let the SDK auto-retry the safe Messages calls; hand-roll retries only for side-effecting tools, and only
+    with an idempotency key.</p>
+<pre><span class="cm"># The SDK already retries 408/409/429/5xx + connection errors, twice by</span>
+<span class="cm"># default, honoring retry-after. Tune or disable per-client:</span>
+client = anthropic.<span class="fn">Anthropic</span>(max_retries=<span class="st">4</span>)   <span class="cm"># 0 disables auto-retry</span>
+
+RETRYABLE = {<span class="st">408</span>, <span class="st">409</span>, <span class="st">429</span>, <span class="st">500</span>, <span class="st">529</span>}
+
+<span class="kw">def</span> <span class="fn">should_retry</span>(status, tool):
+    <span class="kw">if</span> status <span class="kw">not in</span> RETRYABLE:
+        <span class="kw">return</span> <span class="kw">False</span>                    <span class="cm"># terminal 4xx — fixing needed</span>
+    <span class="kw">if</span> tool.side_effecting <span class="kw">and not</span> tool.idempotency_key:
+        <span class="kw">return</span> <span class="kw">False</span>                    <span class="cm"># unsafe to replay — could double-charge</span>
+    <span class="kw">return</span> <span class="kw">True</span>
+
+<span class="cm"># Side-effecting tool call: stable key makes the replay a no-op downstream</span>
+<span class="fn">charge_card</span>(amount=<span class="st">4200</span>, idempotency_key=<span class="st">f"order-{order_id}"</span>)</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Auto-retry everything vs. gate by idempotency</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Gate side effects by idempotency</h4>
+            <ul><li>Reads &amp; Messages calls retry freely — resilient</li>
+            <li>Charges/emails never duplicate</li>
+            <li>Idempotency key makes even the unsafe ops safe to replay</li></ul></div>
+        <div class="con"><h4>⚠️ Blanket auto-retry on every op</h4>
+            <ul><li>One retry policy, less code</li>
+            <li>But: a post-success timeout replays the side effect</li>
+            <li>Double charges, duplicate orders, repeated emails</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "If the error is retryable, just retry." → Retryable error is necessary, not
+    sufficient. Also ask whether the <b>operation is idempotent</b>. A retryable 429 on a <code>charge_card</code>
+    with no idempotency key can double-charge.</div>
+    <div class="trap"><b>Trap:</b> Thinking a plain Messages API call is unsafe to retry. → It's read-like — a replay
+    just costs tokens again. The danger is <b>side-effecting tools</b> the model triggers, not the model call itself.</div>
+    <div class="trap"><b>Trap:</b> "The SDK retries for me, so I don't need idempotency keys." → The SDK auto-retries
+    transient errors, but for <b>your own side-effecting calls</b> you still supply the idempotency key so a replay dedupes.</div>
+    <div class="trap"><b>Trap:</b> Treating a timeout as "definitely didn't happen." → A timeout means <b>unknown</b> —
+    the work may have completed before you lost the connection. That's exactly why idempotency keys exist.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A 429 comes back on a <code>send_email</code> tool with no idempotency key. Retry?</summary>
+    <p class="answer">Not blindly. 429 is retryable, but <code>send_email</code> is <b>non-idempotent</b> — a replay
+    could send a duplicate. Add an idempotency key (so the mail service dedupes) or don't auto-retry this one.</p></details>
+    <details><summary>Q2 · Why is a plain <code>messages.create()</code> safe to retry but <code>charge_card</code> isn't?</summary>
+    <p class="answer">The Messages call has <b>no lasting side effect</b> — replaying it just regenerates a response
+    (costing tokens). <code>charge_card</code> mutates external state; a replay after a post-success timeout charges
+    twice. Idempotency is a property of the <b>operation</b>, not the error.</p></details>
+    <details><summary>Q3 · What role does an idempotency key play in a retry?</summary>
+    <p class="answer">It gives the downstream service a stable ID to <b>dedupe</b> replays: the second request with the
+    same key returns the first result instead of performing the side effect again. It turns an unsafe-to-replay
+    operation into a safe-to-retry one.</p></details>
+
+    <div class="pager">
+        <a href="5-1-error-codes.html"><span class="k">← Back</span>5.1 · API Error Codes</a>
+        <a class="next" href="5-3-backoff-jitter.html"><span class="k">Next →</span>5.3 · Exponential Backoff + Jitter</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 5.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

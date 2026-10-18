@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.1 settings.json & Its Precedence · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 2 · Settings &amp; Configuration</div>
+    <h1>2.1 · settings.json &amp; Its Precedence</h1>
+    <div class="tag">Enterprise → command-line order</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Four scopes of settings.json — plus a policy layer above them</h2>
+    <p>Claude Code is configured through <code>settings.json</code> files that live at different <strong>scopes</strong>.
+    The same keys can appear in several files; when they conflict, a fixed <strong>precedence</strong> decides which
+    value wins. From <em>lowest</em> to <em>highest</em> authority:</p>
+    <table>
+        <tr><th>Scope</th><th>File path (macOS / Linux)</th><th>Committed to git?</th><th>Purpose</th></tr>
+        <tr><td><b>User</b></td><td><code>~/.claude/settings.json</code></td><td>No (personal)</td><td>Your defaults across every project</td></tr>
+        <tr><td><b>Project</b></td><td><code>.claude/settings.json</code></td><td>Yes (shared)</td><td>Team settings checked into the repo</td></tr>
+        <tr><td><b>Local</b></td><td><code>.claude/settings.local.json</code></td><td>No (gitignored)</td><td>Your personal overrides for this repo</td></tr>
+        <tr><td><b>Command-line</b></td><td><code>--setting</code> flags on <code>claude</code></td><td>N/A</td><td>Temporary, one-session overrides</td></tr>
+        <tr><td><b>Managed policy</b></td><td><code>/Library/Application Support/ClaudeCode/managed-settings.json</code></td><td>Admin-deployed</td><td>Enterprise policy that <em>cannot</em> be overridden</td></tr>
+    </table>
+    <div class="note">🔑 On Linux/WSL the managed file is <code>/etc/claude-code/managed-settings.json</code>; on Windows it is
+    <code>C:\Program Files\ClaudeCode\managed-settings.json</code>. The project files use the same relative
+    <code>.claude/</code> path on every OS.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The precedence order — highest wins</h2>
+    <p>When the same key is set in more than one place, Claude Code resolves it top-down and takes the
+    <strong>first</strong> match. Memorise this chain for the exam:</p>
+    <div class="good"><b>Managed policy</b> ▸ <b>Command-line args</b> ▸ <b>Local project</b>
+    (<code>.claude/settings.local.json</code>) ▸ <b>Project</b> (<code>.claude/settings.json</code>) ▸
+    <b>User</b> (<code>~/.claude/settings.json</code>).</div>
+    <p>The two ends are the ones people get wrong. <strong>Enterprise managed settings sit at the very top</strong> —
+    a security admin can deploy a policy that no user, project, or CLI flag can undo. And <strong>command-line flags
+    outrank every file</strong>, so a <code>--</code> override on launch beats even a committed project setting for
+    that session.</p>
+    <div class="warn">⚠️ Managed policy does not just "win ties" — it is authoritative. Keys like
+    <code>allowManagedPermissionRulesOnly</code> or <code>disableAllHooks</code> in the managed file can strip
+    abilities from every lower scope entirely.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Resolving one setting through the stack</h2>
+    <div class="mermaid">
+flowchart TD
+    Q["Claude Code needs a setting's value"] --> M{"Set in managed<br/>policy file?"}
+    M -->|"yes"| MW["🔴 Use it — final<br/>(enterprise wins, unoverridable)"]
+    M -->|"no"| C{"Passed as a<br/>command-line flag?"}
+    C -->|"yes"| CW["🟠 Use CLI value<br/>(session override)"]
+    C -->|"no"| L{"In .claude/settings.local.json?"}
+    L -->|"yes"| LW["🔵 Use local value"]
+    L -->|"no"| P{"In .claude/settings.json?"}
+    P -->|"yes"| PW["🔵 Use project value"]
+    P -->|"no"| U["🟢 Fall back to<br/>~/.claude/settings.json (user)"]
+    classDef top fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef mid fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef low fill:#cfe2ff,stroke:#3d7bfe,color:#0a3a9a;
+    classDef base fill:#d4edda,stroke:#28a745,color:#155724;
+    class MW top; class CW mid; class LW low; class PW low; class U base;
+    </div>
+
+    <h2><span class="chip code">CODE</span> The same key at three scopes</h2>
+    <p>A user default, a shared project value, and a personal local override — the local file wins over the project
+    file, which wins over the user file (and any managed policy would beat all three).</p>
+<pre><span class="cm">// ~/.claude/settings.json  — USER scope (your global default)</span>
+{
+  <span class="st">"$schema"</span>: <span class="st">"https://json.schemastore.org/claude-code-settings.json"</span>,
+  <span class="st">"model"</span>: <span class="st">"sonnet"</span>,
+  <span class="st">"includeCoAuthoredBy"</span>: <span class="kw">true</span>
+}
+
+<span class="cm">// .claude/settings.json  — PROJECT scope (committed, shared with the team)</span>
+{
+  <span class="st">"model"</span>: <span class="st">"opus"</span>,
+  <span class="st">"permissions"</span>: { <span class="st">"allow"</span>: [<span class="st">"Bash(npm run test:*)"</span>] }
+}
+
+<span class="cm">// .claude/settings.local.json  — LOCAL scope (gitignored, just you)</span>
+{
+  <span class="cm">// beats the project file for YOUR machine only</span>
+  <span class="st">"model"</span>: <span class="st">"haiku"</span>
+}
+
+<span class="cm"># A CLI flag would beat even the local file for one session:</span>
+<span class="cm"># (managed policy, if present, still overrides everything)</span>
+$ claude
+</pre>
+    <div class="note">🔑 Add <code>"$schema": "https://json.schemastore.org/claude-code-settings.json"</code> at the top
+    of any settings file to get key autocomplete and validation in your editor.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Committing project settings vs. keeping them local</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Project <code>settings.json</code> (committed)</h4>
+            <ul><li>Whole team gets the same permissions, hooks, model</li>
+            <li>Config is reviewed in PRs like any other code</li>
+            <li>New contributors are productive with zero setup</li></ul></div>
+        <div class="con"><h4>⚠️ <code>settings.local.json</code> (gitignored)</h4>
+            <ul><li>Personal tweaks that shouldn't bind the team</li>
+            <li>Auto-gitignored when created — safe for secrets-adjacent config</li>
+            <li>But: invisible to teammates, so drift is easy to miss</li></ul></div>
+    </div>
+    <div class="good">Rule of thumb: shared, safe defaults go in <code>.claude/settings.json</code>; anything personal
+    or machine-specific goes in <code>.claude/settings.local.json</code>; anything an org must enforce goes in the
+    managed policy file.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "User settings override project settings because they're 'more specific to me'." →
+    Wrong direction. <b>Project beats user</b>; <b>local beats project</b>. User settings are the lowest-priority
+    fallback.</div>
+    <div class="trap"><b>Trap:</b> "A command-line flag can override enterprise managed policy." → No. <b>Managed
+    policy is the single highest scope</b> — it beats CLI args, local, project, and user. It is deployed by admins and
+    cannot be undone by a user.</div>
+    <div class="trap"><b>Trap:</b> "<code>settings.local.json</code> is committed with the project." → It is
+    <b>gitignored by default</b> (auto-added when created). Only <code>settings.json</code> is meant to be
+    committed.</div>
+    <div class="trap"><b>Trap:</b> "There's only one settings file." → There are up to four writable scopes (user,
+    project, local, CLI) plus the managed policy layer above them.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Give the precedence order from highest to lowest authority.</summary>
+    <p class="answer">Enterprise <b>managed policy</b> → <b>command-line arguments</b> → <b>local</b> project
+    (<code>.claude/settings.local.json</code>) → <b>project</b> (<code>.claude/settings.json</code>) → <b>user</b>
+    (<code>~/.claude/settings.json</code>).</p></details>
+    <details><summary>Q2 · <code>model</code> is <code>opus</code> in the project file and <code>haiku</code> in
+    <code>settings.local.json</code>. Which runs?</summary>
+    <p class="answer"><b>haiku.</b> The local file (<code>settings.local.json</code>) sits above the committed project
+    file in precedence, so its value wins on your machine — unless a managed policy or a CLI flag sets the model
+    higher up.</p></details>
+    <details><summary>Q3 · An admin wants a permission rule no developer can remove. Where does it go?</summary>
+    <p class="answer">In the <b>managed policy file</b> (<code>/Library/Application Support/ClaudeCode/managed-settings.json</code>
+    on macOS, <code>/etc/claude-code/managed-settings.json</code> on Linux). It is the top of the precedence chain and
+    cannot be overridden by user, project, local, or CLI settings.</p></details>
+
+    <div class="pager">
+        <a href="1-6-nested-scoping.html"><span class="k">← Back</span>1.6 · Nested CLAUDE.md</a>
+        <a class="next" href="2-2-key-settings.html"><span class="k">Next →</span>2.2 · Key Settings</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 2.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

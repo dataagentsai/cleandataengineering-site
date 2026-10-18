@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.4 Nesting &amp; Referencing Tags · CCA-F D3</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D3 · Prompt Engineering</a> › Cluster 4 · Structure with XML Tags</div>
+    <h1>4.4 · Nesting &amp; Referencing Tags</h1>
+    <div class="tag">Hierarchy Claude can point back to</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Nest tags when content has a natural hierarchy</h2>
+    <p>When your content is naturally hierarchical — a set of documents, each with a source and a body — mirror
+    that hierarchy with <strong>nested tags</strong>. The official guidance: <em>"Nest tags when content has a
+    natural hierarchy (documents inside <code>&lt;documents&gt;</code>, each inside
+    <code>&lt;document index="n"&gt;</code>)."</em> An outer container holds a repeated inner element, and each
+    inner element can carry <strong>metadata</strong> — an <code>index</code> attribute, a
+    <code>&lt;source&gt;</code>, a <code>&lt;title&gt;</code> — alongside its <code>&lt;document_content&gt;</code>.</p>
+
+    <table>
+        <tr><th>Level</th><th>Tag</th><th>Role</th></tr>
+        <tr><td>Container</td><td><code>&lt;documents&gt;</code></td><td>Wraps the whole collection.</td></tr>
+        <tr><td>Item</td><td><code>&lt;document index="1"&gt;</code></td><td>One document, numbered by attribute.</td></tr>
+        <tr><td>Metadata</td><td><code>&lt;source&gt;</code></td><td>Where the document came from.</td></tr>
+        <tr><td>Body</td><td><code>&lt;document_content&gt;</code></td><td>The actual text of that document.</td></tr>
+    </table>
+
+    <h2><span class="chip concept">CONCEPT</span> Referring back — Claude can point at the hierarchy</h2>
+    <p>The payoff of nesting-with-metadata is <strong>addressability</strong>: because each piece has a name (or an
+    index), your instructions can point precisely at it, and Claude can <strong>cite it back</strong>. You can ask
+    for "the figure from <code>&lt;document index="2"&gt;</code>," and Claude can attribute a claim to
+    <em>document 2's <code>&lt;source&gt;</code></em>. Referencing tag names in the instructions (4.2) becomes far
+    more powerful once the tags form a hierarchy you can index into.</p>
+
+    <div class="good">Ask: "Compare the revenue figure in <code>&lt;document index="1"&gt;</code> with the forecast
+    in <code>&lt;document index="2"&gt;</code>, and cite each by its <code>&lt;source&gt;</code>." The nested,
+    labelled structure makes both the request and the citation unambiguous.</div>
+    <div class="note">🔑 Keep tags well-formed: every opened tag is closed, and children sit fully inside their
+    parent. Malformed nesting reintroduces the ambiguity you were trying to remove.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> A nested document tree</h2>
+    <div class="mermaid">
+flowchart TD
+    DS["&lt;documents&gt;"] --> D1["&lt;document index=1&gt;"]
+    DS --> D2["&lt;document index=2&gt;"]
+    D1 --> S1["&lt;source&gt;<br/>annual_report_2023.pdf"]
+    D1 --> C1["&lt;document_content&gt;<br/>…report text…"]
+    D2 --> S2["&lt;source&gt;<br/>competitor_q2.xlsx"]
+    D2 --> C2["&lt;document_content&gt;<br/>…analysis text…"]
+    INS["&lt;instructions&gt;<br/>refer back by index &amp; source"] -.->|"points at"| D1
+    INS -.->|"points at"| D2
+    classDef container fill:#e7f0ff,stroke:#4a90d9,color:#123;
+    classDef meta fill:#fff3cd,stroke:#e0a800,color:#665200;
+    classDef task fill:#d4edda,stroke:#28a745,color:#155724;
+    class DS,D1,D2 container; class S1,S2,C1,C2 meta; class INS task;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Nested documents with metadata, referenced by index</h2>
+    <p>Mirrors the official multi-document structure: an outer <code>&lt;documents&gt;</code>, each
+    <code>&lt;document index="n"&gt;</code> carrying a <code>&lt;source&gt;</code> and
+    <code>&lt;document_content&gt;</code> — then the instruction points back by index and asks for source
+    citations.</p>
+<pre>&lt;documents&gt;
+  &lt;document index="1"&gt;
+    &lt;source&gt;annual_report_2023.pdf&lt;/source&gt;
+    &lt;document_content&gt;
+      {{ANNUAL_REPORT}}
+    &lt;/document_content&gt;
+  &lt;/document&gt;
+  &lt;document index="2"&gt;
+    &lt;source&gt;competitor_analysis_q2.xlsx&lt;/source&gt;
+    &lt;document_content&gt;
+      {{COMPETITOR_ANALYSIS}}
+    &lt;/document_content&gt;
+  &lt;/document&gt;
+&lt;/documents&gt;
+
+&lt;instructions&gt;
+Using &lt;document index="1"&gt; and &lt;document index="2"&gt;, identify strategic advantages
+and recommend Q3 focus areas. Attribute every claim to the document's &lt;source&gt;.
+&lt;/instructions&gt;</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Flat list vs. nested hierarchy</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Nested + indexed + metadata</h4>
+            <ul><li>Each item is addressable by index and by source</li>
+            <li>Claude can cite claims back to a specific document</li>
+            <li>Scales cleanly to many documents (see 4.5 long-context)</li></ul></div>
+        <div class="con"><h4>⚠️ One flat tag for everything</h4>
+            <ul><li>Simpler for a single short document</li>
+            <li>But: no way to say "document 2" or attribute a source</li>
+            <li>Deep nesting on trivial content just adds ceremony</li></ul></div>
+    </div>
+    <div class="good">Match nesting depth to the content's real structure — one document needs one tag; a corpus
+    needs a container, indexed items, and per-item metadata.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Nesting is always better." → Nest only when there's a <b>natural hierarchy</b>.
+    A single short input doesn't need a container and index.</div>
+    <div class="trap"><b>Trap:</b> Omitting the <code>index</code>/<code>&lt;source&gt;</code> metadata. → Without
+    it you can't reliably say "document 2" or ask Claude to <b>cite its source</b>; addressability is the whole
+    point.</div>
+    <div class="trap"><b>Trap:</b> Malformed tags — unclosed or crossed nesting. → Broken structure reintroduces
+    ambiguity. Every child must sit fully inside its parent, every tag closed.</div>
+    <div class="trap"><b>Trap:</b> Thinking <code>index</code> must be numeric or a special attribute. → It's just
+    a descriptive attribute you choose; consistency matters, not a reserved name.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · When should you nest XML tags?</summary>
+    <p class="answer">When the content has a <b>natural hierarchy</b> — e.g. a collection of documents, each with a
+    source and body. Use an outer container (&lt;documents&gt;) with repeated indexed items
+    (&lt;document index="n"&gt;) carrying metadata like &lt;source&gt; and a &lt;document_content&gt; body.</p></details>
+    <details><summary>Q2 · What does adding index and &lt;source&gt; metadata buy you?</summary>
+    <p class="answer"><b>Addressability</b>: your instructions can point at "document 2," and Claude can <b>refer
+    back and cite</b> claims to a specific document's source — impossible with one flat, unlabelled blob.</p></details>
+    <details><summary>Q3 · Give an instruction that references the nested hierarchy.</summary>
+    <p class="answer">"Compare the figure in &lt;document index='1'&gt; with the forecast in
+    &lt;document index='2'&gt;, and attribute each claim to its &lt;source&gt;." It names both the item (by index)
+    and the metadata tag to cite.</p></details>
+
+    <div class="pager">
+        <a href="4-3-separating-data-instructions.html"><span class="k">← Back</span>4.3 · Separating Data from Instructions</a>
+        <a class="next" href="4-5-long-context-structuring.html"><span class="k">Next →</span>4.5 · Long-Context Structuring</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 3 · Subtopic 4.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

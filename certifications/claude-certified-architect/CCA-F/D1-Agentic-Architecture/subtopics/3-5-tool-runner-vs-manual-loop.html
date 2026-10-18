@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>3.5 Tool Runner vs. Manual Loop · CCA-F D1</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D1 · Agentic Architecture</a> › Cluster 3 · Tool Use</div>
+    <h1>3.5 · Tool Runner vs. Manual Loop</h1>
+    <div class="tag">Let the SDK drive the loop — or drive it yourself when you need control</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Two ways to run the agentic loop</h2>
+    <p>The tool round-trip (3.1) repeated until <code>end_turn</code> is the agentic loop. You can either hand that loop to
+    the SDK's <strong>Tool Runner</strong> or write it yourself as a <strong>manual loop</strong>. Same round-trip
+    underneath — the question is how much of it you want to own.</p>
+
+    <table>
+        <tr><th>Aspect</th><th>Tool Runner (beta)</th><th>Manual loop</th></tr>
+        <tr><td>Who runs the loop</td><td>The SDK</td><td>Your code</td></tr>
+        <tr><td>Tool definitions</td><td><code>@beta_tool</code>-decorated Python fns; schemas auto-generated</td><td>You write <code>tools=[…]</code> JSON Schemas</td></tr>
+        <tr><td>Result plumbing</td><td>Handled for you</td><td>You build each <code>tool_result</code></td></tr>
+        <tr><td>Intercept before exec</td><td>Not the point of it</td><td>Yes — gate / approve / log per call</td></tr>
+        <tr><td>Best for</td><td>Fast, straightforward agents</td><td>Approval, custom logging, conditional/gated exec</td></tr>
+    </table>
+
+    <div class="note">🔑 Tool Runner is <code>client.beta.messages.tool_runner</code>. You pass
+    <code>@beta_tool</code>-decorated functions; the SDK generates schemas, runs the loop, executes the tools, and feeds
+    results back — the whole agentic loop, hands-off.</div>
+
+    <div class="warn">Reach for the <strong>manual loop</strong> when you need <strong>human-in-the-loop approval,
+    custom logging, or conditional/gated execution</strong> — anything where you must inspect or intercept a
+    <code>tool_use</code> <em>before</em> it runs (see 3.6). The Runner executes tools for you, so it's the wrong tool when
+    you must sit in that gap.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Where your code sits</h2>
+    <div class="mermaid">
+flowchart TD
+    subgraph TR["Tool Runner (SDK-driven)"]
+      A1([call tool_runner]) --> A2["SDK: loop + run @beta_tool fns"]
+      A2 --> A3([final answer])
+    end
+    subgraph ML["Manual loop (you-driven)"]
+      B1([create]) --> B2{stop_reason<br/>== tool_use?}
+      B2 -->|no| B3([done])
+      B2 -->|yes| B4["🟣 intercept: log / approve / gate"]
+      B4 --> B5[run tool] --> B6[append tool_result] --> B1
+    end
+    classDef sdk fill:#d1ecf1,stroke:#17a2b8,color:#0c5460;
+    classDef you fill:#e2d4f0,stroke:#764ba2,color:#3d1a5b;
+    class A2 sdk; class B4 you;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Both side by side</h2>
+    <h3>Tool Runner — the SDK drives the whole loop</h3>
+<pre><span class="kw">from</span> anthropic <span class="kw">import</span> beta_tool
+
+<span class="kw">@beta_tool</span>
+<span class="kw">def</span> <span class="fn">get_weather</span>(city: str) -> str:
+    <span class="st">"""Get the current weather for a city."""</span>   <span class="cm"># docstring → description</span>
+    <span class="kw">return</span> <span class="fn">lookup_weather</span>(city)                     <span class="cm"># schema auto-generated</span>
+
+runner = client.beta.messages.<span class="fn">tool_runner</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=[get_weather],                          <span class="cm"># pass the decorated fns</span>
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Weather in Paris?"</span>}],
+)
+<span class="cm"># The SDK runs the loop: calls Claude, executes get_weather, feeds</span>
+<span class="cm"># the tool_result back, repeats until end_turn. You just read the result.</span></pre>
+
+    <h3>Manual loop — you own each step (needed for gating / logging)</h3>
+<pre>messages = [{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: <span class="st">"Weather in Paris?"</span>}]
+<span class="kw">while</span> True:
+    resp = client.messages.<span class="fn">create</span>(model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+                                  tools=TOOLS, messages=messages)
+    <span class="kw">if</span> resp.stop_reason != <span class="st">"tool_use"</span>:
+        <span class="kw">break</span>                                          <span class="cm"># end_turn → done</span>
+    messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"assistant"</span>, <span class="st">"content"</span>: resp.content})
+
+    results = []
+    <span class="kw">for</span> tu <span class="kw">in</span> [b <span class="kw">for</span> b <span class="kw">in</span> resp.content <span class="kw">if</span> b.type == <span class="st">"tool_use"</span>]:
+        <span class="fn">log</span>(tu.name, tu.input)                     <span class="cm"># custom logging — your hook</span>
+        out = <span class="fn">run_tool</span>(tu.name, tu.input)         <span class="cm"># conditional/gated exec here</span>
+        results.<span class="fn">append</span>({<span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+                        <span class="st">"tool_use_id"</span>: tu.id, <span class="st">"content"</span>: out})
+    messages.<span class="fn">append</span>({<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: results})</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Convenience vs. control</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Tool Runner</h4>
+            <ul><li>Least code — schemas + loop + plumbing handled</li>
+            <li>Fewer contract bugs (ids, roles, alternation)</li>
+            <li>Ideal for straightforward, fully-automatable agents</li></ul></div>
+        <div class="con"><h4>⚠️ Manual loop</h4>
+            <ul><li>More code and more ways to break the 3.2 contract</li>
+            <li>…but full control: intercept before exec, gate, log, branch</li>
+            <li>Required for human-in-the-loop and conditional execution</li></ul></div>
+    </div>
+    <div class="good">Default to the <strong>Tool Runner</strong> for speed; drop to the <strong>manual loop</strong> the
+    moment you need to approve, log, or conditionally run a tool.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Using the Tool Runner when you need approval gates. → The Runner executes tools for
+    you; it's not where you insert a human-in-the-loop check. Use the <b>manual loop</b> to intercept a
+    <code>tool_use</code> before running it (3.6).</div>
+    <div class="trap"><b>Trap:</b> Hand-writing JSON Schemas for the Tool Runner. → With <code>@beta_tool</code> the SDK
+    <b>auto-generates</b> schemas from the function signature/docstring; you pass the functions, not JSON.</div>
+    <div class="trap"><b>Trap:</b> Believing the Runner changes the API. → Underneath it's the same stateless round-trip;
+    it just automates the loop. The contract (matching ids, user-role results) still governs.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · A fully-automated read-only research agent — Tool Runner or manual?</summary>
+    <p class="answer"><b>Tool Runner.</b> No approval or gating needed, so let the SDK handle the loop, schemas, and
+    result plumbing. Less code, fewer contract bugs.</p></details>
+    <details><summary>Q2 · Any tool that spends money must be approved by a human first. Which approach, and why?</summary>
+    <p class="answer"><b>Manual loop.</b> You need to intercept the <code>tool_use</code> <em>before</em> execution to
+    require approval — the Runner runs tools for you, so it can't sit in that gap (see 3.6).</p></details>
+    <details><summary>Q3 · How does the Tool Runner know each tool's input schema?</summary>
+    <p class="answer">It <b>auto-generates</b> the schema from the <code>@beta_tool</code>-decorated function's signature
+    and docstring — you don't write <code>input_schema</code> by hand.</p></details>
+
+    <div class="pager">
+        <a href="3-4-tool-choice-control.html"><span class="k">← Prev</span>3.4 · tool_choice as a Control Lever</a>
+        <a class="next" href="3-6-human-in-the-loop-gates.html"><span class="k">Next →</span>3.6 · Human-in-the-Loop / Approval Gates</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Subtopic 3.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

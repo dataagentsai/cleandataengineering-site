@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prompt Caching & Memory · Where It Lives, How It Works · CCA-F D5</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../CCA-F_Study_Guide.html">CCA-F</a> › <a href="index.html">Domain 5</a> › Caching &amp; Memory</div>
+    <h1>🗄️ Prompt Caching &amp; Memory — Where It Lives, How It Works</h1>
+    <div class="tag">Who stores what · what step is skipped · which memory store to pick</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <!-- ============ WHERE ============ -->
+    <h2><span class="chip concept">WHERE</span> Who stores the (prompt) cache?</h2>
+    <p><strong>Anthropic's servers — not your machine.</strong> When you mark a prefix with
+    <code>cache_control</code>, Anthropic stores the model's <em>processed internal state</em> for those tokens (the
+    attention <b>KV cache</b> from prefill) on their infrastructure. Your app <b>stores nothing</b> — it just re-sends the
+    same prefix bytes plus the marker, and Anthropic recognises the matching prefix and reuses its stored compute.</p>
+    <ul>
+        <li><b>Ephemeral</b> — 5-minute TTL by default, or 1-hour. Each hit refreshes the TTL.</li>
+        <li><b>Scoped</b> to your organisation/workspace <em>and</em> the model — never shared across accounts.</li>
+        <li>You don't manage, evict, or persist it. You only <em>enable</em> it by structuring the prompt.</li>
+    </ul>
+    <div class="note">🔑 The <code>cache_control</code> cache is <b>Anthropic-side and ephemeral</b>. It makes re-sending
+    a prefix <em>cheaper &amp; faster</em> — it does <b>not</b> shrink your context window.</div>
+
+    <!-- ============ HOW ============ -->
+    <h2><span class="chip diagram">HOW</span> What step gets skipped</h2>
+    <p>A transformer processes a prompt in a step called <strong>prefill</strong>: it computes the attention
+    <b>key/value (KV)</b> states for <em>every</em> input token before it can generate. For a long prompt, that's the
+    expensive part. Caching stores the KV states for the cached prefix; on a <b>hit</b>, that prefill is <b>skipped</b>.</p>
+    <div class="mermaid">
+flowchart LR
+    subgraph NO["No cache — every request"]
+        A1["PREFILL all input tokens<br/>(compute KV for every token)"]:::bad --> A2["Generate"]
+    end
+    subgraph YES["Cache HIT"]
+        B1["Load stored KV for the<br/>cached prefix — prefill SKIPPED"]:::ok --> B2["Prefill only the NEW tokens"]:::warn --> B3["Generate"]
+    end
+    classDef ok fill:#dcfce7,stroke:#15803d,color:#14532d;
+    classDef warn fill:#fef3c7,stroke:#b45309,color:#7c2d12;
+    classDef bad fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d;
+    </div>
+    <p>So on a hit you pay <b>~0.1×</b> the input rate for the cached tokens (a "cache read") instead of full price, and
+    <b>time-to-first-token drops</b> because that prefill is skipped. A cache <b>write</b> (first time) costs ~1.25× (5-min TTL)
+    or ~2× (1-hour). Verify a hit with <code>usage.cache_read_input_tokens</code> — 0 across identical requests means a
+    silent invalidator is at work.</p>
+
+    <!-- ============ LEVELS ============ -->
+    <h2><span class="chip concept">LEVELS</span> How deep the cached prefix goes</h2>
+    <p>Caching is <b>prefix-based</b>, in render order <code>tools → system → messages</code>, with up to <b>4</b>
+    breakpoints. The deeper the stable prefix, the more prefill is skipped on a repeat:</p>
+    <div style="overflow-x:auto">
+    <table>
+        <tr><th>Cache level</th><th>On a repeat, prefill is skipped for…</th><th>Still processed fresh</th></tr>
+        <tr><td><b>None</b></td><td>nothing — <b>100% re-prefilled</b></td><td>everything</td></tr>
+        <tr><td><b>Tools only</b></td><td>the tool definitions</td><td>system + messages</td></tr>
+        <tr><td><b>Tools + system</b></td><td>tool defs + system prompt</td><td>all messages</td></tr>
+        <tr><td><b>…into messages</b> (conversation prefix / a big document / few-shot)</td><td>tools + system + the cached message prefix (e.g. the whole prior conversation)</td><td>just the newest turn</td></tr>
+    </table>
+    </div>
+    <h3>Invalidation hierarchy (why order matters)</h3>
+    <table>
+        <tr><th>You change…</th><th>Invalidates</th></tr>
+        <tr><td>Tool definitions (add/remove/reorder) or the model</td><td><b>everything</b> below</td></tr>
+        <tr><td>System prompt content</td><td>system + messages cache</td></tr>
+        <tr><td>Message content</td><td>only the messages cache</td></tr>
+    </table>
+    <div class="warn"><b>Byte-stable prefix rule:</b> any change in the prefix invalidates everything after it. Never
+    interpolate a <code>datetime</code>/uuid or an unsorted <code>json.dumps</code> into the system prompt — put volatile
+    content <em>after</em> the last breakpoint. Below the minimum prefix (~1024 tokens on Sonnet, ~4096 on Opus 4.8) it
+    silently won't cache at all.</div>
+
+    <!-- ============ APP-SIDE vs ANTHROPIC ============ -->
+    <h2><span class="chip trade">TWO KINDS</span> "Prompt caching" vs an app-side cache you build</h2>
+    <p>The word "cache" covers two different things — keep them apart:</p>
+    <div style="overflow-x:auto">
+    <table>
+        <tr><th></th><th>Prompt caching (Anthropic's)</th><th>App-side cache (yours)</th></tr>
+        <tr><td>Who stores it</td><td><b>Anthropic</b></td><td><b>You</b> (Redis / your DB / memory)</td></tr>
+        <tr><td>What you do</td><td><em>Enable</em> it — byte-stable prefix + <code>cache_control</code></td><td><em>Build &amp; store</em> it yourself</td></tr>
+        <tr><td>What it saves</td><td>Skips re-<b>prefill</b> of a repeated prefix (cost + latency)</td><td>Skips work entirely (even the LLM call)</td></tr>
+        <tr><td>Examples</td><td>System prompt, tool defs, a document you Q&amp;A over, few-shot</td><td>Response/semantic cache · introspected schema cache · embedding cache</td></tr>
+    </table>
+    </div>
+    <p><b>Use Anthropic prompt caching</b> when you re-send a large stable prefix across ≥2 requests within the TTL
+    (chatbots, doc Q&amp;A, agent loops). <b>Build your own app-side cache</b> when you want to skip calling the model at all
+    (cache the final answer for identical/similar questions) or avoid recomputing an expensive input (a schema you
+    introspected once, embeddings you already made).</p>
+    <div class="tip">In the <a href="https://basantchoudhary.github.io/ClaudeCertifiedArchitect/AIEngineeringProjects/p0-databricks-uc.html">Databricks NL→SQL agent</a>, both
+    appear: the SQL-guidelines system prompt uses <b>Anthropic prompt caching</b>, while the introspected Unity Catalog
+    schema + sample values are an <b>app-side cache</b> you refresh only on DDL change.</div>
+
+    <!-- ============ MEMORY ============ -->
+    <h2><span class="chip concept">MEMORY</span> Where is "memory" stored — DB, vector DB, or graph?</h2>
+    <p><strong>It depends on the access pattern — memory isn't one storage.</strong> And note two different things called
+    memory:</p>
+    <ul>
+        <li><b>Claude's memory tool</b> (<code>memory_20250818</code>) is a <b>file-based</b> interface — Claude reads/writes a
+        <code>/memories</code> directory. It is <b>client-executed: you implement the backend</b>, so it lives on <em>your</em>
+        infrastructure (local files, object storage, a DB blob — your choice). Anthropic doesn't store it. <em>(Managed Agents
+        has a separate hosted "memory store".)</em></li>
+        <li><b>Working (short-term) memory</b> = just the <code>messages</code> you re-send — no external store; keep it in the
+        session (in-process / Redis / a DB row).</li>
+    </ul>
+    <p>For <b>long-term, cross-session</b> memory, pick the store by <em>how you'll retrieve</em>:</p>
+    <div style="overflow-x:auto">
+    <table>
+        <tr><th>You need to recall…</th><th>Use</th><th>Why</th></tr>
+        <tr><td>Structured facts / preferences by key ("default warehouse = analytics_wh", "prefers ₹")</td><td><b>Relational / document / KV DB</b> (Postgres, DynamoDB, Redis)</td><td>Exact lookup by user/key — simplest &amp; most common</td></tr>
+        <tr><td>"Something similar to X" across many past notes/docs</td><td><b>Vector database</b> (pgvector, Pinecone, Chroma)</td><td>Semantic recall by similarity — memory-as-RAG</td></tr>
+        <tr><td>Reasoning over <b>relationships</b> between entities (who-relates-to-whom, multi-hop)</td><td><b>Knowledge graph</b> (Neo4j)</td><td>When the <em>connections</em> are the value; heavier</td></tr>
+    </table>
+    </div>
+    <div class="tip"><b>Rule of thumb:</b> start with the simplest that fits — usually a <b>key-value / relational</b> store.
+    Add a <b>vector store</b> only when you genuinely need semantic recall, and a <b>graph</b> only when relationships /
+    multi-hop reasoning are the point. Real systems often combine a DB for facts + a running summary + a vector store for
+    episodic notes.</div>
+    <div class="warn"><b>Never store secrets/PII in memory</b> — memory replays into every future session that loads it.</div>
+
+    <!-- ============ EXAM ============ -->
+    <h2><span class="chip exam">EXAM ONE-LINERS</span></h2>
+    <div class="note">
+    • Prompt caching is <b>Anthropic-side</b>, ephemeral, prefix-based; a hit <b>skips prefill</b> of the cached tokens
+    (cost + latency) — it does <b>not</b> shrink the context window.<br>
+    • Deeper cache level → more prefill skipped, but the prefix must be <b>byte-stable</b>; render order
+    <code>tools → system → messages</code>.<br>
+    • The memory tool is <b>client-executed</b> (you own the storage); pick DB vs vector vs graph by your
+    <b>retrieval pattern</b>, not by default.
+    </div>
+
+    <div class="good">See also: <a href="cheatsheet-context-bloat.html">Context-bloat cheat sheet</a> ·
+    <a href="subtopics/2-1-what-is-prompt-caching.html">2.1 Prompt caching</a> ·
+    <a href="subtopics/2-3-cacheable-prefix-rule.html">2.3 Prefix rule</a> ·
+    <a href="subtopics/3-5-memory-tool.html">3.5 Memory tool</a> ·
+    runnable <a href="https://basantchoudhary.github.io/ClaudeCertifiedArchitect/CCA-F/D5-Context-Management/examples/context_bloat_techniques.py"><code>examples/context_bloat_techniques.py</code></a>.</div>
+
+    <div class="pager">
+        <a href="index.html"><span class="k">← Back</span>Domain 5 hub</a>
+        <a class="next" href="cheatsheet-context-bloat.html"><span class="k">Next →</span>Context-bloat cheat sheet</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Prompt Caching &amp; Memory</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

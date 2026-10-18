@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>8.5 IDE Integrations &amp; the SDK · CCA-F D2</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D2 · Claude Code</a> › Cluster 8 · Automation, MCP &amp; Integrations</div>
+    <h1>8.5 · IDE Integrations &amp; the SDK</h1>
+    <div class="tag">VS Code · JetBrains · Agent SDK</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> VS Code &amp; JetBrains put Claude Code inside the editor</h2>
+    <p>Claude Code ships two first-party IDE integrations. Both give Claude editor-aware context and native diffs;
+    they differ in how they're packaged.</p>
+    <table>
+        <tr><th></th><th>VS Code extension</th><th>JetBrains plugin</th></tr>
+        <tr><td>Where</td><td>VS Code 1.98+, Cursor, and forks (via Open VSX). Extension id <code>anthropic.claude-code</code></td><td>IntelliJ IDEA, PyCharm, WebStorm, PhpStorm, GoLand, Android Studio</td></tr>
+        <tr><td>CLI needed?</td><td>Bundles its own CLI for the panel; standalone install needed to run <code>claude</code> in the terminal</td><td>Runs <code>claude</code> in the integrated terminal — install the CLI separately</td></tr>
+        <tr><td>Quick launch</td><td>Spark icon / Command Palette; <code>Cmd+Esc</code> (Mac) / <code>Ctrl+Esc</code> toggles focus</td><td><code>Cmd+Esc</code> / <code>Ctrl+Esc</code></td></tr>
+        <tr><td>Insert @-mention</td><td><code>Option+K</code> (Mac) / <code>Alt+K</code> → <code>@file.ts#5-10</code></td><td><code>Cmd+Option+K</code> / <code>Alt+Ctrl+K</code> → <code>@src/auth.ts#L1-99</code></td></tr>
+    </table>
+    <p>Shared feature set that makes the IDE version more than a terminal:</p>
+    <ul>
+        <li><strong>Diff viewing</strong> — edits show as a side-by-side diff in the IDE's native viewer; you accept,
+        reject, or edit before applying;</li>
+        <li><strong>Selection context</strong> — your current selection / active file is shared automatically;</li>
+        <li><strong>Diagnostic sharing</strong> — lint and syntax errors from the IDE flow to Claude as you work.</li>
+    </ul>
+    <div class="warn">Selection and diagnostic sharing are governed by <code>Read</code> <em>deny rules</em>: add a deny
+    rule for a sensitive path (e.g. <code>.env</code>) and neither its selected text nor the open-file notice reaches
+    Claude. From an external terminal, run <code>/ide</code> to connect Claude Code to the running IDE.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The Agent SDK: Claude Code as a library</h2>
+    <p>Beyond editors, you can <strong>build on top of</strong> Claude Code with the <strong>Claude Agent SDK</strong>
+    (formerly the Claude Code SDK). It exposes the same tools, agent loop, and context management that power the CLI,
+    programmable in two languages:</p>
+    <table>
+        <tr><th>Language</th><th>Package</th><th>Entry point</th></tr>
+        <tr><td>TypeScript</td><td><code>@anthropic-ai/claude-agent-sdk</code> (npm)</td><td><code>query(...)</code></td></tr>
+        <tr><td>Python</td><td><code>claude-agent-sdk</code> (pip, Python 3.10+)</td><td><code>query(...)</code></td></tr>
+    </table>
+    <p>The same <code>claude -p</code> headless mode (8.1) <em>is</em> the SDK via the CLI; the packages add
+    structured outputs, tool-approval callbacks, hooks, subagents, and native message objects for full programmatic
+    control. Reach for the SDK to build custom agents, CI/CD automation, and production apps; reach for the CLI for
+    interactive and one-off work.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> One engine, many surfaces</h2>
+    <div class="mermaid">
+flowchart TD
+    ENGINE["Claude Code engine<br/>tools · agent loop · context mgmt"] --> CLI["Interactive CLI"]
+    ENGINE --> HL["Headless: claude -p (8.1)"]
+    ENGINE --> IDE["IDE extensions"]
+    ENGINE --> SDK["Agent SDK (library)"]
+    IDE --> VSC["🔵 VS Code / Cursor<br/>anthropic.claude-code"]
+    IDE --> JB["🟠 JetBrains<br/>IntelliJ · PyCharm · GoLand…"]
+    SDK --> TS["🟢 @anthropic-ai/claude-agent-sdk (TS)"]
+    SDK --> PY["🟢 claude-agent-sdk (Python 3.10+)"]
+    HL -.->|"same loop, exposed via CLI"| SDK
+    classDef info fill:#cfe2ff,stroke:#0d6efd,color:#084298;
+    classDef warn fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    class VSC info; class JB warn; class TS ok; class PY ok;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Connecting an IDE, and a minimal SDK agent</h2>
+    <p>Top: connect an external terminal session to the IDE and add an MCP server from within VS Code. Bottom: the
+    Agent SDK's <code>query()</code> in both languages.</p>
+<pre><span class="cm"># From an external terminal, connect Claude Code to your running IDE</span>
+claude
+<span class="cm"># then inside the session:</span>
+/ide
+
+<span class="cm"># Add an MCP server from VS Code's integrated terminal (managed later with /mcp)</span>
+claude mcp add --transport http github https://api.githubcopilot.com/mcp/ \
+  --header <span class="st">"Authorization: Bearer YOUR_GITHUB_PAT"</span></pre>
+<pre><span class="cm"># Python — claude-agent-sdk (pip install claude-agent-sdk)</span>
+<span class="kw">import</span> asyncio
+<span class="kw">from</span> claude_agent_sdk <span class="kw">import</span> query, ClaudeAgentOptions
+
+<span class="kw">async def</span> <span class="fn">main</span>():
+    <span class="kw">async for</span> message <span class="kw">in</span> <span class="fn">query</span>(
+        prompt=<span class="st">"Find and fix the bug in auth.py"</span>,
+        options=<span class="fn">ClaudeAgentOptions</span>(allowed_tools=[<span class="st">"Read"</span>, <span class="st">"Edit"</span>, <span class="st">"Bash"</span>]),
+    ):
+        <span class="fn">print</span>(message)
+
+asyncio.<span class="fn">run</span>(<span class="fn">main</span>())</pre>
+<pre><span class="cm">// TypeScript — npm install @anthropic-ai/claude-agent-sdk</span>
+<span class="kw">import</span> { query } <span class="kw">from</span> <span class="st">"@anthropic-ai/claude-agent-sdk"</span>;
+
+<span class="kw">for await</span> (<span class="kw">const</span> message <span class="kw">of</span> <span class="fn">query</span>({
+  prompt: <span class="st">"Find and fix the bug in auth.ts"</span>,
+  options: { allowedTools: [<span class="st">"Read"</span>, <span class="st">"Edit"</span>, <span class="st">"Bash"</span>] }
+})) {
+  console.<span class="fn">log</span>(message);
+}</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> IDE extension vs. Agent SDK</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ IDE extension</h4>
+            <ul><li>Native diffs, selection &amp; diagnostic context for free</li>
+            <li>Human-in-the-loop: review edits before they apply</li>
+            <li>Best for day-to-day interactive development</li></ul></div>
+        <div class="con"><h4>✅ Agent SDK</h4>
+            <ul><li>Programmatic — build custom agents &amp; automation</li>
+            <li>Same engine, callable from TS or Python</li>
+            <li>Best for CI/CD and production, not interactive coding</li></ul></div>
+    </div>
+    <div class="note">🔑 They're not competitors: the IDE is the human interface, the SDK is the programmatic one,
+    and both wrap the identical Claude Code agent loop.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Installing the VS Code extension puts <code>claude</code> on your PATH." → It
+    bundles a private CLI copy for the panel only. To run <code>claude</code> in the terminal (for
+    <code>claude mcp add</code>, <code>claude --resume</code>, etc.) you still need the standalone CLI install.</div>
+    <div class="trap"><b>Trap:</b> "The JetBrains plugin ships its own Claude binary." → It runs the <code>claude</code>
+    command in the IDE's integrated terminal, so you must install the CLI too. VS Code bundles one; JetBrains does
+    not.</div>
+    <div class="trap"><b>Trap:</b> "It's the Claude Code SDK." → It was renamed the <b>Claude Agent SDK</b>. Packages:
+    <code>@anthropic-ai/claude-agent-sdk</code> (npm) and <code>claude-agent-sdk</code> (pip, Python 3.10+), both
+    entering through <code>query()</code>.</div>
+    <div class="trap"><b>Trap:</b> "IDE selection sharing can't be turned off for secrets." → A <code>Read</code>
+    <b>deny rule</b> for a path blocks both its selected text and the open-file notice from reaching Claude.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · You installed the VS Code extension but <code>claude mcp add</code> fails in the terminal. Why?</summary>
+    <p class="answer">The extension bundles a private CLI for its chat panel but doesn't add <code>claude</code> to your
+    PATH. Install the standalone CLI, after which terminal commands like <code>claude mcp add</code> and
+    <code>claude --resume</code> work in any terminal.</p></details>
+    <details><summary>Q2 · Name the Agent SDK packages and the function you call to run an agent.</summary>
+    <p class="answer">TypeScript: <code>@anthropic-ai/claude-agent-sdk</code> (npm). Python:
+    <code>claude-agent-sdk</code> (pip, Python 3.10+). Both drive the agent with <code>query(...)</code>, passing a
+    prompt and options (e.g. <code>allowedTools</code>). It was formerly the Claude Code SDK.</p></details>
+    <details><summary>Q3 · You're in an external terminal, not the IDE's. How do you get diffs to show in the IDE?</summary>
+    <p class="answer">Run <code>/ide</code> inside the Claude Code session to connect it to the running IDE; that
+    activates native diff viewing, selection context, and diagnostic sharing. (In JetBrains you can also set the diff
+    tool to <code>auto</code> via <code>/config</code>.)</p></details>
+
+    <div class="pager">
+        <a href="8-4-ci-github-actions.html"><span class="k">← Back</span>8.4 · CI &amp; GitHub Actions</a>
+        <a class="next" href="../index.html"><span class="k">Next →</span>Domain 2 hub</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 2 · Subtopic 8.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

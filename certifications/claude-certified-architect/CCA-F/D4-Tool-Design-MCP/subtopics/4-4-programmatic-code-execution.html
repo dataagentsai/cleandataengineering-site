@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4.4 Programmatic Tool Calling &amp; Code Execution · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 4 · Advanced Tool Use</div>
+    <h1>4.4 · Programmatic Tool Calling &amp; Code Execution</h1>
+    <div class="tag">Let Claude orchestrate tools in code</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> The code-execution tool is a real, server-side sandbox</h2>
+    <p><strong>Code execution</strong> is an Anthropic-hosted, <em>server-side</em> tool: you declare it in
+    <code>tools</code> (e.g. <code>{"type": "code_execution_20260120", "name": "code_execution"}</code>) and Claude
+    runs Python/bash in an isolated container on Anthropic's infrastructure — <strong>no client-side execution
+    loop</strong>. Results come back as content blocks in the same response (for bash, a
+    <code>bash_code_execution_tool_result</code> block with <code>.content.stdout</code> /
+    <code>.stderr</code> / <code>.return_code</code>). The container persists and can be reused across requests.</p>
+    <div class="note">🔑 "Server-side" means Anthropic runs the code; you don't execute anything. Contrast with your
+    own custom tools, which <em>you</em> run client-side and feed back as <code>tool_result</code>.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Programmatic tool calling: Claude composes tool calls in a script</h2>
+    <p>Normally each tool call is a round trip: Claude calls → the result lands <em>in Claude's context</em> → Claude
+    reasons → calls again. Three sequential lookups = three round trips, and every intermediate result burns context
+    tokens. <strong>Programmatic tool calling (PTC)</strong> lets Claude write a <em>script</em> that invokes your
+    tools as functions inside the code-execution container:</p>
+    <ul>
+      <li>When the script calls a tool, the container <strong>pauses</strong>, the call is executed
+      (client- or server-side), and the result returns <strong>to the running code — not to Claude's context</strong>.</li>
+      <li>The script processes it with normal control flow (loops, filters, branches). <strong>Only the script's
+      final output</strong> returns to Claude.</li>
+      <li><strong>Token cost scales with the final output, not the intermediate results</strong> — the win for many
+      sequential calls or large intermediate payloads you want filtered before they hit the window.</li>
+    </ul>
+    <p><strong>How to enable it (no beta header):</strong> add the <code>code_execution_20260120</code> tool
+    <em>and</em> set <code>"allowed_callers": ["code_execution_20260120"]</code> on each custom tool the script may
+    call. Available on Opus 4.5+ / Sonnet 4.5+.</p>
+    <div class="warn">⚠️ PTC has hard incompatibilities: it does <strong>not</strong> work with
+    <code>strict: true</code>, <code>disable_parallel_tool_use</code>, a forced <code>tool_choice</code>, or MCP
+    tools. And when you respond to a pending programmatic call, the user message must contain <strong>only
+    <code>tool_result</code> blocks</strong> (no text).</p></div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Round trips vs. one script</h2>
+    <div class="mermaid">
+flowchart TD
+    subgraph STD["Standard tool use"]
+      A1["Claude → get_profile"] --> A2["result into context"]
+      A2 --> A3["Claude → get_orders"] --> A4["result into context"]
+      A4 --> A5["Claude → check_stock"] --> A6["result into context"]
+      A6 --> A7["🔴 3 round trips,<br/>all payloads in window"]
+    end
+    subgraph PTC["Programmatic tool calling"]
+      B1["Claude writes ONE script"] --> B2["code_exec container runs it"]
+      B2 --> B3["script calls tools as fns<br/>(pause → run → resume)"]
+      B3 --> B4["results stay in the CODE,<br/>filtered by loops/branches"]
+      B4 --> B5["🟢 only final output<br/>returns to Claude"]
+    end
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class B5 ok; class A7 bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Enable code execution + a programmatically-callable tool</h2>
+    <p>Declaring <code>code_execution</code> and marking <code>lookup_orders</code> with
+    <code>allowed_callers</code> lets Claude invoke it from inside a script, keeping the (potentially large) order
+    list out of its context.</p>
+<pre>resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">16000</span>,
+    tools=[
+        {<span class="st">"type"</span>: <span class="st">"code_execution_20260120"</span>, <span class="st">"name"</span>: <span class="st">"code_execution"</span>},  <span class="cm"># server sandbox</span>
+        {
+            <span class="st">"name"</span>: <span class="st">"lookup_orders"</span>,
+            <span class="st">"description"</span>: <span class="st">"Return all orders for a customer id."</span>,
+            <span class="st">"allowed_callers"</span>: [<span class="st">"code_execution_20260120"</span>],   <span class="cm"># callable from code</span>
+            <span class="st">"input_schema"</span>: {<span class="st">"type"</span>: <span class="st">"object"</span>,
+                <span class="st">"properties"</span>: {<span class="st">"customer_id"</span>: {<span class="st">"type"</span>: <span class="st">"string"</span>}},
+                <span class="st">"required"</span>: [<span class="st">"customer_id"</span>]},
+        },
+    ],
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>,
+               <span class="st">"content"</span>: <span class="st">"Of my orders, how many shipped late? Just the count."</span>}],
+)
+
+<span class="cm"># Claude writes code that calls lookup_orders(...), loops over the results</span>
+<span class="cm"># INSIDE the container, and returns only the count. Read stdout:</span>
+<span class="kw">for</span> block <span class="kw">in</span> resp.content:
+    <span class="kw">if</span> block.type == <span class="st">"bash_code_execution_tool_result"</span>:
+        <span class="fn">print</span>(block.content.stdout)          <span class="cm"># e.g. "7"</span>
+<span class="cm"># NOTE: not compatible with strict / disable_parallel_tool_use /</span>
+<span class="cm"># forced tool_choice / MCP tools. Replies to pending PTC calls =</span>
+<span class="cm"># tool_result blocks ONLY (no text).</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> When to hand orchestration to code</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Programmatic tool calling</h4>
+            <ul><li>Many sequential/looping tool calls collapse into one turn</li>
+            <li>Large intermediate results filtered <em>before</em> reaching context</li>
+            <li>Token cost tracks the final output, not the raw payloads</li></ul></div>
+        <div class="con"><h4>⚠️ Constraints &amp; cost</h4>
+            <ul><li>No <code>strict</code>, no <code>disable_parallel_tool_use</code>, no forced tool, no MCP tools</li>
+            <li>Needs the code-execution sandbox (Opus 4.5+ / Sonnet 4.5+)</li>
+            <li>Overkill for one or two calls Claude can just make directly</li></ul></div>
+    </div>
+    <div class="good">Reach for PTC when the pattern is "fan out over N items / chain several lookups / crunch a
+    big result." For a single tool call, standard round-trip tool use is simpler.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Thinking you execute the code-execution tool client-side. → It's
+    <b>server-side</b> — Anthropic runs it in a sandbox and returns
+    <code>bash_code_execution_tool_result</code> blocks. Nothing to run locally.</div>
+    <div class="trap"><b>Trap:</b> Combining PTC with <code>tool_choice:{"type":"tool",…}</code>,
+    <code>strict:true</code>, <code>disable_parallel_tool_use</code>, or MCP tools. → All
+    <b>incompatible</b> with programmatic tool calling.</div>
+    <div class="trap"><b>Trap:</b> Expecting every intermediate tool result in Claude's context with PTC. → The whole
+    point is the opposite: results return <b>to the running script</b>; only the final output reaches Claude.</div>
+    <div class="trap"><b>Trap:</b> Adding text to the message that answers a pending programmatic call. → It must
+    contain <b>only <code>tool_result</code> blocks</b>. And PTC needs no beta header — don't invent one.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Where do intermediate tool results go under programmatic tool calling?</summary>
+    <p class="answer">Into the <b>running code</b> in the code-execution container — not into Claude's context. The
+    script processes them with normal control flow and returns only its final output to Claude, so token cost tracks
+    that output, not the raw payloads.</p></details>
+    <details><summary>Q2 · What two things must you configure to let Claude call your tool from a script?</summary>
+    <p class="answer">Declare the code-execution tool (<code>code_execution_20260120</code>) <b>and</b> set
+    <code>"allowed_callers": ["code_execution_20260120"]</code> on the custom tool. No beta header is needed
+    (Opus 4.5+ / Sonnet 4.5+).</p></details>
+    <details><summary>Q3 · Name two features PTC is incompatible with, and why it matters.</summary>
+    <p class="answer">Any of: <code>strict: true</code>, <code>disable_parallel_tool_use</code>, forced
+    <code>tool_choice</code>, MCP tools. It matters because reaching for one of those alongside PTC will fail — you
+    can't, say, force a tool <em>and</em> have Claude orchestrate tools in code at once.</p></details>
+
+    <div class="pager">
+        <a href="4-3-streaming-fine-grained.html"><span class="k">← Back</span>4.3 · Streaming &amp; Fine-Grained Tool Use</a>
+        <a class="next" href="4-5-tool-choice-control.html"><span class="k">Next →</span>4.5 · tool_choice Control &amp; Parallel Toggle</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 4.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

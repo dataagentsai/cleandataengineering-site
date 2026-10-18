@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.2 cache_control &amp; Breakpoints · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 2 · Prompt Caching</div>
+    <h1>2.2 · cache_control &amp; Breakpoints</h1>
+    <div class="tag">Mark the reusable prefix</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> A breakpoint marks "cache everything up to here"</h2>
+    <p>You turn caching on by attaching <code>cache_control: {"type": "ephemeral"}</code> to a <strong>content
+    block</strong>. That marker is a <strong>breakpoint</strong>: it tells the API to cache the entire prefix
+    <em>up to and including that block</em>. You don't tag the individual pieces you want cached — you tag the
+    <strong>last block of the stable region</strong>, and everything before it is captured. <code>cache_control</code>
+    can go on a system text block, a tool definition, or a message content block (<code>text</code>,
+    <code>image</code>, <code>tool_use</code>, <code>tool_result</code>, <code>document</code>).</p>
+
+    <div class="note">🔑 A breakpoint is a <strong>boundary</strong>, not a wrapper. Place it on the last block of
+    the reusable prefix; the cache key is the hash of all bytes preceding and including it.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Max 4 breakpoints — and the minimum length floor</h2>
+    <p>Two hard limits govern breakpoints:</p>
+    <ul>
+        <li><strong>At most 4 <code>cache_control</code> breakpoints per request.</strong> Each is a separate cache
+        read/write point, so you can cache several nested prefixes (e.g. one after tools, one after system, one
+        after a stable chunk of history). A 5th marker is rejected.</li>
+        <li><strong>A minimum cacheable prefix length.</strong> A prefix shorter than the model's floor is
+        <em>silently not cached</em> — no error, just <code>cache_creation_input_tokens: 0</code>. The floor is
+        <strong>model-dependent</strong>:</li>
+    </ul>
+
+    <table>
+        <tr><th>Model</th><th>Minimum cacheable prefix</th></tr>
+        <tr><td>Claude Fable 5 / Mythos 5</td><td>512 tokens</td></tr>
+        <tr><td>Claude Opus 4.8 · Sonnet 5 · Sonnet 4.6</td><td>1024 tokens</td></tr>
+        <tr><td>Claude Opus 4.7 · Haiku 3.5</td><td>2048 tokens</td></tr>
+        <tr><td>Claude Opus 4.6 · Opus 4.5 · Haiku 4.5</td><td>4096 tokens</td></tr>
+    </table>
+
+    <div class="warn">⚠️ Do not guess the floor. A 3K-token prompt caches on Opus 4.8 (1024) but <em>silently
+    won't</em> on Haiku 4.5 (4096). If <code>cache_creation_input_tokens</code> is 0 on a fresh prefix, you're
+    likely under the minimum.</div>
+
+    <div class="good">Convenience shortcut: a <em>top-level</em> <code>cache_control</code> on
+    <code>messages.create()</code> auto-places the breakpoint on the last cacheable block — the simplest option
+    when you don't need fine-grained placement.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> One request, multiple nested breakpoints</h2>
+    <div class="mermaid">
+flowchart TD
+    T["tools (static)"] --> BP1["🟢 breakpoint #1<br/>caches tools"]
+    BP1 --> S["system prompt (static)"]
+    S --> BP2["🟢 breakpoint #2<br/>caches tools + system"]
+    BP2 --> H["stable conversation history"]
+    H --> BP3["🟢 breakpoint #3<br/>caches tools + system + history"]
+    BP3 --> V["volatile: newest user turn"]
+    V --> X["🔴 no breakpoint here<br/>→ processed fresh (1×)"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef neutral fill:#e7f1ff,stroke:#4a90d9,color:#1a4971;
+    class BP1 ok; class BP2 ok; class BP3 ok; class X bad;
+    class T neutral; class S neutral; class H neutral; class V neutral;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Placing breakpoints across tools and system</h2>
+    <p>Render order is tools → system → messages (see 2.3), so a breakpoint on the last system block also caches
+    the tools ahead of it. Here two breakpoints cache the tool catalog and the system prompt independently.</p>
+<pre>resp = client.messages.<span class="fn">create</span>(
+    model=<span class="st">"claude-opus-4-8"</span>, max_tokens=<span class="st">1024</span>,
+    tools=[
+        {<span class="st">"name"</span>: <span class="st">"search"</span>, <span class="st">"description"</span>: <span class="st">"..."</span>, <span class="st">"input_schema"</span>: {...}},
+        {<span class="st">"name"</span>: <span class="st">"lookup"</span>, <span class="st">"description"</span>: <span class="st">"..."</span>, <span class="st">"input_schema"</span>: {...},
+         <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>}},   <span class="cm"># breakpoint 1: caches all tools</span>
+    ],
+    system=[{
+        <span class="st">"type"</span>: <span class="st">"text"</span>, <span class="st">"text"</span>: LONG_SYSTEM_PROMPT,
+        <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>},       <span class="cm"># breakpoint 2: caches tools + system</span>
+    }],
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: user_question}],  <span class="cm"># volatile — no marker</span>
+)
+<span class="cm"># Max 4 breakpoints total; a prefix under the model's floor caches nothing.</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> One breakpoint vs. several</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Multiple breakpoints</h4>
+            <ul><li>Partial reuse — a change late in the prefix still hits earlier breakpoints</li>
+            <li>Fits growing agent loops (cache tools, then system, then history)</li>
+            <li>Up to 4 nested cache points per request</li></ul></div>
+        <div class="con"><h4>⚠️ Just one (or top-level auto)</h4>
+            <ul><li>Simplest to reason about; fewest ways to misplace</li>
+            <li>All-or-nothing: a byte change before it invalidates the whole cache</li>
+            <li>Enough for a single frozen system prompt shared across calls</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Put <code>cache_control</code> on every block I want cached." → You tag only the
+    <b>last block of the stable region</b>. The breakpoint caches the whole prefix up to it — tagging each block
+    wastes your 4-breakpoint budget.</div>
+    <div class="trap"><b>Trap:</b> "I can use as many breakpoints as I like." → <b>Maximum 4</b> per request.</div>
+    <div class="trap"><b>Trap:</b> "My small prompt didn't cache, so caching is broken." → It's likely
+    <b>below the model's minimum</b> (512–4096 tokens depending on the model). Short prefixes are silently not
+    cached — check <code>cache_creation_input_tokens</code>.</div>
+    <div class="trap"><b>Trap:</b> "The minimum is the same for all models." → It <b>varies by model</b>: 1024 on
+    Opus 4.8/Sonnet, up to 4096 on Haiku 4.5 and Opus 4.6/4.5. Verify per model.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Where do you place <code>cache_control</code> to cache a long system prompt?</summary>
+    <p class="answer">On the <b>last content block of the system prompt</b> (or use top-level auto-placement). The
+    breakpoint caches everything up to and including it — which, given render order, also captures any tools ahead
+    of the system prompt.</p></details>
+    <details><summary>Q2 · How many breakpoints can one request have, and what happens at the 5th?</summary>
+    <p class="answer"><b>Four.</b> A request with more than four <code>cache_control</code> markers is rejected —
+    budget them across your stable regions (tools, system, history).</p></details>
+    <details><summary>Q3 · Your fresh prefix shows <code>cache_creation_input_tokens: 0</code>. Cause?</summary>
+    <p class="answer">The prefix is almost certainly <b>below the model's minimum cacheable length</b> (e.g. under
+    1024 tokens on Opus 4.8, or under 4096 on Haiku 4.5). Short prefixes are silently processed uncached — no
+    error is raised.</p></details>
+
+    <div class="pager">
+        <a href="2-1-what-is-prompt-caching.html"><span class="k">← Back</span>2.1 · What Prompt Caching Is</a>
+        <a class="next" href="2-3-cacheable-prefix-rule.html"><span class="k">Next →</span>2.3 · What's Cacheable</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 2.2</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

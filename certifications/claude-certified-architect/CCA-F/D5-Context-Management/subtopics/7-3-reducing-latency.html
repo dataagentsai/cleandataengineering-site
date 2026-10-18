@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>7.3 Reducing Latency · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 7 · Cost &amp; Performance Optimization</div>
+    <h1>7.3 · Reducing Latency</h1>
+    <div class="tag">Make it feel fast</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Two clocks: time-to-first-token and total time</h2>
+    <p>Latency has two parts. <strong>Time-to-first-token (TTFT)</strong> — how long before <em>anything</em>
+    appears — is dominated by how many <strong>input tokens</strong> must be read before generation starts.
+    <strong>Total time</strong> is TTFT plus generation, and generation time scales with how many
+    <strong>output tokens</strong> the model produces. The levers below attack one clock or the other. Note the
+    Batch API (7.2) is the <em>opposite</em> trade — it minimizes cost by accepting high latency, so none of this
+    applies to batched work.</p>
+
+    <table>
+        <tr><th>Lever</th><th>Attacks</th><th>Why it helps</th></tr>
+        <tr><td>Faster / smaller model</td><td>TTFT + total</td><td>Smaller models generate faster; Haiku &lt; Sonnet &lt; Opus in latency</td></tr>
+        <tr><td><strong>Stream</strong> the response</td><td>Perceived TTFT</td><td>User sees tokens as they arrive, not after the full reply</td></tr>
+        <tr><td>Cache the prompt prefix</td><td>TTFT</td><td>Cached tokens are read far faster than fresh ones</td></tr>
+        <tr><td>Minimize input tokens</td><td>TTFT</td><td>Fewer tokens to read before the first output token</td></tr>
+        <tr><td>Constrain output length</td><td>Total time</td><td>Fewer output tokens = less generation time</td></tr>
+        <tr><td>Keep the tool set small</td><td>TTFT</td><td>Tool schemas are input tokens the model reads every call</td></tr>
+    </table>
+
+    <div class="note">🔑 <strong>Streaming is the highest-leverage move for <em>perceived</em> latency.</strong> It
+    doesn't make the model faster, but the user sees the first words almost immediately instead of staring at a
+    spinner until the whole answer lands.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Cut the tokens the model has to read and write</h2>
+    <p><strong>Right-size the model.</strong> A smaller model is faster end-to-end; if Haiku clears the task, it's
+    both cheaper (7.1) and quicker. <strong>Shrink the input:</strong> trim boilerplate, don't dump giant tool
+    results into context, and put a large <em>stable</em> prefix behind <code>cache_control</code> so repeat calls
+    skip re-reading it. <strong>Keep the tool set small</strong> — every tool definition is input tokens read on
+    every request, and a bloated tool list slows TTFT and muddies tool selection. <strong>Cap the output:</strong>
+    set a sensible <code>max_tokens</code> and ask for concise, structured answers so the model doesn't generate a
+    paragraph where a label will do.</p>
+
+    <div class="good">Pair the levers: a right-sized model + cached prefix + streamed, length-capped output is fast
+    on both clocks and cheap at the same time.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Where each lever lands</h2>
+    <div class="mermaid">
+flowchart TD
+    REQ["Request sent"] --> READ["Read input tokens<br/>(prompt + tools)"]
+    READ --> FT(["First token — TTFT"])
+    FT --> GEN["Generate output tokens"]
+    GEN --> DONE(["Full response"])
+    L1["smaller model"] -.-> READ
+    L2["cache the prefix"] -.-> READ
+    L3["fewer input tokens<br/>+ small tool set"] -.-> READ
+    L4["STREAM"] -.-> FT
+    L5["cap max_tokens<br/>+ concise output"] -.-> GEN
+    L6["smaller model"] -.-> GEN
+    classDef lever fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef stage fill:#cce5ff,stroke:#3399ff,color:#004085;
+    class L1 lever; class L2 lever; class L3 lever; class L4 lever; class L5 lever; class L6 lever;
+    class READ stage; class GEN stage;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A low-latency call: stream, cache, cap</h2>
+    <p>Stream so TTFT is low, cache the stable prefix so reads are fast, and bound the output.</p>
+<pre><span class="cm"># Stream → first token reaches the user almost immediately.</span>
+<span class="kw">with</span> client.messages.<span class="fn">stream</span>(
+    model=<span class="st">"claude-haiku-4-5"</span>,            <span class="cm"># smaller = faster generation</span>
+    max_tokens=<span class="st">256</span>,                       <span class="cm"># cap output → bounded total time</span>
+    system=[{
+        <span class="st">"type"</span>: <span class="st">"text"</span>,
+        <span class="st">"text"</span>: stable_instructions,      <span class="cm"># big + unchanging → cache it</span>
+        <span class="st">"cache_control"</span>: {<span class="st">"type"</span>: <span class="st">"ephemeral"</span>},  <span class="cm"># cached reads = faster TTFT</span>
+    }],
+    tools=core_tools,                    <span class="cm"># keep the set SMALL — each schema is input tokens</span>
+    messages=[{<span class="st">"role"</span>: <span class="st">"user"</span>, <span class="st">"content"</span>: user_msg}],
+) <span class="kw">as</span> stream:
+    <span class="kw">for</span> text <span class="kw">in</span> stream.text_stream:
+        <span class="fn">print</span>(text, end=<span class="st">""</span>, flush=<span class="kw">True</span>)   <span class="cm"># render tokens live</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Fast vs. thorough</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Optimizing for latency</h4>
+            <ul><li>Streaming makes the UI feel instant</li>
+            <li>Smaller model + cached prefix cut real time</li>
+            <li>Capped, concise output finishes sooner</li></ul></div>
+        <div class="con"><h4>⚠️ The cost of over-optimizing</h4>
+            <ul><li>Too-small a model may need a retry (slower overall)</li>
+            <li>Over-tight <code>max_tokens</code> truncates the answer</li>
+            <li>Streaming complicates error handling mid-response</li></ul></div>
+    </div>
+    <div class="note">🔑 The lowest-latency <em>correct</em> answer wins. A fast wrong answer that forces a re-ask is
+    slower than getting it right once.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Streaming makes the model generate faster." → It does <b>not</b> change total
+    generation time. It lowers <b>perceived</b> latency by showing the first tokens immediately instead of after
+    the full reply.</div>
+    <div class="trap"><b>Trap:</b> Only tuning output size. → TTFT is driven by <b>input</b> tokens — prompt length
+    and tool schemas. Trimming input and caching the prefix speeds up the first token; capping output speeds up
+    the total.</div>
+    <div class="trap"><b>Trap:</b> Loading every possible tool "just in case." → Each tool definition is input the
+    model reads every call, hurting TTFT and tool-selection quality. Keep the set small and focused.</div>
+    <div class="trap"><b>Trap:</b> Using the Batch API to reduce latency. → Batch <b>increases</b> latency (async,
+    up to 24h) to cut cost. It's the opposite lever — never a latency fix.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Which levers lower TTFT vs. total generation time?</summary>
+    <p class="answer"><b>TTFT</b>: smaller model, cache the prefix, fewer input tokens, small tool set, and
+    (perceived) streaming. <b>Total generation time</b>: smaller model, and capping/constraining output length so
+    fewer output tokens are produced.</p></details>
+    <details><summary>Q2 · Why does streaming help even though the model isn't faster?</summary>
+    <p class="answer">It cuts <b>perceived</b> latency: the user sees the first tokens the moment generation starts
+    rather than waiting for the entire response, so the interface feels responsive even if total time is
+    unchanged.</p></details>
+    <details><summary>Q3 · How does a large tool set hurt latency?</summary>
+    <p class="answer">Tool definitions are input tokens the model must read on <em>every</em> request, raising TTFT;
+    a big list also degrades tool selection. Keep the exposed set small (and pair with prompt caching if the tool
+    list is stable).</p></details>
+
+    <div class="pager">
+        <a href="7-2-batch-api.html"><span class="k">← Back</span>7.2 · The Batch API (async, ~50% off)</a>
+        <a class="next" href="7-4-token-efficient-patterns.html"><span class="k">Next →</span>7.4 · Token-Efficient Patterns</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 7.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

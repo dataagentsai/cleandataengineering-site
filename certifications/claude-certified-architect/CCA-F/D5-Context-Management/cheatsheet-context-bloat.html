@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cheat Sheet · Fixing Context Bloat · CCA-F D5</title>
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../CCA-F_Study_Guide.html">CCA-F</a> › <a href="index.html">Domain 5</a> › Cheat Sheet · Context Bloat</div>
+    <h1>🧹 Fixing Context Bloat — Which Technique, When</h1>
+    <div class="tag">Pick the right lever · keep integrity &amp; reliability intact</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">FRAME</span> First ask: what <em>kind</em> of bloat is it?</h2>
+    <p>"Context is too big" isn't one problem — it has several causes, and each has a different right fix.
+    Diagnose the cause first, then apply the matching technique. Using the wrong one (e.g. summarising when you just
+    needed to prune tool results) is how you break the conversation.</p>
+
+    <h2><span class="chip diagram">DECIDE</span> Decision flow</h2>
+    <div class="mermaid">
+flowchart TD
+    S["Context is bloating"] --> Q1{"What's the cause?"}
+    Q1 -->|"Re-sending a big STABLE prefix<br/>is expensive"| C["Prompt caching"]:::a
+    Q1 -->|"Old tool_result payloads dominate,<br/>but the dialogue must stay"| E["Context editing<br/>(clear_tool_uses)"]:::b
+    Q1 -->|"The WHOLE conversation is<br/>near the window limit"| K["Compaction<br/>(compact)"]:::c
+    Q1 -->|"Facts must survive<br/>ACROSS sessions"| M["Memory tool"]:::d
+    Q1 -->|"Simple 'keep last N turns'<br/>is enough (few/no tools)"| T["Safe truncation<br/>(sliding window)"]:::e
+    Q1 -->|"Many/large tool schemas<br/>or huge tool outputs"| L["Tool slimming<br/>(tool search · lean results · PTC)"]:::f
+    classDef a fill:#e0f2fe,stroke:#0369a1,color:#075985;
+    classDef b fill:#dcfce7,stroke:#15803d,color:#14532d;
+    classDef c fill:#fef3c7,stroke:#b45309,color:#7c2d12;
+    classDef d fill:#ede9fe,stroke:#6d28d9,color:#4c1d95;
+    classDef e fill:#ffe4e6,stroke:#be123c,color:#7f1d1d;
+    classDef f fill:#f1f5f9,stroke:#475569,color:#334155;
+    </div>
+    <div class="note">🔑 The two most-confused options: <b>context editing PRUNES</b> stale tool results (keeps the
+    dialogue); <b>compaction SUMMARISES</b> the whole history (rewrites it). If the problem is specifically bloated
+    tool_results and the running dialogue must stay intact → context editing, every time.</div>
+
+    <h2><span class="chip concept">TABLE</span> The master cheat sheet</h2>
+    <div style="overflow-x:auto">
+    <table>
+        <tr><th>Technique</th><th>Use when…</th><th>What it does</th><th>⚠️ Integrity / reliability rule</th></tr>
+        <tr>
+            <td><b>Token counting</b><br><code>count_tokens</code></td>
+            <td>You need to decide <em>whether/when</em> to act</td>
+            <td>Measures exact, model-specific token size</td>
+            <td>Use the real endpoint — <b>never</b> estimate with tiktoken or "chars ÷ 4" (they under-count Claude tokens)</td>
+        </tr>
+        <tr>
+            <td><b>Prompt caching</b><br><code>cache_control</code></td>
+            <td>A large <em>stable</em> prefix is re-sent across many requests</td>
+            <td>Reuses the processed prefix → ~90% cheaper reads</td>
+            <td>Cuts <b>cost, not footprint</b>. Prefix must be <b>byte-stable</b> (a datetime/uuid silently invalidates it); put volatile content after the last breakpoint. Verify with <code>cache_read_input_tokens</code></td>
+        </tr>
+        <tr>
+            <td><b>Context editing</b><br><code>clear_tool_uses_20250919</code></td>
+            <td>Old, no-longer-needed <b>tool_result</b> payloads dominate the window — but the dialogue must stay</td>
+            <td><b>Prunes</b> stale tool results (optionally their inputs/thinking) server-side before the model sees them</td>
+            <td>Keeps message roles &amp; the running dialogue <b>intact</b> — it is NOT summarisation. You keep the full history client-side; the API reports what it cleared</td>
+        </tr>
+        <tr>
+            <td><b>Compaction</b><br><code>compact_20260112</code></td>
+            <td>The <b>whole conversation</b> is approaching the context-window limit</td>
+            <td><b>Summarises</b> earlier history into a compaction block, server-side</td>
+            <td><b>MUST append <code>response.content</code></b> (not just <code>.text</code>) back to <code>messages</code> every turn — the compaction block carries the state; dropping it corrupts the next request</td>
+        </tr>
+        <tr>
+            <td><b>Memory tool</b><br><code>memory_20250818</code></td>
+            <td>Facts must persist <b>across sessions</b>, not just within one conversation</td>
+            <td>Claude reads/writes a <code>/memories</code> dir you back with storage</td>
+            <td>Lives <b>outside the window</b> (no bloat). Guard against path traversal; <b>never store secrets/PII</b> (it replays into every future session)</td>
+        </tr>
+        <tr>
+            <td><b>Safe truncation</b><br>(client-side sliding window)</td>
+            <td>A simple "keep the last N turns" suffices; few/no tools</td>
+            <td>Drops the oldest turns yourself</td>
+            <td>Cut only at a <b>plain user turn</b> so a <code>tool_use</code> never loses its <code>tool_result</code>; keep the first (instructions) turn. It <b>invalidates the prompt cache</b> (prefix changes) — prefer context editing when you only need to drop tool results</td>
+        </tr>
+        <tr>
+            <td><b>Tool slimming</b><br>(design)</td>
+            <td>Fat tool schemas or huge tool outputs are the bloat</td>
+            <td>Tool search + <code>defer_loading</code>; return lean results; programmatic tool calling</td>
+            <td>Doesn't change roles/pairing — just keeps each turn small. Tool search <b>appends</b> schemas, so the cache is preserved</td>
+        </tr>
+    </table>
+    </div>
+
+    <h2><span class="chip trade">CONTRAST</span> The distinctions the exam probes</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>🟢 Context editing (prune)</h4>
+            <ul><li>Targets <b>stale tool_results</b> specifically</li>
+            <li>Dialogue &amp; message structure untouched</li>
+            <li>Lossless for the conversation (only junk removed)</li>
+            <li>Use when: tool payloads bloat, dialogue must stay</li></ul></div>
+        <div class="con"><h4>🟠 Compaction (summarise)</h4>
+            <ul><li>Condenses the <b>whole history</b> into a summary</li>
+            <li>Lossy — the dialogue is rewritten</li>
+            <li>Needs the <code>response.content</code> round-trip or state is lost</li>
+            <li>Use when: the entire conversation nears the window limit</li></ul></div>
+    </div>
+    <div class="warn"><b>Trap:</b> "context is too big" ⇒ reach for compaction. Not always — if it's <em>tool-result</em>
+    bloat with a live dialogue, that's <b>context editing</b>. And <b>prompt caching does not shrink the window at all</b>
+    — it only makes re-sending cheaper.</div>
+
+    <h2><span class="chip concept">STACK</span> They combine</h2>
+    <p>Real long-running agents use several at once: <b>prompt-cache</b> the stable prefix, <b>context-edit</b> stale tool
+    results as the loop runs, <b>compact</b> if the whole thing still approaches the limit, and use <b>memory</b> for anything
+    that must outlive the session. Keep tool schemas/results lean throughout.</p>
+
+    <div class="good">🧑‍💻 Runnable demo of all of these (done correctly):
+    <a href="https://basantchoudhary.github.io/ClaudeCertifiedArchitect/CCA-F/D5-Context-Management/examples/context_bloat_techniques.py"><code>examples/context_bloat_techniques.py</code></a> ·
+    theory: <a href="index.html#c3">Cluster 3 — Managing Long Conversations</a> and
+    <a href="subtopics/3-4-context-editing.html">3.4 Context Editing</a> ·
+    <a href="subtopics/3-3-summarization-compaction.html">3.3 Compaction</a> ·
+    <a href="subtopics/3-5-memory-tool.html">3.5 Memory Tool</a>.</div>
+
+    <div class="pager">
+        <a href="index.html"><span class="k">← Back</span>Domain 5 hub</a>
+        <a class="next" href="quizzes/index.html"><span class="k">Next →</span>D5 Mock Exam Bank</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Cheat Sheet — Fixing Context Bloat</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

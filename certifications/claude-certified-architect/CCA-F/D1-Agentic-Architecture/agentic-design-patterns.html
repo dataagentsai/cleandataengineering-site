@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agentic Design Patterns — the full catalog · CCA-F D1</title>
+<link rel="stylesheet" href="assets/style.css">
+<style>
+  .pat { background:#fff; border:1px solid #eee; border-left:4px solid #764ba2; border-radius:8px; padding:14px 18px; margin:12px 0; box-shadow:0 1px 4px rgba(0,0,0,.05); }
+  .pat h4 { color:#4a3b7a; margin:0 0 8px; font-size:1.12em; display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .pat .row { font-size:.92em; margin:5px 0; }
+  .pat .k { font-weight:700; color:#5a4a8a; display:inline-block; min-width:74px; vertical-align:top; }
+  .cl { font-size:.66em; font-weight:700; padding:2px 8px; border-radius:12px; }
+  .cl.client { background:#e7ecff; color:#3b5bdb; }
+  .cl.server { background:#e6fcf5; color:#0ca678; }
+  .cl.hybrid { background:#fff4e0; color:#b5691a; }
+  .quick a { display:inline-block; margin:3px 6px 3px 0; color:#764ba2; text-decoration:none; border:1px solid #e0dcf5; border-radius:16px; padding:3px 12px; font-size:.86em; }
+  .quick a:hover { background:#f7f5ff; }
+  h3.grp { color:#764ba2; border-bottom:2px solid #eadff7; padding-bottom:6px; margin-top:26px; }
+</style>
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../CCA-F_Study_Guide.html">CCA-F</a> › <a href="index.html">Domain 1</a> › Agentic Design Patterns</div>
+    <h1>🧠 Agentic Design Patterns — the full catalog</h1>
+    <div class="tag">Every pattern · what · why · how in Claude (client/server) · example · gotcha</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <div class="note">🎯 The single most important D1 distinction: <b>workflows</b> (you orchestrate predefined steps in code) vs
+    <b>agents</b> (the model decides the control flow at runtime). Start simple — reach for an agent only when the path
+    genuinely can't be predefined. Most "agentic" patterns below are <b>client-side orchestration</b> you write around the
+    Messages API; the server just does single calls (+ tool decoding, caching, batch). <b>Managed Agents</b> is the exception —
+    there the server runs the loop.</div>
+
+    <p class="quick">
+        <a href="#block">⚛️ Building block</a><a href="#wf">🔗 Workflows</a><a href="#ag">🤖 Agents</a><a href="#cc">🧩 Cross-cutting</a>
+    </p>
+
+    <h3 class="grp" id="block">⚛️ The building block</h3>
+
+    <div class="pat">
+        <h4>Augmented LLM <span class="cl hybrid">CLIENT + SERVER</span></h4>
+        <div class="row"><span class="k">What</span> A single LLM call enhanced with <b>tools</b>, <b>retrieval</b>, <b>memory</b>, and <b>structured output</b> — the atom every pattern composes.</div>
+        <div class="row"><span class="k">Why</span> It's the smallest useful unit; every workflow/agent is just augmented LLMs wired together.</div>
+        <div class="row"><span class="k">In Claude</span> One <code>messages.create</code> with <code>tools</code> / <code>output_config</code>. The <b>server</b> decodes a <code>tool_use</code> block; <b>you</b> execute it.</div>
+        <div class="row"><span class="k">Example</span> Any single tool call — e.g. G1's structured triage call.</div>
+        <div class="row"><span class="k">Gotcha</span> It is <em>not</em> an agent yet — no loop, no self-direction. Don't over-claim "agent" for one call.</div>
+    </div>
+
+    <h3 class="grp" id="wf">🔗 Workflow patterns <span style="font-weight:400;font-size:.7em;color:#777">— you orchestrate; predictable</span></h3>
+
+    <div class="pat">
+        <h4>1 · Prompt Chaining <span class="cl client">CLIENT</span></h4>
+        <div class="row"><span class="k">What</span> Break a task into sequential steps; each call's output feeds the next, with optional gates/checks between.</div>
+        <div class="row"><span class="k">Why</span> Decompose a complex task into simpler, individually-verifiable steps (accuracy over one giant prompt).</div>
+        <div class="row"><span class="k">In Claude</span> You make N sequential <code>messages.create</code> calls in your code; a check between steps can bail early.</div>
+        <div class="row"><span class="k">Example</span> Extract → validate → format; meeting notes → summary → action items (P2).</div>
+        <div class="row"><span class="k">Gotcha</span> Latency &amp; cost add up (each step re-sends context); an early error <em>propagates</em> — validate between steps.</div>
+    </div>
+
+    <div class="pat">
+        <h4>2 · Routing <span class="cl client">CLIENT</span></h4>
+        <div class="row"><span class="k">What</span> Classify the input, then send it to a specialized prompt / tool / model.</div>
+        <div class="row"><span class="k">Why</span> Different inputs need different handling; separating them beats one prompt trying to do everything.</div>
+        <div class="row"><span class="k">In Claude</span> A cheap classify call (or rules) → route; often paired with <b>model tiering</b> (Haiku decides, Opus does the hard case) and <code>tool_choice</code>.</div>
+        <div class="row"><span class="k">Example</span> Support-ticket routing; model tiering; G1's severity routing.</div>
+        <div class="row"><span class="k">Gotcha</span> The router itself can misroute — keep it cheap, evaluate it; remember <b>tool descriptions drive selection</b>.</div>
+    </div>
+
+    <div class="pat">
+        <h4>3 · Parallelization — Sectioning &amp; Voting <span class="cl client">CLIENT</span></h4>
+        <div class="row"><span class="k">What</span> Run work concurrently. <b>Sectioning</b> = split independent subtasks; <b>Voting</b> = run the same task N times and aggregate.</div>
+        <div class="row"><span class="k">Why</span> Speed (independent parts) or reliability (consensus / diverse checks).</div>
+        <div class="row"><span class="k">In Claude</span> Fire N <code>messages.create</code> calls in parallel (async), then merge in your code.</div>
+        <div class="row"><span class="k">Example</span> Multi-source research fan-out (P7); N verifiers voting on one finding.</div>
+        <div class="row"><span class="k">Gotcha</span> Cost multiplies by N; you must <b>merge/dedup</b>; handle sub-answer disagreement.</div>
+    </div>
+
+    <div class="pat">
+        <h4>4 · Orchestrator–Workers <span class="cl hybrid">CLIENT (or Managed Agents = SERVER)</span></h4>
+        <div class="row"><span class="k">What</span> A coordinator <em>dynamically</em> decomposes the task, delegates to worker sub-agents, then synthesizes their results.</div>
+        <div class="row"><span class="k">Why</span> The subtasks aren't known in advance and are independent — each benefits from its own context window.</div>
+        <div class="row"><span class="k">In Claude</span> A coordinator loop spawns worker calls (each isolated context); in Claude Code the <code>Task</code> tool must be in <code>allowedTools</code>. Managed Agents can run this server-side.</div>
+        <div class="row"><span class="k">Example</span> Multi-source Research Agent (P7); coordinator → sub-agents → merged report.</div>
+        <div class="row"><span class="k">Gotcha</span> Cost blowup; coordinator context bloat; convergence; delegation-prompt quality (give each worker a crisp, self-contained task).</div>
+    </div>
+
+    <div class="pat">
+        <h4>5 · Evaluator–Optimizer <span class="cl client">CLIENT</span></h4>
+        <div class="row"><span class="k">What</span> One LLM generates; another <b>evaluates</b> and gives feedback; loop until it passes.</div>
+        <div class="row"><span class="k">Why</span> When there are clear quality criteria and iterative refinement measurably helps.</div>
+        <div class="row"><span class="k">In Claude</span> generate call → evaluate call → regenerate with the critique; <b>cap the iterations</b>.</div>
+        <div class="row"><span class="k">Example</span> Self-correcting SQL (run = evaluate, fix = optimize); G4's verifier gating the RCA.</div>
+        <div class="row"><span class="k">Gotcha</span> Infinite loop (always cap); evaluator too lenient/strict; <b>same-model blind spots</b> — use a fresh context / different lens.</div>
+    </div>
+
+    <h3 class="grp" id="ag">🤖 Agent patterns <span style="font-weight:400;font-size:.7em;color:#777">— the model decides the control flow</span></h3>
+
+    <div class="pat">
+        <h4>6 · Autonomous Agent (the tool-use loop) <span class="cl hybrid">CLIENT loop + SERVER decode</span></h4>
+        <div class="row"><span class="k">What</span> The model decides an action, acts via a tool, observes the result, adjusts, and repeats until done.</div>
+        <div class="row"><span class="k">Why</span> Open-ended tasks where the steps can't be predefined (you can't know the fix without running the query).</div>
+        <div class="row"><span class="k">In Claude</span> The <code>stop_reason</code> loop: <code>tool_use</code> → execute → return <code>tool_result</code> → repeat until <code>end_turn</code>. Server decodes the tool call &amp; stamps <code>stop_reason</code>; you own the loop (or use the <b>Tool Runner</b> / Managed Agents).</div>
+        <div class="row"><span class="k">Example</span> Text-to-SQL agent (P0); G4 RCA Copilot.</div>
+        <div class="row"><span class="k">Gotcha</span> Runaway loop → <code>max_turns</code>; handle <b>all 6 stop_reasons</b>; the tool-result contract (mismatched pairing = 400); cost of long loops.</div>
+    </div>
+
+    <div class="pat">
+        <h4>7 · ReAct (Reason + Act) <span class="cl hybrid">CLIENT loop + MODEL reasoning</span></h4>
+        <div class="row"><span class="k">What</span> Interleave explicit <b>reasoning</b> with <b>tool actions</b> — think, act, observe, think again.</div>
+        <div class="row"><span class="k">Why</span> Complex multi-step problems where reasoning <em>between</em> actions improves the next choice.</div>
+        <div class="row"><span class="k">In Claude</span> Adaptive <b>thinking</b> + tool use inside the loop; the response carries thinking blocks then a <code>tool_use</code>.</div>
+        <div class="row"><span class="k">Example</span> G4 deciding <em>which</em> evidence to pull next based on the last log it read.</div>
+        <div class="row"><span class="k">Gotcha</span> Thinking tokens are billed as <b>output</b> (cost); can get stuck looping — keep it grounded and capped.</div>
+    </div>
+
+    <h3 class="grp" id="cc">🧩 Cross-cutting patterns <span style="font-weight:400;font-size:.7em;color:#777">— compose with any of the above</span></h3>
+
+    <div class="pat">
+        <h4>8 · Reflection / Self-Critique <span class="cl client">CLIENT</span></h4>
+        <div class="row"><span class="k">What</span> The model reviews and improves its own output before returning it.</div>
+        <div class="row"><span class="k">Why</span> Catch errors, omissions, and format slips cheaply.</div>
+        <div class="row"><span class="k">In Claude</span> A second <code>messages.create</code> asking it to critique &amp; revise the draft.</div>
+        <div class="row"><span class="k">Example</span> "Check this SQL matches the question" before trusting it.</div>
+        <div class="row"><span class="k">Gotcha</span> <b>Same-model bias</b> — self-review misses its own blind spots; an independent judge (fresh context) is stronger.</div>
+    </div>
+
+    <div class="pat">
+        <h4>9 · Verifier / LLM-as-Judge <span class="cl client">CLIENT</span></h4>
+        <div class="row"><span class="k">What</span> An <em>independent</em> pass, in a fresh context, checks correctness / groundedness before the output is trusted.</div>
+        <div class="row"><span class="k">Why</span> The defense against <a href="../D5-Context-Management/silent-failures-wrong-but-valid.html">silent failures</a> (valid-looking but wrong).</div>
+        <div class="row"><span class="k">In Claude</span> A separate call with the claim + evidence and a <b>structured verdict</b> schema; clean context, no priming.</div>
+        <div class="row"><span class="k">Example</span> nl2sql verifier; G4's <code>verify()</code> gating the ticket.</div>
+        <div class="row"><span class="k">Gotcha</span> Judge bias if it's the same model/prompt as the generator; must be grounded on evidence; costs an extra call.</div>
+    </div>
+
+    <div class="pat">
+        <h4>10 · Human-in-the-Loop / Approval Gate <span class="cl hybrid">CLIENT / APP</span></h4>
+        <div class="row"><span class="k">What</span> A person approves before a high-stakes or irreversible action executes.</div>
+        <div class="row"><span class="k">Why</span> Irreversible, costly, or regulated actions need oversight — AI proposes, human decides.</div>
+        <div class="row"><span class="k">In Claude</span> Gate the tool execution in <b>your code</b> (or a Tool Runner per-turn hook, or an <code>ask_user</code> tool).</div>
+        <div class="row"><span class="k">Example</span> G4 drafts a ticket (never files it); G6 proposes a right-sizing a human applies.</div>
+        <div class="row"><span class="k">Gotcha</span> Enforce at the <b>code layer, not the prompt</b>; watch approval fatigue &amp; latency.</div>
+    </div>
+
+    <div class="pat">
+        <h4>11 · Memory <span class="cl client">CLIENT</span></h4>
+        <div class="row"><span class="k">What</span> Persist state across turns/sessions — short-term (the window) and long-term (an external store).</div>
+        <div class="row"><span class="k">Why</span> Continuity, personalization, and long-horizon tasks.</div>
+        <div class="row"><span class="k">In Claude</span> You store &amp; re-inject it (the API is <b>stateless</b>); the client-executed <b>memory tool</b>; context editing / compaction to keep it lean.</div>
+        <div class="row"><span class="k">Example</span> Second-Brain assistant (Redis + SQLite + vector + graph).</div>
+        <div class="row"><span class="k">Gotcha</span> Staleness; retrieval quality; context bloat; the server keeps no session — <em>you</em> resend history.</div>
+    </div>
+
+    <div class="pat">
+        <h4>12 · Retrieval-Augmented (RAG) <span class="cl client">CLIENT</span></h4>
+        <div class="row"><span class="k">What</span> Fetch relevant context and ground the answer on it.</div>
+        <div class="row"><span class="k">Why</span> Private/fresh knowledge the model doesn't have; reduces hallucination.</div>
+        <div class="row"><span class="k">In Claude</span> Retrieve in your code, put chunks in the system/user content; optionally the <b>citations</b> feature for grounded references.</div>
+        <div class="row"><span class="k">Example</span> G5 Runbook Agent; P1 Docs Q&amp;A.</div>
+        <div class="row"><span class="k">Gotcha</span> Retrieval recall; stale index; ungrounded hallucination; chunking quality.</div>
+    </div>
+
+    <div class="pat">
+        <h4>13 · Guardrails <span class="cl hybrid">TOOL / APP (never prompt-only)</span></h4>
+        <div class="row"><span class="k">What</span> Enforce safety, policy, and limits around the agent.</div>
+        <div class="row"><span class="k">Why</span> Prevent harmful, injected, over-scoped, or runaway behaviour.</div>
+        <div class="row"><span class="k">In Claude</span> Code checks, least-privilege / read-only tools, moderation, approval gates — <em>not</em> the prompt. Full set: <a href="../D5-Context-Management/guardrails.html">the guardrails catalog</a>.</div>
+        <div class="row"><span class="k">Example</span> G-series read-only grants; injection filtering on tool output.</div>
+        <div class="row"><span class="k">Gotcha</span> Prompt-based guardrails are bypassable — the enforcing ones live in code/permissions.</div>
+    </div>
+
+    <h2><span class="chip trade">CLIENT vs SERVER</span> where each pattern actually runs</h2>
+    <div style="overflow-x:auto">
+    <table>
+        <tr><th>Runs where</th><th>Patterns</th></tr>
+        <tr><td><b>Your client code</b> (orchestration around the Messages API)</td><td>Chaining, Routing, Parallelization, Evaluator-Optimizer, Reflection, Verifier, HITL, Memory, RAG — <em>and the agent loop itself</em></td></tr>
+        <tr><td><b>The server</b> (single-call features)</td><td>Tool-use decoding, structured outputs, prompt caching, the Batch API</td></tr>
+        <tr><td><b>Server runs the loop</b></td><td><b>Managed Agents</b> (Anthropic hosts the loop + sandbox); the <b>Tool Runner</b> automates the loop in <em>your</em> process</td></tr>
+    </table>
+    </div>
+    <div class="bad"><b>The recurring exam theme:</b> almost every agentic pattern is <b>your orchestration code</b> calling a stateless
+    single-turn API. The model provides intelligence per call; <em>you</em> provide the loop, the memory, the routing, and the
+    guardrails — unless you hand the loop to Managed Agents.</div>
+
+    <div class="good">Related: <a href="index.html">D1 hub</a> ·
+    <a href="https://basantchoudhary.github.io/ClaudeCertifiedArchitect/AIEngineeringProjects/index.html">the projects that implement these</a> ·
+    <a href="../D5-Context-Management/silent-failures-wrong-but-valid.html">verifier &amp; silent failures</a> ·
+    <a href="../D5-Context-Management/guardrails.html">guardrails</a>.</div>
+
+    <div class="pager">
+        <a href="index.html"><span class="k">← Back</span>Domain 1 hub</a>
+        <a class="next" href="https://basantchoudhary.github.io/ClaudeCertifiedArchitect/AIEngineeringProjects/index.html"><span class="k">Next →</span>Build them (projects)</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 1 · Agentic Design Patterns</footer>
+</body>
+</html>

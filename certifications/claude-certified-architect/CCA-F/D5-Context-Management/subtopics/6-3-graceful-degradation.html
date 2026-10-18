@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>6.3 Graceful Degradation &amp; Partial Results · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 6 · Reliability: Degradation &amp; Recovery</div>
+    <h1>6.3 · Graceful Degradation &amp; Partial Results</h1>
+    <div class="tag">Some answer beats an error page</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Return the best available answer, not an all-or-nothing failure</h2>
+    <p>A multi-tool agent request is rarely one atomic call — it fans out across sub-tasks: search a doc, hit a
+    weather API, query a database, summarize. If <em>one</em> of those legs fails, the naive design throws away the
+    whole turn and returns an error. <strong>Graceful degradation</strong> is the opposite instinct: complete what
+    you can, drop or stub what you can't, and return a <strong>partial result</strong> that's clearly
+    <strong>marked as degraded</strong> — the user gets the four sub-answers that worked instead of zero.</p>
+
+    <div class="note">🔑 The design question is "what's the <em>most</em> useful thing I can still return?" — not "did
+    everything succeed?" A weather widget that can't reach the forecast API should show yesterday's cached temp with a
+    "stale" badge, not blank out the whole page.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Isolate failures, then label them</h2>
+    <p>Two rules make partial results safe: <strong>isolation</strong> and <strong>honesty</strong>.</p>
+
+    <table>
+        <tr><th>Principle</th><th>What it means</th><th>Anti-pattern it prevents</th></tr>
+        <tr><td><b>Isolate</b> each sub-task</td><td>One tool's error doesn't abort the others</td><td>A single failed <code>tool_result</code> tanks the whole turn</td></tr>
+        <tr><td><b>Return a <code>tool_result</code> with <code>is_error</code></b></td><td>Tell Claude the leg failed so it adapts around it</td><td>Silently dropping a tool call → mismatched <code>tool_use_id</code></td></tr>
+        <tr><td><b>Mark degraded</b></td><td>Flag partial/stale output to the caller</td><td>A partial answer read as complete &amp; authoritative</td></tr>
+        <tr><td><b>Rank by value</b></td><td>Preserve the highest-value legs; drop the optional ones</td><td>Losing the core answer to keep a nice-to-have widget</td></tr>
+    </table>
+
+    <div class="good">When a tool leg fails, return its <code>tool_result</code> with <code>"is_error": true</code>
+    and an informative message — Claude acknowledges the failure and works around it, rather than the harness silently
+    dropping the block (which breaks the <code>tool_use</code>/<code>tool_result</code> pairing).</div>
+
+    <div class="warn">⚠️ "Degraded" must be <em>visible</em>. An unlabeled partial answer is worse than an error — it
+    looks authoritative while missing data, and someone downstream trusts it.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> One leg fails, the request survives</h2>
+    <div class="mermaid">
+flowchart TD
+    REQ["Agent turn: fan out"] --> T1["🟢 search_docs → ok"]
+    REQ --> T2["🔴 weather_api → 503"]
+    REQ --> T3["🟢 db_query → ok"]
+    T2 --> ISO{"Isolate the failure"}
+    ISO -->|"return tool_result<br/>is_error:true"| MERGE["Merge available results"]
+    T1 --> MERGE
+    T3 --> MERGE
+    MERGE --> OUT["🟠 Partial answer<br/>marked DEGRADED<br/>(weather unavailable)"]
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    class T1 ok; class T3 ok; class T2 bad; class OUT gate;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Partial results with an is_error tool_result</h2>
+    <p>Each leg is isolated; a failure becomes an <code>is_error</code> result, and the response carries a
+    <code>degraded</code> flag so callers never mistake it for complete.</p>
+<pre><span class="kw">def</span> <span class="fn">run_tools</span>(tool_uses):
+    results, degraded = [], []
+    <span class="kw">for</span> tu <span class="kw">in</span> tool_uses:
+        <span class="kw">try</span>:
+            content = <span class="fn">execute</span>(tu.name, tu.input)
+            results.append({<span class="st">"type"</span>: <span class="st">"tool_result"</span>,
+                            <span class="st">"tool_use_id"</span>: tu.id, <span class="st">"content"</span>: content})
+        <span class="kw">except</span> ToolError <span class="kw">as</span> e:
+            degraded.append(tu.name)                     <span class="cm"># track what we lost</span>
+            results.append({<span class="st">"type"</span>: <span class="st">"tool_result"</span>,        <span class="cm"># still return the block!</span>
+                            <span class="st">"tool_use_id"</span>: tu.id,           <span class="cm"># id must match the tool_use</span>
+                            <span class="st">"content"</span>: <span class="st">f"Error: {tu.name} unavailable — proceed without it."</span>,
+                            <span class="st">"is_error"</span>: <span class="kw">True</span>})              <span class="cm"># Claude adapts around it</span>
+    <span class="kw">return</span> {<span class="st">"tool_results"</span>: results,
+            <span class="st">"degraded"</span>: <span class="fn">bool</span>(degraded),               <span class="cm"># surface it to the caller</span>
+            <span class="st">"missing"</span>: degraded}</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Partial result vs. hard fail</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Graceful degradation</h4>
+            <ul><li>User keeps the parts that worked</li>
+            <li>One flaky tool can't sink the whole request</li>
+            <li>Product stays usable during partial outages</li></ul></div>
+        <div class="con"><h4>⚠️ All-or-nothing</h4>
+            <ul><li>Simpler: one success/fail path</li>
+            <li>But one leg's failure wastes every other leg</li>
+            <li>Unmarked partials mislead downstream consumers</li></ul></div>
+    </div>
+    <div class="good">Degrade for <b>optional</b> or <b>recoverable</b> legs; hard-fail only when a <b>required</b>
+    input is missing and a partial answer would be actively wrong.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> Aborting the whole turn when one tool fails. → Isolate the leg: return its
+    <code>tool_result</code> with <code>is_error:true</code> and keep the successful results. One failure shouldn't
+    discard the rest.</div>
+    <div class="trap"><b>Trap:</b> Silently dropping a failed tool call. → You must still return a
+    <code>tool_result</code> for every <code>tool_use</code> — an unmatched <code>tool_use_id</code> is a 400. Return
+    an error result, don't omit the block.</div>
+    <div class="trap"><b>Trap:</b> Serving a partial answer as if it were complete. → Always <b>mark it degraded</b>.
+    An unlabeled partial is read as authoritative and propagates missing data downstream.</div>
+    <div class="trap"><b>Trap:</b> Degrading a <em>required</em> input. → If the missing leg makes the answer wrong
+    (not just thinner), fail loudly instead. Degrade optional/nice-to-have legs, not load-bearing ones.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · An agent fans out to 4 tools; one returns a 503. What should the turn return?</summary>
+    <p class="answer">The <b>three successful results plus a partial answer marked degraded</b>, noting the weather leg
+    was unavailable. Return the failed tool's <code>tool_result</code> with <code>is_error:true</code> so Claude
+    adapts around it — don't abort the whole turn.</p></details>
+    <details><summary>Q2 · Why not just drop the failed tool_use block entirely?</summary>
+    <p class="answer">Every <code>tool_use</code> needs a matching <code>tool_result</code> with the same
+    <code>tool_use_id</code>; omitting one is a 400 invalid-request error. Return an <code>is_error</code> result
+    instead — it keeps the pairing valid and tells the model the leg failed.</p></details>
+    <details><summary>Q3 · When is graceful degradation the <em>wrong</em> choice?</summary>
+    <p class="answer">When the failed leg is a <b>required</b> input and a partial answer would be actively wrong or
+    misleading. Then fail loudly. Degradation is for optional/recoverable sub-tasks where a thinner-but-honest answer
+    still helps.</p></details>
+
+    <div class="pager">
+        <a href="6-2-circuit-breakers.html"><span class="k">← Back</span>6.2 · Circuit Breakers</a>
+        <a class="next" href="6-4-max-tokens-continuation.html"><span class="k">Next →</span>6.4 · max_tokens Continuation</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 6.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

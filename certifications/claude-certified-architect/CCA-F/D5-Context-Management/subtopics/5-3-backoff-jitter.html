@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.3 Exponential Backoff + Jitter · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 5 · Reliability: Errors &amp; Retries</div>
+    <h1>5.3 · Exponential Backoff + Jitter</h1>
+    <div class="tag">Back off, spread out</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Grow the wait, cap the attempts</h2>
+    <p>When a retryable error (429/5xx) comes back, the worst thing you can do is retry immediately in a tight loop —
+    you hammer an already-strained service and make the overload worse. <strong>Exponential backoff</strong> waits a
+    delay that <em>doubles</em> each attempt (1s, 2s, 4s, 8s…), giving the service room to recover. Three guardrails
+    make it production-safe: <strong>cap the delay</strong> (e.g. never wait more than 60s), <strong>cap the
+    attempts</strong> (e.g. 5 tries, then give up and surface the error), and — the piece everyone forgets —
+    <strong>add jitter</strong>.</p>
+
+    <div class="note">🔑 The base formula: <code>delay = min(cap, base · 2^attempt)</code>, then <em>add jitter</em>,
+    then sleep. Stop after a fixed number of attempts.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Jitter defeats the thundering herd</h2>
+    <p>Imagine 500 clients all get a 529 at the same instant. With pure exponential backoff they all wait exactly
+    1s, then all retry at the <em>same moment</em> — a synchronized stampede that re-overloads the service. Then
+    they all wait 2s and stampede again. This is the <strong>thundering herd</strong>. <strong>Jitter</strong> —
+    adding a random component to each delay — <em>spreads</em> the retries across a window so they arrive smoothly
+    instead of in a spike. It's the single most important addition to backoff, and the reason "exponential backoff
+    <em>with jitter</em>" is the phrase, not "exponential backoff" alone.</p>
+
+    <div class="good">Two common jitter styles: <b>full jitter</b> — <code>sleep(random(0, min(cap, base·2^n)))</code>
+    — spreads retries maximally; <b>equal jitter</b> — half the delay fixed, half random. Both break the synchronized herd.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> The <code>retry-after</code> header overrides your math</h2>
+    <p>A <strong>429</strong> response includes a <code>retry-after</code> header telling you exactly how many
+    seconds to wait before the request can succeed. When it's present, <strong>honor it</strong> — it's the server's
+    authoritative instruction, and retrying earlier is guaranteed to fail. Treat <code>retry-after</code> as the
+    <em>floor</em> for that attempt's delay; use your computed backoff only when the header is absent (typical for
+    500/529). Anthropic's SDKs already do this: they auto-retry 408/409/429/5xx with exponential backoff, twice by
+    default, honoring <code>retry-after</code> when present.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> One retry decision</h2>
+    <div class="mermaid">
+flowchart TD
+    A["Retryable error (429/5xx)"] --> N{"Attempts left?"}
+    N -->|"no — cap hit"| FAIL["🔴 Give up,<br/>surface the error"]
+    N -->|"yes"| H{"retry-after header?"}
+    H -->|"yes (429)"| USE["🟠 delay = retry-after"]
+    H -->|"no (5xx)"| CALC["delay = min(cap, base·2^n)"]
+    CALC --> J["🟢 + random jitter"]
+    USE --> S["sleep(delay), retry"]
+    J --> S
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class J ok; class S ok; class USE gate; class FAIL bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Backoff with jitter and a <code>retry-after</code> floor</h2>
+    <p>Capped attempts, capped delay, full jitter, and the header takes priority when present.</p>
+<pre><span class="kw">import</span> time, random, anthropic
+
+<span class="kw">def</span> <span class="fn">call_with_backoff</span>(fn, max_attempts=<span class="st">5</span>, base=<span class="st">1.0</span>, cap=<span class="st">60.0</span>):
+    <span class="kw">for</span> attempt <span class="kw">in</span> <span class="fn">range</span>(max_attempts):
+        <span class="kw">try</span>:
+            <span class="kw">return</span> <span class="fn">fn</span>()
+        <span class="kw">except</span> anthropic.RateLimitError <span class="kw">as</span> e:              <span class="cm"># 429</span>
+            hdr = e.response.headers.get(<span class="st">"retry-after"</span>)
+            delay = <span class="fn">float</span>(hdr) <span class="kw">if</span> hdr <span class="kw">else</span> <span class="kw">None</span>       <span class="cm"># header wins</span>
+        <span class="kw">except</span> anthropic.APIStatusError <span class="kw">as</span> e:
+            <span class="kw">if</span> e.status_code &lt; <span class="st">500</span>: <span class="kw">raise</span>              <span class="cm"># terminal 4xx</span>
+            delay = <span class="kw">None</span>                              <span class="cm"># 5xx: compute below</span>
+        <span class="kw">if</span> delay <span class="kw">is</span> <span class="kw">None</span>:
+            delay = <span class="fn">min</span>(cap, base * <span class="st">2</span> ** attempt)     <span class="cm"># exponential…</span>
+            delay = random.<span class="fn">uniform</span>(<span class="st">0</span>, delay)          <span class="cm"># …+ full jitter</span>
+        time.<span class="fn">sleep</span>(delay)
+    <span class="kw">raise</span> <span class="fn">RuntimeError</span>(<span class="st">"exhausted retries"</span>)     <span class="cm"># capped — give up</span></pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Fixed delay vs. exponential-with-jitter</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Exponential backoff + jitter</h4>
+            <ul><li>Doubling delay gives the service room to recover</li>
+            <li>Jitter spreads retries — no synchronized stampede</li>
+            <li>Capped attempts fail cleanly instead of looping forever</li></ul></div>
+        <div class="con"><h4>⚠️ Fixed-interval retry (e.g. every 1s)</h4>
+            <ul><li>Trivial to implement</li>
+            <li>But: no jitter → all clients retry in lockstep</li>
+            <li>Keeps hammering an overloaded service, deepening the outage</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Exponential backoff is enough." → Without <b>jitter</b>, synchronized clients back
+    off in lockstep and re-stampede. Jitter (randomized delay) is what actually breaks the thundering herd.</div>
+    <div class="trap"><b>Trap:</b> Ignoring the <code>retry-after</code> header and using your own delay on a 429. →
+    The header is the server's authoritative wait; retrying earlier just fails again. <b>Honor it.</b></div>
+    <div class="trap"><b>Trap:</b> No cap on attempts. → An unbounded retry loop can hammer forever. <b>Cap the
+    attempts</b> (and the max delay), then surface the failure.</div>
+    <div class="trap"><b>Trap:</b> Retrying a 400/404 with backoff. → Backoff is only for <b>transient</b> errors
+    (429/5xx). A terminal 4xx never becomes valid by waiting — fix the request.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Why add jitter to exponential backoff?</summary>
+    <p class="answer">To prevent the <b>thundering herd</b>: without jitter, many clients that failed at the same
+    instant back off by the same amount and all retry simultaneously, re-overloading the service. Random jitter
+    spreads the retries across a window.</p></details>
+    <details><summary>Q2 · A 429 returns <code>retry-after: 12</code>. Your backoff computed 3s. What do you wait?</summary>
+    <p class="answer"><b>12 seconds</b> — the <code>retry-after</code> header is authoritative. Retrying before it
+    elapses is guaranteed to fail. Use your computed backoff only when the header is absent.</p></details>
+    <details><summary>Q3 · Name the three guardrails on a backoff loop besides doubling the delay.</summary>
+    <p class="answer">(1) <b>Jitter</b> — randomize each delay; (2) <b>cap the delay</b> so it doesn't grow
+    unbounded; (3) <b>cap the attempts</b> so the loop terminates and surfaces the error instead of retrying forever.</p></details>
+
+    <div class="pager">
+        <a href="5-2-retryable-idempotency.html"><span class="k">← Back</span>5.2 · Retryable vs Not &amp; Idempotency</a>
+        <a class="next" href="5-4-rate-limits.html"><span class="k">Next →</span>5.4 · Rate Limits &amp; Handling 429</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 5.3</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

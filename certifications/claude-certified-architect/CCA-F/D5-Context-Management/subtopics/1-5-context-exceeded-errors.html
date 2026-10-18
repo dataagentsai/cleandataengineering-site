@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>1.5 Context-Window-Exceeded Handling · CCA-F D5</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D5 · Context &amp; Reliability</a> › Cluster 1 · Context Windows &amp; Token Budgeting</div>
+    <h1>1.5 · Context-Window-Exceeded Handling</h1>
+    <div class="tag">Detect &amp; recover, don't crash</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Two distinct overflow conditions</h2>
+    <p>When a request is too big for the window, the API's behavior depends on <em>which</em> way it's too big:</p>
+    <table>
+        <tr><th>Condition</th><th>What the API does</th></tr>
+        <tr><td><strong>Input alone exceeds the window</strong></td><td>Rejected up front: HTTP <code>400 invalid_request_error</code> ("prompt is too long"), on <em>every</em> model.</td></tr>
+        <tr><td><strong>Input + <code>max_tokens</code> exceeds the window</strong> (Claude 4.5+)</td><td>Request is <strong>accepted</strong>. If generation then reaches the window limit, it stops with <code>stop_reason: "model_context_window_exceeded"</code>.</td></tr>
+        <tr><td>Same case on <em>earlier</em> models</td><td>Returns a validation error instead — opt into the graceful stop with beta header <code>model-context-window-exceeded-2025-08-26</code>.</td></tr>
+    </table>
+
+    <div class="warn">⚠️ <code>model_context_window_exceeded</code> is <strong>not</strong> the same as
+    <code>max_tokens</code>. <code>max_tokens</code> means you hit <em>your own</em> requested output cap (1.3);
+    <code>model_context_window_exceeded</code> means generation ran into the <em>model's</em> hard window limit.
+    Same symptom (a truncated reply), different cause and different fix.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Recover by making room, then continue</h2>
+    <p>These are handleable stop conditions, not crashes. The response you got is valid partial output; the fix is
+    to <strong>reduce the input</strong> and continue:</p>
+    <ul>
+        <li><strong>Trim</strong> — drop the oldest turns, or clear stale tool results (context editing).</li>
+        <li><strong>Summarize / compact</strong> — replace old turns with a summary. <em>Server-side compaction</em>
+        (beta) does this automatically so a conversation can continue <em>past</em> the window limit — available on
+        Fable 5, Mythos 5, Opus 4.8/4.7/4.6, Sonnet 5, and Sonnet 4.6.</li>
+        <li><strong>Prevent</strong> — <code>count_tokens</code> before sending (1.2) so you catch the 400 before
+        spending a create call.</li>
+    </ul>
+    <div class="good">Design move: never let a 400 or a context-exceeded stop reach the user as an error. Detect the
+    condition, trim or summarize the history, and re-issue the turn.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Route each overflow to a recovery</h2>
+    <div class="mermaid">
+flowchart TD
+    R["Send request"] --> Q{"Outcome?"}
+    Q -->|"400 prompt too long"| PRE["🔴 Input alone too big<br/>→ trim/summarize BEFORE resending"]
+    Q -->|"stop: model_context_window_exceeded"| MID["🟠 Ran into window mid-gen<br/>→ compact, then continue"]
+    Q -->|"stop: max_tokens"| CAP["🟠 Hit YOUR output cap<br/>→ raise max_tokens / continue"]
+    Q -->|"stop: end_turn"| OK["🟢 Normal completion"]
+    PRE --> R
+    MID --> R
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef gate fill:#ffe8cc,stroke:#ff9f40,color:#9a4a0a;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class OK ok; class MID gate; class CAP gate; class PRE bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Detect the distinct stop reason and recover</h2>
+<pre><span class="kw">import</span> anthropic
+
+<span class="kw">def</span> <span class="fn">send_turn</span>(history, max_out=<span class="st">4096</span>):
+    <span class="kw">try</span>:
+        resp = client.messages.<span class="fn">create</span>(
+            model=<span class="st">"claude-opus-4-8"</span>, max_tokens=max_out, messages=history,
+        )
+    <span class="kw">except</span> anthropic.BadRequestError:
+        <span class="cm"># 400 "prompt is too long" — input alone overflowed. Shrink &amp; retry.</span>
+        <span class="fn">compact</span>(history)
+        <span class="kw">return</span> <span class="fn">send_turn</span>(history, max_out)
+
+    <span class="cm"># Context-window-exceeded is a STOP REASON, not an exception (Claude 4.5+).</span>
+    <span class="kw">if</span> resp.stop_reason == <span class="st">"model_context_window_exceeded"</span>:
+        <span class="fn">compact</span>(history)          <span class="cm"># make room, then keep the partial going</span>
+        <span class="kw">return</span> <span class="fn">send_turn</span>(history, max_out)
+
+    <span class="kw">if</span> resp.stop_reason == <span class="st">"max_tokens"</span>:
+        ...                        <span class="cm"># DIFFERENT: your own cap — raise it or continue</span>
+
+    <span class="kw">return</span> resp   <span class="cm"># end_turn / tool_use / etc.</span></pre>
+    <div class="note">🔑 On earlier models the second case is a validation <em>error</em> unless you send the
+    <code>model-context-window-exceeded-2025-08-26</code> beta header to get the graceful stop reason.</div>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Prevent vs. react</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Prevent (count first)</h4>
+            <ul><li>No wasted create call, no user-visible error</li>
+            <li>Free pre-check; own rate-limit pool</li>
+            <li>Deterministic — you decide when to trim</li></ul></div>
+        <div class="con"><h4>⚠️ React (handle the stop)</h4>
+            <ul><li>Simpler loop, no pre-count round trip</li>
+            <li>But: a create call is spent, output truncates</li>
+            <li>Must correctly distinguish the two stop reasons</li></ul></div>
+    </div>
+    <div class="good">Best of both: <code>count_tokens</code> to prevent the common case, <em>and</em> handle the
+    stop reason as a safety net. Compaction (beta) automates the recovery for long-running chats.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "<code>model_context_window_exceeded</code> and <code>max_tokens</code> are the
+    same thing." → No. One is the model's hard window limit; the other is <b>your own</b> output cap. Different
+    cause, different fix.</div>
+    <div class="trap"><b>Trap:</b> "Context overflow always throws an exception." → When <code>input +
+    max_tokens</code> overflows on Claude 4.5+, the request is <b>accepted</b> and returns a <b>stop reason</b>. Only
+    input-alone-too-big is a 400.</div>
+    <div class="trap"><b>Trap:</b> "Just retry the same request." → Retrying an over-window request repeats the
+    failure. You must <b>reduce the input</b> (trim/summarize/compact) first.</div>
+    <div class="trap"><b>Trap:</b> "The graceful stop works everywhere by default." → On earlier models you need the
+    <code>model-context-window-exceeded-2025-08-26</code> beta header; otherwise it's a validation error.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · How does the API signal "input alone is too big" vs. "ran out of window while generating"?</summary>
+    <p class="answer">Input alone over the window → HTTP <code>400 invalid_request_error</code> ("prompt is too long")
+    on every model. Input + <code>max_tokens</code> over the window (Claude 4.5+) → the request is accepted and
+    generation stops with <code>stop_reason: "model_context_window_exceeded"</code>.</p></details>
+    <details><summary>Q2 · Why must you not treat <code>model_context_window_exceeded</code> like <code>max_tokens</code>?</summary>
+    <p class="answer">They have different causes: <code>max_tokens</code> is the output cap <em>you</em> set (fix: raise
+    it or continue), while <code>model_context_window_exceeded</code> is the model's hard window limit (fix: reduce
+    input via trim/summarize/compact). Bumping <code>max_tokens</code> won't help the latter.</p></details>
+    <details><summary>Q3 · What are the two main ways to recover, and which one is automated?</summary>
+    <p class="answer">Trim (drop old turns / clear stale tool results) or summarize the history, then continue. On
+    older models you need the <code>model-context-window-exceeded-2025-08-26</code> beta header for the graceful
+    stop. <b>Server-side compaction</b> (beta) automates summarization so the conversation continues past the
+    window limit.</p></details>
+
+    <div class="pager">
+        <a href="1-4-budgeting-conversation.html"><span class="k">← Back</span>1.4 · Budgeting a Growing Conversation</a>
+        <a class="next" href="2-1-what-is-prompt-caching.html"><span class="k">Next →</span>2.1 · What Prompt Caching Is</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 5 · Subtopic 1.5</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

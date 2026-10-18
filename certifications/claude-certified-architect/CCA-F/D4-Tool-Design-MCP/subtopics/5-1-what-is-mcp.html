@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>5.1 What MCP Is & Why It Exists · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design & MCP</a> › Cluster 5 · MCP Fundamentals</div>
+    <h1>5.1 · What MCP Is & Why It Exists</h1>
+    <div class="tag">The USB-C port for AI</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> An open standard for connecting LLM apps to the world</h2>
+    <p>The <strong>Model Context Protocol (MCP)</strong> is an <strong>open standard</strong> for connecting AI
+    applications to external systems — data sources (files, databases), tools (search, calculators), and workflows
+    (specialized prompts). The official docs put it plainly: <em>"Think of MCP like a USB-C port for AI applications.
+    Just as USB-C provides a standardized way to connect electronic devices, MCP provides a standardized way to
+    connect AI applications to external systems."</em></p>
+
+    <p>Before MCP, every AI app wired up every integration <strong>by hand</strong>: this chatbot's GitHub connector,
+    that IDE's database connector, each a bespoke one-off. MCP replaces that <em>N×M</em> tangle with a single wire
+    format. Build a server <strong>once</strong>, and <strong>any</strong> MCP-compatible host — Claude Desktop,
+    Claude Code, VS Code, Cursor, ChatGPT — can use it.</p>
+
+    <div class="note">🔑 MCP is a <strong>protocol</strong>, not a product or an SDK. It defines the messages two
+    programs exchange. SDKs (Python, TypeScript, …) are convenience wrappers <em>over</em> that protocol.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Built on JSON-RPC 2.0</h2>
+    <p>Under the hood, MCP is a <strong>JSON-RPC 2.0</strong> exchange. Clients and servers send each other
+    <strong>requests</strong> (which expect a response, carrying an <code>id</code>), <strong>responses</strong>
+    (matched to a request by that <code>id</code>), and <strong>notifications</strong> (fire-and-forget, no
+    <code>id</code>, no response). That's the entire message vocabulary — everything MCP does rides on those three
+    shapes.</p>
+
+    <table>
+        <tr><th>What MCP <em>is</em></th><th>What MCP is <em>not</em></th></tr>
+        <tr><td>An open, versioned <strong>protocol spec</strong></td><td>A specific product or vendor API</td></tr>
+        <tr><td>A <strong>JSON-RPC 2.0</strong> message format</td><td>A new network transport it invented</td></tr>
+        <tr><td>A way to expose <strong>tools, resources, prompts</strong></td><td>A rule for how the LLM must <em>use</em> them</td></tr>
+        <tr><td>Reusable across <strong>any</strong> compatible host</td><td>Tied to one app or one model vendor</td></tr>
+    </table>
+
+    <div class="good">The spec is explicit about its narrow scope: <em>"MCP focuses solely on the protocol for
+    context exchange — it does not dictate how AI applications use LLMs or manage the provided context."</em> MCP
+    delivers the tools; the host decides what to do with them.</div>
+
+    <h2><span class="chip diagram">DIAGRAM</span> One protocol replaces N×M wiring</h2>
+    <div class="mermaid">
+flowchart LR
+    subgraph BEFORE["❌ Before MCP: hand-wired N×M"]
+        A1["Chatbot"] --> G1["GitHub glue"]
+        A2["IDE"] --> G2["GitHub glue #2"]
+        A3["Agent"] --> G3["GitHub glue #3"]
+    end
+    subgraph AFTER["✅ With MCP: one server, reused"]
+        H1["Claude Desktop"] --> S["GitHub<br/>MCP server"]
+        H2["Claude Code"] --> S
+        H3["VS Code / Cursor"] --> S
+    end
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class S ok; class G1,G2,G3 bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> A JSON-RPC 2.0 request / response pair</h2>
+    <p>MCP's whole wire language is JSON-RPC. Here a client discovers the tools a server exposes — a
+    <code>tools/list</code> request, answered by a matching response (note the shared <code>"id": 1</code>).</p>
+<pre><span class="cm">// Client → Server : a JSON-RPC 2.0 request (expects a response)</span>
+{
+  <span class="st">"jsonrpc"</span>: <span class="st">"2.0"</span>,
+  <span class="st">"id"</span>: <span class="st">1</span>,
+  <span class="st">"method"</span>: <span class="st">"tools/list"</span>
+}
+
+<span class="cm">// Server → Client : the matching response (same id)</span>
+{
+  <span class="st">"jsonrpc"</span>: <span class="st">"2.0"</span>,
+  <span class="st">"id"</span>: <span class="st">1</span>,
+  <span class="st">"result"</span>: {
+    <span class="st">"tools"</span>: [
+      { <span class="st">"name"</span>: <span class="st">"get_weather"</span>,
+        <span class="st">"description"</span>: <span class="st">"Get current weather for a location"</span>,
+        <span class="st">"inputSchema"</span>: { <span class="st">"type"</span>: <span class="st">"object"</span>, <span class="st">"properties"</span>: { <span class="st">"location"</span>: { <span class="st">"type"</span>: <span class="st">"string"</span> } } } }
+    ]
+  }
+}</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Adopting a protocol vs. rolling your own glue</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ MCP (shared protocol)</h4>
+            <ul><li>Write a server once → reuse across every compatible host</li>
+            <li>Standard discovery, framing, and lifecycle — no bespoke wire format</li>
+            <li>Growing ecosystem of ready-made servers to drop in</li></ul></div>
+        <div class="con"><h4>⚠️ Custom per-app integrations</h4>
+            <ul><li>Total control, zero external dependency</li>
+            <li>But: every host × every tool is a fresh integration to build &amp; maintain</li>
+            <li>No interoperability — your glue works only in your app</li></ul></div>
+    </div>
+    <div class="good">Reach for MCP when a capability should be reusable across hosts or shared with others. Keep a
+    private in-process function when it's a one-off that only your single app will ever call.</div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "MCP is an Anthropic-only feature." → MCP is an <b>open standard</b> supported across
+    many hosts (Claude, ChatGPT, VS Code, Cursor, …). Any compatible client can use any compliant server.</div>
+    <div class="trap"><b>Trap:</b> "MCP replaces the model's tool-use ability." → It doesn't. MCP <b>standardizes how
+    tools/data are exposed</b>; the host still runs the LLM and decides when to call them. The spec explicitly does
+    not dictate how the app uses the model.</div>
+    <div class="trap"><b>Trap:</b> "MCP defines its own network protocol." → No — it's <b>JSON-RPC 2.0</b> over
+    standard transports (stdio, Streamable HTTP). MCP reuses existing plumbing.</div>
+    <div class="trap"><b>Trap:</b> "USB-C" means MCP moves bytes like a cable. → The analogy is about a
+    <b>standardized connector</b>: one shape that lets many devices interoperate — not a physical link.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · In one sentence, what problem does MCP solve?</summary>
+    <p class="answer">It replaces the <b>N×M</b> explosion of bespoke per-app, per-tool integrations with a single
+    open standard, so a tool/data <b>server built once</b> can be reused by <b>any</b> MCP-compatible host.</p></details>
+    <details><summary>Q2 · What RPC protocol is MCP built on, and what are its three message shapes?</summary>
+    <p class="answer"><b>JSON-RPC 2.0</b>. The shapes are <b>requests</b> (have an <code>id</code>, expect a
+    response), <b>responses</b> (matched by that <code>id</code>), and <b>notifications</b> (no <code>id</code>, no
+    response expected).</p></details>
+    <details><summary>Q3 · Explain the "USB-C for AI" analogy precisely.</summary>
+    <p class="answer">Like USB-C is a <b>standardized connector</b> that lets many devices interoperate without a
+    custom cable per pair, MCP is a <b>standardized way to connect AI applications to external systems</b> — build to
+    the standard once and everything that speaks it can plug in.</p></details>
+
+    <div class="pager">
+        <a href="4-5-tool-choice-control.html"><span class="k">← Back</span>4.5 · tool_choice Control</a>
+        <a class="next" href="5-2-mcp-architecture.html"><span class="k">Next →</span>5.2 · Architecture</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 5.1</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>

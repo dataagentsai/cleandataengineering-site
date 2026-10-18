@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>2.4 Namespacing &amp; Avoiding Tool Overlap · CCA-F D4</title>
+<link rel="stylesheet" href="../assets/style.css">
+</head>
+<body>
+<header class="page">
+    <div class="crumb"><a href="../index.html">D4 · Tool Design &amp; MCP</a> › Cluster 2 · Designing Great Tools</div>
+    <h1>2.4 · Namespacing &amp; Avoiding Tool Overlap</h1>
+    <div class="tag">Stop Claude picking the wrong tool</div>
+</header>
+
+<div class="wrap">
+<main class="card">
+
+    <h2><span class="chip concept">CONCEPT</span> Overlap is the root cause of wrong-tool selection</h2>
+    <p>When two tools have similar names and similar descriptions, Claude has to guess which one you meant — and
+    sometimes guesses wrong. As a tool library grows (multiple services, MCP servers, resource types), the odds of
+    a collision rise: a bare <code>search</code> from your CRM and a bare <code>search</code> from your docs system
+    are indistinguishable at selection time. <strong>Overlap — not model capability — is the usual cause of
+    wrong-tool selection.</strong> The primary fix is to make each tool's <em>identity</em> unambiguous.</p>
+
+    <h2><span class="chip concept">CONCEPT</span> Namespace tool names by service/resource</h2>
+    <p>Anthropic's guidance: <strong>use meaningful namespacing in tool names.</strong> When your tools span
+    multiple services or resources, <strong>prefix the name with the service</strong> —
+    <code>github_list_prs</code>, <code>slack_send_message</code>, <code>jira_create_ticket</code>. The prefix makes
+    selection unambiguous as the library grows, and it's <em>especially</em> important when using the
+    <strong>tool search tool</strong>, where Claude discovers tools by matching names and descriptions against the
+    query rather than seeing all of them up front.</p>
+
+    <table>
+        <tr><th>Without namespacing</th><th>With namespacing</th></tr>
+        <tr><td><code>search</code> (CRM) vs <code>search</code> (docs)</td><td><code>crm_search</code> · <code>docs_search</code></td></tr>
+        <tr><td><code>send</code> — send what, where?</td><td><code>slack_send_message</code> · <code>email_send</code></td></tr>
+        <tr><td><code>list</code>, <code>get</code>, <code>create</code></td><td><code>github_list_prs</code> · <code>github_get_pr</code></td></tr>
+    </table>
+
+    <div class="note">🔑 Namespacing is the <em>naming-level</em> defense against overlap; consolidation (2.3) is the
+    <em>granularity-level</em> defense. Detailed descriptions (2.1) that state "when NOT to use" are the
+    <em>semantic</em> defense. Use all three together.</div>
+
+    <h2><span class="chip concept">CONCEPT</span> Disambiguate with "when NOT to use"</h2>
+    <p>Even with prefixes, two tools can be functionally close. Close the remaining gap in the
+    <strong>descriptions</strong>: state each tool's boundary and explicitly point to its sibling — "Use
+    <code>crm_search</code> for customer records; for product documentation use <code>docs_search</code> instead."
+    Cross-referencing the alternative in each description is the cheapest way to kill a lingering ambiguity.</p>
+
+    <h2><span class="chip diagram">DIAGRAM</span> Three layers that prevent wrong-tool selection</h2>
+    <div class="mermaid">
+flowchart TD
+    REQ["User request"] --> L1{"Distinct names?<br/>(namespacing)"}
+    L1 -->|"crm_search vs docs_search"| L2{"Non-overlapping scope?<br/>(consolidation)"}
+    L1 -->|"search vs search"| BAD["🔴 Collision →<br/>wrong-tool selection"]
+    L2 -->|"few, well-scoped tools"| L3{"Descriptions say<br/>when NOT to use?"}
+    L2 -->|"many lookalike tools"| BAD
+    L3 -->|"yes: cross-reference sibling"| GOOD["🟢 Unambiguous<br/>selection"]
+    L3 -->|"no boundary stated"| BAD
+    BAD -.->|"add prefix + boundary"| GOOD
+    classDef ok fill:#d4edda,stroke:#28a745,color:#155724;
+    classDef bad fill:#f8d7da,stroke:#dc3545,color:#721c24;
+    class GOOD ok; class BAD bad;
+    </div>
+
+    <h2><span class="chip code">CODE</span> Namespaced names + boundary-setting descriptions</h2>
+    <p>Two search tools that used to collide. The service prefix disambiguates the <em>name</em>; the
+    cross-reference in each <em>description</em> disambiguates the intent.</p>
+<pre>[
+  {
+    <span class="st">"name"</span>: <span class="st">"crm_search"</span>,                 <span class="cm">// service prefix</span>
+    <span class="st">"description"</span>: <span class="st">"Search the customer CRM for accounts, contacts, and "</span>
+      <span class="st">"deals by name, email, or company. Use for questions about customers "</span>
+      <span class="st">"or sales records. For product documentation, use docs_search "</span>
+      <span class="st">"instead."</span>,                       <span class="cm">// ← points at the sibling</span>
+    <span class="st">"input_schema"</span>: { <span class="st">"type"</span>: <span class="st">"object"</span>,
+      <span class="st">"properties"</span>: { <span class="st">"query"</span>: { <span class="st">"type"</span>: <span class="st">"string"</span>,
+        <span class="st">"description"</span>: <span class="st">"Customer name, email, or company"</span> } },
+      <span class="st">"required"</span>: [<span class="st">"query"</span>] }
+  },
+  {
+    <span class="st">"name"</span>: <span class="st">"docs_search"</span>,
+    <span class="st">"description"</span>: <span class="st">"Search internal product documentation and how-to guides. "</span>
+      <span class="st">"Use for questions about how the product works. For customer or sales "</span>
+      <span class="st">"records, use crm_search instead."</span>,
+    <span class="st">"input_schema"</span>: { <span class="st">"type"</span>: <span class="st">"object"</span>,
+      <span class="st">"properties"</span>: { <span class="st">"query"</span>: { <span class="st">"type"</span>: <span class="st">"string"</span>,
+        <span class="st">"description"</span>: <span class="st">"Topic or feature to look up"</span> } },
+      <span class="st">"required"</span>: [<span class="st">"query"</span>] }
+  }
+]</pre>
+
+    <h2><span class="chip trade">TRADE-OFFS</span> Namespaced vs. bare names</h2>
+    <div class="tradeoff">
+        <div class="pro"><h4>✅ Namespaced, boundaried tools</h4>
+            <ul><li>Selection stays unambiguous as the library grows</li>
+            <li>Essential for tool search (name/description matching)</li>
+            <li>Cross-references route Claude to the right sibling</li></ul></div>
+        <div class="con"><h4>⚠️ Bare, overlapping names</h4>
+            <ul><li>Shorter, cleaner-looking in isolation</li>
+            <li>But: collisions the moment a second service is added</li>
+            <li>Wrong-tool selection Claude can't reason its way out of</li></ul></div>
+    </div>
+
+    <h2><span class="chip exam">EXAM TRAPS</span></h2>
+    <div class="trap"><b>Trap:</b> "Claude picked the wrong tool → it's a model problem." → Usually it's a
+    <b>design problem: overlapping tools</b>. Fix with namespacing, consolidation, and boundary-setting
+    descriptions before blaming the model.</div>
+    <div class="trap"><b>Trap:</b> Reusing generic verbs across services (<code>search</code>, <code>get</code>,
+    <code>send</code>). → Collisions are inevitable. <b>Prefix with the service</b>: <code>github_list_prs</code>,
+    <code>slack_send_message</code>.</div>
+    <div class="trap"><b>Trap:</b> Ignoring namespacing "because there are only a few tools." → Libraries grow, and
+    namespacing is <b>especially important with tool search</b>, which selects by matching names/descriptions.</div>
+    <div class="trap"><b>Trap:</b> Prefixing names but leaving descriptions overlapping. → Add a
+    <b>"when NOT to use, use X instead"</b> boundary in each description to close the remaining ambiguity.</div>
+
+    <h2><span class="chip practice">PRACTICE</span></h2>
+    <details><summary>Q1 · Two tools both named <code>search</code> from different systems. What's the fix?</summary>
+    <p class="answer">Namespace the names by service — <code>crm_search</code> and <code>docs_search</code> — and add
+    a boundary line to each description pointing at the sibling. Anthropic recommends prefixing tool names with the
+    service when tools span multiple services or resources.</p></details>
+    <details><summary>Q2 · Why does namespacing matter most with the tool search tool?</summary>
+    <p class="answer">Tool search <b>discovers tools by matching the query against names and descriptions</b> rather
+    than loading them all up front. Distinct, service-prefixed names make that matching unambiguous, so the right
+    tool surfaces for the right query.</p></details>
+    <details><summary>Q3 · Name the three complementary defenses against wrong-tool selection.</summary>
+    <p class="answer">(1) <b>Namespacing</b> — distinct, service-prefixed names (2.4); (2) <b>consolidation</b> —
+    fewer, well-scoped tools so there's less to overlap (2.3); (3) <b>detailed descriptions</b> stating when NOT to
+    use a tool and which sibling to use instead (2.1).</p></details>
+
+    <div class="pager">
+        <a href="2-3-naming-granularity.html"><span class="k">← Back</span>2.3 · Naming &amp; Granularity</a>
+        <a class="next" href="2-5-token-efficiency.html"><span class="k">Next →</span>2.5 · Token Efficiency &amp; Tool-Set Size</a>
+    </div>
+
+</main>
+</div>
+
+<footer>CCA-F · Domain 4 · Subtopic 2.4</footer>
+<script type="module">
+    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs';
+    mermaid.initialize({ startOnLoad: true, theme: 'default', securityLevel: 'loose' });
+</script>
+</body>
+</html>
