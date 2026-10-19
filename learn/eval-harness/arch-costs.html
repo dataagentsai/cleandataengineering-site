@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cost rules · Eval Harness Tutorial</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="style.css"></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg>
+<header class="top"><div class="row"><button class="menu" aria-label="Show the page list">☰ Pages</button>
+<a class="home" href="https://cleandataengineering.ai/">cleandataengineering.ai</a><a class="brand" href="index.html">Eval Harness, drawn simply</a><nav class="tabs" aria-label="Sections"><a class="" href="index.html">Start</a><a class="on" href="arch.html">Architecture</a><a class="" href="session.html">Sessions</a><a class="" href="patterns.html">Five patterns</a><a class="" href="yaml.html">Writing rules</a><a class="" href="traces.html">From traces</a><a class="" href="catalog.html">Catalog</a><a class="" href="requirements.html">Requirements</a><a class="" href="design.html">Design</a><a class="" href="review.html">Your review</a></nav></div>
+<div class="crumbs">You are here: <a href="arch.html">Architecture</a> › <b>Cost rules</b></div></header>
+<aside class="side" aria-label="All pages"><h4>Start here</h4><ul><li><a class="" href="index.html">Overview</a></li></ul><ul><li><a class="" href="why.html">Why check?</a></li><li><a class="" href="picture.html">The whole picture</a></li></ul><h4>Architecture</h4><ul><li><a class="" href="arch.html">Overview</a></li></ul><ul><li><a class="" href="arch-modes.html">Offline, inline, online</a></li><li><a class="" href="arch-integrations.html">Integrations</a></li><li><a class="" href="arch-engine.html">Inside the engine</a></li><li><a class="" href="arch-hooks.html">Hooks in your own loop</a></li><li><a class="on" href="arch-costs.html">Cost rules</a></li><li><a class="" href="arch-outputs.html">On top of your tools</a></li></ul><h4>Sessions</h4><ul><li><a class="" href="session.html">Overview</a></li></ul><ul><li><a class="" href="session-shape.html">In code</a></li><li><a class="" href="from-messages.html">From chat messages</a></li></ul><h4>Five patterns</h4><ul><li><a class="" href="patterns.html">Overview</a></li></ul><ul><li><a class="" href="p-requires-before.html">requires_before</a></li><li><a class="" href="p-argument-limit.html">argument_limit</a></li><li><a class="" href="p-claim-needs-action.html">claim_needs_action</a></li><li><a class="" href="p-decision-vs-should.html">decision_vs_should</a></li><li><a class="" href="p-consistency.html">consistency</a></li></ul><h4>Writing rules</h4><ul><li><a class="" href="yaml.html">Overview</a></li></ul><ul><li><a class="" href="presets.html">Presets</a></li></ul><h4>From traces</h4><ul><li><a class="" href="traces.html">Overview</a></li></ul><ul><li><a class="" href="trace-rebuild.html">Three traps</a></li><li><a class="" href="trace-gaps.html">Gaps in the standard</a></li><li><a class="" href="trace-real.html">Real traces: FNOL</a></li><li><a class="" href="trace-verdicts.html">Verdicts into App Insights</a></li><li><a class="" href="trace-report.html">Weekly report</a></li></ul><h4>Catalog</h4><ul><li><a class="" href="catalog.html">Overview</a></li></ul><ul><li><a class="" href="cat-any.html">Any agent</a></li><li><a class="" href="cat-kind.html">By kind of agent</a></li><li><a class="" href="cat-domain.html">For one business</a></li></ul><h4>Requirements</h4><ul><li><a class="" href="requirements.html">Overview</a></li></ul><ul><li><a class="" href="req-fnol.html">Motor-claims FNOL agent</a></li><li><a class="" href="req-clothing.html">Clothing shop support agent</a></li><li><a class="" href="req-standard.html">The standard</a></li></ul><h4>Design</h4><ul><li><a class="" href="design.html">Overview</a></li></ul><ul><li><a class="" href="design-decisions.html">Decisions</a></li></ul><h4>Your review</h4><ul><li><a class="" href="review.html">Your review</a></li></ul></aside>
+<main><div class="wrap"><article class="page">
+<header><p class="kicker">Eval Harness Tutorial · Architecture</p><h1>The second engine: cost rules</h1></header>
+
+<div class="text">
+<p>The five patterns judge one conversation. Most cost waste can't be seen in one
+conversation: “a nightly job paying real-time prices” or “a cache that expires before
+it's reused” only shows across a whole day of calls. So cost rules run on a second
+engine: <b>llm-cost-explainer</b>, our own product, used here as a library. It reads a
+provider's usage export and runs its rules (YAML plus SQL on DuckDB).</p>
+<p>Our adapter turns each of its rules into an ordinary verdict, so cost goes to the
+same App Insights events and the same <a href="trace-report.html">weekly report</a> as everything else.</p>
+</div>
+<figure><div class="scroll"><svg viewBox="0 0 1120 170" role="img" aria-label="The cost engine" style="min-width:680px"><rect class="pf pf-bxs" x="24" y="44" width="238" height="88" rx="12"/><rect class="bxs ol" x="20" y="40" width="240" height="90" rx="12"/><text class="tt" x="140.0" y="72.0" text-anchor="middle">Usage export</text><text class="sm" x="140.0" y="96.0" text-anchor="middle">OpenAI or Anthropic,</text><text class="sm" x="140.0" y="115.0" text-anchor="middle">a day of calls</text><line class="ln" x1="260" y1="85" x2="320" y2="85" marker-end="url(#ar)"/><rect class="pf pf-bx" x="324" y="34" width="278" height="108" rx="12"/><rect class="bx ol" x="320" y="30" width="280" height="110" rx="12"/><text class="tt" x="460.0" y="62.5" text-anchor="middle">llm-cost-explainer</text><text class="sm" x="460.0" y="86.5" text-anchor="middle">its YAML + SQL rules</text><text class="sm" x="460.0" y="105.5" text-anchor="middle">on DuckDB (a library,</text><text class="sm" x="460.0" y="124.5" text-anchor="middle">still its own product)</text><line class="ln" x1="600" y1="85" x2="660" y2="85" marker-end="url(#ar)"/><rect class="pf pf-solid" x="664" y="44" width="218" height="88" rx="12"/><rect class="solid ol" x="660" y="40" width="220" height="90" rx="12"/><text class="tt inv" x="770.0" y="81.5" text-anchor="middle">LlmCostExplainer</text><text class="inv sm2" x="770.0" y="105.5" text-anchor="middle">one verdict per rule</text><line class="ln" x1="880" y1="85" x2="940" y2="85" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="944" y="44" width="158" height="88" rx="12"/><rect class="bxs ol" x="940" y="40" width="160" height="90" rx="12"/><text class="tt" x="1020.0" y="72.0" text-anchor="middle">Same sinks,</text><text class="sm" x="1020.0" y="96.0" text-anchor="middle">same weekly</text><text class="sm" x="1020.0" y="115.0" text-anchor="middle">report</text></svg></div><figcaption>A day of calls in, one verdict per rule out, into the same places as every other check.</figcaption></figure>
+<div class="tw"><table><tr><th>Rule outcome</th><th>Verdict</th><th>Why</th></tr><tr><td>Found waste</td><td><b>fail</b>, one finding per API key or model, with the monthly saving</td><td>So the report can rank by money</td></tr><tr><td>Ran, found nothing</td><td><b>pass</b></td><td></td></tr><tr><td>The export lacks what the rule needs</td><td><b>skip</b>: could not judge</td><td>An export with no hourly data can't show a nightly job; that's never a pass</td></tr></table></div>
+<h2>Run when this page was built</h2>
+<div class="text"><p>llm-cost-explainer's own made-up days, each with a known mistake, through our adapter:</p></div>
+<h3>A day with a nightly job sent through the real-time API</h3><div class="tw"><table><tr><th>Rule</th><th>What it finds</th><th>Verdict</th><th>Why</th></tr><tr><td><code>LLM-01</code></td><td>Long prompts sent with caching off</td><td><b>fail</b></td><td>1 finding, about $614/month to save; 30,332,921 input tokens went to gpt-4.1 on key key_etl today, and 0% of them were read from the cache.</td></tr><tr><td><code>LLM-06</code></td><td>Bulk work on the real-time API</td><td><b>fail</b></td><td>1 finding, about $1,341/month to save; Key key_etl sends $89.38/day of real-time traffic to gpt-4.1 that runs in one burst of a few hours (3 active hours). Peop</td></tr><tr><td><code>LLM-08</code></td><td>—</td><td><b>pass</b></td><td>nothing wasteful found</td></tr><tr><td><code>LLM-22</code></td><td>—</td><td><b>pass</b></td><td>nothing wasteful found</td></tr><tr><td><code>LLM-24</code></td><td>—</td><td><b>pass</b></td><td>nothing wasteful found</td></tr><tr><td><code>LLM-26</code></td><td>—</td><td><b>pass</b></td><td>nothing wasteful found</td></tr></table></div><h3>A day with a model that retires next month still in use</h3><div class="tw"><table><tr><th>Rule</th><th>What it finds</th><th>Verdict</th><th>Why</th></tr><tr><td><code>LLM-01</code></td><td>—</td><td><b>pass</b></td><td>nothing wasteful found</td></tr><tr><td><code>LLM-06</code></td><td>—</td><td><b>pass</b></td><td>nothing wasteful found</td></tr><tr><td><code>LLM-08</code></td><td>—</td><td><b>pass</b></td><td>nothing wasteful found</td></tr><tr><td><code>LLM-22</code></td><td>—</td><td><b>pass</b></td><td>nothing wasteful found</td></tr><tr><td><code>LLM-24</code></td><td>Old model still in use</td><td><b>fail</b></td><td>1 finding, about $773/month to save; claude-sonnet-4-5 retires on 2026-11-30 and cost $77.34 today (keys: key_legacy).</td></tr><tr><td><code>LLM-26</code></td><td>—</td><td><b>pass</b></td><td>nothing wasteful found</td></tr></table></div>
+<div class="box"><b>How far the cost pack is</b><p>6 of 36 rules are built (LLM-01, LLM-06, LLM-08, LLM-22, LLM-24, LLM-26); every one now runs through this framework. The other 30 come next in Tier 5, in an order you choose. The full list is on <a href="cat-any.html">checks for any agent</a>.</p></div>
+<div class="snip"><div class="snip-h"><span>Each rule as a verdict, in real code</span><a href="https://github.com/dataagentsai/eval-harness-framework/blob/main/src/evalharness/costs.py#L62"><code>src/evalharness/costs.py:62</code></a></div><pre>def results_of(payload: dict[str, Any]) -&gt; list[EvalResult]:
+    &quot;&quot;&quot;One result per rule, from llm-cost-explainer&#x27;s answer.&quot;&quot;&quot;
+    version = _version()
+    found: dict[str, list[dict[str, Any]]] = {}
+    for f in payload.get(&quot;findings&quot;, ()):
+        found.setdefault(f[&quot;rule_id&quot;], []).append(f)
+    titles = {f[&quot;rule_id&quot;]: f[&quot;title&quot;] for f in payload.get(&quot;findings&quot;, ())}
+    out = []
+    for rule_id in sorted(set(payload.get(&quot;rules_run&quot;, ())) | set(found)):
+        hits = found.get(rule_id, [])
+        saving = sum(f[&quot;savings_day&quot;] for f in hits)
+        out.append(
+            EvalResult(
+                verdict=&quot;fail&quot; if hits else &quot;pass&quot;,
+                score=0.0 if hits else 1.0,
+                raw_score=saving,
+                threshold=None,
+                reason=(
+                    f&quot;{len(hits)} finding{&#x27;s&#x27; if len(hits) != 1 else &#x27;&#x27;}, &quot;
+                    f&quot;about ${saving * 30:,.0f}/month to save; {hits[0][&#x27;summary&#x27;]}&quot;
+                    if hits
+                    else &quot;nothing wasteful found&quot;
+                ),
+                evaluator=rule_id,
+                version=version,
+                provider=PROVIDER,
+                label=titles.get(rule_id, &quot;&quot;),
+                raw={&quot;day&quot;: payload.get(&quot;day&quot;), &quot;findings&quot;: hits},
+                findings=tuple(
+                    Finding(
+                        kind=rule_id,
+                        confidence=1.0,
+                        label=f&quot;{&#x27;, &#x27;.join(f&#x27;{k}={v}&#x27; for k, v in f[&#x27;scope&#x27;].items())}: &quot;
+                        f&quot;${f[&#x27;savings_day&#x27;] * 30:,.0f}/month&quot;,
+                    )
+                    for f in hits
+                ),
+            )
+        )
+    for rule_id, title, why in payload.get(&quot;skipped&quot;, ()):
+        if rule_id in found or any(r.evaluator == rule_id for r in out):
+            continue
+        out.append(
+            EvalResult(
+                verdict=&quot;skip&quot;,
+                score=None,
+                raw_score=None,
+                threshold=None,
+                reason=f&quot;could not judge: {why}&quot;,
+                evaluator=rule_id,
+                version=version,
+                provider=PROVIDER,
+                label=title,
+            )
+        )
+    return sorted(out, key=lambda r: r.evaluator)</pre></div>
+<div class="review"><b>Your review · Cost rules</b><ol><li>Which cost rules matter most to your clients? This sets the order of the remaining 30.</li></ol><p class="deeper">Reply in chat with the page name and the number, for example “session 2: …”.</p></div>
+
+
+</article><nav class="pn"><a class="pv" href="arch-hooks.html"><small>← Back</small>Hooks in your own loop</a><a class="nx" href="arch-outputs.html"><small>Next →</small>On top of your tools</a></nav></div></main>
+<script src="nav.js"></script></body></html>
