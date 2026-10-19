@@ -80,15 +80,70 @@ the model asked for. Which hooks ran, and what was decided:</p></div>
 <h2>What we borrowed, and from where</h2>
 <div class="tw"><table><tr><th>Idea</th><th>Borrowed from</th><th>What it gives us</th></tr><tr><td>An event plus a matcher on the tool name</td><td>Claude Code's PreToolUse and PostToolUse hooks</td><td>One tool, a pattern, or all, without touching the loop</td></tr><tr><td>A hook answers allow, deny or a changed input</td><td>Same hooks</td><td>Hooks can fix a call, not only stop it</td></tr><tr><td>A check beside the call that can trip it</td><td>Guardrails in the agent SDKs</td><td>Our checks become hooks with one line: <code>check(...)</code></td></tr><tr><td>Before and after the model call, at the gateway</td><td>LiteLLM's pre- and post-call guardrails</td><td>The same hook can run at the gateway for model calls (Tier 7)</td></tr><tr><td>Matching on the kind of tool, not its name</td><td>Our specs: every operation declares its side effect</td><td>New irreversible tools are covered without a new rule</td></tr></table></div>
 <div class="box"><b>Why this stays simple and effective</b><p><b>Simple:</b> one entry point, five calls, one decision type; rules are added in YAML or with a decorator, never in the loop. <b>Effective:</b> unmatched hooks cost nothing; the first block stops the rest; matching by kind of tool covers tools nobody listed; and the same hook runs in your loop, in a framework (an adapter turns its hook into an Event), or at the gateway. Still to come in Tier 3: a time budget per moment, fail-closed when a hook breaks, and every decision recorded on the trace.</p></div>
-<div class="snip"><div class="snip-h"><span>The hook runner, in real code</span><a href="https://github.com/dataagentsai/eval-harness-framework/blob/main/src/evalharness/hooks.py#L157"><code>src/evalharness/hooks.py:157</code></a></div><pre>    def run(self, event: Event) -&gt; Decision:
+<h2>Safe by default: modes, broken checks, time budgets</h2>
+<div class="text"><p>A check that can stop a reply can also stop a good one. So a rule placed in
+YAML starts in <b>shadow</b>: it runs on every turn and records what it <i>would</i> have
+done, and changes nothing until someone moves it to <b>block</b>.</p></div>
+<div class="tw"><table><tr><th>Mode</th><th>Runs?</th><th>Acts?</th><th>Use it for</th></tr><tr><td><code>off</code></td><td>no</td><td>no</td><td>a rule kept in the file but switched off</td></tr><tr><td><code>shadow</code></td><td>yes, and recorded</td><td>no</td><td>every new rule: measure how often it would be right (the default from YAML)</td></tr><tr><td><code>alert</code></td><td>yes, and recorded</td><td>no, but flagged for an alert</td><td>a rule you trust to notice, not yet to stop</td></tr><tr><td><code>block</code></td><td>yes, and recorded</td><td>yes</td><td>a rule with its precision measured and an owner</td></tr></table></div>
+<div class="snip"><div class="snip-h"><span>Each moment's budget and what happens when a check breaks</span></div><pre>moments:
+  pre_tool: {budget_ms: 200, on_error: closed}   # before an action: never let a broken check through
+  reply:    {budget_ms: 300, on_error: open}     # the reply: a broken check shouldn&#x27;t silence the agent
+
+evaluators:
+  refund_cap:
+    adapter: argument_limit
+    tool: issue_refund
+    field: amount
+    max: 10000
+    at: pre_tool
+    mode: shadow                                # the default; move to block when it has earned it</pre></div>
+<div class="tw"><table><tr><th>What can go wrong</th><th>What happens</th></tr><tr><td>A check is declared slower than its moment allows (Azure groundedness, about 3 s, at <code>pre_tool</code> with 200 ms)</td><td>Refused when the rules load: “run it online instead”</td></tr><tr><td>A check runs over the budget once</td><td>It still decides, and the record says <i>over budget</i></td></tr><tr><td>A blocking check breaks (an exception)</td><td><code>on_error: closed</code> blocks the action (the default); <code>open</code> lets the turn go on. Either way it's recorded</td></tr><tr><td>A shadow check breaks</td><td>Nothing changes for the customer; the break is recorded</td></tr></table></div>
+<h3>Try it: one rule in shadow, then in block</h3>
+<div class="tw"><table><tr><th>Mode</th><th>What the rule decided</th><th>What was applied</th></tr><tr><td><code>shadow</code></td><td><b>block</b></td><td><b>allow</b></td></tr><tr><td><code>block</code></td><td><b>block</b></td><td><b>block</b></td></tr></table></div>
+<div class="text"><p>Every run of every hook becomes an event on the turn's trace
+(<code>evalharness.guard.decision</code>): rule, moment, mode, decided, applied, milliseconds,
+tool, over budget, broke. No reason text, which could quote the conversation. Counting
+“decided block, applied allow” for a shadow rule over a week is how you measure it
+before promoting it.</p></div>
+<div class="snip"><div class="snip-h"><span>The hook runner, in real code</span><a href="https://github.com/dataagentsai/eval-harness-framework/blob/main/src/evalharness/hooks.py#L224"><code>src/evalharness/hooks.py:224</code></a></div><pre>    def run(self, event: Event) -&gt; Decision:
         &quot;&quot;&quot;Every hook for this moment whose matcher fits, in order. The first
-        block or escalate wins; a modification is handed on to the next hook.&quot;&quot;&quot;
+        block or escalate wins; a modification is handed on to the next hook.
+        Shadow and alert hooks run and are recorded but change nothing; a
+        blocking hook that breaks decides by the moment&#x27;s `on_error`.&quot;&quot;&quot;
         changed: Decision | None = None
+        moment = self.moment(event.position)
         for placed in self.placed:
+            if placed.mode == &quot;off&quot;:
+                continue
             if placed.position != event.position or not placed.match.matches(event):
                 continue
-            decision = placed.hook(event) or ALLOW
+            started = time.perf_counter()
+            broke = False
+            try:
+                decision = placed.hook(event) or ALLOW
+            except Exception as failure:  # noqa: BLE001 (a hook must never break the turn)
+                broke = True
+                fallback: Action = &quot;block&quot; if moment.on_error == &quot;closed&quot; else &quot;allow&quot;
+                decision = Decision(fallback, reason=f&quot;hook broke: {type(failure).__name__}&quot;)
+            ms = (time.perf_counter() - started) * 1000
             decision = replace(decision, hook=decision.hook or placed.name)
+            acts = placed.mode == &quot;block&quot;
+            if self.on_record is not None:
+                self.on_record(
+                    Record(
+                        position=event.position,
+                        hook=placed.name,
+                        mode=placed.mode,
+                        intended=decision.action,
+                        applied=decision.action if acts else &quot;allow&quot;,
+                        ms=ms,
+                        tool=event.tool,
+                        over_budget=moment.budget_ms is not None and ms &gt; moment.budget_ms,
+                        broke=broke,
+                    )
+                )
+            if not acts:
+                continue
             if decision.stops:
                 return decision
             if decision.action == &quot;modify&quot;:
