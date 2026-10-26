@@ -130,6 +130,9 @@ def audit(rels):
             errors.append((rel, "no <title>"))
         elif len(t.group(1)) > 75:
             warns.append((rel, f"title {len(t.group(1))} chars"))
+        dm = re.search(r'name="description" content="([^"]*)"', s)
+        if dm and len(dm.group(1)) > 160:
+            warns.append((rel, f"description {len(dm.group(1))} chars"))
         if 'name="description"' not in s:
             (errors if str(rel).startswith(("paths/", "index.html")) else warns).append((rel, "no meta description"))
         if 'rel="canonical"' not in s:

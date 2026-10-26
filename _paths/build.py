@@ -78,6 +78,10 @@ CSS = """<style>
 </style>"""
 
 
+def clip(s, n=158):
+    return s if len(s) <= n else s[: n - 1].rsplit(" ", 1)[0].rstrip(",;:") + "…"
+
+
 def wash(d):
     return f'style="--wash:var({d["wash"]})"'
 
@@ -206,7 +210,7 @@ def certs_box(d, plat):
 
 def platform_page(d, plat):
     name = f'{d["name"]} on {PLATFORMS[plat]}'
-    desc = f'A free {d["name"].lower()} learning path on {PLATFORM_NOTE[plat]}: crawl, walk and run, with the {PLATFORMS[plat]} services to learn and GitHub projects to build at each level.'
+    desc = clip(f'Free {d["name"].lower()} learning path on {PLATFORMS[plat]}: crawl, walk and run, with the {PLATFORMS[plat]} services to learn and GitHub projects at each level.')
     url = f"{SITE}/paths/{d['id']}/{plat}/"
     body = [crumbs((d["name"], f"/paths/{d['id']}/"), (PLATFORMS[plat], None)),
             f'<div class="phero" {wash(d)}><p class="eyebrow">Learning path · {PLATFORMS[plat]}</p><h1>{E(name)}</h1>',
@@ -230,11 +234,11 @@ def platform_page(d, plat):
                 f'<p><a href="/projects/">All projects →</a> &nbsp; <a href="/paths/">Another path →</a></p></section>')
     ld = jsonld(course_ld(name, desc, url, [f"{LEVELS[k][0]} ({LEVELS[k][1]})" for k in LEVELS], teaches)) + \
         jsonld(breadcrumb_ld([("Paths", "/paths/"), (d["name"], f"/paths/{d['id']}/"), (PLATFORMS[plat], f"/paths/{d['id']}/{plat}/")]))
-    return wb.page(name + " · learning path", desc, url, "\n".join(body), CSS + ld)
+    return wb.page(name if len(name) > 34 else name + " · learning path", desc, url, "\n".join(body), CSS + ld)
 
 
 def discipline_page(d):
-    desc = f'A free {d["name"].lower()} learning path in three levels (crawl, walk, run) on {", ".join(PLATFORMS[p] for p in d["platforms"])}, with GitHub projects to build at each level.'
+    desc = clip(f'Free {d["name"].lower()} learning path: key concepts, then crawl, walk and run on {", ".join(PLATFORMS[p] for p in d["platforms"])}, with GitHub projects.')
     url = f"{SITE}/paths/{d['id']}/"
     pg = "".join(f'<a href="/paths/{d["id"]}/{p}/" {wash(d)}><b>{PLATFORMS[p]}</b><span>{E(PLATFORM_NOTE[p])}</span></a>' for p in d["platforms"])
     body = [crumbs((d["name"], None)),
@@ -256,7 +260,7 @@ def discipline_page(d):
     ld = jsonld(course_ld(d["name"] + " learning path", desc, url, [f"{LEVELS[k][0]} ({LEVELS[k][1]})" for k in LEVELS],
                           [t[0] for k in LEVELS for t in d["levels"][k]["topics"]])) + \
         jsonld(breadcrumb_ld([("Paths", "/paths/"), (d["name"], f"/paths/{d['id']}/")]))
-    return wb.page(d["name"] + " learning path: crawl, walk, run", desc, url, "\n".join(body), CSS + ld)
+    return wb.page(d["name"] + " learning path", desc, url, "\n".join(body), CSS + ld)
 
 
 def picker(compact=False):
@@ -274,7 +278,7 @@ function goPath(f){{var s={supported};var r=f.r.value,p=f.p.value;location.href=
 
 
 def hub_page():
-    desc = "Free learning paths for data, AI, LLM, ML, software and forward-deployed engineers on AWS, Azure, Google Cloud, Databricks and open source: crawl, walk, run, with GitHub projects at every level."
+    desc = "Free crawl, walk, run learning paths for data, AI, LLM, ML, software and forward-deployed engineers on AWS, Azure, Google Cloud and Databricks."
     head = "".join(f"<th>{E(v)}</th>" for v in PLATFORMS.values())
     rows = "".join(
         f'<tr><td><a href="/paths/{d["id"]}/"><b>{E(d["name"])}</b></a></td>'
@@ -293,7 +297,7 @@ def hub_page():
 <p>Each level has topics to learn, GitHub projects to build, and a short checklist that tells you when you are ready to move on. Not sure where to start? <a href="/mindset/">Read the dragon story</a>, then <a href="/learn/ai-universe/">draw the map</a>.</p></section>"""
     ld = jsonld({"@context": "https://schema.org", "@type": "ItemList", "name": "Learning paths",
                  "itemListElement": [{"@type": "ListItem", "position": i + 1, "url": f"{SITE}/paths/{d['id']}/", "name": d["name"]} for i, d in enumerate(DISCIPLINES)]})
-    return wb.page("Learning paths: data, AI, LLM, ML, software and FDE", desc, f"{SITE}/paths/", body, CSS + ld)
+    return wb.page("Free learning paths for data and AI engineers", desc, f"{SITE}/paths/", body, CSS + ld)
 
 
 def home_roles():
@@ -349,8 +353,8 @@ def concept_page(cid):
     term = {"@context": "https://schema.org", "@type": "DefinedTerm", "name": c["name"], "description": c["short"], "url": url,
             "inDefinedTermSet": {"@type": "DefinedTermSet", "name": "Clean Data Engineering key concepts", "url": f"{SITE}/concepts/"}}
     ld = jsonld(term) + jsonld(faq) + jsonld(breadcrumb_ld([("Key concepts", "/concepts/"), (c["name"], f"/concepts/{cid}/")]))
-    desc = f'{c["name"]} explained simply: {c["short"]} What it is, why it matters, an example and the common mistake. Free, the same on every cloud.'
-    return wb.page(c["name"] + (", explained simply" if len(c["name"]) < 30 else ""), desc[:300], url, "\n".join(body), CSS + ld)
+    desc = clip(f'{c["name"]}: {c["short"]} What it is, why it matters, an example and the common mistake.')
+    return wb.page(c["name"] + (", explained simply" if len(c["name"]) < 30 else ""), desc, url, "\n".join(body), CSS + ld)
 
 
 def concepts_index():
@@ -372,8 +376,8 @@ def concepts_index():
     body.append(f'<section id="a-z"><p class="eyebrow">Glossary</p><h2>All concepts, A to Z</h2><ul>{az}</ul></section>')
     ld = jsonld({"@context": "https://schema.org", "@type": "DefinedTermSet", "name": "Clean Data Engineering key concepts", "url": url,
                  "hasDefinedTerm": [{"@type": "DefinedTerm", "name": v["name"], "description": v["short"], "url": f"{SITE}/concepts/{k}/"} for k, v in CARDS.items()]})
-    desc = "Key concepts in data engineering, AI engineering, LLM, ML, software and forward-deployed engineering, explained simply: ETL vs ELT, medallion architecture, file formats, RAG, agents, drift and more."
-    return wb.page("Key concepts in data and AI engineering, explained simply", desc, url, "\n".join(body), CSS + ld)
+    desc = "Data and AI engineering concepts explained simply: ETL vs ELT, medallion architecture, file formats, RAG, agents, drift and 78 more. Free."
+    return wb.page("Key concepts in data and AI engineering", desc, url, "\n".join(body), CSS + ld)
 
 
 def check_concepts():
