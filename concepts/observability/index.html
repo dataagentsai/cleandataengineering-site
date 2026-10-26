@@ -1,0 +1,211 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Observability: logs, metrics, traces · Clean Data Engineering</title>
+<meta name="description" content="Observability: logs, metrics, traces explained simply: See what your system is doing from the outside, especially when it goes wrong. What it is, why it matters, an example and the common mistake. Free, the same on every cloud."><link rel="canonical" href="https://cleandataengineering.ai/concepts/observability/">
+<meta property="og:title" content="Observability: logs, metrics, traces"><meta property="og:description" content="Observability: logs, metrics, traces explained simply: See what your system is doing from the outside, especially when it goes wrong. What it is, why it matters, an example and the common mistake. Free, the same on every cloud."><meta property="og:url" content="https://cleandataengineering.ai/concepts/observability/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .phero { padding:26px 0 6px; } .phero h1 { margin-bottom:10px; } .phero .who { font-size:19px; color:var(--ink-soft); }
+  .switch { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; align-items:center; }
+  .switch .lb { color:var(--faint); margin-right:4px; }
+  .switch a, .switch span.on { border:1.5px solid var(--ink); border-radius:var(--wob); padding:3px 13px; text-decoration:none; color:var(--ink); background:#fff; }
+  .switch span.on { background:var(--ink); color:#fff; }
+  .lvlstrip { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin:24px 0 0; }
+  .lvlstrip a { border:var(--line); border-radius:var(--wob); padding:12px 16px; text-decoration:none; color:var(--ink); background:var(--wash); }
+  .lvlstrip b { font-family:var(--hand); font-weight:400; font-size:26px; display:block; }
+  .lvlstrip span { font-size:13.5px; color:var(--muted); display:block; line-height:1.4; }
+  .goal { background:var(--wash); border:var(--line); border-radius:var(--wob); padding:12px 18px; font-size:17px; margin:6px 0 18px; }
+  .tw { overflow-x:auto; } table.learn { border-collapse:collapse; width:100%; font-size:15px; margin:4px 0 18px; }
+  table.learn th, table.learn td { text-align:left; padding:8px 10px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.learn th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); font-weight:700; }
+  table.learn td.tool { font-weight:600; color:var(--ink); }
+  table.learn td small { display:block; color:var(--faint); font-weight:400; font-size:13px; }
+  h3.sub { font-size:24px; margin:22px 0 8px; }
+  .projs { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; margin:6px 0 18px; }
+  .proj { border:var(--line); border-radius:var(--wob); padding:14px 18px; background:#fff; display:flex; flex-direction:column; }
+  .proj h4 { font-family:var(--hand); font-weight:400; font-size:22px; margin:0 0 4px; }
+  .proj p { font-size:14.5px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .proj .st { font-size:11.5px; font-weight:700; letter-spacing:.05em; text-transform:uppercase; color:var(--ink); margin-bottom:6px; }
+  .proj .st i { font-style:normal; background:var(--butter); border:1.5px solid var(--ink); border-radius:999px; padding:0 8px; }
+  .proj .port { font-size:13px; color:var(--muted); margin:0 0 8px; }
+  .proj .lk { margin-top:auto; font-size:14px; display:flex; gap:12px; flex-wrap:wrap; }
+  ul.ready { list-style:none; padding:0; margin:0 0 8px; } ul.ready li { padding:4px 0 4px 28px; position:relative; }
+  ul.ready li::before { content:""; position:absolute; left:2px; top:9px; width:14px; height:14px; border:1.5px solid var(--ink); border-radius:4px; }
+  .note { font-size:14px; color:var(--faint); }
+  .pgrid { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:12px; margin:14px 0; }
+  .pgrid a { border:var(--line); border-radius:var(--wob); padding:14px 16px; text-decoration:none; color:var(--ink); background:var(--wash); }
+  .pgrid b { font-family:var(--hand); font-weight:400; font-size:24px; display:block; } .pgrid span { font-size:13px; color:var(--muted); }
+  .matrix td a { white-space:nowrap; }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .ideas a:hover { background:var(--wash, var(--butter-wash)); }
+  .cgroup { margin:18px 0 0; } .cgroup h3 { font-size:24px; margin:0 0 8px; }
+  .ccards { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px; }
+  .ccard { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; text-decoration:none; color:var(--ink); display:block; }
+  .ccard b { font-family:var(--hand); font-weight:400; font-size:21px; display:block; line-height:1.2; margin-bottom:3px; }
+  .ccard span { font-size:14px; color:var(--ink-soft); display:block; line-height:1.45; }
+  .ccard i { font-style:normal; font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); display:block; margin-top:6px; }
+  .cbody h2 { font-size:28px; margin:26px 0 6px; }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .box { border:var(--line); border-radius:var(--wob); padding:12px 18px; margin:8px 0 14px; }
+  .box.ex { background:var(--mint-wash); } .box.bad { background:var(--rose-wash); }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; }
+  .diagram { overflow-x:auto; } .diagram svg { width:100%; min-width:560px; height:auto; display:block; }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .diagram text { font-family:var(--hand); }
+  @media (max-width:640px) { .lvlstrip { grid-template-columns:1fr; } }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "DefinedTerm", "name": "Observability: logs, metrics, traces", "description": "See what your system is doing from the outside, especially when it goes wrong.", "url": "https://cleandataengineering.ai/concepts/observability/", "inDefinedTermSet": {"@type": "DefinedTermSet", "name": "Clean Data Engineering key concepts", "url": "https://cleandataengineering.ai/concepts/"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What is Observability: logs, metrics, traces?", "acceptedAnswer": {"@type": "Answer", "text": "See what your system is doing from the outside, especially when it goes wrong. Logs are records of events. Metrics are numbers over time, such as requests per second or error rate. Traces follow one request across every service and step. OpenTelemetry is the open standard for collecting all three."}}, {"@type": "Question", "name": "Why does Observability: logs, metrics, traces matter?", "acceptedAnswer": {"@type": "Answer", "text": "You cannot fix what you cannot see. Good traces turn an hour of guessing into a minute of reading."}}, {"@type": "Question", "name": "What is a common mistake with Observability: logs, metrics, traces?", "acceptedAnswer": {"@type": "Answer", "text": "Logging everything as free text and having no way to follow one request."}}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Key concepts", "item": "https://cleandataengineering.ai/concepts/"}, {"@type": "ListItem", "position": 2, "name": "Observability: logs, metrics, traces", "item": "https://cleandataengineering.ai/concepts/observability/"}]}</script></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/concepts/">Key concepts</a> › Observability: logs, metrics, traces</p>
+<div class="phero" style="--wash:var(--lilac-wash)"><p class="eyebrow">Key concept · Walk (intermediate) · the same on every platform</p><h1>Observability: logs, metrics, traces</h1><p class="lede">See what your system is doing from the outside, especially when it goes wrong.</p></div>
+<div class="cbody">
+<h2>What it is</h2><p>Logs are records of events. Metrics are numbers over time, such as requests per second or error rate. Traces follow one request across every service and step. OpenTelemetry is the open standard for collecting all three.</p>
+<h2>Why it matters</h2><p>You cannot fix what you cannot see. Good traces turn an hour of guessing into a minute of reading.</p>
+<h2>An example</h2><div class="box ex">One trace shows a slow reply spent 6 of 7 seconds waiting on a search call.</div>
+<h2>The common mistake</h2><div class="box bad">Logging everything as free text and having no way to follow one request.</div>
+<h2>Where you meet it on each platform</h2><p>The idea stays the same; only the product name changes.</p><div class="tw"><table class="learn"><tr><th>Job</th><th>AWS</th><th>Azure</th><th>Google Cloud</th><th>Databricks</th><th>Open source</th></tr><tr><td><b>Monitoring</b><small>logs, metrics and traces, so you see trouble first</small></td><td>CloudWatch + X-Ray</td><td>Azure Monitor + App Insights</td><td>Cloud Logging + Trace</td><td>System tables + MLflow tracing</td><td>OpenTelemetry + Grafana</td></tr><tr><td><b>Tracing</b><small>see every model call, tool call, token and cent</small></td><td>CloudWatch + X-Ray (OpenTelemetry)</td><td>App Insights (OpenTelemetry)</td><td>Cloud Trace (OpenTelemetry)</td><td>MLflow tracing</td><td>Phoenix or Langfuse</td></tr></table></div>
+<h2>Related ideas</h2><div class="ideas"><a href="/concepts/tracing-ai/">Tracing an AI system</a></div>
+<h2>Where it shows up</h2><p>Part of the Walk level on these paths: <a href="/paths/ml-engineering/#concepts">ML Engineering</a> (production ml) · <a href="/paths/software-engineering/#concepts">Software Engineering</a> (running services).</p>
+</div>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

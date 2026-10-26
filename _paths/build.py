@@ -16,6 +16,8 @@ spec = importlib.util.spec_from_file_location("writing_build", ROOT / "_writing"
 wb = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wb)
 from data import CERTS, CONCEPTS, DISCIPLINES, LEVELS, PLATFORM_NOTE, PLATFORMS, PROJECTS, READ, STATUS  # noqa: E402
+from concepts import CARDS, ROLE_GROUPS  # noqa: E402
+from diagrams import DIAGRAMS  # noqa: E402
 
 E = wb.E
 SITE = wb.SITE
@@ -55,6 +57,23 @@ CSS = """<style>
   .pgrid a { border:var(--line); border-radius:var(--wob); padding:14px 16px; text-decoration:none; color:var(--ink); background:var(--wash); }
   .pgrid b { font-family:var(--hand); font-weight:400; font-size:24px; display:block; } .pgrid span { font-size:13px; color:var(--muted); }
   .matrix td a { white-space:nowrap; }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:0 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .ideas a:hover { background:var(--wash, var(--butter-wash)); }
+  .cgroup { margin:18px 0 0; } .cgroup h3 { font-size:24px; margin:0 0 8px; }
+  .ccards { display:grid; grid-template-columns:repeat(auto-fit,minmax(230px,1fr)); gap:10px; }
+  .ccard { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; text-decoration:none; color:var(--ink); display:block; }
+  .ccard b { font-family:var(--hand); font-weight:400; font-size:21px; display:block; line-height:1.2; margin-bottom:3px; }
+  .ccard span { font-size:14px; color:var(--ink-soft); display:block; line-height:1.45; }
+  .ccard i { font-style:normal; font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--faint); display:block; margin-top:6px; }
+  .cbody h2 { font-size:28px; margin:26px 0 6px; }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .box { border:var(--line); border-radius:var(--wob); padding:12px 18px; margin:8px 0 14px; }
+  .box.ex { background:var(--mint-wash); } .box.bad { background:var(--rose-wash); }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; }
+  .diagram { overflow-x:auto; } .diagram svg { width:100%; min-width:560px; height:auto; display:block; }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .diagram text { font-family:var(--hand); }
   @media (max-width:640px) { .lvlstrip { grid-template-columns:1fr; } }
 </style>"""
 
@@ -85,6 +104,29 @@ def course_ld(name, desc, url, level_names, teaches):
             "hasCourseInstance": {"@type": "CourseInstance", "courseMode": "online", "courseWorkload": "Self-paced"},
             "syllabusSections": [{"@type": "Syllabus", "name": n} for n in level_names],
             "offers": {"@type": "Offer", "price": 0, "priceCurrency": "USD", "category": "Free"}}
+
+
+def role_concepts(rid):
+    return [c for _, ids in ROLE_GROUPS.get(rid, []) for c in ids]
+
+
+def ideas(d, k):
+    ids = [c for c in role_concepts(d["id"]) if CARDS[c]["level"] == k]
+    if not ids:
+        return ""
+    return ('<p class="note" style="margin:0 0 6px">Key ideas at this level, the same on every platform:</p><div class="ideas">'
+            + "".join(f'<a href="/concepts/{c}/">{E(CARDS[c]["name"])}</a>' for c in ids) + "</div>")
+
+
+def concept_section(d):
+    out = [f'<section id="concepts" {wash(d)}><p class="eyebrow">Step 1 · the same everywhere</p><h2>Key concepts</h2>'
+           f'<p>Learn these ideas first. They are the same on every cloud and with every tool; only the product names change. '
+           f'Each one is a short page: what it is, why it matters, an example and the common mistake.</p>']
+    for g, ids in ROLE_GROUPS[d["id"]]:
+        cards = "".join(f'<a class="ccard" href="/concepts/{c}/"><b>{E(CARDS[c]["name"])}</b><span>{E(CARDS[c]["short"])}</span>'
+                        f'<i>{LEVELS[CARDS[c]["level"]][0]}</i></a>' for c in ids)
+        out.append(f'<div class="cgroup"><h3>{E(g)}</h3><div class="ccards">{cards}</div></div>')
+    return "".join(out) + "</section>"
 
 
 def project_card(pid, plat=None):
@@ -177,6 +219,7 @@ def platform_page(d, plat):
         teaches += [t[0] for t in lv["topics"]]
         body.append(f'<section id="{k}" {wash(d)}><p class="eyebrow">{LEVELS[k][1]} · {lv["weeks"]}</p>'
                     f'<h2>{LEVELS[k][0]}: {E(LEVELS[k][2])}</h2><p class="goal">{E(lv["goal"])}</p>'
+                    f'{ideas(d, k)}'
                     f'<h3 class="sub">Learn</h3>{learn_table(lv["topics"], plat)}'
                     f'<h3 class="sub">Build on GitHub</h3><div class="projs">{"".join(project_card(p, plat) for p in lv["projects"])}</div>'
                     f'<h3 class="sub">You are ready to move on when</h3><ul class="ready">{"".join(f"<li>{E(r)}</li>" for r in lv["ready"])}</ul></section>')
@@ -196,13 +239,17 @@ def discipline_page(d):
     pg = "".join(f'<a href="/paths/{d["id"]}/{p}/" {wash(d)}><b>{PLATFORMS[p]}</b><span>{E(PLATFORM_NOTE[p])}</span></a>' for p in d["platforms"])
     body = [crumbs((d["name"], None)),
             f'<div class="phero" {wash(d)}><p class="eyebrow">Learning path</p><h1>{E(d["name"])}</h1><p class="who">{E(d["who"])}</p>{role_switch(d["id"])}</div>',
-            f'<section id="platform"><p class="eyebrow">Step 1</p><h2>Where do you work?</h2><p>Pick your platform and you get one page with that platform\'s products in every step.</p><div class="pgrid">{pg}</div></section>',
-            f'<section {wash(d)}><p class="eyebrow">Why this path</p><p>{E(d["why"])}</p>{level_strip(d)}<p class="note" style="margin-top:12px">Read alongside: {reading(d)}.</p></section>']
+            f'<section {wash(d)}><p class="eyebrow">Why this path</p><p>{E(d["why"])}</p>'
+            f'<p><b>How to use this page:</b> 1. learn the <a href="#concepts">key concepts</a>, which are the same everywhere; '
+            f'2. <a href="#platform">pick your platform</a>; 3. work through Crawl, Walk and Run.</p>{level_strip(d)}'
+            f'<p class="note" style="margin-top:12px">Read alongside: {reading(d)}.</p></section>',
+            concept_section(d),
+            f'<section id="platform"><p class="eyebrow">Step 2</p><h2>Where do you work?</h2><p>Pick your platform and you get one page with that platform\'s products in every step.</p><div class="pgrid">{pg}</div></section>']
     for k in ("crawl", "walk", "run"):
         lv = d["levels"][k]
         links = " · ".join(f'<a href="/paths/{d["id"]}/{p}/#{k}">{PLATFORMS[p]}</a>' for p in d["platforms"])
         body.append(f'<section id="{k}" {wash(d)}><p class="eyebrow">{LEVELS[k][1]} · {lv["weeks"]}</p><h2>{LEVELS[k][0]}: {E(LEVELS[k][2])}</h2>'
-                    f'<p class="goal">{E(lv["goal"])}</p><p class="note">Open this level on: {links}</p>'
+                    f'<p class="goal">{E(lv["goal"])}</p>{ideas(d, k)}<p class="note">Open this level on: {links}</p>'
                     f'<h3 class="sub">Learn: the concept, and the product on each platform</h3>{concept_table(lv["topics"], d["platforms"])}'
                     f'<h3 class="sub">Build on GitHub</h3><div class="projs">{"".join(project_card(p) for p in lv["projects"])}</div>'
                     f'<h3 class="sub">You are ready to move on when</h3><ul class="ready">{"".join(f"<li>{E(r)}</li>" for r in lv["ready"])}</ul></section>')
@@ -252,11 +299,96 @@ def hub_page():
 def home_roles():
     out = ['<div class="roles">']
     for d in DISCIPLINES:
-        lv = "".join(f'<a href="/paths/{d["id"]}/#{k}">{LEVELS[k][0]}</a>' for k in ("crawl", "walk", "run"))
+        lv = f'<a href="/paths/{d["id"]}/#concepts">Key concepts</a>' + "".join(f'<a href="/paths/{d["id"]}/#{k}">{LEVELS[k][0]}</a>' for k in ("crawl", "walk", "run"))
         pl = " · ".join(f'<a href="/paths/{d["id"]}/{p}/">{PLATFORMS[p]}</a>' for p in d["platforms"])
         out.append(f'<div class="role" {wash(d)}><h3><a href="/paths/{d["id"]}/">{E(d["name"])}</a></h3><p>{E(d["who"])}</p>'
                    f'<div class="lv">{lv}</div><div class="pl">{pl}</div></div>')
     return "".join(out) + "</div>"
+
+
+def concept_roles(cid):
+    """(discipline, group) pairs where a concept appears."""
+    return [(d, g) for d in DISCIPLINES for g, ids in ROLE_GROUPS.get(d["id"], []) if cid in ids]
+
+
+def concept_page(cid):
+    c = CARDS[cid]
+    url = f"{SITE}/concepts/{cid}/"
+    roles = concept_roles(cid)
+    first = roles[0][0] if roles else DISCIPLINES[0]
+    lvl = LEVELS[c["level"]]
+    body = ['<p class="crumbs"><a href="/">Home</a> › <a href="/concepts/">Key concepts</a> › ' + E(c["name"]) + "</p>",
+            f'<div class="phero" style="--wash:var({first["wash"]})"><p class="eyebrow">Key concept · {lvl[0]} ({lvl[1].lower()}) · the same on every platform</p>'
+            f'<h1>{E(c["name"])}</h1>'
+            f'<p class="lede">{E(c["short"])}</p></div>',
+            '<div class="cbody">',
+            f'<h2>What it is</h2><p>{E(c["what"])}</p>']
+    if c["diagram"]:
+        svg, cap = DIAGRAMS[c["diagram"]]()
+        body.append(f'<figure class="diagram">{svg}<figcaption>{E(cap)}</figcaption></figure>')
+    body += [f'<h2>Why it matters</h2><p>{E(c["why"])}</p>',
+             f'<h2>An example</h2><div class="box ex">{E(c["example"])}</div>',
+             f'<h2>The common mistake</h2><div class="box bad">{E(c["mistake"])}</div>']
+    if c["products"]:
+        plats = list(PLATFORMS)
+        head = "".join(f"<th>{E(PLATFORMS[p])}</th>" for p in plats)
+        rows = "".join(f"<tr><td><b>{E(CONCEPTS[k][0])}</b><small>{E(CONCEPTS[k][1])}</small></td>"
+                       + "".join(f"<td>{E(CONCEPTS[k][2].get(p, '–'))}</td>" for p in plats) + "</tr>" for k in c["products"])
+        body.append('<h2>Where you meet it on each platform</h2><p>The idea stays the same; only the product name changes.</p>'
+                    f'<div class="tw"><table class="learn"><tr><th>Job</th>{head}</tr>{rows}</table></div>')
+    if c["related"]:
+        body.append('<h2>Related ideas</h2><div class="ideas">' + "".join(f'<a href="/concepts/{r}/">{E(CARDS[r]["name"])}</a>' for r in c["related"]) + "</div>")
+    if roles:
+        links = " · ".join(f'<a href="/paths/{d["id"]}/#concepts">{E(d["name"])}</a> ({E(g.lower())})' for d, g in roles)
+        body.append(f'<h2>Where it shows up</h2><p>Part of the {lvl[0]} level on these paths: {links}.</p>')
+    body.append("</div>")
+    faq = {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [
+        {"@type": "Question", "name": f'What is {c["name"]}?', "acceptedAnswer": {"@type": "Answer", "text": c["short"] + " " + c["what"]}},
+        {"@type": "Question", "name": f'Why does {c["name"]} matter?', "acceptedAnswer": {"@type": "Answer", "text": c["why"]}},
+        {"@type": "Question", "name": f'What is a common mistake with {c["name"]}?', "acceptedAnswer": {"@type": "Answer", "text": c["mistake"]}}]}
+    term = {"@context": "https://schema.org", "@type": "DefinedTerm", "name": c["name"], "description": c["short"], "url": url,
+            "inDefinedTermSet": {"@type": "DefinedTermSet", "name": "Clean Data Engineering key concepts", "url": f"{SITE}/concepts/"}}
+    ld = jsonld(term) + jsonld(faq) + jsonld(breadcrumb_ld([("Key concepts", "/concepts/"), (c["name"], f"/concepts/{cid}/")]))
+    desc = f'{c["name"]} explained simply: {c["short"]} What it is, why it matters, an example and the common mistake. Free, the same on every cloud.'
+    return wb.page(c["name"] + (", explained simply" if len(c["name"]) < 30 else ""), desc[:300], url, "\n".join(body), CSS + ld)
+
+
+def concepts_index():
+    url = f"{SITE}/concepts/"
+    body = ['<p class="crumbs"><a href="/">Home</a> › Key concepts</p>',
+            '<div class="phero" style="--wash:var(--butter-wash)"><p class="eyebrow">Key concepts · free</p><h1>The ideas that are the same everywhere</h1>'
+            f'<p class="who">{len(CARDS)} ideas behind data, AI, LLM, ML, software and forward-deployed engineering. Clouds and tools change; these don\'t. '
+            'Each is one short page: what it is, why it matters, an example and the common mistake.</p>'
+            '<div class="switch"><span class="lb">Jump to:</span>' + "".join(f'<a href="#{d["id"]}">{d["short"]}</a>' for d in DISCIPLINES) + '<a href="#a-z">A–Z</a></div></div>']
+    for d in DISCIPLINES:
+        body.append(f'<section id="{d["id"]}" {wash(d)}><p class="eyebrow">{E(d["name"])}</p><h2>Key concepts in {E(d["name"])}</h2>'
+                    f'<p class="note">Then follow the path: <a href="/paths/{d["id"]}/">{E(d["name"])} · Crawl, Walk, Run</a></p>')
+        for g, ids in ROLE_GROUPS[d["id"]]:
+            cards = "".join(f'<a class="ccard" href="/concepts/{c}/"><b>{E(CARDS[c]["name"])}</b><span>{E(CARDS[c]["short"])}</span>'
+                            f'<i>{LEVELS[CARDS[c]["level"]][0]}</i></a>' for c in ids)
+            body.append(f'<div class="cgroup"><h3>{E(g)}</h3><div class="ccards">{cards}</div></div>')
+        body.append("</section>")
+    az = "".join(f'<li><a href="/concepts/{k}/">{E(v["name"])}</a>: {E(v["short"])}</li>' for k, v in sorted(CARDS.items(), key=lambda x: x[1]["name"].lower()))
+    body.append(f'<section id="a-z"><p class="eyebrow">Glossary</p><h2>All concepts, A to Z</h2><ul>{az}</ul></section>')
+    ld = jsonld({"@context": "https://schema.org", "@type": "DefinedTermSet", "name": "Clean Data Engineering key concepts", "url": url,
+                 "hasDefinedTerm": [{"@type": "DefinedTerm", "name": v["name"], "description": v["short"], "url": f"{SITE}/concepts/{k}/"} for k, v in CARDS.items()]})
+    desc = "Key concepts in data engineering, AI engineering, LLM, ML, software and forward-deployed engineering, explained simply: ETL vs ELT, medallion architecture, file formats, RAG, agents, drift and more."
+    return wb.page("Key concepts in data and AI engineering, explained simply", desc, url, "\n".join(body), CSS + ld)
+
+
+def check_concepts():
+    used = {c for groups in ROLE_GROUPS.values() for _, ids in groups for c in ids}
+    for cid, c in CARDS.items():
+        assert c["level"] in LEVELS, cid
+        for k in c["products"]:
+            assert k in CONCEPTS, (cid, k)
+        for r in c["related"]:
+            assert r in CARDS, (cid, r)
+        assert not c["diagram"] or c["diagram"] in DIAGRAMS, cid
+    missing = used - set(CARDS)
+    assert not missing, missing
+    unused = set(CARDS) - used
+    assert not unused, f"concepts on no role: {unused}"
 
 
 def put(s, name, html_):
@@ -268,6 +400,14 @@ def main():
     home = ROOT / "index.html"
     s = put(put(home.read_text(), "picker", picker()), "paths", home_roles())
     home.write_text(s)
+    check_concepts()
+    cdir = ROOT / "concepts"
+    cdir.mkdir(exist_ok=True)
+    (cdir / "index.html").write_text(concepts_index())
+    for cid in CARDS:
+        (cdir / cid).mkdir(exist_ok=True)
+        (cdir / cid / "index.html").write_text(concept_page(cid))
+    print(f"{len(CARDS) + 1} concept pages -> {cdir}")
     OUT.mkdir(exist_ok=True)
     (OUT / "index.html").write_text(hub_page())
     n = 1

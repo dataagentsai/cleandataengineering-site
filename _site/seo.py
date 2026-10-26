@@ -19,6 +19,7 @@ SKIP = ("preview", "_", ".")
 
 sys.path.insert(0, str(ROOT / "_paths"))
 from data import DISCIPLINES, LEVELS, PLATFORMS  # noqa: E402
+from concepts import CARDS, ROLE_GROUPS  # noqa: E402
 
 AI_BOTS = ["GPTBot", "OAI-SearchBot", "ChatGPT-User", "ClaudeBot", "Claude-SearchBot", "Claude-User", "PerplexityBot",
            "Perplexity-User", "Google-Extended", "Applebot-Extended", "Bingbot", "CCBot", "Meta-ExternalAgent", "DuckAssistBot"]
@@ -53,7 +54,7 @@ def priority(rel):
     s = str(rel)
     if s == "index.html":
         return "1.0"
-    if s.startswith("paths/"):
+    if s.startswith(("paths/", "concepts/")):
         return "0.9"
     if s.count("/") <= 1:
         return "0.8"
@@ -93,6 +94,11 @@ def write_llms():
     for d in DISCIPLINES:
         plats = ", ".join(f"[{PLATFORMS[p]}]({SITE}/paths/{d['id']}/{p}/)" for p in d["platforms"])
         out.append(f"- [{d['name']}]({SITE}/paths/{d['id']}/): {d['who']} Platforms: {plats}")
+    out += ["", "## Key concepts (the same on every platform)", "",
+            f"- [All key concepts, by role and A to Z]({SITE}/concepts/)"]
+    for d in DISCIPLINES:
+        names = ", ".join(f"[{CARDS[c]['name']}]({SITE}/concepts/{c}/)" for _, ids in ROLE_GROUPS[d["id"]] for c in ids)
+        out.append(f"- {d['name']}: {names}")
     out += ["", "## Courses", "",
             f"- [The AI Universe]({SITE}/learn/ai-universe/): seven families of AI stacks, concept versus product, on open source, Azure, AWS and Google Cloud",
             f"- [Agent Harness, drawn simply]({SITE}/learn/agent-harness/): one real agent end to end, 167 hand-drawn pages with real code",

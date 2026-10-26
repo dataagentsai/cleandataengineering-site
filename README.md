@@ -21,6 +21,10 @@ Databricks, open source) × three levels (Crawl, Walk, Run). Data in `_paths/dat
 platform, projects, levels); build with `python3 _paths/build.py`. It also writes the home page's picker and role cards
 between the `picker` and `paths` markers.
 
+Key concepts (the ideas that are the same on every cloud) live in `_paths/concepts.py` (CARDS + ROLE_GROUPS); the same build
+writes `/concepts/` (index by role and A–Z) and `/concepts/<id>/`, shows each role's concepts on its path page and each level's
+key ideas on the platform pages. Drawings for concept pages are in `_paths/diagrams.py`.
+
 ## SEO
 
 `python3 _site/seo.py` writes `sitemap.xml`, `robots.txt` (search and AI crawlers welcome) and `llms.txt`, fills a
