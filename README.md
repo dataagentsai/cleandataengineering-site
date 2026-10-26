@@ -1,6 +1,6 @@
 # cleandataengineering.ai
 
-Static site for Clean Data Engineering: the open standards and research. Single `index.html`, no build step.
+Static site for Clean Data Engineering: learn together, teach, community projects, research and product building. Plain HTML; small Python generators in the `_*` folders.
 
 Served by GitHub Pages from `main`, root.
 
@@ -13,6 +13,19 @@ Republish with:
 
 Publish mode points source links at the public GitHub repos and redacts live-deployment identifiers
 (subscription and tenant ids, the Azure resource suffix) from every page, including the Series copy.
+
+## /paths/
+
+Learning paths: six roles (data, AI, LLM, ML, software, forward-deployed) × platforms (AWS, Azure, Google Cloud,
+Databricks, open source) × three levels (Crawl, Walk, Run). Data in `_paths/data.py` (concepts with the product per
+platform, projects, levels); build with `python3 _paths/build.py`. It also writes the home page's picker and role cards
+between the `picker` and `paths` markers.
+
+## SEO
+
+`python3 _site/seo.py` writes `sitemap.xml`, `robots.txt` (search and AI crawlers welcome) and `llms.txt`, fills a
+missing description or canonical on pages copied in from other repos, and audits every page (`--strict` exits 1 on
+errors). Run it last, after every build. The growth plan is `_plan/GROWTH-PLAN.md`.
 
 ## /writing/
 
