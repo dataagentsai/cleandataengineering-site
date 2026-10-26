@@ -168,7 +168,7 @@ def platform_page(d, plat):
     url = f"{SITE}/paths/{d['id']}/{plat}/"
     body = [crumbs((d["name"], f"/paths/{d['id']}/"), (PLATFORMS[plat], None)),
             f'<div class="phero" {wash(d)}><p class="eyebrow">Learning path · {PLATFORMS[plat]}</p><h1>{E(name)}</h1>',
-            f'<p class="who">{E(d["who"])}</p>{platform_switch(d, plat)}{role_switch(d["id"], plat)}{level_strip(d)}</div>',
+            f'<p class="who">{E(d["who"])}</p><p class="note" style="margin:0">Free, like everything here: no sign-up, no paywall. Only the cloud you practise on may charge; the open-source path costs nothing.</p>{platform_switch(d, plat)}{role_switch(d["id"], plat)}{level_strip(d)}</div>',
             f'<section><p>{E(d["why"])}</p><p class="note">Every topic below is a <b>concept</b> (the job) with the <b>{PLATFORMS[plat]} product</b> that does it. '
             f'Learn the concept once; on another platform only the product name changes. Read alongside: {reading(d)}.</p></section>']
     teaches = []
@@ -237,7 +237,7 @@ def hub_page():
         f'<a href="/paths/{d["id"]}/" {wash(d)}><b>{E(d["name"])}</b><span>{E(d["who"])}</span></a>' for d in DISCIPLINES)
     body = f"""{crumbs()}
 <div class="phero" style="--wash:var(--peri-wash)"><p class="eyebrow">Learning paths</p><h1>Pick your path</h1>
-<p class="who">Six roles, five platforms, three levels. Choose who you are and where you work, and you get one page with what to learn and what to build.</p>
+<p class="who">Free, like everything here. Six roles, five platforms, three levels. Choose who you are and where you work, and you get one page with what to learn and what to build.</p>
 {picker()}</div>
 <section><p class="eyebrow">Or browse</p><h2>Six roles</h2><div class="pgrid">{cards}</div></section>
 <section><p class="eyebrow">Every page, at a glance</p><h2>Role × platform</h2><div class="tw"><table class="learn matrix"><tr><th>Role</th>{head}</tr>{rows}</table></div></section>

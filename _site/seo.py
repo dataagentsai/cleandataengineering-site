@@ -82,7 +82,7 @@ def write_robots():
 
 def write_llms():
     out = ["# Clean Data Engineering", "",
-           "> A free, open community to learn data engineering, AI engineering, LLM engineering, ML engineering, software engineering "
+           "> Everything is free (no sign-up, no paywall, no ads). A free, open community to learn data engineering, AI engineering, LLM engineering, ML engineering, software engineering "
            "and forward-deployed engineering together. Every role has a crawl (beginner), walk (intermediate) and run (advanced) path "
            "on AWS, Azure, Google Cloud, Databricks and open source, with GitHub projects to build at each level. "
            "It also publishes open standards and research on building AI systems that hold up in production.", "",
