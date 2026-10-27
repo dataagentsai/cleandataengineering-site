@@ -101,6 +101,7 @@ def write_llms():
         out.append(f"- {d['name']}: {names}")
     out += ["", "## Courses", "",
             f"- [Data platform architecture, drawn right]({SITE}/learn/data-platform-architecture/): control plane and metadata DB, three services, medallion layers, streaming lane, 22 cross-cutting concerns, agents that only propose, products per platform",
+            f"- [DataTwin Studio]({SITE}/learn/data-platform-sim/): simulation of one batch through a data platform (metadata, Spark jobs, bronze/silver/gold rows, Delta Lake commits, query plans, logs, dashboard), recorded from a real Spark 3.5 + Delta 3.2 run; replay and naive-pipeline scenarios",
             f"- Components: [metadata store]({SITE}/learn/data-platform-architecture/metadata-store/), [ingestion]({SITE}/learn/data-platform-architecture/ingestion/), [bronze to silver with SCD Type 1 and 2]({SITE}/learn/data-platform-architecture/bronze-to-silver/), [gold]({SITE}/learn/data-platform-architecture/gold/)",
             f"- [Medallion architecture, drawn right]({SITE}/learn/medallion-architecture/): bronze, silver and gold layers, one order through every layer, nine rules, common mistakes, products on each platform",
             f"- [The AI Universe]({SITE}/learn/ai-universe/): seven families of AI stacks, concept versus product, on open source, Azure, AWS and Google Cloud",

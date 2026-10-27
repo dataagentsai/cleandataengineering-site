@@ -257,7 +257,7 @@ def page():
 <div class="ideas"><a href="/concepts/etl-elt/">ETL vs ELT</a><a href="/concepts/lakehouse/">Warehouse, lake and lakehouse</a><a href="/concepts/file-formats/">File formats</a><a href="/concepts/table-formats/">Open table formats</a><a href="/concepts/idempotency/">Idempotency</a><a href="/concepts/data-quality/">Data quality</a><a href="/concepts/data-contracts/">Data contracts</a><a href="/concepts/scd/">Slowly changing dimensions</a><a href="/concepts/dimensional/">Star schema</a><a href="/concepts/semantic-layer/">Semantic layer</a><a href="/concepts/lineage/">Lineage</a></div>
 <p><b>Learn it step by step:</b> <a href="/paths/data-engineering/">the Data Engineering path</a> (Crawl, Walk, Run on AWS, Azure, Google Cloud, Databricks or open source).</p>
 <p><b>Build one:</b> the <a href="/projects/dataeng-training/">Ecom simple data platform</a> project lands a shop's data through bronze, silver and gold. Join it, free.</p>
-<p><b>Coming soon:</b> the medallion as a simulation. Run a pretend shop's data through every layer, break it on purpose (a duplicate batch, a renamed column, a late file), and watch what catches it.</p></section>"""
+<p><b>Run it:</b> <a href="/learn/data-platform-sim/">DataTwin Studio</a> follows the same three orders through every layer, recorded from a real Spark and Delta Lake run. Then send the same file again and watch a naive pipeline double the revenue.</p></section>"""
     ld = [
         {"@context": "https://schema.org", "@type": "TechArticle", "headline": "Medallion architecture, drawn right",
          "description": "A free guide to medallion architecture: bronze, silver and gold layers, one order through every layer, nine rules, common mistakes and the products on each platform.",

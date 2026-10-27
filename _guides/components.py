@@ -535,7 +535,7 @@ def render(slug, title, desc, body, plat, qa):
 <section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
 <p><a href="{BASE}">↑ The whole picture</a> · <a href="/learn/medallion-architecture/">The medallion layers</a> · <a href="/concepts/#data-engineering">Key concepts</a> · <a href="/paths/data-engineering/">The Data Engineering path</a></p>
 {siblings(slug)}
-<p class="note" style="margin-top:12px">Coming soon: this component as a simulation you can run and break.</p></section>"""
+<p class="note" style="margin-top:12px"><b>See it run:</b> <a href="/learn/data-platform-sim/">DataTwin Studio</a> plays this component step by step on a real recorded run, including what happens when the same file arrives twice.</p></section>"""
     ld = [{"@context": "https://schema.org", "@type": "TechArticle", "headline": title, "description": desc, "url": url, "inLanguage": "en",
            "isAccessibleForFree": True, "dateModified": "2026-10-27", "author": {"@type": "Person", "name": "Basant Choudhary", "url": f"{SITE}/#about"},
            "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": SITE}},

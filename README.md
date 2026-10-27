@@ -25,6 +25,10 @@ Key concepts (the ideas that are the same on every cloud) live in `_paths/concep
 writes `/concepts/` (index by role and A–Z) and `/concepts/<id>/`, shows each role's concepts on its path page and each level's
 key ideas on the platform pages. Drawings for concept pages are in `_paths/diagrams.py`.
 
+## /learn/data-platform-sim/ (DataTwin Studio)
+
+`_sim/record_batch.py` records a real run on local Spark + Delta (run with `env -u SPARK_HOME ~/CostIntelligence1/.venv/bin/python _sim/record_batch.py`) into `_sim/data/batch.json`; `python3 _sim/build.py` writes the studio page with the data embedded. Re-record only when the scene changes.
+
 ## SEO
 
 `python3 _site/seo.py` writes `sitemap.xml`, `robots.txt` (search and AI crawlers welcome) and `llms.txt`, fills a
