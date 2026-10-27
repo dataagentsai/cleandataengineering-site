@@ -680,7 +680,7 @@ PROJECTS = [
         ],
         "repo": None,
         "repo_public": False,
-        "links": [],
+        "links": [("Simulation: a day with Babuji (hear Babu, see the rules behind each reply)", "/projects/babu-companion/simulation/")],
         "good_first": [
             "Write a Hindi or Hinglish exchange for one everyday situation, such as a festival morning.",
             "Review a sample transcript and mark anything that sounds like a machine.",
