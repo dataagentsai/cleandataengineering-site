@@ -100,6 +100,7 @@ def write_llms():
         names = ", ".join(f"[{CARDS[c]['name']}]({SITE}/concepts/{c}/)" for _, ids in ROLE_GROUPS[d["id"]] for c in ids)
         out.append(f"- {d['name']}: {names}")
     out += ["", "## Courses", "",
+            f"- [Data platform architecture, drawn right]({SITE}/learn/data-platform-architecture/): control plane and metadata DB, three services, medallion layers, streaming lane, 22 cross-cutting concerns, agents that only propose, products per platform",
             f"- [Medallion architecture, drawn right]({SITE}/learn/medallion-architecture/): bronze, silver and gold layers, one order through every layer, nine rules, common mistakes, products on each platform",
             f"- [The AI Universe]({SITE}/learn/ai-universe/): seven families of AI stacks, concept versus product, on open source, Azure, AWS and Google Cloud",
             f"- [Agent Harness, drawn simply]({SITE}/learn/agent-harness/): one real agent end to end, 167 hand-drawn pages with real code",

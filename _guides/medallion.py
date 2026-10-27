@@ -217,6 +217,7 @@ def page():
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › Medallion architecture</p>
 <p class="eyebrow" style="margin-top:22px">Data engineering · free guide · the same on every platform</p>
 <h1>Medallion architecture, drawn right</h1>
+<p class="note" style="margin:0 0 6px">Part of <a href="/learn/data-platform-architecture/">Data platform architecture, drawn right</a>: this page zooms into its middle row.</p>
 <p class="lede">The most common way to organise a data platform: raw data in, clean data in the middle, business-ready data out, and each step simple enough to check and redo. This guide shows each layer, follows one order through all of them with real rows, and lists the rules, the mistakes and the products on each platform.</p>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#plain">In plain words</a></li><li><a href="#spine">The whole picture</a></li><li><a href="#layers">Each layer, its job and its promise</a></li>
@@ -251,6 +252,7 @@ def page():
 <section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{faq}</section>
 
 <section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
+<p><b>Zoom out:</b> <a href="/learn/data-platform-architecture/">Data platform architecture, drawn right</a>: the control plane, the three services, streaming, 22 cross-cutting concerns and the agents around the medallion.</p>
 <p><b>The ideas behind each layer</b>, one short page each:</p>
 <div class="ideas"><a href="/concepts/etl-elt/">ETL vs ELT</a><a href="/concepts/lakehouse/">Warehouse, lake and lakehouse</a><a href="/concepts/file-formats/">File formats</a><a href="/concepts/table-formats/">Open table formats</a><a href="/concepts/idempotency/">Idempotency</a><a href="/concepts/data-quality/">Data quality</a><a href="/concepts/data-contracts/">Data contracts</a><a href="/concepts/scd/">Slowly changing dimensions</a><a href="/concepts/dimensional/">Star schema</a><a href="/concepts/semantic-layer/">Semantic layer</a><a href="/concepts/lineage/">Lineage</a></div>
 <p><b>Learn it step by step:</b> <a href="/paths/data-engineering/">the Data Engineering path</a> (Crawl, Walk, Run on AWS, Azure, Google Cloud, Databricks or open source).</p>
