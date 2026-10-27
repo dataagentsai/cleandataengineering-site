@@ -36,11 +36,11 @@ CSS = """<style>
   .ctl .pos { font-size:14px; color:var(--muted); margin-left:6px; }
   .studio { display:grid; grid-template-columns:260px 1fr; gap:16px; margin-top:8px; }
   .steps { border:var(--line); border-radius:14px; padding:8px; background:#fff; align-self:start; position:sticky; top:10px; max-height:92vh; overflow:auto; }
-  .steps button { display:flex; gap:8px; width:100%; text-align:left; font:inherit; font-size:14px; border:0; background:none; padding:7px 8px; border-radius:10px; cursor:pointer; color:var(--ink-soft); }
+  .steps { min-width:0; } .steps button { box-sizing:border-box; display:flex; gap:8px; width:100%; text-align:left; font:inherit; font-size:14px; border:0; background:none; padding:7px 8px; border-radius:10px; cursor:pointer; color:var(--ink-soft); }
   .steps button b { font-family:var(--hand); font-size:19px; min-width:24px; color:var(--ink); }
   .steps button.on { background:var(--butter-wash); color:var(--ink); outline:1.5px solid var(--ink); }
   .steps button.done { color:var(--ink); }
-  .insp { border:var(--line); border-radius:var(--wob); padding:14px 18px; background:var(--butter-wash); margin-bottom:14px; }
+  .insp { box-sizing:border-box; overflow-wrap:anywhere; border:var(--line); border-radius:var(--wob); padding:14px 18px; background:var(--butter-wash); margin-bottom:14px; }
   .insp h2 { font-size:28px; margin:0 0 6px; } .insp p { margin:0 0 10px; font-size:16.5px; }
   .insp pre, .panel pre { font-family:var(--mono); font-size:12px; line-height:1.45; background:#fff; border:1px solid var(--rule); border-radius:8px; padding:10px 12px; overflow-x:auto; margin:6px 0; white-space:pre; }
   .grid8 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
@@ -63,7 +63,7 @@ CSS = """<style>
   .log { font-family:var(--mono); font-size:11.5px; } .log div { padding:2px 0; border-bottom:1px dashed var(--rule); } .log .ERROR { color:#b0281a; font-weight:700; } .log .WARN { color:#8a6100; }
   details.c summary { cursor:pointer; font-family:var(--mono); font-size:12px; } .kv { font-family:var(--mono); font-size:12px; }
   .note { font-size:13px; color:var(--faint); }
-  @media (max-width:980px) { .studio { grid-template-columns:1fr; } .steps { position:static; max-height:none; } .grid8 { grid-template-columns:1fr; } .tiles { grid-template-columns:1fr 1fr; } }
+  @media (max-width:980px) { .studio { grid-template-columns:minmax(0,1fr); } .studio > div { min-width:0; } .steps { position:static; max-height:none; } .grid8 { grid-template-columns:1fr; } .tiles { grid-template-columns:1fr 1fr; } }
 </style>"""
 
 JS = r"""
@@ -94,6 +94,7 @@ function state(upto) {            // panels as they stand after step `upto` of t
 const R = {
   inputs(p) {
     if (!p) return '<p class="empty">Nothing yet.</p>';
+    if (!p.user) return '<pre style="white-space:pre-wrap">' + esc(p.text) + '</pre>';
     return '<p style="margin:0 0 6px;font-size:14.5px">' + esc(p.user) + '</p>' + (p.file ? '<p class="note">' + esc(p.file) + '</p>' : '') + '<pre>' + esc(p.text) + '</pre>';
   },
   config(p, ch) {
@@ -109,42 +110,57 @@ const R = {
     return h;
   },
   cluster(_, __, step) {
-    const env = D.env, gs = D.group_for_step[step.n] || [];
+    const env = D.env, gs = D.group_for_step[step.n] || (step.group ? [step.group] : []);
     let h = '<p class="kv">' + esc(env.master) + ' · driver ' + esc(env.executors.map(e => e.host + ', ' + e.cores + ' cores').join('; ')) + ' · Spark ' + esc(env.spark) + ' · Delta ' + esc(env.delta) + '</p>';
-    if (!gs.length) return h + '<p class="empty">' + (step.n === 10 ? 'No Spark job ran: the batch check stopped it before any work.' : 'No Spark work in this step.') + '</p>';
+    if (!gs.length) return h + '<p class="empty">' + (D.order.some(o => o[0] === 'dashboard') && step.n === 10 ? 'No Spark job ran: the batch check stopped it before any work.' : 'No Spark jobs recorded for this step.') + '</p>';
     const jobs = gs.flatMap(g => D.jobs[g] || []);
     const stages = jobs.flatMap(j => j.stages), tasks = stages.reduce((a, s) => a + s.tasks, 0), ms = jobs.reduce((a, j) => a + j.ms, 0);
     const shuffle = stages.reduce((a, s) => a + s.shuffle_write, 0);
     h += '<div class="tiles" style="grid-template-columns:repeat(4,1fr);margin:6px 0"><div class="tile"><span>jobs</span><b>' + jobs.length + '</b></div><div class="tile"><span>stages</span><b>' + stages.length + '</b></div><div class="tile"><span>tasks</span><b>' + tasks + '</b></div><div class="tile"><span>time</span><b>' + (ms / 1000).toFixed(1) + 's</b></div></div>';
     const top = jobs.slice().sort((a, b) => b.ms - a.ms).slice(0, 8), mx = Math.max(...top.map(j => j.ms), 1);
     h += '<div class="bars">' + top.map(j => '<div class="bar"><i style="width:' + Math.round(160 * j.ms / mx) + 'px"></i>job ' + j.job + ' · ' + j.ms + ' ms · ' + j.stages.map(s => s.tasks).join('+') + ' tasks · ' + esc(j.desc.replace(/^(Delta: )+/, '')) + '</div>').join('') + '</div>';
-    h += '<p class="note">Shuffle written: ' + shuffle + ' bytes. Many stages have 50 tasks: that is Delta rebuilding the table\'s state from its log (50 partitions by default), not your data. On three rows, the bookkeeping is most of the work.</p>';
+    h += '<p class="note">Shuffle written: ' + shuffle + ' bytes. Many stages have 50 tasks: that is Delta rebuilding the table\'s state from its log (50 partitions by default), not your data. On small data, that bookkeeping is most of the work.</p>';
     return h;
   },
   layers(p, ch) {
     if (!p) return '<p class="empty">No data yet.</p>';
-    const names = ['landing', 'bronze', 'silver', 'quarantine', 'gold'].filter(n => p[n]);
+    const names = Object.keys(p);
     const hint = (D.tab_for_step[curStep] || [])[0]; const cur = (tabState.layers && names.includes(tabState.layers)) ? tabState.layers : (names.includes(hint) ? hint : names[names.length - 1]);
     return tabs('layers', names, cur, ch) + tbl(p[cur]);
   },
   storage(p, ch) {
     if (!p) return '<p class="empty">No files yet.</p>';
     const names = Object.keys(p).filter(k => k !== 'landing');
-    let h = '<p class="kv">landing/ ' + esc((p.landing || []).join(', ')) + '</p>';
+    let h = p.landing ? '<p class="kv">landing/ ' + esc(p.landing.join(', ')) + '</p>' : '';
     if (!names.length) return h;
     const hint = (D.tab_for_step[curStep] || [])[1]; const cur = (tabState.storage && names.includes(tabState.storage)) ? tabState.storage : (names.includes(hint) ? hint : names[names.length - 1]);
     const t = p[cur];
-    h += tabs('storage', names, cur, ch) + '<p class="kv">' + esc(t.table) + ': ' + t.data_files + ' Parquet file(s) on disk, ' + t.commits.length + ' commit(s) in _delta_log/</p>';
-    h += t.commits.slice().reverse().map((c, i) => {
+    h += tabs('storage', names, cur, ch) + '<p class="kv">' + esc(t.table) + ': ' + (t.data_files != null ? t.data_files + ' Parquet file(s) on disk, ' : '') + t.commits.length + ' commit(s) in _delta_log/' + (t.other_files && t.other_files.filter(f => f !== '_commits').length ? '; also: ' + esc(t.other_files.filter(f => f !== '_commits').join(', ')) : '') + '</p>' +
+      (t.last_checkpoint ? '<p class="kv">_last_checkpoint → ' + esc(JSON.stringify(t.last_checkpoint)) + '</p>' : '');
+    const cs = t.commits.slice().reverse(); h += (cs.length > 12 ? '<p class="count">showing the latest 12 of ' + cs.length + ' commits</p>' : '');
+    h += cs.slice(0, 12).map((c, i) => {
       const ci = (c.actions.find(a => a.commitInfo) || {}).commitInfo || {};
       const m = ci.operationMetrics || {};
-      const keys = ['numOutputRows', 'numTargetRowsInserted', 'numTargetRowsUpdated', 'numTargetRowsCopied', 'numTargetFilesAdded', 'numTargetFilesRemoved', 'numFiles', 'numRemovedFiles'].filter(k => k in m);
-      return '<details class="c"' + (i === 0 ? ' open' : '') + '><summary>_delta_log/' + c.file + ' · ' + esc(ci.operation) + ' · ' + keys.map(k => k.replace('numTarget', '').replace('num', '') + '=' + m[k]).join(' ') + '</summary><pre>' + esc(JSON.stringify(c.actions, null, 1)) + '</pre></details>';
+      const keys = ['numOutputRows', 'numTargetRowsInserted', 'numTargetRowsUpdated', 'numTargetRowsCopied', 'numTargetFilesAdded', 'numTargetFilesRemoved', 'numFiles', 'numRemovedFiles', 'numAddedFiles', 'numUpdatedRows', 'numDeletedRows', 'numCopiedRows', 'numDeletionVectorsAdded', 'numRestoredFiles'].filter(k => k in m);
+      return '<details class="c"' + (i === 0 ? ' open' : '') + '><summary>_delta_log/' + c.file + ' · ' + esc(ci.operation) + ' · ' + keys.map(k => k.replace('numTarget', '').replace('num', '') + '=' + m[k]).join(' ') + '</summary><pre>' + esc(JSON.stringify(c.actions.slice(0, 6), null, 1)) + '</pre>' + (c.actions.length > 6 ? '<p class="count">… and ' + (c.actions.length - 6) + ' more actions in this commit (' + c.actions.filter(a => a.add).length + ' add, ' + c.actions.filter(a => a.remove).length + ' remove)</p>' : '') + '</details>';
     }).join('');
     return h;
   },
+  files(p) {
+    if (!p) return '<p class="empty">No files yet.</p>';
+    const ix = [0, 5, 2, 3, 4, 1], re = r => ix.map(i => r[i]);
+    return '<p class="kv"><b>' + esc(p.summary) + '</b></p>' + tbl({cols: re(p.cols), rows: p.rows.map(re)}, 14) + (p.rows.length > 14 ? '<p class="count">… ' + (p.rows.length - 14) + ' more files</p>' : '') +
+      '<p class="note">live = part of the current version. removed = no longer in the current version, but still on disk so older versions can be read, until VACUUM.</p>';
+  },
   engine(p) {
-    if (!p) return '<p class="empty">' + (scen.id === 'naive' && curStep > 4 ? 'Plans were not recorded for the naive pipeline; see scenario 1 for the plans of each hop.' : 'No query yet.') + '</p>';
+    if (!p) return '<p class="empty">' + (scen.id === 'naive' && curStep > 4 ? 'Plans were not recorded for the naive pipeline; see scenario 1 for the plans of each hop.' : 'Nothing yet.') + '</p>';
+    if (p.error || p.history || p.metrics) {
+      let h = '';
+      if (p.error) h += '<p class="note">The error, as Spark and Delta reported it:</p><pre style="color:#b0281a;white-space:pre-wrap">' + esc(p.error) + '</pre>';
+      if (p.metrics) h += '<div class="tiles" style="grid-template-columns:repeat(3,1fr);margin:4px 0 8px"><div class="tile bad"><span>query before</span><b>' + p.metrics.before_ms + ' ms</b></div><div class="tile"><span>OPTIMIZE took</span><b>' + p.metrics.optimize_ms + ' ms</b></div><div class="tile"><span>query after</span><b>' + p.metrics.after_ms + ' ms</b></div></div>';
+      if (p.history) h += '<p class="note">DESCRIBE HISTORY: every version, its operation and metrics</p>' + tbl(Object.assign({}, p.history, {rows: p.history.rows.slice().reverse()}), 14);
+      return h;
+    }
     return '<p class="note">The physical plan Spark chose for this step (EXPLAIN FORMATTED, recorded):</p><pre>' + esc(p.plan) + '</pre>';
   },
   logs(_, __, step, st) {
@@ -158,7 +174,7 @@ const R = {
     return '<div class="tiles">' + p.tiles.map(t => '<div class="tile' + (/✗|2,500/.test(t[1]) ? ' bad' : '') + '"><span>' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b></div>').join('') + '</div>' + (p.note ? '<p class="note" style="margin-top:6px">' + esc(p.note) + '</p>' : '');
   },
 };
-const ORDER = [['inputs', '1 · Inputs'], ['config', '2 · Config & metadata'], ['cluster', '3 · Cluster'], ['layers', '4 · Layers'], ['storage', '5 · Storage (Delta log)'], ['engine', '6 · Engine (query plan)'], ['logs', '7 · Logs'], ['dashboard', '8 · Dashboard']];
+const ORDER = D.order;
 function render() {
   const n = scen.steps[idx], step = BY[n], {st, changed} = state(idx);
   curStep = n; if (lastStep !== n) { for (const k in tabState) delete tabState[k]; lastStep = n; }
@@ -166,7 +182,7 @@ function render() {
   document.getElementById('steps').innerHTML = scen.steps.map((sn, i) => '<button data-i="' + i + '" class="' + (i === idx ? 'on' : i < idx ? 'done' : '') + '"><b>' + (i + 1) + '</b><span>' + esc(BY[sn].title) + '</span></button>').join('');
   document.getElementById('insp').innerHTML = '<p class="eyebrow">Step ' + (idx + 1) + ' of ' + scen.steps.length + ' · ' + esc(scen.label) + '</p><h2>' + esc(step.title) + '</h2><p>' + esc(step.plain) + '</p>' + (step.code ? '<details' + (idx > 0 ? ' open' : '') + '><summary style="cursor:pointer;font-size:14px">The code that ran</summary><pre>' + esc(step.code) + '</pre></details>' : '');
   document.getElementById('pos').textContent = (idx + 1) + ' / ' + scen.steps.length;
-  document.getElementById('grid').innerHTML = ORDER.map(([k, t]) => '<div class="panel' + (step.focus.includes(k) || (k === 'cluster' && D.group_for_step[n]) ? ' focus' : '') + (k === 'storage' || k === 'engine' ? '' : '') + '" id="p-' + k + '"><h3>' + t + '<small>' + (step.focus.includes(k) ? 'changed' : '') + '</small></h3>' + R[k](st[k], changed[k] || [], step, st) + '</div>').join('');
+  document.getElementById('grid').innerHTML = ORDER.map(([k, t]) => '<div class="panel' + (step.focus.includes(k) || (k === 'cluster' && (D.group_for_step[n] || step.group)) ? ' focus' : '') + (k === 'storage' || k === 'engine' ? '' : '') + '" id="p-' + k + '"><h3>' + t + '<small>' + (step.focus.includes(k) ? 'changed' : '') + '</small></h3>' + R[k](st[k], changed[k] || [], step, st) + '</div>').join('');
 }
 document.addEventListener('click', e => {
   const b = e.target.closest('button'); if (!b) return;
@@ -183,32 +199,66 @@ render();
 """
 
 
-def main():
-    data = json.loads((ROOT / "_sim" / "data" / "batch.json").read_text())
-    data["scenarios"] = SCENARIOS
-    data["group_for_step"] = {str(k): v for k, v in GROUP_FOR_STEP.items()}
-    data["tab_for_step"] = TAB_FOR_STEP
+DELTA_SCENARIOS = [
+    {"id": "files", "label": "1 · Files plus a log", "steps": [1, 2, 3, 4, 5], "blurb": "Create, insert, insert, update, delete: watch files and commits."},
+    {"id": "versions", "label": "2 · Old versions, checkpoints, RESTORE", "steps": [6, 7, 8], "blurb": "Continues from scenario 1."},
+    {"id": "writers", "label": "3 · Two writers at once", "steps": [9, 10], "blurb": "Optimistic concurrency, recorded with two real threads."},
+    {"id": "dv", "label": "4 · Deletion vectors", "steps": [11, 12, 13], "blurb": "The same changes without rewriting files."},
+    {"id": "small", "label": "5 · Small files and OPTIMIZE", "steps": [14, 15], "blurb": "300 tiny files, then compaction, with real timings."},
+    {"id": "vacuum", "label": "6 · VACUUM and time travel", "steps": [16, 17], "blurb": "Why old versions stop working."},
+]
+BATCH_ORDER = [["inputs", "1 · Inputs"], ["config", "2 · Config & metadata"], ["cluster", "3 · Cluster"], ["layers", "4 · Layers"], ["storage", "5 · Storage (Delta log)"], ["engine", "6 · Engine (query plan)"], ["logs", "7 · Logs"], ["dashboard", "8 · Dashboard"]]
+DELTA_ORDER = [["inputs", "1 · Command"], ["layers", "2 · Table rows"], ["files", "3 · Files on disk"], ["storage", "4 · _delta_log"], ["engine", "5 · History & errors"], ["cluster", "6 · Spark jobs"], ["logs", "7 · Logs"]]
+
+SCENES = [
+    {"slug": "", "data": "batch.json", "scenarios": SCENARIOS, "order": BATCH_ORDER, "groups": GROUP_FOR_STEP, "tabs": TAB_FOR_STEP,
+     "nav": "One batch, end to end", "eyebrow": "DataTwin Studio · scene 1 · one batch, end to end", "h1": "Watch one batch go through a data platform",
+     "title": "DataTwin Studio: one batch, end to end",
+     "desc": "Watch one batch move through a data platform: metadata, Spark jobs, bronze, silver, gold, Delta Lake commits, query plans, logs and the dashboard, recorded from a real run.",
+     "lede": "A clothing shop's orders file travels from the moment a data engineer onboards the table to the dashboard tile. Every panel shows what that part of the platform holds at that step: the YAML and the metadata database, the Spark jobs and tasks, the rows in each layer, the Delta Lake commit files, the query plan, the logs and the dashboard. Then break it: send the same file again.",
+     "real": "with a real SQLite metadata store. Only the story (who merged the pull request, why the file was re-sent) is made up."},
+    {"slug": "delta", "data": "delta.json", "scenarios": DELTA_SCENARIOS, "order": DELTA_ORDER, "groups": {}, "tabs": {},
+     "nav": "Delta Lake internals", "eyebrow": "DataTwin Studio · Delta Lake internals", "h1": "Delta Lake internals, recorded",
+     "title": "Delta Lake internals: files, log, versions, DVs",
+     "desc": "See Delta Lake from the inside: Parquet files and the _delta_log, copy-on-write updates, checkpoints, time travel, concurrent writers, deletion vectors, OPTIMIZE and VACUUM.",
+     "lede": "What really happens on disk when you create, insert, update and delete in a Delta table. Each step shows the command, the table's rows, every Parquet file on disk (live, or kept only for time travel), the commit files in _delta_log, the table history and the Spark jobs. Six scenarios, from 'a table is files plus a log' to 'why VACUUM breaks time travel'.",
+     "real": "Nothing here is drawn by hand: the files, commits, errors and timings are what Delta actually wrote and reported."},
+]
+
+
+def page(sc):
+    data = json.loads((ROOT / "_sim" / "data" / sc["data"]).read_text())
+    data["scenarios"] = sc["scenarios"]
+    data["order"] = sc["order"]
+    data["group_for_step"] = sc["groups"]
+    data["tab_for_step"] = sc["tabs"]
     blob = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     env = data["env"]
-    scen_btns = "".join(f'<button data-s="{s["id"]}">{s["label"]}</button>' for s in SCENARIOS)
-    body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › DataTwin Studio</p>
-<p class="eyebrow" style="margin-top:20px">DataTwin Studio · scene 1 · one batch, end to end</p>
-<h1>Watch one batch go through a data platform</h1>
-<p class="lede">A clothing shop's orders file travels from the moment a data engineer onboards the table to the dashboard tile. Every panel shows what that part of the platform holds at that step: the YAML and the metadata database, the Spark jobs and tasks, the rows in each layer, the Delta Lake commit files, the query plan, the logs and the dashboard. Then break it: send the same file again.</p>
-<p><span class="real">real</span> Every value was recorded from a real run on {env['master']} Spark {env['spark']} + Delta Lake {env['delta']} on {env['recorded_at'][:10]}, with a real SQLite metadata store. Only the story (who merged the pull request, why the file was re-sent) is made up.</p>
+    url = URL + (sc["slug"] + "/" if sc["slug"] else "")
+    scen_btns = "".join(f'<button data-s="{s["id"]}" title="{s["blurb"]}">{s["label"]}</button>' for s in sc["scenarios"])
+    nav = "".join(f'<span class="real" style="background:var(--ink);color:#fff">{x["nav"]}</span>' if x is sc else f'<a href="/learn/data-platform-sim/{x["slug"] + "/" if x["slug"] else ""}" style="font-size:14px">{x["nav"]}</a>' for x in SCENES)
+    body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › <a href="/learn/data-platform-sim/">DataTwin Studio</a>{" › " + sc["nav"] if sc["slug"] else ""}</p>
+<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> {nav} <span>· more coming: Spark internals, streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
+<p class="eyebrow" style="margin-top:16px">{sc["eyebrow"]}</p>
+<h1>{sc["h1"]}</h1>
+<p class="lede">{sc["lede"]}</p>
+<p><span class="real">real</span> Recorded on {env['master']} Spark {env['spark']} + Delta Lake {env['delta']} on {env['recorded_at'][:10]}. {sc["real"]}</p>
 <div class="scen">{scen_btns}</div>
 <div class="ctl"><button id="prev">◀ Back</button><button id="play">▶ Play</button><button id="next">Next ▶</button><span class="pos" id="pos"></span><span class="note">Arrow keys work too. Click a step, a tab or a commit to look closer.</span></div>
 <div class="studio"><nav class="steps" id="steps" aria-label="Steps"></nav><div><div class="insp" id="insp"></div><div class="grid8" id="grid"></div></div></div>
-<section><p class="eyebrow">Read alongside</p><p><a href="/learn/data-platform-architecture/">Data platform architecture</a> · <a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a> · <a href="/learn/data-platform-architecture/ingestion/">Ingestion</a> · <a href="/learn/data-platform-architecture/bronze-to-silver/">Bronze to silver</a> · <a href="/learn/data-platform-architecture/gold/">Gold</a> · <a href="/concepts/idempotency/">Idempotency</a></p>
-<p class="note">More scenes are on the way: Delta Lake internals, Spark internals, streaming and Kafka, data quality and profiling, Unity Catalog, dimensional modelling, and cost.</p></section>
+<section><p class="eyebrow">Read alongside</p><p><a href="/learn/data-platform-architecture/">Data platform architecture</a> · <a href="/learn/medallion-architecture/">Medallion architecture</a> · <a href="/concepts/table-formats/">Open table formats</a> · <a href="/concepts/small-files/">The small-files problem</a> · <a href="/concepts/idempotency/">Idempotency</a></p></section>
 <script type="application/json" id="sim-data">{blob}</script>
 <script>{JS}</script>"""
-    desc = "Watch one batch move through a data platform: metadata, Spark jobs, bronze, silver, gold, Delta Lake commits, query plans, logs and the dashboard, recorded from a real run."
-    html = wb.page("DataTwin Studio: one batch, end to end", desc, URL, body, CSS)
-    out = ROOT / "learn" / "data-platform-sim"
+    html = wb.page(sc["title"], sc["desc"], url, body, CSS)
+    out = ROOT / "learn" / "data-platform-sim" / sc["slug"]
     out.mkdir(parents=True, exist_ok=True)
     (out / "index.html").write_text(html)
     print("studio ->", out / "index.html", f"{len(html) // 1024} KB")
+
+
+def main():
+    for sc in SCENES:
+        page(sc)
 
 
 if __name__ == "__main__":
