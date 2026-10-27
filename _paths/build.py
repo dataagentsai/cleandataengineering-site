@@ -315,6 +315,9 @@ def concept_roles(cid):
     return [(d, g) for d in DISCIPLINES for g, ids in ROLE_GROUPS.get(d["id"], []) if cid in ids]
 
 
+GUIDES = {"medallion": ("Medallion architecture, drawn right", "/learn/medallion-architecture/")}
+
+
 def concept_page(cid):
     c = CARDS[cid]
     url = f"{SITE}/concepts/{cid}/"
@@ -327,6 +330,8 @@ def concept_page(cid):
             f'<p class="lede">{E(c["short"])}</p></div>',
             '<div class="cbody">',
             f'<h2>What it is</h2><p>{E(c["what"])}</p>']
+    if cid in GUIDES:
+        body.append(f'<div class="box ex"><b>Full guide:</b> <a href="{GUIDES[cid][1]}">{E(GUIDES[cid][0])}</a>, with every layer, one order followed through them all, the rules, the mistakes and the products on each platform.</div>')
     if c["diagram"]:
         svg, cap = DIAGRAMS[c["diagram"]]()
         body.append(f'<figure class="diagram">{svg}<figcaption>{E(cap)}</figcaption></figure>')

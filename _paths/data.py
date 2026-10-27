@@ -210,6 +210,7 @@ STATUS = {"live": "Under way · join", "starting": "Just starting · join", "nee
 # Tutorials and pages on this site worth reading at a level.
 READ = {
     "universe": ("The AI Universe", "/learn/ai-universe/"),
+    "medallion": ("Medallion architecture, drawn right", "/learn/medallion-architecture/"),
     "harness": ("Agent Harness, drawn simply", "/learn/agent-harness/"),
     "series": ("The Agent Harness Series", "/learn/agent-harness/series/"),
     "evalh": ("Eval Harness, drawn simply", "/learn/eval-harness/"),
@@ -243,7 +244,7 @@ DISCIPLINES = [
         "who": "You move, clean and shape data so other people can trust the numbers.",
         "why": "Every AI system is only as good as the data under it. Data engineers build that floor: pipelines that land data, tables that hold it, checks that stop bad rows, and models that give each metric one meaning.",
         "platforms": ["aws", "azure", "gcp", "databricks", "open"],
-        "read": ["universe", "certs"],
+        "read": ["medallion", "universe", "certs"],
         "levels": {
             "crawl": {"weeks": "8 weeks", "goal": "Land a dataset, clean it in layers, and show it on a dashboard.",
                       "topics": [("SQL, really well", "joins, group by, window functions; read a query plan once", ["sql"]),

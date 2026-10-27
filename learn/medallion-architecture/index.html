@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Medallion architecture, drawn right · Clean Data Engineering</title>
+<meta name="description" content="Medallion architecture explained: bronze, silver and gold layers, one order through every layer with real rows, nine rules, common mistakes and products per platform."><link rel="canonical" href="https://cleandataengineering.ai/learn/medallion-architecture/">
+<meta property="og:title" content="Medallion architecture, drawn right"><meta property="og:description" content="Medallion architecture explained: bronze, silver and gold layers, one order through every layer with real rows, nine rules, common mistakes and products per platform."><meta property="og:url" content="https://cleandataengineering.ai/learn/medallion-architecture/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Medallion architecture, drawn right", "description": "A free guide to medallion architecture: bronze, silver and gold layers, one order through every layer, nine rules, common mistakes and the products on each platform.", "url": "https://cleandataengineering.ai/learn/medallion-architecture/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-10-27", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}, "about": [{"@type": "Thing", "name": "Medallion architecture"}, {"@type": "Thing", "name": "Data engineering"}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What is medallion architecture?", "acceptedAnswer": {"@type": "Answer", "text": "A way to organise a data platform into layers of increasing quality: bronze keeps raw data as it arrived, silver holds clean, typed, de-duplicated data with one row per real thing, and gold holds tables shaped for a business use. Each layer is built only from the one before it."}}, {"@type": "Question", "name": "Is medallion architecture only for Databricks?", "acceptedAnswer": {"@type": "Answer", "text": "No. The name was popularised by Databricks, and Microsoft Fabric uses it too, but the idea (raw, then cleaned, then modelled) is much older and works on AWS, Google Cloud, Snowflake or open source. Only the product names change."}}, {"@type": "Question", "name": "Is medallion a data model?", "acceptedAnswer": {"@type": "Answer", "text": "No. It says how data moves and what each layer promises. You still choose a data model inside the layers: for example dimensional (star schema) in gold, or data vault in silver."}}, {"@type": "Question", "name": "How many layers should there be?", "acceptedAnswer": {"@type": "Answer", "text": "Three named layers (bronze, silver, gold), often with a landing area before bronze and a semantic layer after gold. If you feel you need a fourth medallion, you usually need more tables, not another layer."}}, {"@type": "Question", "name": "Where should data quality checks go?", "acceptedAnswer": {"@type": "Answer", "text": "Everywhere, but the contract is enforced at the bronze-to-silver hop: rows that break it go to quarantine with a reason. Gold adds reconciliation (counts and sums agree with silver and the source)."}}, {"@type": "Question", "name": "Where does SCD Type 2 history live?", "acceptedAnswer": {"@type": "Answer", "text": "In silver, for entities whose history matters (a customer's city, a product's price). Gold dimensions read that history."}}, {"@type": "Question", "name": "Does streaming need a different architecture?", "acceptedAnswer": {"@type": "Answer", "text": "Usually not: one medallion, two speeds. Hot tables flow through the same layers continuously; the rules (one-way flow, contracts, MERGE) stay the same."}}, {"@type": "Question", "name": "Medallion vs Kimball vs data vault?", "acceptedAnswer": {"@type": "Answer", "text": "They answer different questions. Medallion is the flow and the promise of each layer. Kimball (star schemas) is how to shape gold for analysis. Data vault is one way to model an integrated, historised silver. Many platforms use medallion with Kimball in gold."}}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Learn", "item": "https://cleandataengineering.ai/learn/"}, {"@type": "ListItem", "position": 2, "name": "Medallion architecture", "item": "https://cleandataengineering.ai/learn/medallion-architecture/"}]}</script></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › Medallion architecture</p>
+<p class="eyebrow" style="margin-top:22px">Data engineering · free guide · the same on every platform</p>
+<h1>Medallion architecture, drawn right</h1>
+<p class="lede">The most common way to organise a data platform: raw data in, clean data in the middle, business-ready data out, and each step simple enough to check and redo. This guide shows each layer, follows one order through all of them with real rows, and lists the rules, the mistakes and the products on each platform.</p>
+<nav class="toc"><b>On this page</b><ol>
+<li><a href="#plain">In plain words</a></li><li><a href="#spine">The whole picture</a></li><li><a href="#layers">Each layer, its job and its promise</a></li>
+<li><a href="#journey">One order, through every layer</a></li><li><a href="#rules">Nine rules that keep it honest</a></li><li><a href="#mistakes">Common mistakes</a></li>
+<li><a href="#platforms">On each platform</a></li><li><a href="#faq">Questions people ask</a></li><li><a href="#next">Where to go next</a></li></ol></nav>
+
+<section id="plain"><p class="eyebrow">In plain words</p><h2>Think of a kitchen</h2>
+<p>A restaurant never cooks straight from the delivery bag. Groceries go into a store room as they arrived, labelled with when they came. On the prep counter they are washed, chopped and the bad bits thrown out. Then they are cooked into a dish for one purpose, and the menu gives each dish one name and one price. If a dish goes wrong, the cook goes back to the store room, not to the supplier.</p>
+<figure class="diagram"><svg viewBox="0 0 990 155" role="img" aria-label="A kitchen: groceries as delivered, a store room that keeps everything, a prep counter where food is cleaned, a dish cooked for one purpose, and a menu with one name per dish."><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F1F1F"/></marker></defs><rect x="10" y="20" width="160" height="88" rx="14" fill="#F3F3F1" stroke="#1F1F1F" stroke-width="1.6"/><text x="90.0" y="60.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Groceries</text><text x="90.0" y="80.0" text-anchor="middle" font-size="14" fill="#555">as delivered,</text><text x="90.0" y="96.0" text-anchor="middle" font-size="14" fill="#555">still in bags</text><line x1="172" y1="64" x2="204" y2="64" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="206" y="20" width="160" height="88" rx="14" fill="#F5E3D3" stroke="#1F1F1F" stroke-width="1.6"/><text x="286.0" y="60.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Store room</text><text x="286.0" y="80.0" text-anchor="middle" font-size="14" fill="#555">unpacked, labelled,</text><text x="286.0" y="96.0" text-anchor="middle" font-size="14" fill="#555">nothing thrown away</text><line x1="368" y1="64" x2="400" y2="64" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="402" y="20" width="160" height="88" rx="14" fill="#ECEEF1" stroke="#1F1F1F" stroke-width="1.6"/><text x="482.0" y="60.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Prep counter</text><text x="482.0" y="80.0" text-anchor="middle" font-size="14" fill="#555">washed, chopped,</text><text x="482.0" y="96.0" text-anchor="middle" font-size="14" fill="#555">bad bits removed</text><line x1="564" y1="64" x2="596" y2="64" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="598" y="20" width="160" height="88" rx="14" fill="#FFF1C2" stroke="#1F1F1F" stroke-width="1.6"/><text x="678.0" y="60.0" text-anchor="middle" font-size="19" fill="#1F1F1F">The dish</text><text x="678.0" y="80.0" text-anchor="middle" font-size="14" fill="#555">cooked for</text><text x="678.0" y="96.0" text-anchor="middle" font-size="14" fill="#555">one purpose</text><line x1="760" y1="64" x2="792" y2="64" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="794" y="20" width="160" height="88" rx="14" fill="#F0F8F3" stroke="#1F1F1F" stroke-width="1.6"/><text x="874.0" y="60.0" text-anchor="middle" font-size="19" fill="#1F1F1F">The menu</text><text x="874.0" y="80.0" text-anchor="middle" font-size="14" fill="#555">one name per dish,</text><text x="874.0" y="96.0" text-anchor="middle" font-size="14" fill="#555">one price</text><text x="495" y="140" text-anchor="middle" font-size="15" fill="#555">you never cook straight from the delivery bag, and you can always go back to the store room</text></svg><figcaption>The same idea in a kitchen. Landing is the delivery bag, bronze the store room, silver the prep counter, gold the dish, semantic the menu.</figcaption></figure>
+<p>A data platform works the same way. <b>Bronze</b> is the store room: everything as it arrived. <b>Silver</b> is the prep counter: cleaned, one of each thing. <b>Gold</b> is the dish: shaped for a use. The <b>semantic layer</b> is the menu: one meaning per number. The name "medallion" just means bronze, silver and gold, in order of polish.</p></section>
+
+<section id="spine"><p class="eyebrow">The whole picture</p><h2>The spine, with what sits above and below it</h2>
+<p>Read it left to right. Data moves one way. Above the layers sits the <b>control plane</b>, which turns a written description of each table (the manifest) into pipelines. Below them sit the <b>cross-cutting jobs</b> such as quality, lineage and cost, which run on every hop, not as a box at the end.</p>
+<figure class="diagram"><svg viewBox="0 0 1120 300" role="img" aria-label="The medallion spine: sources, landing, bronze, silver, gold, semantic, experiences, with the control plane above and cross-cutting concerns below."><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F1F1F"/></marker></defs><rect x="10" y="10" width="1100" height="58" rx="14" fill="#F6F2FC" stroke="#1F1F1F" stroke-width="1.4" stroke-dasharray="6 5"/><text x="560" y="34" text-anchor="middle" font-size="16" fill="#1F1F1F">Control plane: the manifest (YAML) → validator → generator → pipelines · orchestration · catalog · run log</text><text x="560" y="56" text-anchor="middle" font-size="13" fill="#555">Agents may only propose manifest changes by pull request; they never touch production</text><rect x="10" y="96" width="138" height="96" rx="14" fill="#F3F3F1" stroke="#1F1F1F" stroke-width="1.6"/><text x="79.0" y="140.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Sources</text><text x="79.0" y="160.0" text-anchor="middle" font-size="14" fill="#555">databases, files,</text><text x="79.0" y="176.0" text-anchor="middle" font-size="14" fill="#555">APIs, events</text><line x1="150" y1="144" x2="168" y2="144" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="170" y="96" width="138" height="96" rx="14" fill="#FFFFFF" stroke="#1F1F1F" stroke-width="1.6"/><text x="239.0" y="140.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Landing</text><text x="239.0" y="160.0" text-anchor="middle" font-size="14" fill="#555">files as received,</text><text x="239.0" y="176.0" text-anchor="middle" font-size="14" fill="#555">never changed</text><line x1="310" y1="144" x2="328" y2="144" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="330" y="96" width="138" height="96" rx="14" fill="#F5E3D3" stroke="#1F1F1F" stroke-width="1.6"/><text x="399.0" y="140.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Bronze</text><text x="399.0" y="160.0" text-anchor="middle" font-size="14" fill="#555">raw, append-only,</text><text x="399.0" y="176.0" text-anchor="middle" font-size="14" fill="#555">+ audit columns</text><line x1="470" y1="144" x2="488" y2="144" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="490" y="96" width="138" height="96" rx="14" fill="#ECEEF1" stroke="#1F1F1F" stroke-width="1.6"/><text x="559.0" y="140.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Silver</text><text x="559.0" y="160.0" text-anchor="middle" font-size="14" fill="#555">typed, deduped,</text><text x="559.0" y="176.0" text-anchor="middle" font-size="14" fill="#555">one row per thing</text><line x1="630" y1="144" x2="648" y2="144" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="650" y="96" width="138" height="96" rx="14" fill="#FFF1C2" stroke="#1F1F1F" stroke-width="1.6"/><text x="719.0" y="140.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Gold</text><text x="719.0" y="160.0" text-anchor="middle" font-size="14" fill="#555">shaped for a use:</text><text x="719.0" y="176.0" text-anchor="middle" font-size="14" fill="#555">facts, dims, marts</text><line x1="790" y1="144" x2="808" y2="144" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="810" y="96" width="138" height="96" rx="14" fill="#F0F8F3" stroke="#1F1F1F" stroke-width="1.6"/><text x="879.0" y="140.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Semantic</text><text x="879.0" y="160.0" text-anchor="middle" font-size="14" fill="#555">metrics defined</text><text x="879.0" y="176.0" text-anchor="middle" font-size="14" fill="#555">once; no tables</text><line x1="950" y1="144" x2="968" y2="144" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="970" y="96" width="138" height="96" rx="14" fill="#EFF8FB" stroke="#1F1F1F" stroke-width="1.6"/><text x="1039.0" y="140.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Experiences</text><text x="1039.0" y="160.0" text-anchor="middle" font-size="14" fill="#555">dashboards, AI,</text><text x="1039.0" y="176.0" text-anchor="middle" font-size="14" fill="#555">APIs, ML</text><text x="560" y="216" text-anchor="middle" font-size="15" fill="#1F1F1F">data moves one way: each layer is built only from the one before it</text><rect x="10" y="232" width="1100" height="58" rx="14" fill="#FFF8E8" stroke="#1F1F1F" stroke-width="1.4" stroke-dasharray="6 5"/><text x="560" y="256" text-anchor="middle" font-size="15" fill="#1F1F1F">Cross-cutting, on every hop: contracts and quality · reconciliation · lineage · freshness · cost · access and PII · audit</text><text x="560" y="278" text-anchor="middle" font-size="13" fill="#555">declared once in the manifest, switched on by default, never bolted on at the end</text></svg><figcaption>The medallion, drawn right: a spine of layers, a control plane above it, and the cross-cutting jobs below it.</figcaption></figure></section>
+
+<section id="layers"><p class="eyebrow">Each layer</p><h2>Its job and its promise</h2><div class="layer" style="--w:#FFFFFF"><h3>Landing</h3><p class="one">Files exactly as they arrived, so a bad parse can be redone.</p><dl><dt>Holds</dt><dd>Files from the mover: CSV, JSON, Parquet, exports, API pages, untouched.</dd><dt>Writes</dt><dd>New files only. Never edited, never deleted by a pipeline.</dd><dt>Read by</dt><dd>The bronze loader only.</dd><dt>Keep for</dt><dd>Short: days or weeks. Long enough to replay a bad load.</dd><dt>Skip it when</dt><dd>Change data capture writes straight into bronze.</dd></dl></div><div class="layer" style="--w:#F5E3D3"><h3>Bronze</h3><p class="one">Raw data in the source's own shape, append-only, with notes on where each row came from.</p><dl><dt>Holds</dt><dd>Every row ever received, in the source's columns and types (often all strings).</dd><dt>Adds</dt><dd><code>_ingested_at</code>, <code>_source</code>, <code>_batch_id</code>, <code>_file</code>: when, from where, in which batch, from which file.</dd><dt>Writes</dt><dd>Append only. Loading the same batch again is detected by <code>_batch_id</code> and skipped.</dd><dt>Read by</dt><dd>Silver jobs only. No dashboard, no analyst, no model reads bronze.</dd><dt>Promise</dt><dd>You can always rebuild silver from bronze.</dd></dl></div><div class="layer" style="--w:#ECEEF1"><h3>Silver</h3><p class="one">The first layer with an opinion: one clean row per real thing.</p><dl><dt>Holds</dt><dd>One row per business entity (an order, a customer), typed, de-duplicated, with conformed keys.</dd><dt>Does</dt><dd>Cast types, trim, standardise codes, fix time zones, handle nulls, keep the latest row per key, keep history (SCD Type 1 or 2).</dd><dt>Enforces</dt><dd>The data contract. A row that fails goes to quarantine with its reason; it is never silently dropped.</dd><dt>Writes</dt><dd>MERGE on the business key, so re-running changes nothing.</dd><dt>Read by</dt><dd>Gold jobs, data scientists, feature pipelines.</dd></dl></div><div class="layer" style="--w:#FFF1C2"><h3>Gold</h3><p class="one">Tables shaped for a use: a sales mart, a star schema, a feature table, a data product.</p><dl><dt>Holds</dt><dd>Facts and dimensions, aggregates, marts, published data products.</dd><dt>Built from</dt><dd>Silver only, never bronze.</dd><dt>Checked by</dt><dd>Reconciliation: counts and sums agree with silver and with the source, within a tolerance.</dd><dt>Read by</dt><dd>The semantic layer, dashboards, sharing, ML.</dd></dl></div><div class="layer" style="--w:#F0F8F3"><h3>Semantic</h3><p class="one">Definitions, not tables: each metric means one thing.</p><dl><dt>Holds</dt><dd>Metric definitions (net revenue = gross minus refunds, excluding test orders), entities, joins, governed names.</dd><dt>Read by</dt><dd>Dashboards and conversation UIs alike, so both give the same answer. The model never writes raw SQL.</dd><dt>Why</dt><dd>It ends the 'why do two dashboards show two revenues' meeting.</dd></dl></div><div class="layer" style="--w:#EFF8FB"><h3>Experiences</h3><p class="one">Where people and programs use the data.</p><dl><dt>Includes</dt><dd>Dashboards, conversation UIs, APIs, data sharing, ML features, documents for AI (RAG).</dd><dt>Reads</dt><dd>Only from semantic or gold.</dd></dl></div></section>
+
+<section id="journey"><p class="eyebrow">Worked example</p><h2>One order, through every layer</h2>
+<p>A clothing shop sends a small file at 9 a.m. It has three rows, and two problems in it. Watch what each layer does with them.</p>
+<h3>1 · Landing: the file as it arrived</h3>
+<pre style="font-size:13px;background:var(--surface-2);padding:12px;border-radius:8px;overflow-x:auto">orders_2026-10-27_0900.json
+{"order_id":"1001","customer":"C-77","amount":"1,250.00","currency":"inr","placed":"27/10/2026 08:58","status":"PAID "}
+{"order_id":"1002","customer":null,"amount":"-40","currency":"INR","placed":"27/10/2026 08:59","status":"paid"}
+{"order_id":"1001","customer":"C-77","amount":"1,250.00","currency":"inr","placed":"27/10/2026 08:58","status":"PAID "}</pre>
+<p>Order 1001 was sent twice. Order 1002 has no customer and a negative amount. Landing keeps all of it, untouched.</p>
+
+<h3>2 · Bronze: the same rows, plus where they came from</h3>
+<div class="tw"><table class="t rows"><tr><th>order_id</th><th>customer</th><th>amount</th><th>currency</th><th>placed</th><th>status</th><th>_ingested_at</th><th>_source</th><th>_batch_id</th><th>_file</th></tr>
+<tr><td>1001</td><td>C-77</td><td>1,250.00</td><td>inr</td><td>27/10/2026 08:58</td><td>"PAID "</td><td class="new">2026-10-27T03:31:02Z</td><td class="new">shop_db</td><td class="new">b-0912</td><td class="new">orders_…0900.json</td></tr>
+<tr><td>1002</td><td class="bad">null</td><td class="bad">-40</td><td>INR</td><td>27/10/2026 08:59</td><td>paid</td><td class="new">2026-10-27T03:31:02Z</td><td class="new">shop_db</td><td class="new">b-0912</td><td class="new">orders_…0900.json</td></tr>
+<tr><td class="bad">1001</td><td>C-77</td><td>1,250.00</td><td>inr</td><td>27/10/2026 08:58</td><td>"PAID "</td><td class="new">2026-10-27T03:31:02Z</td><td class="new">shop_db</td><td class="new">b-0912</td><td class="new">orders_…0900.json</td></tr></table></div>
+<p>Still strings (note the stray space after "PAID"), still the duplicate, still the bad row. Bronze is a faithful record, not a clean one. The green columns are the audit columns the loader adds.</p>
+
+<h3>3 · Silver: one clean, typed row per order</h3>
+<div class="tw"><table class="t rows"><tr><th>order_id</th><th>customer_key</th><th>amount_inr</th><th>placed_at_utc</th><th>status</th><th>_batch_id</th></tr>
+<tr><td>1001</td><td>C-77</td><td>1250.00</td><td>2026-10-27 03:28:00</td><td>paid</td><td>b-0912</td></tr></table></div>
+<div class="tw"><table class="t rows"><tr><th>quarantine: order_id</th><th>rule failed</th><th>_batch_id</th></tr>
+<tr><td class="bad">1002</td><td class="bad">customer_key is required; amount must be ≥ 0</td><td>b-0912</td></tr></table></div>
+<p>The duplicate collapsed to one row (latest per key). Text became numbers and timestamps, India time became UTC, codes were standardised. Order 1002 failed the contract and went to quarantine with its reason, where the owner can see it.</p>
+
+<h3>4 · Gold: shaped for the question "how much did we sell?"</h3>
+<div class="tw"><table class="t rows"><tr><th>fact_sales: date_key</th><th>store_key</th><th>customer_key</th><th>order_id</th><th>amount_inr</th></tr>
+<tr><td>20261027</td><td>S-04</td><td>C-77</td><td>1001</td><td>1250.00</td></tr></table></div>
+<div class="tw"><table class="t rows"><tr><th>daily_sales: date</th><th>orders</th><th>revenue_inr</th><th>reconciled</th></tr>
+<tr><td>2026-10-27</td><td>1</td><td>1250.00</td><td class="new">✓ 2 distinct orders in the source = 1 in silver + 1 in quarantine</td></tr></table></div>
+
+<h3>5 · Semantic: one meaning for "revenue"</h3>
+<pre style="font-size:13px;background:var(--surface-2);padding:12px;border-radius:8px;overflow-x:auto">metric: net_revenue
+  meaning: paid order amounts minus refunds, excluding test orders
+  from: gold.fact_sales
+  owner: finance</pre>
+<p>The dashboard and the conversation UI both ask for <code>net_revenue</code>, so both say ₹1,250 for 27 October, and both can say why order 1002 is missing.</p>
+</section>
+
+<section id="rules"><p class="eyebrow">Rules</p><h2>Nine rules that keep it honest</h2>
+<p>Each rule can be checked by a machine, which is what keeps a medallion from slowly turning back into a swamp.</p><div class="rule"><b class="n">1</b><div><b>Data moves one way.</b> Each layer is built only from the one before it. Gold never reads bronze; a dashboard never reads silver directly.</div></div><div class="rule"><b class="n">2</b><div><b>Bronze is append-only and replayable.</b> Nothing in bronze is edited. If silver is wrong, fix the job and rebuild silver from bronze.</div></div><div class="rule"><b class="n">3</b><div><b>Every row says where it came from.</b> Audit columns in bronze, lineage on every hop, the batch id carried into silver.</div></div><div class="rule"><b class="n">4</b><div><b>Silver is one row per real thing.</b> De-duplicated on the business key, typed, with history kept as decided (SCD Type 1 or 2).</div></div><div class="rule"><b class="n">5</b><div><b>Bad rows are quarantined, never dropped.</b> Each with the rule it failed, visible to its owner. A rule is never loosened just to make a job pass.</div></div><div class="rule"><b class="n">6</b><div><b>Every load can run twice.</b> Bronze skips a batch it has seen; silver and gold use MERGE or partition overwrite. Run twice = run once.</div></div><div class="rule"><b class="n">7</b><div><b>Numbers reconcile across hops.</b> Counts and sums agree from source to gold within a tolerance, every run.</div></div><div class="rule"><b class="n">8</b><div><b>Metrics are defined once.</b> In the semantic layer, not in each dashboard.</div></div><div class="rule"><b class="n">9</b><div><b>Cross-cutting jobs are on by default.</b> Quality, lineage, freshness, cost, access and PII are declared per table; turning one off needs a written waiver.</div></div></section>
+
+<section id="mistakes"><p class="eyebrow">Mistakes</p><h2>Common mistakes, and the fix</h2>
+<div class="tw"><table class="t"><tr><th>Mistake</th><th>Why it hurts</th><th>Fix</th></tr><tr><td><b>Dashboards reading bronze</b></td><td>Every report cleans the data its own way, so numbers disagree</td><td>Point reports at gold or semantic; block bronze access for analysts</td></tr><tr><td><b>Cleaning before landing a raw copy</b></td><td>A bug in the cleaning has nothing to re-run from</td><td>Land and keep the raw copy first (ELT)</td></tr><tr><td><b>Dropping bad rows silently</b></td><td>Totals are quietly wrong and nobody knows why</td><td>Quarantine with a reason and alert the owner</td></tr><tr><td><b>INSERT instead of MERGE in silver</b></td><td>Every retry adds duplicates</td><td>MERGE on the business key; skip seen batches in bronze</td></tr><tr><td><b>One giant flat table per report in gold</b></td><td>The same product is spelled three ways</td><td>Facts and conformed dimensions; marts built from them</td></tr><tr><td><b>Too many layers (&#x27;platinum&#x27;, &#x27;diamond&#x27;, &#x27;staging2&#x27;)</b></td><td>Nobody knows which one to read</td><td>Keep the meaning of each layer; add tables, not layers</td></tr><tr><td><b>Medallion per team, each with its own rules</b></td><td>The same customer cleaned five ways</td><td>One silver per business entity, owned and shared</td></tr><tr><td><b>Metric logic in dashboards</b></td><td>Two revenues in one meeting</td><td>Define the metric once in the semantic layer</td></tr></table></div></section>
+
+<section id="platforms"><p class="eyebrow">Concept vs product</p><h2>The same layers on each platform</h2>
+<p>The layers and rules never change. Only the products that do each job change. Learn the job once; the product is a binding.</p>
+<div class="tw"><table class="t"><tr><th>Job</th><th>AWS</th><th>Azure / Fabric</th><th>Google Cloud</th><th>Databricks</th><th>Open source</th></tr><tr><td><b>Storage</b></td><td>Amazon S3</td><td>OneLake / ADLS Gen2</td><td>Cloud Storage</td><td>Unity Catalog volumes on cloud storage</td><td>MinIO or local disk</td></tr><tr><td><b>Table format</b></td><td>Apache Iceberg (S3 Tables)</td><td>Delta Lake</td><td>Iceberg on BigLake</td><td>Delta Lake</td><td>Delta Lake or Iceberg</td></tr><tr><td><b>Into landing</b></td><td>AWS DMS, AppFlow</td><td>Data Factory copy, mirroring</td><td>Datastream</td><td>Lakeflow Connect</td><td>dlt or Airbyte</td></tr><tr><td><b>Landing → bronze</b></td><td>Glue (Spark) or EMR</td><td>Fabric Spark / notebooks</td><td>Dataproc (Spark)</td><td>Auto Loader / Lakeflow pipelines</td><td>PySpark</td></tr><tr><td><b>Bronze → silver → gold</b></td><td>Glue, EMR, or dbt on Athena/Redshift</td><td>Fabric Spark or dbt on Fabric</td><td>Dataform or dbt on BigQuery</td><td>Lakeflow Declarative Pipelines or dbt</td><td>PySpark or dbt + DuckDB</td></tr><tr><td><b>Quality checks</b></td><td>Glue Data Quality</td><td>Purview data quality</td><td>Dataplex data quality</td><td>Pipeline expectations</td><td>Great Expectations or Soda</td></tr><tr><td><b>Catalog, access, lineage</b></td><td>Glue Data Catalog + Lake Formation</td><td>Microsoft Purview</td><td>Dataplex</td><td>Unity Catalog</td><td>OpenMetadata + OpenLineage</td></tr><tr><td><b>Semantic layer</b></td><td>dbt semantic layer</td><td>Power BI semantic models</td><td>Looker (LookML)</td><td>Metric views</td><td>Cube Core</td></tr><tr><td><b>Orchestration</b></td><td>MWAA (Airflow), Step Functions</td><td>Data Factory / Fabric pipelines</td><td>Cloud Composer</td><td>Lakeflow Jobs</td><td>Airflow or Dagster</td></tr></table></div>
+<p class="note">Product names change often; check the current docs before you build.</p></section>
+
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>What is medallion architecture?</summary><p>A way to organise a data platform into layers of increasing quality: bronze keeps raw data as it arrived, silver holds clean, typed, de-duplicated data with one row per real thing, and gold holds tables shaped for a business use. Each layer is built only from the one before it.</p></details><details class="faq"><summary>Is medallion architecture only for Databricks?</summary><p>No. The name was popularised by Databricks, and Microsoft Fabric uses it too, but the idea (raw, then cleaned, then modelled) is much older and works on AWS, Google Cloud, Snowflake or open source. Only the product names change.</p></details><details class="faq"><summary>Is medallion a data model?</summary><p>No. It says how data moves and what each layer promises. You still choose a data model inside the layers: for example dimensional (star schema) in gold, or data vault in silver.</p></details><details class="faq"><summary>How many layers should there be?</summary><p>Three named layers (bronze, silver, gold), often with a landing area before bronze and a semantic layer after gold. If you feel you need a fourth medallion, you usually need more tables, not another layer.</p></details><details class="faq"><summary>Where should data quality checks go?</summary><p>Everywhere, but the contract is enforced at the bronze-to-silver hop: rows that break it go to quarantine with a reason. Gold adds reconciliation (counts and sums agree with silver and the source).</p></details><details class="faq"><summary>Where does SCD Type 2 history live?</summary><p>In silver, for entities whose history matters (a customer&#x27;s city, a product&#x27;s price). Gold dimensions read that history.</p></details><details class="faq"><summary>Does streaming need a different architecture?</summary><p>Usually not: one medallion, two speeds. Hot tables flow through the same layers continuously; the rules (one-way flow, contracts, MERGE) stay the same.</p></details><details class="faq"><summary>Medallion vs Kimball vs data vault?</summary><p>They answer different questions. Medallion is the flow and the promise of each layer. Kimball (star schemas) is how to shape gold for analysis. Data vault is one way to model an integrated, historised silver. Many platforms use medallion with Kimball in gold.</p></details></section>
+
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
+<p><b>The ideas behind each layer</b>, one short page each:</p>
+<div class="ideas"><a href="/concepts/etl-elt/">ETL vs ELT</a><a href="/concepts/lakehouse/">Warehouse, lake and lakehouse</a><a href="/concepts/file-formats/">File formats</a><a href="/concepts/table-formats/">Open table formats</a><a href="/concepts/idempotency/">Idempotency</a><a href="/concepts/data-quality/">Data quality</a><a href="/concepts/data-contracts/">Data contracts</a><a href="/concepts/scd/">Slowly changing dimensions</a><a href="/concepts/dimensional/">Star schema</a><a href="/concepts/semantic-layer/">Semantic layer</a><a href="/concepts/lineage/">Lineage</a></div>
+<p><b>Learn it step by step:</b> <a href="/paths/data-engineering/">the Data Engineering path</a> (Crawl, Walk, Run on AWS, Azure, Google Cloud, Databricks or open source).</p>
+<p><b>Build one:</b> the <a href="/projects/dataeng-training/">Ecom simple data platform</a> project lands a shop's data through bronze, silver and gold. Join it, free.</p>
+<p><b>Coming soon:</b> the medallion as a simulation. Run a pretend shop's data through every layer, break it on purpose (a duplicate batch, a renamed column, a late file), and watch what catches it.</p></section>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
