@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt or Hook?</title>
+<meta name="description" content="CCA-F trap gym: when to guide Claude with a prompt and when to enforce a rule with a hook. A simulator runs 1,000 chats for each choice, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  #sim-grid { display: grid; grid-template-columns: repeat(40, 1fr); gap: 2px; margin: 12px 0; }
+  #sim-grid i { aspect-ratio: 1; border-radius: 2px; background: #eceef2; }
+  #sim-grid i.ok { background: #a8dcc3; } #sim-grid i.miss { background: #d46a92; }
+  #sim-grid i.block { background: #f0b429; } #sim-grid i.na { background: #d9dce3; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin: 0 4px 0 10px; }
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/prompt-vs-hook/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../CCA-F_Study_Guide.html">CCA-F</a> · <a href="../index.html">Trap gym</a> · Prompt or hook?</div>
+  <h1>Prompt or hook?</h1>
+  <p class="lede">This is the exam's most common trap. A rule that must hold every time comes with answers that make the prompt clearer. A nice-to-have comes with answers that build code. Learn to tell the two apart, and a whole family of questions becomes easy.</p>
+  <p><span class="chip peri">D1 Agentic Architecture</span><span class="chip">Exam guide 1.4 and 1.5</span><span class="chip">About 15 minutes</span></p>
+
+  <h2>Start here: the cashier and the till</h2>
+  <p>A shop has two ways to make its cashiers behave.</p>
+  <div class="grid2">
+    <div class="box peri"><b>Tell them.</b> A note by the till says “offer the loyalty card”, and the manager shows them how once. Most cashiers do it most of the time. If one forgets now and then, nothing bad happens.</div>
+    <div class="box butter"><b>Build it into the till.</b> The till won't open for a refund over $150 without a manager's key. It works every time, but someone had to build it, test it and maintain it.</div>
+  </div>
+  <p>Claude works the same way. A <b>prompt</b> (instructions, plus a few example chats) is the note by the till: followed most of the time, cheap to change. A <b>hook</b> is code that runs every time Claude calls a tool. It is the till that won't open.</p>
+
+  <svg viewBox="0 0 640 290" role="img" aria-label="Where each mechanism acts: the system prompt guides Claude; a PreToolUse hook checks each tool call before it runs; a PostToolUse hook edits each tool result before Claude reads it." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M120,68 L120,106"/><path d="M220,140 L256,140"/><path d="M420,140 L456,140"/>
+      <path d="M540,170 L540,240 L424,240"/><path d="M260,240 L120,240 L120,174"/>
+    </g>
+    <rect id="box-prompt" x="20" y="16" width="200" height="52" rx="12" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="120" y="38" text-anchor="middle" font-size="14" font-weight="600">System prompt + examples</text>
+    <text x="120" y="57" text-anchor="middle" font-size="12">followed most of the time</text>
+    <rect x="20" y="110" width="200" height="60" rx="12" fill="#a3b5df" stroke="#23262f" stroke-width="1.5"/>
+    <text x="120" y="136" text-anchor="middle" font-size="15" font-weight="600">Claude</text>
+    <text x="120" y="155" text-anchor="middle" font-size="12">decides what to say and call</text>
+    <rect id="box-pre" x="260" y="110" width="160" height="60" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="340" y="136" text-anchor="middle" font-size="14" font-weight="600">PreToolUse hook</text>
+    <text x="340" y="155" text-anchor="middle" font-size="12">checks the call first</text>
+    <rect x="460" y="110" width="160" height="60" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="540" y="136" text-anchor="middle" font-size="14" font-weight="600">Tool</text>
+    <text x="540" y="155" text-anchor="middle" font-size="12">e.g. process_refund</text>
+    <rect id="box-post" x="260" y="212" width="160" height="56" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="340" y="236" text-anchor="middle" font-size="14" font-weight="600">PostToolUse hook</text>
+    <text x="340" y="255" text-anchor="middle" font-size="12">edits the result first</text>
+    <text x="238" y="132" text-anchor="middle" font-size="11">call</text>
+    <text x="190" y="232" text-anchor="middle" font-size="11">result</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> if this goes wrong once, is that acceptable?
+    <ul style="margin:.4em 0 0">
+      <li><b>Yes</b> (a suggestion, a tone, a style): use a <b>prompt instruction plus a few examples</b>.</li>
+      <li><b>No, an action must not run</b> (a refund over the limit): a <b>PreToolUse hook</b> that blocks the call.</li>
+      <li><b>No, data must not reach Claude</b> (a card number): a <b>PostToolUse hook</b> that strips it from the result.</li>
+      <li><b>No, one step must come before another</b> (verify identity, then refund): a <b>prerequisite gate</b> in code.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box mint side"><h3>Prompt side</h3><ul><li>suggest, encourage, prefer</li><li>tone, style, wording</li><li>“a retention idea, not a business rule”</li><li>“most appropriate”, “simplest”: they ask for the right size, not the strongest</li></ul></div>
+    <div class="box rose side"><h3>Code side</h3><ul><li>must, never, every time, stop completely</li><li>money, refunds, identity, security, compliance</li><li>“a prompt already says so, yet…”</li><li>“guarantee”, “deterministic”</li></ul></div>
+  </div>
+
+  <h2>Try it: run 1,000 chats</h2>
+  <p>Pick a behaviour, then pick how you'd make Claude follow it. The simulator replays 1,000 chats where the behaviour matters, and the diagram above shows where your choice acts.</p>
+  <div class="box">
+    <b>1. The behaviour</b>
+    <div id="sim-b"></div>
+    <b>2. How you make it happen</b>
+    <div id="sim-m"></div>
+    <div id="sim-grid" aria-label="1,000 simulated chats"></div>
+    <div class="legend" style="font-size:.85rem"><i style="background:#a8dcc3;margin-left:0"></i>followed<i style="background:#d46a92"></i>missed<i style="background:#f0b429"></i>wrongly blocked<i style="background:#d9dce3"></i>not possible</div>
+    <p id="sim-tally"></p>
+    <p id="sim-effort" style="font-size:.92rem;color:var(--muted)"></p>
+    <div id="sim-verdict" class="box"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">The rates are illustrative, chosen to show the shape. They are not measurements. The exam guide's point is that prompt instructions have a non-zero failure rate, while hooks are deterministic for what they can see: tool calls and tool results.</p>
+  </div>
+  <p>Things to try: <b>refund + prompt</b>, then <b>refund + PreToolUse</b>. Then <b>pause + PreToolUse</b> to see the trap in reverse. Last, <b>card number + PreToolUse</b>, the right family but the wrong hook.</p>
+
+  <h2>The three traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it's wrong</th></tr>
+    <tr><td><b>Prompt where code was needed</b></td><td>“Move the rule to the top of the prompt”, “add examples”, “state it in capitals”, for a money, security or must-never rule</td><td>Prompts are followed most of the time. A rule that must hold every time needs code.</td></tr>
+    <tr><td><b>Code where a prompt was enough</b></td><td>A hook, classifier or new subagent for a suggestion or a tone</td><td>Overbuilt. More to build and maintain, and it can block real users when it misreads.</td></tr>
+    <tr><td><b>Right family, wrong hook</b></td><td>PostToolUse to stop an action; PreToolUse to hide data; a hook that only logs</td><td>PreToolUse acts on the call, before it runs. PostToolUse acts on the result, before Claude reads it. Logging prevents nothing.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>Must hold every time → code. Nice to have → prompt and examples.</b> Stop an action with PreToolUse; hide data with PostToolUse.
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 1.4: “When deterministic compliance is required (e.g., identity verification before financial ops), prompt instructions have a non-zero failure rate.” Exam guide 1.5: “Hooks give deterministic guarantees vs prompt-based probabilistic compliance.”</p>
+  </div>
+  <p><a href="../index.html">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["m7p-s1-03", "m7p-s1-11", "m7p-s1-04"]);
+</script>
+</body>
+</html>
