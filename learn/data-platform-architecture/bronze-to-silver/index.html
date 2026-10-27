@@ -1,0 +1,251 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bronze to silver: clean, dedupe, keep history · Clean Data Engineering</title>
+<meta name="description" content="The bronze-to-silver hop: common transformations, quarantine, dedupe by key, SCD Type 1 and Type 2 with MERGE, and the traps that make history hard."><link rel="canonical" href="https://cleandataengineering.ai/learn/data-platform-architecture/bronze-to-silver/">
+<meta property="og:title" content="Bronze to silver: clean, dedupe, keep history"><meta property="og:description" content="The bronze-to-silver hop: common transformations, quarantine, dedupe by key, SCD Type 1 and Type 2 with MERGE, and the traps that make history hard."><meta property="og:url" content="https://cleandataengineering.ai/learn/data-platform-architecture/bronze-to-silver/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Bronze to silver: clean, dedupe, keep history", "description": "The bronze-to-silver hop: common transformations, quarantine, dedupe by key, SCD Type 1 and Type 2 with MERGE, and the traps that make history hard.", "url": "https://cleandataengineering.ai/learn/data-platform-architecture/bronze-to-silver/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-10-27", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Should silver be modelled as a star schema?", "acceptedAnswer": {"@type": "Answer", "text": "No: silver is one clean row per real thing, close to the source's entities. Shaping for questions (facts and dimensions) is gold's job."}}, {"@type": "Question", "name": "SCD Type 1 or Type 2?", "acceptedAnswer": {"@type": "Answer", "text": "Type 2 where history changes the meaning of past numbers (a customer's region, a product's category). Type 1 where only the current value matters or the old one was simply wrong."}}, {"@type": "Question", "name": "Where do quality checks run?", "acceptedAnswer": {"@type": "Answer", "text": "The contract is enforced at this hop, before rows reach silver. Gold adds reconciliation."}}, {"@type": "Question", "name": "Can I use AUTO CDC (APPLY CHANGES) instead of writing MERGE?", "acceptedAnswer": {"@type": "Answer", "text": "Yes on Databricks: Lakeflow Declarative Pipelines' AUTO CDC, formerly called APPLY CHANGES, handles Type 1 and Type 2, including out-of-order changes ordered by a sequence column. The rules on this page still apply."}}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Learn", "item": "https://cleandataengineering.ai/learn/"}, {"@type": "ListItem", "position": 2, "name": "Data platform architecture", "item": "https://cleandataengineering.ai/learn/data-platform-architecture/"}, {"@type": "ListItem", "position": 3, "name": "Bronze to silver", "item": "https://cleandataengineering.ai/learn/data-platform-architecture/bronze-to-silver/"}]}</script></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › Bronze to silver</p>
+<p class="eyebrow" style="margin-top:22px">Data platform architecture · component · the same on every platform</p>
+<h1>Bronze to silver: clean, dedupe, keep history</h1>
+<p class="lede">The bronze-to-silver hop: common transformations, quarantine, dedupe by key, SCD Type 1 and Type 2 with MERGE, and the traps that make history hard.</p><div class="sib"><a href="/learn/data-platform-architecture/">↑ The whole picture</a><a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a><a href="/learn/data-platform-architecture/ingestion/">Ingestion</a><span>Bronze to silver</span><a href="/learn/data-platform-architecture/gold/">Gold</a></div>
+
+<section id="plain"><p class="eyebrow">In plain words</p><h2>From a faithful record to one clean row per real thing</h2>
+<p>Bronze is everything as it arrived: strings, duplicates, bad rows and all. Silver is the first layer with an opinion: <b>one clean, typed row per real thing</b> (an order, a customer), with history kept the way the business needs, and with every row that breaks the rules set aside with its reason.</p>
+<figure class="diagram"><svg viewBox="0 0 1060 160" role="img" aria-label="Where this component sits: Bronze, Silver"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F1F1F"/></marker></defs><rect x="10" y="8" width="1040" height="40" rx="12" fill="#F0F8F3" stroke="#1F1F1F" stroke-width="1.2" opacity="0.45"/><text x="530" y="33" text-anchor="middle" font-size="15" fill="#999">Control plane: manifest → metadata DB → generators → pipelines</text><g opacity="0.4"><rect x="10" y="70" width="132" height="56" rx="14" fill="#F3F3F1" stroke="#1F1F1F" stroke-width="1.2"/><text x="76.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Sources</text></g><line x1="144" y1="98" x2="158" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="161" y="70" width="132" height="56" rx="14" fill="#FFFFFF" stroke="#1F1F1F" stroke-width="1.2"/><text x="227.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Landing</text></g><line x1="295" y1="98" x2="309" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="1"><rect x="312" y="70" width="132" height="56" rx="14" fill="#F5E3D3" stroke="#1F1F1F" stroke-width="2.8"/><text x="378.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Bronze</text></g><line x1="446" y1="98" x2="460" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="1"><rect x="463" y="70" width="132" height="56" rx="14" fill="#ECEEF1" stroke="#1F1F1F" stroke-width="2.8"/><text x="529.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Silver</text></g><line x1="597" y1="98" x2="611" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="614" y="70" width="132" height="56" rx="14" fill="#FFF1C2" stroke="#1F1F1F" stroke-width="1.2"/><text x="680.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Gold</text></g><line x1="748" y1="98" x2="762" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="765" y="70" width="132" height="56" rx="14" fill="#F0F8F3" stroke="#1F1F1F" stroke-width="1.2"/><text x="831.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Semantic</text></g><line x1="899" y1="98" x2="913" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="916" y="70" width="132" height="56" rx="14" fill="#EFF8FB" stroke="#1F1F1F" stroke-width="1.2"/><text x="982.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Experiences</text></g><text x="530" y="150" text-anchor="middle" font-size="15" fill="#1F1F1F">you are here: Bronze + Silver</text></svg><figcaption>This component is the hop from bronze to silver.</figcaption></figure></section>
+
+<section id="steps"><p class="eyebrow">The steps</p><h2>Common transformations, in order</h2><div class="tw"><table class="t"><tr><th>Step</th><th>What it does</th><th>Example</th></tr><tr><td><b>Select and rename</b></td><td>Keep the agreed columns, give them their silver names</td><td>cust → customer_id</td></tr><tr><td><b>Cast types</b></td><td>Text to numbers, dates, timestamps; a failed cast goes to quarantine</td><td>&#x27;1,250.00&#x27; → 1250.00</td></tr><tr><td><b>Trim and standardise</b></td><td>Remove stray spaces, one case, one code list</td><td>&#x27;PAID &#x27; → &#x27;paid&#x27;; &#x27;inr&#x27; → &#x27;INR&#x27;</td></tr><tr><td><b>Fix time</b></td><td>Parse with the source&#x27;s time zone, store UTC</td><td>27/10/2026 08:58 IST → 03:28 UTC</td></tr><tr><td><b>Handle nulls</b></td><td>Defaults only where the contract allows; otherwise quarantine</td><td>country null → &#x27;unknown&#x27; (allowed)</td></tr><tr><td><b>Check the contract</b></td><td>Required fields, ranges, allowed values, referential checks</td><td>amount ≥ 0; customer_id not null</td></tr><tr><td><b>Dedupe</b></td><td>Keep the latest row per business key</td><td>order 1001 sent twice → one row</td></tr><tr><td><b>Keep history</b></td><td>SCD Type 1 (overwrite) or Type 2 (new version)</td><td>customer moves city</td></tr><tr><td><b>Mask personal data</b></td><td>Per the column&#x27;s PII class and the reader&#x27;s role</td><td>phone → ******3210</td></tr></table></div>
+<p>Each step is driven by column-level settings in the <a href="/learn/data-platform-architecture/metadata-store/">metadata store</a> (silver name and type, PII class, transforms), not hand-written per table.</p></section>
+
+<section id="quarantine"><p class="eyebrow">Bad rows</p><h2>Quarantine, never drop</h2>
+<p>A row that fails a cast or a contract rule is written to a quarantine table with the rule it broke, the batch it came from and when. Silver gets only good rows. The owner sees a count and the reasons. Two rules: a row is <b>never silently dropped</b>, and a rule is <b>never loosened just to make a job pass</b>. A check that looked at zero rows is an error, not a pass.</p></section>
+
+<section id="dedupe"><p class="eyebrow">Duplicates</p><h2>Latest row per key</h2>
+<pre class="code">from pyspark.sql import Window, functions as F
+
+w = Window.partitionBy(&quot;order_id&quot;).orderBy(F.col(&quot;updated_at&quot;).desc(), F.col(&quot;_ingested_at&quot;).desc())
+latest = (bronze_batch
+          .withColumn(&quot;_rn&quot;, F.row_number().over(w))
+          .filter(&quot;_rn = 1&quot;)
+          .drop(&quot;_rn&quot;))</pre><p class="cap">Keep one row per business key: the most recently updated, and if two tie, the most recently ingested.</p></section>
+
+<section id="scd1"><p class="eyebrow">History: Type 1</p><h2>SCD Type 1: overwrite</h2>
+<p>When only the current value matters (an order's status, a corrected email), update the row in place. MERGE on the business key makes it safe to run twice: the same change applied again changes nothing. A <code>row_hash</code> of the tracked columns skips rows that didn't really change.</p>
+<pre class="code">MERGE INTO silver.orders AS t
+USING staged_orders AS s                      -- one row per order_id, already cleaned
+ON t.order_id = s.order_id
+WHEN MATCHED AND t.row_hash &lt;&gt; s.row_hash THEN UPDATE SET *
+WHEN NOT MATCHED THEN INSERT *;</pre><p class="cap">Delta Lake / Spark SQL.</p></section>
+
+<section id="scd2"><p class="eyebrow">History: Type 2</p><h2>SCD Type 2: keep every version</h2>
+<p>When history matters (which city a customer lived in when they ordered), a change closes the current row and opens a new one. One MERGE does both, using a well-known trick: changed rows are sent twice, once with the key (to close the old version) and once without (so it is inserted as the new version).</p>
+<pre class="code">MERGE INTO silver.customer AS t
+USING (
+  -- every staged row, keyed by customer_id: closes the current version if it changed
+  SELECT s.customer_id AS merge_key, s.* FROM staged_customer s
+  UNION ALL
+  -- a second copy of changed rows, with no key, so it is inserted as the new version
+  SELECT NULL AS merge_key, s.* FROM staged_customer s
+  JOIN silver.customer c ON c.customer_id = s.customer_id AND c.is_current
+  WHERE c.row_hash &lt;&gt; s.row_hash
+) AS u
+ON t.customer_id = u.merge_key AND t.is_current
+WHEN MATCHED AND t.row_hash &lt;&gt; u.row_hash THEN
+  UPDATE SET is_current = false, valid_to = u.changed_at
+WHEN NOT MATCHED THEN
+  INSERT (customer_id, name, city, email, row_hash, valid_from, valid_to, is_current)
+  VALUES (u.customer_id, u.name, u.city, u.email, u.row_hash, u.changed_at, NULL, true);</pre><p class="cap">Delta Lake / Spark SQL. staged_customer has one row per customer_id, with changed_at = when the change happened in the source.</p>
+<pre class="code">customer_id | city   | valid_from          | valid_to            | is_current
+C-77        | Pune   | 2024-03-02 10:00:00 | 2026-11-15 09:00:00 | false
+C-77        | Sydney | 2026-11-15 09:00:00 | NULL                | true</pre><p class="cap">Asha (C-77) moves from Pune to Sydney on 15 November. Last year&#x27;s orders still join to Pune.</p>
+<h3>What makes Type 2 hard</h3>
+<ul><li><b>Two changes for one key in one batch:</b> the MERGE above takes one row per key. Apply the changes in order (one MERGE per sequence step), or collapse them and lose the in-between version on purpose.</li>
+<li><b>Changes out of order:</b> use the source's change time, never the load time, for <code>valid_from</code>; a late, older change must slot into the past, not become 'current'.</li>
+<li><b>No-op updates:</b> compare <code>row_hash</code>, or every touch of a row opens a new version.</li>
+<li><b>Deletes:</b> close the current row and mark it deleted (a soft delete), so history stays.</li>
+<li><b>The guarantee to test:</b> exactly one current row per key, and no overlapping valid ranges.</li></ul>
+<p>More: <a href="/concepts/scd/">slowly changing dimensions</a>, <a href="/concepts/idempotency/">idempotency</a>.</p></section>
+
+<section id="problems"><p class="eyebrow">What goes wrong</p><h2>Common problems</h2>
+<h3 style="margin-top:16px">Two current rows for one customer</h3><p>Reports double-count; joins fan out.</p><div class="split"><div class="card bad"><h4>Naive fix</h4>Pick one at random in the query.</div><div class="card good"><h4>Right fix</h4>Close and open in one MERGE; test &#x27;one current row per key&#x27; after every run.</div></div><h3 style="margin-top:16px">A column renamed upstream</h3><p>The silver column goes all null overnight.</p><div class="split"><div class="card bad"><h4>Naive fix</h4>Map the new name by hand in production.</div><div class="card good"><h4>Right fix</h4>The contract check fails the hop and quarantines; the mapping is fixed in the manifest by pull request.</div></div><h3 style="margin-top:16px">Bad rows silently dropped</h3><p>Totals are a little low and nobody knows why.</p><div class="split"><div class="card bad"><h4>Naive fix</h4>A WHERE clause that filters them out.</div><div class="card good"><h4>Right fix</h4>Quarantine with a reason; reconcile counts: bronze = silver + quarantine.</div></div><h3 style="margin-top:16px">Re-running adds rows</h3><p>A retried job inserts the batch again.</p><div class="split"><div class="card bad"><h4>Naive fix</h4>Delete the batch by hand, then re-run.</div><div class="card good"><h4>Right fix</h4>MERGE on the business key; INSERT never appears in silver code.</div></div>
+</section>
+<section id="platforms"><p class="eyebrow">Concept vs product</p><h2>On each platform</h2><div class="tw"><table class="t"><tr><th>Job</th><th>AWS</th><th>Azure</th><th>Google Cloud</th><th>Databricks</th><th>Open source</th></tr><tr><td><b>Transform engine</b></td><td>Glue or EMR Spark; dbt on Athena</td><td>Fabric Spark; dbt on Fabric</td><td>Dataproc; Dataform or dbt on BigQuery</td><td>Lakeflow Declarative Pipelines or jobs</td><td>PySpark; dbt + DuckDB</td></tr><tr><td><b>MERGE / upsert</b></td><td>Iceberg MERGE</td><td>Delta MERGE</td><td>BigQuery MERGE</td><td>Delta MERGE; AUTO CDC (formerly APPLY CHANGES) for SCD</td><td>Delta or Iceberg MERGE</td></tr><tr><td><b>Contract and quality checks</b></td><td>Glue Data Quality</td><td>Purview data quality</td><td>Dataplex data quality</td><td>Pipeline expectations</td><td>Great Expectations or Soda</td></tr><tr><td><b>Masking</b></td><td>Lake Formation</td><td>Purview + SQL masking</td><td>Policy tags</td><td>Unity Catalog column masks</td><td>views per role</td></tr></table></div><p class="note">Product names change often; check the current docs before you build.</p></section>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>Should silver be modelled as a star schema?</summary><p>No: silver is one clean row per real thing, close to the source&#x27;s entities. Shaping for questions (facts and dimensions) is gold&#x27;s job.</p></details><details class="faq"><summary>SCD Type 1 or Type 2?</summary><p>Type 2 where history changes the meaning of past numbers (a customer&#x27;s region, a product&#x27;s category). Type 1 where only the current value matters or the old one was simply wrong.</p></details><details class="faq"><summary>Where do quality checks run?</summary><p>The contract is enforced at this hop, before rows reach silver. Gold adds reconciliation.</p></details><details class="faq"><summary>Can I use AUTO CDC (APPLY CHANGES) instead of writing MERGE?</summary><p>Yes on Databricks: Lakeflow Declarative Pipelines&#x27; AUTO CDC, formerly called APPLY CHANGES, handles Type 1 and Type 2, including out-of-order changes ordered by a sequence column. The rules on this page still apply.</p></details></section>
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
+<p><a href="/learn/data-platform-architecture/">↑ The whole picture</a> · <a href="/learn/medallion-architecture/">The medallion layers</a> · <a href="/concepts/#data-engineering">Key concepts</a> · <a href="/paths/data-engineering/">The Data Engineering path</a></p>
+<div class="sib"><a href="/learn/data-platform-architecture/">↑ The whole picture</a><a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a><a href="/learn/data-platform-architecture/ingestion/">Ingestion</a><span>Bronze to silver</span><a href="/learn/data-platform-architecture/gold/">Gold</a></div>
+<p class="note" style="margin-top:12px">Coming soon: this component as a simulation you can run and break.</p></section>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

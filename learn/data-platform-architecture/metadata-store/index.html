@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The metadata store · Clean Data Engineering</title>
+<meta name="description" content="How a metadata-driven data platform stores its settings: five tables, one reader view, an override order, a YAML loader and a fingerprint on every run."><link rel="canonical" href="https://cleandataengineering.ai/learn/data-platform-architecture/metadata-store/">
+<meta property="og:title" content="The metadata store"><meta property="og:description" content="How a metadata-driven data platform stores its settings: five tables, one reader view, an override order, a YAML loader and a fingerprint on every run."><meta property="og:url" content="https://cleandataengineering.ai/learn/data-platform-architecture/metadata-store/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "The metadata store", "description": "How a metadata-driven data platform stores its settings: five tables, one reader view, an override order, a YAML loader and a fingerprint on every run.", "url": "https://cleandataengineering.ai/learn/data-platform-architecture/metadata-store/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-10-27", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Why not just keep the YAML and skip the database?", "acceptedAnswer": {"@type": "Answer", "text": "YAML is great for writing and reviewing, but pipelines need fast, consistent reads, runtime state next to settings, and joins with run logs. The database gives that; git keeps the history."}}, {"@type": "Question", "name": "Why key-value instead of proper columns?", "acceptedAnswer": {"@type": "Answer", "text": "Settings grow every month. Key-value rows absorb a new setting without a schema change, and the key registry gives back the type safety that columns would have given."}}, {"@type": "Question", "name": "Why one database per environment?", "acceptedAnswer": {"@type": "Answer", "text": "So dev and test can never read or overwrite production settings by mistake, and so promoting a change is a normal release through CI."}}, {"@type": "Question", "name": "What is the config fingerprint for?", "acceptedAnswer": {"@type": "Answer", "text": "It proves which settings a run used. Two runs with the same fingerprint ran with identical settings; a backfill can reuse a past run's snapshot exactly."}}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Learn", "item": "https://cleandataengineering.ai/learn/"}, {"@type": "ListItem", "position": 2, "name": "Data platform architecture", "item": "https://cleandataengineering.ai/learn/data-platform-architecture/"}, {"@type": "ListItem", "position": 3, "name": "Metadata store", "item": "https://cleandataengineering.ai/learn/data-platform-architecture/metadata-store/"}]}</script></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › Metadata store</p>
+<p class="eyebrow" style="margin-top:22px">Data platform architecture · component · the same on every platform</p>
+<h1>The metadata store</h1>
+<p class="lede">How a metadata-driven data platform stores its settings: five tables, one reader view, an override order, a YAML loader and a fingerprint on every run.</p><div class="sib"><a href="/learn/data-platform-architecture/">↑ The whole picture</a><span>Metadata store</span><a href="/learn/data-platform-architecture/ingestion/">Ingestion</a><a href="/learn/data-platform-architecture/bronze-to-silver/">Bronze to silver</a><a href="/learn/data-platform-architecture/gold/">Gold</a></div>
+
+<section id="plain"><p class="eyebrow">In plain words</p><h2>The platform's rule book</h2>
+<p>Every pipeline needs to know things before it runs: where the source is, which columns are the key, how history is kept, which checks to run, who pays. In a metadata-driven platform none of that is written inside the pipeline. It lives in one place, the metadata store, and every pipeline reads its settings from there. Adding a source means adding rows, not writing code.</p>
+<figure class="diagram"><svg viewBox="0 0 1060 160" role="img" aria-label="Where this component sits: control plane"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F1F1F"/></marker></defs><rect x="10" y="8" width="1040" height="40" rx="12" fill="#F0F8F3" stroke="#1F1F1F" stroke-width="2.6"/><text x="530" y="33" text-anchor="middle" font-size="15" fill="#1F1F1F">Control plane: manifest → metadata DB → generators → pipelines</text><g opacity="0.4"><rect x="10" y="70" width="132" height="56" rx="14" fill="#F3F3F1" stroke="#1F1F1F" stroke-width="1.2"/><text x="76.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Sources</text></g><line x1="144" y1="98" x2="158" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="161" y="70" width="132" height="56" rx="14" fill="#FFFFFF" stroke="#1F1F1F" stroke-width="1.2"/><text x="227.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Landing</text></g><line x1="295" y1="98" x2="309" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="312" y="70" width="132" height="56" rx="14" fill="#F5E3D3" stroke="#1F1F1F" stroke-width="1.2"/><text x="378.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Bronze</text></g><line x1="446" y1="98" x2="460" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="463" y="70" width="132" height="56" rx="14" fill="#ECEEF1" stroke="#1F1F1F" stroke-width="1.2"/><text x="529.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Silver</text></g><line x1="597" y1="98" x2="611" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="614" y="70" width="132" height="56" rx="14" fill="#FFF1C2" stroke="#1F1F1F" stroke-width="1.2"/><text x="680.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Gold</text></g><line x1="748" y1="98" x2="762" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="765" y="70" width="132" height="56" rx="14" fill="#F0F8F3" stroke="#1F1F1F" stroke-width="1.2"/><text x="831.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Semantic</text></g><line x1="899" y1="98" x2="913" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="916" y="70" width="132" height="56" rx="14" fill="#EFF8FB" stroke="#1F1F1F" stroke-width="1.2"/><text x="982.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Experiences</text></g><text x="530" y="150" text-anchor="middle" font-size="15" fill="#1F1F1F">you are here: the control plane, which drives every layer</text></svg><figcaption>The metadata store sits in the control plane and drives every layer.</figcaption></figure>
+<p>The design here follows the article <a href="https://medium.com/@basant.choudhary09/metadata-db-design-for-data-engineering-components-ingestion-processing-data-quality-data-6b355ad5ecb9">Metadata DB Design for Data Engineering Platforms</a>. It has three rules: a new setting needs <b>no schema change</b>; master data and settings are <b>kept apart with real foreign keys</b>; and readers get <b>one stable interface</b> that never changes when settings are added.</p></section>
+
+<section id="model"><p class="eyebrow">The model</p><h2>Five tables in two tiers</h2>
+<div class="tw"><table class="t"><tr><th>Table</th><th>Tier</th><th>One row per</th><th>Why it exists</th></tr><tr><td><b>platform_config</b></td><td>settings</td><td>platform-wide setting</td><td>Defaults for everything: time zone, retry count, alert channel</td></tr><tr><td><b>source_master</b></td><td>master</td><td>upstream system</td><td>A database, an API, a bucket, a topic</td></tr><tr><td><b>source_config</b></td><td>settings</td><td>setting of one source</td><td>Key-value, grouped (ingestion, quality, cost); new keys need no ALTER TABLE</td></tr><tr><td><b>dataset_master</b></td><td>master</td><td>dataset of a source</td><td>A table, a file pattern, a stream</td></tr><tr><td><b>dataset_config</b></td><td>settings</td><td>setting of one dataset</td><td>Overrides for this dataset only</td></tr></table></div>
+<pre class="code">-- PostgreSQL. One database per environment (dev, test, prod), same schema.
+CREATE TABLE platform_config (
+  config_key   text PRIMARY KEY,
+  config_value text NOT NULL,
+  description  text,
+  updated_at   timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE source_master (
+  source_id   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_name text NOT NULL UNIQUE,
+  source_type text NOT NULL,              -- postgres, sftp, rest, kafka …
+  is_active   boolean NOT NULL DEFAULT true,
+  created_at  timestamptz NOT NULL DEFAULT now(),
+  updated_at  timestamptz NOT NULL DEFAULT now()
+);
+
+CREATE TABLE source_config (
+  config_id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  source_id    uuid NOT NULL REFERENCES source_master(source_id),
+  config_key   text NOT NULL,
+  config_value text NOT NULL,
+  config_group text NOT NULL,              -- ingestion, quality, cost …
+  is_active    boolean NOT NULL DEFAULT true,
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (source_id, config_key)
+);
+
+CREATE TABLE dataset_master (
+  dataset_id   uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  dataset_name text NOT NULL,
+  source_id    uuid NOT NULL REFERENCES source_master(source_id),
+  schema_name  text,
+  table_name   text,
+  is_active    boolean NOT NULL DEFAULT true,
+  created_at   timestamptz NOT NULL DEFAULT now(),
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (source_id, dataset_name)
+);
+
+CREATE TABLE dataset_config (            -- same shape as source_config
+  config_id    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  dataset_id   uuid NOT NULL REFERENCES dataset_master(dataset_id),
+  config_key   text NOT NULL,
+  config_value text NOT NULL,
+  config_group text NOT NULL,
+  is_active    boolean NOT NULL DEFAULT true,
+  updated_at   timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (dataset_id, config_key)
+);</pre><p class="cap">The tables, in PostgreSQL. UUID keys make it safe to copy settings between the dev, test and prod databases.</p>
+</section>
+
+<section id="reader"><p class="eyebrow">Reading it</p><h2>One view, one function, one override order</h2>
+<p>Pipelines never query the tables directly. They read one view, which returns one row per dataset with each tier's settings as a JSON object. Each tier is aggregated in its own subquery, so rows never multiply and a dataset with no settings gets an empty object instead of an error.</p>
+<pre class="code">CREATE VIEW dataset_view AS
+SELECT
+  dm.dataset_id, dm.dataset_name, dm.schema_name, dm.table_name,
+  sm.source_id,  sm.source_name,  sm.source_type,
+  COALESCE((SELECT jsonb_object_agg(sc.config_key, sc.config_value)
+            FROM source_config sc
+            WHERE sc.source_id = sm.source_id AND sc.is_active), &#x27;{}&#x27;::jsonb)   AS source_config_json,
+  COALESCE((SELECT jsonb_object_agg(dc.config_key, dc.config_value)
+            FROM dataset_config dc
+            WHERE dc.dataset_id = dm.dataset_id AND dc.is_active), &#x27;{}&#x27;::jsonb) AS dataset_config_json,
+  COALESCE((SELECT jsonb_object_agg(pc.config_key, pc.config_value)
+            FROM platform_config pc), &#x27;{}&#x27;::jsonb)                             AS platform_config_json
+FROM dataset_master dm
+JOIN source_master  sm ON sm.source_id = dm.source_id
+WHERE dm.is_active AND sm.is_active;</pre>
+<p>The reader merges the three objects in a fixed order: <b>platform, then source, then dataset</b>. A dataset setting beats a source setting, which beats a platform default. It also computes a <b>fingerprint</b> of the merged settings.</p>
+<pre class="code">import hashlib, json
+
+def load_combined_config(conn, dataset_id: str) -&gt; dict:
+    row = conn.execute(
+        &quot;SELECT dataset_name, platform_config_json, source_config_json, dataset_config_json &quot;
+        &quot;FROM dataset_view WHERE dataset_id = %s&quot;, (dataset_id,)).fetchone()
+    if row is None:
+        raise LookupError(f&quot;dataset {dataset_id} is missing or inactive&quot;)
+    combined = {}
+    combined.update(row[&quot;platform_config_json&quot;])   # lowest priority
+    combined.update(row[&quot;source_config_json&quot;])     # source overrides platform
+    combined.update(row[&quot;dataset_config_json&quot;])    # dataset overrides source
+    return {&quot;dataset_name&quot;: row[&quot;dataset_name&quot;], &quot;config&quot;: combined}
+
+def fingerprint(config: dict) -&gt; str:
+    canonical = json.dumps(config, sort_keys=True, separators=(&quot;,&quot;, &quot;:&quot;))
+    return hashlib.sha256(canonical.encode()).hexdigest()[:16]</pre><p class="cap">Python. The fingerprint is a short hash of the merged settings, so two runs with the same fingerprint used exactly the same configuration.</p>
+</section>
+
+<section id="yaml"><p class="eyebrow">Changing it</p><h2>YAML in git, a loader, then the database</h2>
+<p>People and agents never edit the tables by hand. They change a YAML file through a pull request, where it is reviewed and tested. A loader then checks every key against a <b>key registry</b> (each key's table, type, allowed values and default) and writes the rows. Git is the history of every change; the database is what pipelines read at run time.</p>
+<pre class="code"># manifests/shop_db.yaml  (edited by pull request; key names are illustrative)
+source: shop_db
+type: postgres
+config:
+  ingestion.connection_ref: kv://shop-db-readonly   # a secret reference, never the secret
+  ingestion.mode: incremental
+datasets:
+  - name: orders
+    schema: public
+    table: orders
+    config:
+      ingestion.watermark_column: updated_at
+      silver.key: order_id
+      silver.history: scd1
+      quality.on_bad_row: quarantine
+      cost.owner: sales-analytics
+  - name: customers
+    schema: public
+    table: customers
+    config:
+      ingestion.mode: cdc                            # overrides the source default
+      silver.key: customer_id
+      silver.history: scd2</pre>
+<div class="split"><div class="card"><h4>The loader</h4>Parses the YAML, rejects unknown keys and wrong types, then upserts source_master, source_config, dataset_master and dataset_config in one transaction. Removed keys are set <code>is_active = false</code>, not deleted, so history stays.</div>
+<div class="card"><h4>Protected keys</h4>Keys that loosen a data contract or change a metric definition need an extra approver, and an agent can never change them on its own.</div></div>
+</section>
+
+<section id="runtime"><p class="eyebrow">Runtime</p><h2>Settings and state live apart</h2>
+<p>Settings say what should happen. State records what did happen: watermarks, run logs, quality results. Keeping them in separate tables means changing a setting never rewrites history, and every run can prove which settings it used.</p>
+<pre class="code">CREATE TABLE run_log (
+  run_id             uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  dataset_id         uuid NOT NULL REFERENCES dataset_master(dataset_id),
+  batch_id           text NOT NULL,
+  layer              text NOT NULL,               -- bronze, silver, gold
+  status             text NOT NULL,               -- running, succeeded, failed
+  config_fingerprint text NOT NULL,               -- which config this run used
+  config_snapshot    jsonb NOT NULL,              -- the exact merged config
+  rows_in            bigint, rows_out bigint, rows_quarantined bigint,
+  started_at         timestamptz NOT NULL DEFAULT now(),
+  ended_at           timestamptz
+);
+CREATE TABLE watermark (                          -- runtime state, never in the config tables
+  dataset_id      uuid PRIMARY KEY REFERENCES dataset_master(dataset_id),
+  watermark_value text NOT NULL,
+  last_run_id     uuid REFERENCES run_log(run_id),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);</pre><p class="cap">Every run stores the fingerprint and a full copy of the settings it ran with. A replay or backfill months later can show exactly what it used.</p>
+<div class="tw"><table class="t"><tr><th>Table</th><th>Holds</th></tr><tr><td><b>run_log</b></td><td>One row per run per layer: status, counts, the settings fingerprint and snapshot</td></tr><tr><td><b>watermark</b></td><td>How far each dataset has been loaded; advanced only after a successful commit</td></tr><tr><td><b>dq_results, dq_violations</b></td><td>Each check&#x27;s result per run, and the rows that failed</td></tr><tr><td><b>dataset_config_columns</b></td><td>Column-level settings: types, primary key, PII class, silver name and type, transforms</td></tr></table></div>
+</section>
+
+<section id="problems"><p class="eyebrow">What goes wrong</p><h2>Common problems</h2>
+<h3 style="margin-top:16px">A new setting needs a database change</h3><p>Every new option means an ALTER TABLE, a migration and a release, so teams start hard-coding settings in pipelines instead.</p><div class="split"><div class="card bad"><h4>Naive fix</h4>Add a column each time and schedule a migration.</div><div class="card good"><h4>Right fix</h4>Key-value settings with a key registry: a new key is a registry entry and a YAML line.</div></div><h3 style="margin-top:16px">Nobody knows which settings a run used</h3><p>A number changed last month; the settings have been edited three times since.</p><div class="split"><div class="card bad"><h4>Naive fix</h4>Read the current settings and hope they didn&#x27;t change.</div><div class="card good"><h4>Right fix</h4>Store the fingerprint and snapshot on every run_log row.</div></div><h3 style="margin-top:16px">Dev settings leak into production</h3><p>A test bucket path ends up in a prod pipeline.</p><div class="split"><div class="card bad"><h4>Naive fix</h4>An env column and careful WHERE clauses.</div><div class="card good"><h4>Right fix</h4>One database per environment, same schema; YAML promoted through CI.</div></div><h3 style="margin-top:16px">Settings edited directly in the database</h3><p>Production behaves differently from what is in git, and nobody knows why.</p><div class="split"><div class="card bad"><h4>Naive fix</h4>Ask people to be careful.</div><div class="card good"><h4>Right fix</h4>Only the loader writes; it is fed by YAML from git; direct writes are blocked by permissions.</div></div>
+</section>
+<section id="platforms"><p class="eyebrow">Concept vs product</p><h2>On each platform</h2><div class="tw"><table class="t"><tr><th>Job</th><th>AWS</th><th>Azure</th><th>Google Cloud</th><th>Databricks</th><th>Open source</th></tr><tr><td><b>Metadata database</b></td><td>RDS or Aurora PostgreSQL</td><td>Azure Database for PostgreSQL</td><td>Cloud SQL for PostgreSQL</td><td>Lakebase (Postgres)</td><td>PostgreSQL</td></tr><tr><td><b>Secrets referenced from config</b></td><td>Secrets Manager</td><td>Key Vault</td><td>Secret Manager</td><td>Databricks secrets</td><td>Vault or sops</td></tr><tr><td><b>YAML → loader in CI</b></td><td>GitHub Actions or CodeBuild</td><td>GitHub Actions or Azure Pipelines</td><td>GitHub Actions or Cloud Build</td><td>GitHub Actions + bundles</td><td>GitHub Actions</td></tr></table></div><p class="note">Product names change often; check the current docs before you build.</p></section>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>Why not just keep the YAML and skip the database?</summary><p>YAML is great for writing and reviewing, but pipelines need fast, consistent reads, runtime state next to settings, and joins with run logs. The database gives that; git keeps the history.</p></details><details class="faq"><summary>Why key-value instead of proper columns?</summary><p>Settings grow every month. Key-value rows absorb a new setting without a schema change, and the key registry gives back the type safety that columns would have given.</p></details><details class="faq"><summary>Why one database per environment?</summary><p>So dev and test can never read or overwrite production settings by mistake, and so promoting a change is a normal release through CI.</p></details><details class="faq"><summary>What is the config fingerprint for?</summary><p>It proves which settings a run used. Two runs with the same fingerprint ran with identical settings; a backfill can reuse a past run&#x27;s snapshot exactly.</p></details></section>
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
+<p><a href="/learn/data-platform-architecture/">↑ The whole picture</a> · <a href="/learn/medallion-architecture/">The medallion layers</a> · <a href="/concepts/#data-engineering">Key concepts</a> · <a href="/paths/data-engineering/">The Data Engineering path</a></p>
+<div class="sib"><a href="/learn/data-platform-architecture/">↑ The whole picture</a><span>Metadata store</span><a href="/learn/data-platform-architecture/ingestion/">Ingestion</a><a href="/learn/data-platform-architecture/bronze-to-silver/">Bronze to silver</a><a href="/learn/data-platform-architecture/gold/">Gold</a></div>
+<p class="note" style="margin-top:12px">Coming soon: this component as a simulation you can run and break.</p></section>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

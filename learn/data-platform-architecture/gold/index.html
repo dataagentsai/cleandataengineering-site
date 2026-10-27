@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gold: shaped for the business · Clean Data Engineering</title>
+<meta name="description" content="Building gold: state the grain, facts and dimensions, surrogate keys, point-in-time joins, inferred members, idempotent rebuilds and reconciliation."><link rel="canonical" href="https://cleandataengineering.ai/learn/data-platform-architecture/gold/">
+<meta property="og:title" content="Gold: shaped for the business"><meta property="og:description" content="Building gold: state the grain, facts and dimensions, surrogate keys, point-in-time joins, inferred members, idempotent rebuilds and reconciliation."><meta property="og:url" content="https://cleandataengineering.ai/learn/data-platform-architecture/gold/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Gold: shaped for the business", "description": "Building gold: state the grain, facts and dimensions, surrogate keys, point-in-time joins, inferred members, idempotent rebuilds and reconciliation.", "url": "https://cleandataengineering.ai/learn/data-platform-architecture/gold/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-10-27", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Do I always need a star schema in gold?", "acceptedAnswer": {"@type": "Answer", "text": "No, but it is the safest default for analytics. Wide, flat tables are fine for a single dashboard or ML features, as long as they are built from the shared facts and dimensions."}}, {"@type": "Question", "name": "Where do surrogate keys come from?", "acceptedAnswer": {"@type": "Answer", "text": "The platform makes them when it builds the dimension, one per version of a row. Don't reuse the source system's id as the dimension key once you keep history."}}, {"@type": "Question", "name": "Should gold be views or tables?", "acceptedAnswer": {"@type": "Answer", "text": "Tables for anything large or used often (rebuilt by partition); views for thin, cheap layers on top."}}, {"@type": "Question", "name": "How is gold different from the semantic layer?", "acceptedAnswer": {"@type": "Answer", "text": "Gold holds the tables. The semantic layer holds the definitions on top of them (metrics, joins, names), so every tool computes 'revenue' the same way."}}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Learn", "item": "https://cleandataengineering.ai/learn/"}, {"@type": "ListItem", "position": 2, "name": "Data platform architecture", "item": "https://cleandataengineering.ai/learn/data-platform-architecture/"}, {"@type": "ListItem", "position": 3, "name": "Gold", "item": "https://cleandataengineering.ai/learn/data-platform-architecture/gold/"}]}</script></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › Gold</p>
+<p class="eyebrow" style="margin-top:22px">Data platform architecture · component · the same on every platform</p>
+<h1>Gold: shaped for the business</h1>
+<p class="lede">Building gold: state the grain, facts and dimensions, surrogate keys, point-in-time joins, inferred members, idempotent rebuilds and reconciliation.</p><div class="sib"><a href="/learn/data-platform-architecture/">↑ The whole picture</a><a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a><a href="/learn/data-platform-architecture/ingestion/">Ingestion</a><a href="/learn/data-platform-architecture/bronze-to-silver/">Bronze to silver</a><span>Gold</span></div>
+
+<section id="plain"><p class="eyebrow">In plain words</p><h2>Tables built for the questions people ask</h2>
+<p>Silver says what happened, one clean row per thing. Gold arranges it for a purpose: "how much did we sell, by store and month?", "which customers are at risk?", "what goes on the board report?". The classic shape is a <b>star</b>: a fact table of events with numbers, surrounded by dimension tables that describe them.</p>
+<figure class="diagram"><svg viewBox="0 0 1060 160" role="img" aria-label="Where this component sits: Silver, Gold"><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F1F1F"/></marker></defs><rect x="10" y="8" width="1040" height="40" rx="12" fill="#F0F8F3" stroke="#1F1F1F" stroke-width="1.2" opacity="0.45"/><text x="530" y="33" text-anchor="middle" font-size="15" fill="#999">Control plane: manifest → metadata DB → generators → pipelines</text><g opacity="0.4"><rect x="10" y="70" width="132" height="56" rx="14" fill="#F3F3F1" stroke="#1F1F1F" stroke-width="1.2"/><text x="76.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Sources</text></g><line x1="144" y1="98" x2="158" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="161" y="70" width="132" height="56" rx="14" fill="#FFFFFF" stroke="#1F1F1F" stroke-width="1.2"/><text x="227.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Landing</text></g><line x1="295" y1="98" x2="309" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="312" y="70" width="132" height="56" rx="14" fill="#F5E3D3" stroke="#1F1F1F" stroke-width="1.2"/><text x="378.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Bronze</text></g><line x1="446" y1="98" x2="460" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="1"><rect x="463" y="70" width="132" height="56" rx="14" fill="#ECEEF1" stroke="#1F1F1F" stroke-width="2.8"/><text x="529.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Silver</text></g><line x1="597" y1="98" x2="611" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="1"><rect x="614" y="70" width="132" height="56" rx="14" fill="#FFF1C2" stroke="#1F1F1F" stroke-width="2.8"/><text x="680.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Gold</text></g><line x1="748" y1="98" x2="762" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="765" y="70" width="132" height="56" rx="14" fill="#F0F8F3" stroke="#1F1F1F" stroke-width="1.2"/><text x="831.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Semantic</text></g><line x1="899" y1="98" x2="913" y2="98" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><g opacity="0.4"><rect x="916" y="70" width="132" height="56" rx="14" fill="#EFF8FB" stroke="#1F1F1F" stroke-width="1.2"/><text x="982.0" y="104.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Experiences</text></g><text x="530" y="150" text-anchor="middle" font-size="15" fill="#1F1F1F">you are here: Silver + Gold</text></svg><figcaption>Gold is built from silver only, never from bronze.</figcaption></figure></section>
+
+<section id="grain"><p class="eyebrow">Step 1</p><h2>Say the grain first</h2>
+<p>The grain is one sentence: what one row of the fact table means. "One row per order line." "One row per customer per day." Every column must be true at that grain, and every number must add up correctly at it. Most gold bugs are grain bugs: a join that turns one order line into three.</p></section>
+
+<section id="star"><p class="eyebrow">Step 2</p><h2>Facts and dimensions</h2>
+<div class="tw"><table class="t"><tr><th>Table</th><th>Holds</th><th>Key</th></tr><tr><td><b>fact_sales</b></td><td>One row per order line: quantity, amount</td><td>keys to each dimension + order id and line</td></tr><tr><td><b>dim_customer</b></td><td>Who: name, city, segment, with history from silver&#x27;s SCD2</td><td>customer_sk (surrogate key)</td></tr><tr><td><b>dim_product</b></td><td>What: name, category, brand</td><td>product_sk</td></tr><tr><td><b>dim_store</b></td><td>Where: store, city, region</td><td>store_sk</td></tr><tr><td><b>dim_date</b></td><td>When: day, week, month, holiday, fiscal period</td><td>date_key</td></tr></table></div>
+<p>A <b>surrogate key</b> is a number made by the platform for each version of a dimension row, so the fact joins to the right version even after the customer moves city. <b>Conformed</b> dimensions are shared: the same dim_customer serves sales, returns and marketing, so 'customer' means one thing everywhere. See <a href="/concepts/dimensional/">star schema</a>.</p></section>
+
+<section id="build"><p class="eyebrow">Step 3</p><h2>Build it so it can run twice</h2>
+<pre class="code">-- Grain: one row per order line. Rebuilt per day, so re-running a day replaces it exactly.
+INSERT OVERWRITE gold.fact_sales PARTITION (order_date = &#x27;2026-10-27&#x27;)
+SELECT                                              -- order_date is fixed by PARTITION (...), so it is not selected
+  COALESCE(c.customer_sk, -1)  AS customer_sk,     -- -1 = inferred member (customer not arrived yet)
+  p.product_sk,
+  o.order_id, o.line_no, o.quantity, o.amount_inr
+FROM silver.order_lines o
+LEFT JOIN silver.customer c                         -- point-in-time join to the SCD2 version
+  ON  c.customer_id = o.customer_id
+  AND o.placed_at &gt;= c.valid_from
+  AND (c.valid_to IS NULL OR o.placed_at &lt; c.valid_to)
+JOIN gold.dim_product p ON p.product_id = o.product_id AND p.is_current
+WHERE o.order_date = &#x27;2026-10-27&#x27;;</pre><p class="cap">Spark SQL. Overwriting one day&#x27;s partition makes the rebuild idempotent: run it twice, get the same rows once.</p>
+<ul><li><b>Point-in-time join:</b> the order joins to the customer version that was valid when it was placed.</li>
+<li><b>Inferred members:</b> if the order arrives before its customer, it joins to a placeholder (-1) instead of disappearing; when the customer arrives, the next rebuild fixes it.</li>
+<li><b>Only from silver:</b> gold never reads bronze, so it inherits every check silver passed.</li></ul></section>
+
+<section id="recon"><p class="eyebrow">Step 4</p><h2>Reconcile every run</h2>
+<pre class="code">SELECT
+  (SELECT count(*)        FROM silver.order_lines WHERE order_date = &#x27;2026-10-27&#x27;) AS silver_rows,
+  (SELECT count(*)        FROM gold.fact_sales     WHERE order_date = &#x27;2026-10-27&#x27;) AS gold_rows,
+  (SELECT sum(amount_inr) FROM silver.order_lines WHERE order_date = &#x27;2026-10-27&#x27;) AS silver_amount,
+  (SELECT sum(amount_inr) FROM gold.fact_sales     WHERE order_date = &#x27;2026-10-27&#x27;) AS gold_amount;
+-- fail the run if rows differ, or amounts differ by more than the agreed tolerance</pre>
+<p>Counts and sums must agree with silver, and silver with the source (minus quarantine), within an agreed tolerance. When they don't, the run fails and names the hop where they diverged.</p></section>
+
+<section id="products"><p class="eyebrow">Beyond the star</p><h2>Marts, aggregates and data products</h2>
+<ul><li><b>Aggregates</b> (daily sales by store) make dashboards fast; they are rebuilt from the fact, never edited.</li>
+<li><b>Marts</b> are subject areas for one team, built from the shared facts and dimensions.</li>
+<li><b>Data products</b> are gold tables published for others with an owner, a contract, a freshness promise and documentation.</li>
+<li>Metric definitions (what 'net revenue' means) go one level up, into the <a href="/concepts/semantic-layer/">semantic layer</a>, not into each dashboard.</li></ul></section>
+
+<section id="problems"><p class="eyebrow">What goes wrong</p><h2>Common problems</h2>
+<h3 style="margin-top:16px">The fan-out join</h3><p>Revenue triples after a new dimension is joined in.</p><div class="split"><div class="card bad"><h4>Naive fix</h4>Add DISTINCT until it looks right.</div><div class="card good"><h4>Right fix</h4>State the grain; make sure every dimension key is unique for the join (test it); join at the grain.</div></div><h3 style="margin-top:16px">Orders vanish from the report</h3><p>A late customer feed means the inner join drops new orders.</p><div class="split"><div class="card bad"><h4>Naive fix</h4>Wait for all feeds before building.</div><div class="card good"><h4>Right fix</h4>Inferred member (-1) with a left join; count placeholders and alert if they don&#x27;t clear.</div></div><h3 style="margin-top:16px">Last year&#x27;s numbers change</h3><p>A customer moved city and history was rewritten.</p><div class="split"><div class="card bad"><h4>Naive fix</h4>Freeze a copy of last year.</div><div class="card good"><h4>Right fix</h4>SCD2 in silver and a point-in-time join in gold.</div></div><h3 style="margin-top:16px">A day loaded twice</h3><p>Gold totals are double for one day.</p><div class="split"><div class="card bad"><h4>Naive fix</h4>Delete by hand.</div><div class="card good"><h4>Right fix</h4>Overwrite by partition (or MERGE) and reconcile against silver every run.</div></div>
+</section>
+<section id="platforms"><p class="eyebrow">Concept vs product</p><h2>On each platform</h2><div class="tw"><table class="t"><tr><th>Job</th><th>AWS</th><th>Azure</th><th>Google Cloud</th><th>Databricks</th><th>Open source</th></tr><tr><td><b>Modelling</b></td><td>dbt on Redshift or Athena</td><td>dbt on Fabric, Fabric Warehouse</td><td>Dataform or dbt on BigQuery</td><td>dbt or Lakeflow Declarative Pipelines</td><td>dbt + DuckDB</td></tr><tr><td><b>Gold tables</b></td><td>Redshift, Iceberg on S3</td><td>Fabric Warehouse / Lakehouse</td><td>BigQuery</td><td>Delta in Unity Catalog</td><td>Delta, DuckDB, Postgres</td></tr><tr><td><b>Semantic layer</b></td><td>dbt semantic layer</td><td>Power BI semantic models</td><td>Looker</td><td>Metric views</td><td>Cube Core</td></tr><tr><td><b>Dashboards</b></td><td>QuickSight</td><td>Power BI</td><td>Looker</td><td>AI/BI dashboards</td><td>Superset or Metabase</td></tr></table></div><p class="note">Product names change often; check the current docs before you build.</p></section>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>Do I always need a star schema in gold?</summary><p>No, but it is the safest default for analytics. Wide, flat tables are fine for a single dashboard or ML features, as long as they are built from the shared facts and dimensions.</p></details><details class="faq"><summary>Where do surrogate keys come from?</summary><p>The platform makes them when it builds the dimension, one per version of a row. Don&#x27;t reuse the source system&#x27;s id as the dimension key once you keep history.</p></details><details class="faq"><summary>Should gold be views or tables?</summary><p>Tables for anything large or used often (rebuilt by partition); views for thin, cheap layers on top.</p></details><details class="faq"><summary>How is gold different from the semantic layer?</summary><p>Gold holds the tables. The semantic layer holds the definitions on top of them (metrics, joins, names), so every tool computes &#x27;revenue&#x27; the same way.</p></details></section>
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
+<p><a href="/learn/data-platform-architecture/">↑ The whole picture</a> · <a href="/learn/medallion-architecture/">The medallion layers</a> · <a href="/concepts/#data-engineering">Key concepts</a> · <a href="/paths/data-engineering/">The Data Engineering path</a></p>
+<div class="sib"><a href="/learn/data-platform-architecture/">↑ The whole picture</a><a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a><a href="/learn/data-platform-architecture/ingestion/">Ingestion</a><a href="/learn/data-platform-architecture/bronze-to-silver/">Bronze to silver</a><span>Gold</span></div>
+<p class="note" style="margin-top:12px">Coming soon: this component as a simulation you can run and break.</p></section>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

@@ -22,7 +22,7 @@ MED = "/learn/medallion-architecture/"
 
 # id, name, one line, group, link (concept page or guide anchor)
 CONCERNS = [
-    ("X1", "Metadata & control", "Everything is declared in one manifest and validated", "Run", "#control"),
+    ("X1", "Metadata & control", "Everything is declared in one manifest and validated", "Run", "/learn/data-platform-architecture/metadata-store/"),
     ("X2", "Orchestration", "What runs when, and in what order", "Run", "/concepts/orchestration/"),
     ("X3", "Contracts & schema", "What a table promises, and what happens when a source changes shape", "Trust", "/concepts/data-contracts/"),
     ("X4", "Data quality", "Rules on rows and tables; bad rows quarantined", "Trust", "/concepts/data-quality/"),
@@ -51,10 +51,10 @@ GROUP = {"Trust": ("#FFF1D6", "Can I trust the number?"), "See": ("#E6F4EC", "Ca
 
 STAGES = [  # x, name, lines, fill, link
     (30, "Sources", ["databases · CDC", "files · APIs", "event streams", "SaaS apps"], "#F4F4F2", "/concepts/cdc/"),
-    (182, "Landing", ["files as received", "never changed", "short retention", "optional for CDC"], "#FFFFFF", MED + "#layers"),
-    (334, "Bronze", ["raw, append-only", "+ ingest metadata", "source schema", "replayable"], "#F3E3D3", MED + "#layers"),
-    (486, "Silver", ["typed, deduped", "conformed keys, SCD", "contract enforced", "bad rows quarantined"], "#ECEDEF", MED + "#layers"),
-    (638, "Gold", ["business shape", "star schema, marts", "data products", "reads only silver"], "#FFF4D9", "/concepts/dimensional/"),
+    (182, "Landing", ["files as received", "never changed", "short retention", "optional for CDC"], "#FFFFFF", "/learn/data-platform-architecture/ingestion/"),
+    (334, "Bronze", ["raw, append-only", "+ ingest metadata", "source schema", "replayable"], "#F3E3D3", "/learn/data-platform-architecture/ingestion/"),
+    (486, "Silver", ["typed, deduped", "conformed keys, SCD", "contract enforced", "bad rows quarantined"], "#ECEDEF", "/learn/data-platform-architecture/bronze-to-silver/"),
+    (638, "Gold", ["business shape", "star schema, marts", "data products", "reads only silver"], "#FFF4D9", "/learn/data-platform-architecture/gold/"),
     (790, "Semantic", ["metrics defined once", "entities, joins", "governed names", "no tables of its own"], "#F8EBF1", "/concepts/semantic-layer/"),
     (942, "Experiences", ["dashboards", "conversation UI", "APIs, sharing", "ML features, RAG"], "#E9EDF8", "#serve"),
 ]
@@ -68,7 +68,7 @@ def drawing():
     a('<a href="#agents"><rect x="20" y="16" width="1060" height="52" rx="16" fill="#E9EDF8" stroke="#2b2b2b" stroke-width="1.5"/>'
       '<text x="40" y="38" font-family="Patrick Hand" font-size="20">Agent plane</text>'
       '<text x="40" y="58" font-size="12.5">onboarding · rule suggester · triage &amp; self-heal · cost advisor · docs · conversation UI. Agents open pull requests against the manifest; they never touch production.</text></a>')
-    a('<a href="#control"><rect x="20" y="82" width="1060" height="58" rx="16" fill="#EAF6EF" stroke="#2b2b2b" stroke-width="1.5"/>'
+    a('<a href="/learn/data-platform-architecture/metadata-store/"><rect x="20" y="82" width="1060" height="58" rx="16" fill="#EAF6EF" stroke="#2b2b2b" stroke-width="1.5"/>'
       '<text x="40" y="105" font-family="Patrick Hand" font-size="20">Control plane</text>'
       '<text x="40" y="126" font-size="12.5">Platform manifest (YAML) → validator → metadata DB → generators → pipelines for your platform\'s binding · orchestration · catalog · run log</text></a>')
     a('<line x1="550" y1="68" x2="550" y2="82" stroke="#2b2b2b" stroke-width="1.5" marker-end="url(#ah2)"/>')
@@ -157,6 +157,7 @@ def page():
 <p class="eyebrow" style="margin-top:22px">Data engineering · free guide · the whole picture</p>
 <h1>Data platform architecture, drawn right</h1>
 <p class="lede">One picture of a whole data platform, from the systems that make data to the dashboards and AI that use it: the layers in the middle, the control plane that runs them, the agents that may only suggest, and the jobs that keep every number honest. Click any box to go one level down.</p>
+<div class="sib" style="display:flex;flex-wrap:wrap;gap:8px;font-size:14px;margin:6px 0 0"><b style="padding:2px 0">Components:</b> <a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a> · <a href="/learn/data-platform-architecture/ingestion/">Ingestion</a> · <a href="/learn/data-platform-architecture/bronze-to-silver/">Bronze to silver</a> · <a href="/learn/data-platform-architecture/gold/">Gold</a></div>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#plain">In plain words</a></li><li><a href="#picture">The whole picture</a></li><li><a href="#control">Control plane and metadata</a></li>
 <li><a href="#services">Three services</a></li><li><a href="#streaming">The streaming lane</a></li><li><a href="#concerns">22 cross-cutting concerns</a></li>
@@ -176,7 +177,8 @@ def page():
 <li><b>Load the metadata DB.</b> A loader writes the manifest into a metadata database: master tables for sources and datasets, key-value config tables, and one stable view that every pipeline reads. One database per environment (dev, test, prod), same schema. The design is described in <a href="https://medium.com/@basant.choudhary09/metadata-db-design-for-data-engineering-components-ingestion-processing-data-quality-data-6b355ad5ecb9">Metadata DB Design for Data Engineering Platforms</a>.</li>
 <li><b>Generate.</b> Generators turn the metadata into pipelines for the chosen platform, using that platform's binding file.</li>
 <li><b>Run and record.</b> The orchestrator runs them; every run is logged with a fingerprint of the exact config it used, so any replay or backfill can prove what it ran with.</li></ol>
-<p>Runtime state (watermarks, run logs, quality results) is kept apart from configuration, so changing a setting never rewrites history.</p></section>
+<p>Runtime state (watermarks, run logs, quality results) is kept apart from configuration, so changing a setting never rewrites history.</p>
+<p><b>Zoom in:</b> <a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a>: the tables, the reader view, the YAML loader and the fingerprint, with code.</p></section>
 
 <section id="services"><p class="eyebrow">Services</p><h2>Three services, three owners</h2>
 <div class="tw"><table class="t"><tr><th>Service</th><th>Covers</th><th>Its job</th><th>Typical owner</th></tr>
@@ -211,7 +213,8 @@ def page():
 <p><b>Zoom into the middle row:</b> <a href="{MED}">Medallion architecture, drawn right</a>: each layer, one order followed through all of them, the rules and the mistakes.</p>
 <p><b>The ideas behind the boxes:</b> <a href="/concepts/#data-engineering">key data engineering concepts</a>, one short page each.</p>
 <p><b>Learn it step by step:</b> <a href="/paths/data-engineering/">the Data Engineering path</a>, on AWS, Azure, Google Cloud, Databricks or open source.</p>
-<p><b>Coming soon:</b> a page for each component (the metadata store, ingestion, bronze to silver, SCD, gold), and the whole picture as a simulation you can run and break.</p></section>"""
+<p><b>Each component, in detail:</b> <a href="/learn/data-platform-architecture/metadata-store/">metadata store</a> · <a href="/learn/data-platform-architecture/ingestion/">ingestion</a> · <a href="/learn/data-platform-architecture/bronze-to-silver/">bronze to silver (SCD Type 1 and 2)</a> · <a href="/learn/data-platform-architecture/gold/">gold</a>.</p>
+<p><b>Coming soon:</b> the whole picture as a simulation you can run and break.</p></section>"""
     ld = [
         {"@context": "https://schema.org", "@type": "TechArticle", "headline": "Data platform architecture, drawn right",
          "description": "A free guide to modern data platform architecture: control plane, metadata-driven pipelines, medallion layers, three services, streaming, 22 cross-cutting concerns and agents that only propose.",
