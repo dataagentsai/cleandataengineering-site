@@ -111,15 +111,15 @@ const R = {
   },
   cluster(_, __, step) {
     const env = D.env, gs = D.group_for_step[step.n] || (step.group ? [step.group] : []);
-    let h = '<p class="kv">' + esc(env.master) + ' · driver ' + esc(env.executors.map(e => e.host + ', ' + e.cores + ' cores').join('; ')) + ' · Spark ' + esc(env.spark) + ' · Delta ' + esc(env.delta) + '</p>';
+    let h = '<p class="kv">' + esc(env.master) + ' · driver ' + esc(env.executors.map(e => e.host + ', ' + e.cores + ' cores').join('; ')) + ' · Spark ' + esc(env.spark) + (env.delta && env.delta !== 'n/a' ? ' · Delta ' + esc(env.delta) : '') + '</p>';
     if (!gs.length) return h + '<p class="empty">' + (D.order.some(o => o[0] === 'dashboard') && step.n === 10 ? 'No Spark job ran: the batch check stopped it before any work.' : 'No Spark jobs recorded for this step.') + '</p>';
     const jobs = gs.flatMap(g => D.jobs[g] || []);
     const stages = jobs.flatMap(j => j.stages), tasks = stages.reduce((a, s) => a + s.tasks, 0), ms = jobs.reduce((a, j) => a + j.ms, 0);
-    const shuffle = stages.reduce((a, s) => a + s.shuffle_write, 0);
+    const shuffle = stages.reduce((a, s) => a + (s.shuffle_write != null ? s.shuffle_write : (s.sw || 0)), 0);
     h += '<div class="tiles" style="grid-template-columns:repeat(4,1fr);margin:6px 0"><div class="tile"><span>jobs</span><b>' + jobs.length + '</b></div><div class="tile"><span>stages</span><b>' + stages.length + '</b></div><div class="tile"><span>tasks</span><b>' + tasks + '</b></div><div class="tile"><span>time</span><b>' + (ms / 1000).toFixed(1) + 's</b></div></div>';
     const top = jobs.slice().sort((a, b) => b.ms - a.ms).slice(0, 8), mx = Math.max(...top.map(j => j.ms), 1);
     h += '<div class="bars">' + top.map(j => '<div class="bar"><i style="width:' + Math.round(160 * j.ms / mx) + 'px"></i>job ' + j.job + ' · ' + j.ms + ' ms · ' + j.stages.map(s => s.tasks).join('+') + ' tasks · ' + esc(j.desc.replace(/^(Delta: )+/, '')) + '</div>').join('') + '</div>';
-    h += '<p class="note">Shuffle written: ' + shuffle + ' bytes. Many stages have 50 tasks: that is Delta rebuilding the table\'s state from its log (50 partitions by default), not your data. On small data, that bookkeeping is most of the work.</p>';
+    h += '<p class="note">Shuffle written: ' + shuffle + ' bytes.' + (D.order.some(o => o[0] === 'storage') ? ' Many stages have 50 tasks: that is Delta rebuilding the table\'s state from its log (50 partitions by default), not your data. On small data, that bookkeeping is most of the work.' : '') + '</p>';
     return h;
   },
   layers(p, ch) {
@@ -146,6 +146,22 @@ const R = {
     }).join('');
     return h;
   },
+  stages(_, __, step) {
+    const gs = step.group ? (D.jobs[step.group] || []) : [];
+    const st = gs.flatMap(j => j.stages).sort((a, b) => a.submitted - b.submitted);
+    if (!st.length) return '<p class="empty">' + (step.group ? 'No stages recorded.' : 'No job ran in this step: nothing was executed.') + '</p>';
+    const kb = x => x >= 1048576 ? (x / 1048576).toFixed(1) + ' MB' : x >= 1024 ? (x / 1024).toFixed(1) + ' KB' : x + ' B';
+    return st.map(s => {
+      const ts = s.task_list, span = Math.max(1, ...ts.map(t => t.offset + t.ms)), mx = Math.max(...ts.map(t => t.ms));
+      const med = ts.map(t => t.ms).sort((a, b) => a - b)[Math.floor(ts.length / 2)] || 0;
+      const skew = ts.length > 3 && s.sr > 0 && mx >= 100 && mx > 3 * Math.max(med, 1);   // key skew shows after a shuffle
+      const bars = ts.slice(0, 60).map(t => '<div style="position:relative;height:7px;margin:1px 0"><i title="task ' + t.i + ': ' + t.ms + ' ms" style="position:absolute;left:' + (100 * t.offset / span).toFixed(1) + '%;width:' + Math.max(0.6, 100 * t.ms / span).toFixed(1) + '%;height:7px;border-radius:2px;background:' + (skew && t.ms === mx ? '#d9534f' : 'var(--peri)') + ';border:0.5px solid var(--ink)"></i></div>').join('');
+      return '<div style="border-top:1px dashed var(--rule-firm);padding:6px 0"><p class="kv" style="margin:0"><b>stage ' + s.id + '</b> · ' + esc(s.name.replace(/ at .*$/, '')) + ' · <b>' + s.tasks + ' task' + (s.tasks === 1 ? '' : 's') + '</b> · ' + s.ms + ' ms' +
+        (s.sw ? ' · shuffle write ' + kb(s.sw) : '') + (s.sr ? ' · shuffle read ' + kb(s.sr) : '') + (s.spill ? ' · <b style="color:#b0281a">spill ' + kb(s.spill) + '</b>' : '') + '</p>' +
+        '<div style="margin:4px 0 2px">' + bars + '</div>' + (ts.length > 60 ? '<p class="count">first 60 of ' + ts.length + ' tasks</p>' : '') +
+        '<p class="count">task time: slowest ' + mx + ' ms, median ' + med + ' ms' + (skew ? ' · <b style="color:#b0281a">one task ' + (mx / Math.max(med, 1)).toFixed(1) + '× the median: skew</b>' : '') + '</p></div>';
+    }).join('') + '<p class="note">Each bar is one task, placed on its stage\'s own timeline. Two cores means at most two bars overlap: that is a wave.</p>';
+  },
   files(p) {
     if (!p) return '<p class="empty">No files yet.</p>';
     const ix = [0, 5, 2, 3, 4, 1], re = r => ix.map(i => r[i]);
@@ -153,7 +169,7 @@ const R = {
       '<p class="note">live = part of the current version. removed = no longer in the current version, but still on disk so older versions can be read, until VACUUM.</p>';
   },
   engine(p) {
-    if (!p) return '<p class="empty">' + (scen.id === 'naive' && curStep > 4 ? 'Plans were not recorded for the naive pipeline; see scenario 1 for the plans of each hop.' : 'Nothing yet.') + '</p>';
+    if (!p) return '<p class="empty">' + (scen.id === 'naive' && curStep > 4 ? 'Plans were not recorded for the naive pipeline; see scenario 1 for the plans of each hop.' : D.order.some(o => o[0] === 'stages') ? 'No plan captured for this step.' : 'Nothing yet.') + '</p>';
     if (p.error || p.history || p.metrics) {
       let h = '';
       if (p.error) h += '<p class="note">The error, as Spark and Delta reported it:</p><pre style="color:#b0281a;white-space:pre-wrap">' + esc(p.error) + '</pre>';
@@ -210,6 +226,17 @@ DELTA_SCENARIOS = [
 BATCH_ORDER = [["inputs", "1 · Inputs"], ["config", "2 · Config & metadata"], ["cluster", "3 · Cluster"], ["layers", "4 · Layers"], ["storage", "5 · Storage (Delta log)"], ["engine", "6 · Engine (query plan)"], ["logs", "7 · Logs"], ["dashboard", "8 · Dashboard"]]
 DELTA_ORDER = [["inputs", "1 · Command"], ["layers", "2 · Table rows"], ["files", "3 · Files on disk"], ["storage", "4 · _delta_log"], ["engine", "5 · History & errors"], ["cluster", "6 · Spark jobs"], ["logs", "7 · Logs"]]
 
+SPARK_SCENARIOS = [
+    {"id": "tasks", "label": "1 · Jobs, stages, tasks", "steps": [1, 2], "blurb": "Partitions become tasks; two cores run them in waves."},
+    {"id": "lazy", "label": "2 · Lazy evaluation", "steps": [3, 4], "blurb": "Transformations run nothing; actions run everything."},
+    {"id": "wide", "label": "3 · Narrow vs wide", "steps": [5, 6], "blurb": "filter vs groupBy, and the shuffle between stages."},
+    {"id": "plan", "label": "4 · The query plan", "steps": [7, 8], "blurb": "Parsed, analysed, optimised, physical; pushdown."},
+    {"id": "join", "label": "5 · Joins", "steps": [9, 10], "blurb": "Broadcast hash join vs sort-merge join."},
+    {"id": "skew", "label": "6 · Skew and AQE", "steps": [11, 12], "blurb": "One hot key, one slow task; AQE splits it."},
+    {"id": "cache", "label": "7 · Caching", "steps": [13, 14], "blurb": "The same query twice, then cached."},
+]
+SPARK_ORDER = [["inputs", "1 · Code"], ["layers", "2 · Result"], ["stages", "3 · Stages & tasks"], ["engine", "4 · Query plan"], ["cluster", "5 · Jobs"], ["logs", "6 · Logs"]]
+
 SCENES = [
     {"slug": "", "data": "batch.json", "scenarios": SCENARIOS, "order": BATCH_ORDER, "groups": GROUP_FOR_STEP, "tabs": TAB_FOR_STEP,
      "nav": "One batch, end to end", "eyebrow": "DataTwin Studio · scene 1 · one batch, end to end", "h1": "Watch one batch go through a data platform",
@@ -223,6 +250,12 @@ SCENES = [
      "desc": "See Delta Lake from the inside: Parquet files and the _delta_log, copy-on-write updates, checkpoints, time travel, concurrent writers, deletion vectors, OPTIMIZE and VACUUM.",
      "lede": "What really happens on disk when you create, insert, update and delete in a Delta table. Each step shows the command, the table's rows, every Parquet file on disk (live, or kept only for time travel), the commit files in _delta_log, the table history and the Spark jobs. Six scenarios, from 'a table is files plus a log' to 'why VACUUM breaks time travel'.",
      "real": "Nothing here is drawn by hand: the files, commits, errors and timings are what Delta actually wrote and reported."},
+    {"slug": "spark", "data": "spark.json", "scenarios": SPARK_SCENARIOS, "order": SPARK_ORDER, "groups": {}, "tabs": {},
+     "nav": "Spark internals", "eyebrow": "DataTwin Studio · Spark internals", "h1": "Spark internals, recorded",
+     "title": "Spark internals: jobs, stages, tasks, plans",
+     "desc": "See Spark from the inside: jobs, stages and tasks, lazy evaluation, the shuffle, Catalyst query plans, broadcast vs sort-merge joins, skew and AQE, and caching.",
+     "lede": "What Spark actually does with your code. Each step shows the code, the result, every stage with its tasks as a timeline (so you can see waves and the one slow task), the query plan, the jobs and the logs. Seven scenarios on 2 million orders, from 'an action becomes tasks' to 'AQE splits a skewed join'.",
+     "real": "Every stage, task, byte shuffled, plan and timing comes from Spark's own event log and EXPLAIN. Timings are from a laptop with 2 cores: compare them with each other, not with a cluster."},
 ]
 
 
@@ -242,11 +275,11 @@ def page(sc):
 <p class="eyebrow" style="margin-top:16px">{sc["eyebrow"]}</p>
 <h1>{sc["h1"]}</h1>
 <p class="lede">{sc["lede"]}</p>
-<p><span class="real">real</span> Recorded on {env['master']} Spark {env['spark']} + Delta Lake {env['delta']} on {env['recorded_at'][:10]}. {sc["real"]}</p>
+<p><span class="real">real</span> Recorded on {env['master']} Spark {env['spark']}{(' + Delta Lake ' + env['delta']) if env.get('delta') not in (None, 'n/a') else ''} on {env['recorded_at'][:10]}. {sc["real"]}</p>
 <div class="scen">{scen_btns}</div>
 <div class="ctl"><button id="prev">◀ Back</button><button id="play">▶ Play</button><button id="next">Next ▶</button><span class="pos" id="pos"></span><span class="note">Arrow keys work too. Click a step, a tab or a commit to look closer.</span></div>
 <div class="studio"><nav class="steps" id="steps" aria-label="Steps"></nav><div><div class="insp" id="insp"></div><div class="grid8" id="grid"></div></div></div>
-<section><p class="eyebrow">Read alongside</p><p><a href="/learn/data-platform-architecture/">Data platform architecture</a> · <a href="/learn/medallion-architecture/">Medallion architecture</a> · <a href="/concepts/table-formats/">Open table formats</a> · <a href="/concepts/small-files/">The small-files problem</a> · <a href="/concepts/idempotency/">Idempotency</a></p></section>
+<section><p class="eyebrow">Read alongside</p><p><a href="/learn/data-platform-architecture/">Data platform architecture</a> · <a href="/learn/medallion-architecture/">Medallion architecture</a> · <a href="/concepts/table-formats/">Open table formats</a> · <a href="/concepts/small-files/">The small-files problem</a> · <a href="/concepts/idempotency/">Idempotency</a> · <a href="/concepts/cost-drivers/">Where data costs come from</a></p></section>
 <script type="application/json" id="sim-data">{blob}</script>
 <script>{JS}</script>"""
     html = wb.page(sc["title"], sc["desc"], url, body, CSS)

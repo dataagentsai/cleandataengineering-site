@@ -318,7 +318,8 @@ def concept_roles(cid):
 GUIDES = {"medallion": ("Medallion architecture, drawn right", "/learn/medallion-architecture/"),
           "table-formats": ("Delta Lake internals, recorded (simulation)", "/learn/data-platform-sim/delta/"),
           "small-files": ("Delta Lake internals: 300 tiny files, then OPTIMIZE (simulation)", "/learn/data-platform-sim/delta/"),
-          "idempotency": ("DataTwin Studio: the same file sent twice (simulation)", "/learn/data-platform-sim/")}
+          "idempotency": ("DataTwin Studio: the same file sent twice (simulation)", "/learn/data-platform-sim/"),
+          "cost-drivers": ("Spark internals: shuffle, joins, skew and AQE (simulation)", "/learn/data-platform-sim/spark/")}
 
 
 def concept_page(cid):
