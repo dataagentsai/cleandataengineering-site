@@ -1,0 +1,634 @@
+[
+ {
+  "n": 1,
+  "slug": "stop-reason",
+  "title": "Stop reason",
+  "domain": "D1",
+  "guide": [
+   "1.1"
+  ],
+  "objMatch": "^1\\.1 .*(stop_reason|[Tt]ermination|agentic loop)",
+  "gym": null,
+  "mindmap": "Keep the loop going while stop_reason is \"tool_use\" and stop when it is \"end_turn\"; never stop because of the reply's wording or an iteration cap.",
+  "story": "A waiter keeps going back to the kitchen while the customer is still ordering, and stops when the customer closes the menu. The waiter does not stop because the customer said \"great\" halfway through, and does not stop after exactly three trips. Claude's API tells your code the same thing in one field: stop_reason says whether Claude wants a tool run (\"tool_use\") or has finished its turn (\"end_turn\").",
+  "question": "What does the code look at to decide whether to run another step: the stop_reason field, or something else?",
+  "signals": [
+   {
+    "label": "Words that point to reading stop_reason",
+    "words": [
+     "loop ends too early",
+     "loop never ends",
+     "decide when the agent is done",
+     "after each response",
+     "tool results"
+    ]
+   },
+   {
+    "label": "Words that point to the trap",
+    "words": [
+     "checks the reply for \"done\"",
+     "looks for phrases like \"I have finished\"",
+     "stops after 10 iterations",
+     "if the response contains text"
+    ]
+   }
+  ],
+  "best": "Send the request, look at stop_reason, run the tool and add its result to the conversation when it is \"tool_use\", and end the loop when it is \"end_turn\".",
+  "lookalikes": [
+   {
+    "option": "Stop when Claude's reply contains a phrase such as \"task complete\"",
+    "label": "only usually works",
+    "why": "Works, but Claude's wording varies, so the loop sometimes stops mid-task or runs on; the field exists so you don't have to parse text."
+   },
+   {
+    "option": "Stop after a fixed number of iterations, such as 10",
+    "label": "wrong primary stop",
+    "why": "Works, but as the main stop it cuts off long tasks and wastes calls on short ones; a cap is only a safety net."
+   },
+   {
+    "option": "Stop as soon as the response includes any text",
+    "label": "only usually works",
+    "why": "Works, but Claude often writes text and asks for a tool in the same response, so the loop ends before the tool runs."
+   },
+   {
+    "option": "Replace the loop with a fixed sequence of tool calls",
+    "label": "different problem",
+    "why": "Works, but it removes Claude's ability to choose the next step from what it just learned; it answers a design question, not a stopping one."
+   }
+  ],
+  "guideQuotes": [
+   "Continue the loop when stop_reason == \"tool_use\"; terminate when \"end_turn\".",
+   "Anti-patterns: parsing natural-language signals to determine termination; arbitrary iteration caps as the primary stop; checking assistant text content as a completion indicator."
+  ],
+  "remember": "The loop's stop sign is stop_reason: keep going on \"tool_use\", stop on \"end_turn\"."
+ },
+ {
+  "n": 2,
+  "slug": "coordinator-split",
+  "title": "Coordinator split",
+  "domain": "D1",
+  "guide": [
+   "1.2"
+  ],
+  "objMatch": "^1\\.2 .*(ecomposition|Scope|refinement)",
+  "gym": "coordinator-split",
+  "mindmap": "If whole topics are missing from the result and every subagent did its job, the coordinator split the task too narrowly, so fix the coordinator, not the subagents.",
+  "story": "An editor asks three reporters to cover a town festival: one for food, one for music, one for parking. Each writes a great piece, yet the paper has nothing on the crafts fair. That gap is not the reporters' fault. Nobody was asked to cover it.",
+  "question": "Did each subagent do what it was asked? If yes, the fault is upstream, in what the coordinator asked.",
+  "signals": [
+   {
+    "label": "Words that point to the coordinator",
+    "words": [
+     "whole topics are missing",
+     "every subagent reports success",
+     "each subagent's output is good",
+     "covers only part of the question"
+    ]
+   },
+   {
+    "label": "Words that point to a subagent",
+    "words": [
+     "a subagent's sources are weak",
+     "one subagent returned errors",
+     "results contradict the sources it was given"
+    ]
+   }
+  ],
+  "best": "Widen the coordinator's decomposition so the subtasks cover the whole question, and give each subagent a brief with the goal and quality criteria.",
+  "lookalikes": [
+   {
+    "option": "Give the subagents better search terms or more sources",
+    "label": "blaming the subagent",
+    "why": "Works, but the subagents already did what they were asked; the missing topic was never in any Task prompt."
+   },
+   {
+    "option": "Add a gap check or reviewer after the report is written",
+    "label": "too late",
+    "why": "Works, but it pays for a wasted round and leaves the narrow split in place for the next run."
+   },
+   {
+    "option": "Run the subagents in parallel to finish faster",
+    "label": "different problem",
+    "why": "Works, but speed is not the problem; parallel calls cover the same narrow set of topics."
+   },
+   {
+    "option": "Give the coordinator a longer step-by-step procedure",
+    "label": "only usually works",
+    "why": "Works, but coordinator prompts should state goals and quality criteria; more steps make the split more rigid, not wider."
+   }
+  ],
+  "guideQuotes": [
+   "Coordinator handles task decomposition, delegation, aggregation, and selecting which subagents to invoke by query complexity.",
+   "Hub-and-spoke: coordinator manages all inter-subagent communication, error handling, routing."
+  ],
+  "remember": "When everyone did their part and something is still missing, look at who handed out the parts."
+ },
+ {
+  "n": 3,
+  "slug": "subagent-context",
+  "title": "Subagent context",
+  "domain": "D1",
+  "guide": [
+   "1.3"
+  ],
+  "objMatch": "^1\\.3 .*(context|findings)",
+  "gym": null,
+  "mindmap": "A subagent knows only what its prompt tells it, so pass findings and sources explicitly, and launch parallel subagents as several Task calls in one response.",
+  "story": "You hire a contractor to finish a room. They were not at last week's meetings, so they don't know the client hates grey. If you don't write it in their brief, they will paint it grey. A subagent is that contractor: it starts with an empty memory and sees only its Task prompt.",
+  "question": "Was the fact the subagent got wrong actually in its Task prompt?",
+  "signals": [
+   {
+    "label": "Words that point to writing it into the Task prompt",
+    "words": [
+     "ignores what the user said",
+     "repeats work already done",
+     "loses the sources",
+     "doesn't know the earlier findings"
+    ]
+   },
+   {
+    "label": "Words that point to parallel Task calls",
+    "words": [
+     "subagents run one after another",
+     "independent searches",
+     "takes too long",
+     "no dependency between them"
+    ]
+   }
+  ],
+  "best": "Write the complete earlier findings, the user's constraints and the source details (URLs, document names, page numbers) into each subagent's Task prompt, in a structured form; send independent subagents as several Task calls in one response.",
+  "lookalikes": [
+   {
+    "option": "Give the subagents shared memory or let them read the coordinator's history",
+    "label": "doesn't exist",
+    "why": "Works in other frameworks, but here subagents inherit nothing automatically; the prompt is the only channel."
+   },
+   {
+    "option": "Put the user's rules in the subagent's system prompt",
+    "label": "wrong home",
+    "why": "Works for rules that never change, but per-request facts like this user's constraints belong in the Task prompt for this request."
+   },
+   {
+    "option": "Summarise earlier findings in one short sentence to save tokens",
+    "label": "loses information",
+    "why": "Works, but the guide asks for complete prior findings; a one-line summary drops the numbers and the sources."
+   },
+   {
+    "option": "Let subagents talk to each other directly",
+    "label": "wrong shape",
+    "why": "Works in a mesh design, but the hub-and-spoke pattern keeps all communication going through the coordinator."
+   }
+  ],
+  "guideQuotes": [
+   "Subagent context must be provided explicitly in the prompt (no automatic inheritance / shared memory).",
+   "spawn parallel subagents by emitting multiple Task calls in one response"
+  ],
+  "remember": "If it isn't in the Task prompt, the subagent doesn't know it."
+ },
+ {
+  "n": 4,
+  "slug": "prompt-vs-hook",
+  "title": "Prompt or hook",
+  "domain": "D1",
+  "guide": [
+   "1.4",
+   "1.5"
+  ],
+  "objMatch": "^1\\.4 .*(gate|Gate|[Ee]nforcement|Prompt guidance)|^1\\.5 Hooks for policy",
+  "gym": "prompt-vs-hook",
+  "mindmap": "A rule that must hold every time, like verifying identity before a refund, goes in a hook or gate; a preference can stay in the prompt.",
+  "story": "A shop can put a note by the till saying \"offer the loyalty card\", or it can build a till that won't open for a refund over $150 without a manager's key. The note works most of the time, and that's fine for a suggestion. The till lock works every time, and that's what money rules need.",
+  "question": "If this goes wrong once, is that acceptable?",
+  "signals": [
+   {
+    "label": "Words that point to a hook or gate",
+    "words": [
+     "must never",
+     "every time",
+     "refund over",
+     "before any financial action",
+     "identity verified",
+     "compliance",
+     "even once"
+    ]
+   },
+   {
+    "label": "Words that point to a prompt",
+    "words": [
+     "tone",
+     "style",
+     "should usually",
+     "suggest",
+     "offer",
+     "friendlier"
+    ]
+   }
+  ],
+  "best": "Block the tool call in code until the condition is met (a PreToolUse hook or a prerequisite gate), and redirect to escalation when the policy says so.",
+  "lookalikes": [
+   {
+    "option": "Move the rule to the top of the system prompt and state it more firmly",
+    "label": "only usually works",
+    "why": "Works, but prompt instructions have a non-zero failure rate; a rule that must hold every time needs code."
+   },
+   {
+    "option": "Add few-shot examples showing the agent checking identity first",
+    "label": "only usually works",
+    "why": "Works, but examples raise the rate without making it certain."
+   },
+   {
+    "option": "Use a PostToolUse hook to check the refund after it runs",
+    "label": "too late",
+    "why": "Works for cleaning results, but PostToolUse acts after the tool has run, so the refund has already happened."
+   },
+   {
+    "option": "Log every refund and review the log daily",
+    "label": "too late",
+    "why": "Works for audit, but logging prevents nothing."
+   }
+  ],
+  "guideQuotes": [
+   "When deterministic compliance is required (e.g., identity verification before financial ops), prompt instructions have a non-zero failure rate.",
+   "Hooks give deterministic guarantees vs prompt-based probabilistic compliance."
+  ],
+  "remember": "If once is too many, use code; if it's a preference, use the prompt."
+ },
+ {
+  "n": 5,
+  "slug": "hook-cleanup",
+  "title": "Hook to clean up data",
+  "domain": "D1",
+  "guide": [
+   "1.5"
+  ],
+  "objMatch": "^1\\.5 .*([Nn]ormali|PostToolUse)",
+  "gym": null,
+  "mindmap": "Use a PostToolUse hook to tidy mixed formats, such as dates and status codes, before Claude sees the result, instead of asking Claude to do it.",
+  "story": "Three suppliers send invoices: one writes dates as 03/04, one as 4 March, one as a number of seconds. A good office manager has the post room stamp every invoice with one date format before it reaches the accountant. The accountant never has to guess. A PostToolUse hook is that post room.",
+  "question": "Is the problem in what the tool returns, and could plain code fix it the same way every time?",
+  "signals": [
+   {
+    "label": "Words that point to a PostToolUse hook",
+    "words": [
+     "different formats",
+     "Unix timestamps",
+     "ISO 8601",
+     "numeric status codes",
+     "before the model sees",
+     "every tool result",
+     "strip a field"
+    ]
+   },
+   {
+    "label": "Words that point elsewhere",
+    "words": [
+     "the agent calls the wrong tool",
+     "the rule must block an action"
+    ]
+   }
+  ],
+  "best": "Add a PostToolUse hook that converts every tool result to one format (or removes a field) before Claude reads it.",
+  "lookalikes": [
+   {
+    "option": "Tell Claude in the system prompt how to read each format",
+    "label": "only usually works",
+    "why": "Works most of the time, but Claude can still misread a timestamp; code converts it the same way every time."
+   },
+   {
+    "option": "Ask each team that owns a tool to change its output format",
+    "label": "slow and out of your hands",
+    "why": "Works eventually, but you don't control those tools, and the next new tool brings a new format."
+   },
+   {
+    "option": "Use a PreToolUse hook",
+    "label": "wrong hook",
+    "why": "Works for checking a call before it runs, but the mess is in the result, which PreToolUse never sees."
+   },
+   {
+    "option": "Add a separate normalising subagent",
+    "label": "overbuilt",
+    "why": "Works, but it adds a model call, cost and its own error rate for a job a few lines of code do exactly."
+   }
+  ],
+  "guideQuotes": [
+   "PostToolUse hooks intercept results for transformation before the model sees them.",
+   "Normalize heterogeneous formats (Unix ts, ISO 8601, numeric codes); block policy-violating actions (e.g., refunds > $500) and redirect to escalation."
+  ],
+  "remember": "Fix messy tool results in code on the way back, before Claude reads them."
+ },
+ {
+  "n": 6,
+  "slug": "chain-or-decide",
+  "title": "Fixed chain or Claude decides",
+  "domain": "D1",
+  "guide": [
+   "1.6"
+  ],
+  "objMatch": "^1\\.6 ",
+  "gym": null,
+  "mindmap": "If the steps are known in advance, use a fixed chain of prompts; let Claude choose the steps only when they depend on what is found along the way.",
+  "story": "Baking a cake from a recipe is a fixed chain: mix, pour, bake, ice, the same every time. Finding out why the cake sank is different: what you check next depends on what you just found. Use a recipe for the first and a detective for the second.",
+  "question": "Can you write down every step before you start, or does the next step depend on what you discover?",
+  "signals": [
+   {
+    "label": "Words that point to a fixed chain",
+    "words": [
+     "every file",
+     "the same steps each time",
+     "review each file, then",
+     "known stages",
+     "predictable"
+    ]
+   },
+   {
+    "label": "Words that point to Claude deciding",
+    "words": [
+     "depends on what it finds",
+     "open-ended investigation",
+     "unknown cause",
+     "follow the leads"
+    ]
+   }
+  ],
+  "best": "For known steps, chain prompts: analyse each item on its own, then run one integration pass across them. For open problems, let Claude build its plan from what it discovers.",
+  "lookalikes": [
+   {
+    "option": "Give one agent everything and let it decide the steps",
+    "label": "overbuilt",
+    "why": "Works, but when the steps are known it adds unpredictability and cost for no gain."
+   },
+   {
+    "option": "Hard-code the investigation steps as a decision tree",
+    "label": "too rigid",
+    "why": "Works for cases you foresaw, but an open problem needs the next step chosen from what was just found."
+   },
+   {
+    "option": "Process all the files in one large prompt",
+    "label": "attention dilution",
+    "why": "Works for a few files, but quality drops as the prompt grows; per-file passes plus an integration pass keep it sharp."
+   }
+  ],
+  "guideQuotes": [
+   "Fixed sequential pipelines (prompt chaining) vs dynamic adaptive decomposition based on intermediate findings.",
+   "Prompt chaining: analyze each file individually, then a cross-file integration pass.",
+   "Adaptive investigation plans generate subtasks from what's discovered."
+  ],
+  "remember": "Known steps get a recipe; unknown steps get a detective."
+ },
+ {
+  "n": 7,
+  "slug": "resume-fork-fresh",
+  "title": "Resume, fork or start fresh",
+  "domain": "D1",
+  "guide": [
+   "1.7"
+  ],
+  "objMatch": "^1\\.7 ",
+  "gym": null,
+  "mindmap": "Resume when nothing has changed, fork to try another approach from the same starting point, and start a new session with a summary when the earlier tool results are out of date.",
+  "story": "You pick up a book where you left off when nobody has touched it. You photocopy a page to try two different notes on it. But if someone rewrote half the chapters while you were away, you don't trust your old bookmarks; you start from a fresh summary of what you know now.",
+  "question": "Is what the old session saw still true, and do you want one path or two?",
+  "signals": [
+   {
+    "label": "Words that point to resume",
+    "words": [
+     "continue yesterday's session",
+     "nothing has changed",
+     "named session",
+     "pick up where it left off"
+    ]
+   },
+   {
+    "label": "Words that point to fork",
+    "words": [
+     "try two approaches",
+     "compare options",
+     "from the same starting point"
+    ]
+   },
+   {
+    "label": "Words that point to a fresh session with a summary",
+    "words": [
+     "files changed since",
+     "stale tool results",
+     "the code was refactored",
+     "results are out of date"
+    ]
+   }
+  ],
+  "best": "Pick the one that matches: --resume for an unchanged task, fork_session for divergent approaches, or a new session seeded with a structured summary when the old tool results are stale. If you do resume after changes, tell the agent what changed.",
+  "lookalikes": [
+   {
+    "option": "Resume the old session after the files have changed",
+    "label": "stale results",
+    "why": "Works if you tell the agent what changed, but a fresh session with a structured summary is more reliable than old tool results."
+   },
+   {
+    "option": "Start every session from scratch",
+    "label": "wastes work",
+    "why": "Works, but it throws away valid context and repeats exploration when nothing has changed."
+   },
+   {
+    "option": "Run the second approach in the same session after the first",
+    "label": "polluted context",
+    "why": "Works, but the first attempt's reasoning colours the second; a fork gives each a clean branch."
+   }
+  ],
+  "guideQuotes": [
+   "fork_session creates independent branches from a shared baseline.",
+   "Inform the agent about file changes when resuming after modifications.",
+   "Starting a new session with a structured summary is more reliable than resuming with stale tool results."
+  ],
+  "remember": "Same world, resume; two paths, fork; changed world, start fresh with a summary."
+ },
+ {
+  "n": 8,
+  "slug": "tool-picker",
+  "title": "Tool picker",
+  "domain": "D2",
+  "guide": [
+   "2.1"
+  ],
+  "objMatch": "^2\\.1 .*(escription|wording)",
+  "gym": "tool-picker",
+  "mindmap": "If Claude picks the wrong tool, first improve the tool descriptions (what each does, its inputs, its edge cases, when not to use it) before adding routers or new tools.",
+  "story": "A new assistant has two folders labelled \"Stuff\" and \"Things\". They file papers in the wrong one, and it isn't their fault. Relabel them \"Unpaid invoices\" and \"Signed contracts\", with a note on each saying what does not go in, and the mistakes stop.",
+  "question": "Does Claude have what it needs, in the descriptions, to tell these tools apart?",
+  "signals": [
+   {
+    "label": "Words that point to better descriptions",
+    "words": [
+     "one-line descriptions",
+     "similar tools",
+     "picks the wrong tool",
+     "overlapping",
+     "misroutes"
+    ]
+   },
+   {
+    "label": "Words that point to something else",
+    "words": [
+     "a prompt line ties a word to a tool",
+     "one generic tool does several jobs",
+     "18 tools"
+    ]
+   }
+  ],
+  "best": "Rewrite the descriptions with input formats, example queries, edge cases and boundaries (\"not for X: use Y\"). If a system-prompt line ties a keyword to a tool, remove it; if one tool does several jobs, split it.",
+  "lookalikes": [
+   {
+    "option": "Add a routing layer that picks the tool from keywords",
+    "label": "overbuilt",
+    "why": "Works on the cases it was written for, but it is more to build and maintain, can hide the right tool, and leaves the vague descriptions in place."
+   },
+   {
+    "option": "Add 5 to 8 few-shot examples showing which tool to call",
+    "label": "later step",
+    "why": "Works on cases like the examples, but it adds tokens to every call and leaves the cause in place."
+   },
+   {
+    "option": "Set tool_choice to \"any\"",
+    "label": "different problem",
+    "why": "Works to force a tool call, but it controls whether a tool is called, not which one Claude picks."
+   },
+   {
+    "option": "Merge the similar tools into one",
+    "label": "wrong direction",
+    "why": "Works to remove the choice, but the guide asks for purpose-specific tools with clear contracts, not a generic one."
+   }
+  ],
+  "guideQuotes": [
+   "Include input formats, example queries, edge cases, boundaries.",
+   "Ambiguous/overlapping descriptions cause misrouting; keyword-sensitive system-prompt wording creates unintended tool associations."
+  ],
+  "remember": "Fix the labels before you build a sorter."
+ },
+ {
+  "n": 9,
+  "slug": "tool-failure",
+  "title": "Tool failure",
+  "domain": "D2",
+  "guide": [
+   "2.2",
+   "5.3"
+  ],
+  "objMatch": "^2\\.2 .*rror|^5\\.3 Structured",
+  "gym": "tool-failure",
+  "mindmap": "Return a structured error that says what failed and whether a retry can help; never return an empty success, a generic \"failed\" or a crash.",
+  "story": "You send someone to the bank. If it's closed, you need to hear \"it was closed, it opens at 9, I got the deposit slip\". \"It didn't work\" is useless, \"there's no money\" is a lie, and quitting the whole errand list is worse.",
+  "question": "After this failure, does the next decision-maker know what happened, what was tried and what is still usable?",
+  "signals": [
+   {
+    "label": "Words that point to a structured error",
+    "words": [
+     "timeout",
+     "the coordinator can't tell",
+     "generic error",
+     "partial results",
+     "isError",
+     "retryable"
+    ]
+   },
+   {
+    "label": "Words that point to the trap",
+    "words": [
+     "returns an empty list on failure",
+     "marks it as success",
+     "\"Operation failed\"",
+     "raises an exception that ends the workflow"
+    ]
+   }
+  ],
+  "best": "Return isError with the error category (transient, validation, business, permission), whether it is retryable, a plain description, the attempted query and any partial results. Retry short blips locally; never retry a business rule.",
+  "lookalikes": [
+   {
+    "option": "Return an empty result marked as success",
+    "label": "inventing information",
+    "why": "Works to keep the run going, but \"we couldn't check\" becomes \"there is none\", and the agent acts on it as fact."
+   },
+   {
+    "option": "Return a uniform \"Operation failed\" message",
+    "label": "losing information",
+    "why": "Works to signal failure, but the decider can't tell a timeout from a policy refusal."
+   },
+   {
+    "option": "Retry with backoff, then report \"unavailable\"",
+    "label": "losing information",
+    "why": "Works for a short blip, but a long outage still ends in a generic status, and retrying a policy refusal never helps."
+   },
+   {
+    "option": "Raise an exception to a top-level handler",
+    "label": "over-terminating",
+    "why": "Works to stop bad data, but one failure throws away all finished work and every chance to recover."
+   }
+  ],
+  "guideQuotes": [
+   "Uniform \"Operation failed\" prevents good recovery decisions.",
+   "Distinguish transient (timeouts), validation (bad input), business (policy), permission errors.",
+   "Generic statuses hide context; silently suppressing errors or terminating on single failure are both anti-patterns."
+  ],
+  "remember": "A failure should arrive with its name, its cause and what was saved."
+ },
+ {
+  "n": 10,
+  "slug": "too-many-tools",
+  "title": "Too many tools",
+  "domain": "D2",
+  "guide": [
+   "2.3"
+  ],
+  "objMatch": "^2\\.3 .*(Too many|[Ss]coped|[Rr]estricting|distribution)",
+  "gym": null,
+  "mindmap": "Give each agent the 4 or 5 tools its job needs, not all 18, with a small shared tool only for a need that comes up often.",
+  "story": "A chef with a hundred gadgets on the counter spends time choosing and sometimes grabs the wrong one. A chef with the five knives the dish needs works fast and right. And the pastry chef shouldn't have the meat cleaver at all.",
+  "question": "Does this agent really need every tool it has?",
+  "signals": [
+   {
+    "label": "Words that point to scoping the tool set",
+    "words": [
+     "18 tools",
+     "every agent gets every tool",
+     "uses a tool outside its role",
+     "selection got worse after adding tools"
+    ]
+   },
+   {
+    "label": "Words that point to a limited shared tool",
+    "words": [
+     "often needs to look up",
+     "high-frequency",
+     "keeps handing back to the coordinator for one lookup"
+    ]
+   }
+  ],
+  "best": "Scope each agent's tools to its role, and give a narrow cross-role tool only for a frequent need instead of the whole set.",
+  "lookalikes": [
+   {
+    "option": "Improve all 18 tool descriptions",
+    "label": "only usually works",
+    "why": "Works a little, but good descriptions don't fix the fact that 18 choices degrade selection."
+   },
+   {
+    "option": "Add a router agent that picks tools for the others",
+    "label": "overbuilt",
+    "why": "Works, but it adds a model call and a failure point when scoping the list fixes the cause."
+   },
+   {
+    "option": "Tell each agent in its prompt which tools not to use",
+    "label": "only usually works",
+    "why": "Works most of the time, but a tool the agent has is a tool it may misuse; remove it instead."
+   },
+   {
+    "option": "Give the subagent no cross-role tools, so it always asks the coordinator",
+    "label": "too strict",
+    "why": "Works, but for a frequent need the round trips add delay; a limited cross-role tool is the guide's answer."
+   }
+  ],
+  "guideQuotes": [
+   "Too many tools (18 vs 4-5) degrades selection reliability.",
+   "Agents with off-specialization tools misuse them.",
+   "Scoped access; limited cross-role tools for high-frequency needs."
+  ],
+  "remember": "Fewer, role-fitted tools beat more tools with better labels."
+ }
+]

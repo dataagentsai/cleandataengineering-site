@@ -1,0 +1,644 @@
+[
+ {
+  "n": 21,
+  "slug": "retry-with-error",
+  "title": "Retry with the error",
+  "domain": "D4",
+  "guide": [
+   "4.4"
+  ],
+  "objMatch": "^4\\.4 .*([Rr]etr|[Vv]alidation)",
+  "gym": "extraction-honesty",
+  "mindmap": "When an extraction fails a check, retry with the specific error attached, but don't retry when the value isn't in the document at all.",
+  "story": "A clerk copies a total from an invoice and writes 1,240 where the page says 1,420. If you say \"try again\", they may make the same slip. If you say \"the line items add up to 1,420, check the total\", they fix it at once. But if the invoice has no total printed, no amount of asking makes one appear; pushing harder only gets you a guess.",
+  "question": "Is the missing or wrong value actually printed in the source document?",
+  "signals": [
+   {
+    "label": "Words that point to a retry with the specific error",
+    "words": [
+     "format",
+     "date written as",
+     "totals don't add up",
+     "wrong field",
+     "the value is on the page"
+    ]
+   },
+   {
+    "label": "Words that point to stopping and allowing null or human review",
+    "words": [
+     "not printed",
+     "cut off",
+     "missing from the scan",
+     "the document doesn't say",
+     "illegible"
+    ]
+   }
+  ],
+  "best": "Send the specific validation error back with the document so Claude can correct a format or structure mistake; when the information is absent, let the field be null and route it for review instead of retrying.",
+  "lookalikes": [
+   {
+    "option": "Retry the request with a firmer instruction such as \"be accurate this time\".",
+    "label": "only usually works",
+    "why": "Works, but a generic nudge doesn't tell Claude what was wrong, so the same mistake often comes back."
+   },
+   {
+    "option": "Retry up to five times until the output passes validation.",
+    "label": "invents information",
+    "why": "Works, but when the value isn't in the document, repeated retries push Claude to make one up just to pass the check."
+   },
+   {
+    "option": "Switch to a strict JSON schema so the output is always valid.",
+    "label": "different problem",
+    "why": "Works, but a schema removes syntax errors, not wrong values; a total that doesn't add up is still schema-valid."
+   },
+   {
+    "option": "Send every failed document straight to a human reviewer.",
+    "label": "overbuilt",
+    "why": "Works, but a format slip that one retry with the error would fix doesn't need a person's time."
+   }
+  ],
+  "guideQuotes": [
+   "Retry-with-error-feedback: append specific validation errors on retry.",
+   "Retries are ineffective when info is absent from the source (vs format/structural errors)."
+  ],
+  "remember": "Retry with the exact error when the answer is on the page; when it isn't, allow null and stop retrying."
+ },
+ {
+  "n": 22,
+  "slug": "batch-or-now",
+  "title": "Batch or now",
+  "domain": "D4",
+  "guide": [
+   "4.5"
+  ],
+  "objMatch": "^4\\.5 (?!Batch API & custom_id)",
+  "gym": "batch-or-now",
+  "mindmap": "Use the Batch API at half price only when nobody is waiting and no back-and-forth tool calls are needed; anything someone waits on, like a pre-merge check, calls the API directly.",
+  "story": "A bakery can bake to order or take an overnight bulk order. The bulk order costs half as much, but it arrives sometime tomorrow. That's perfect for the weekly office party and useless for a customer standing at the counter right now.",
+  "question": "Is someone or something waiting for this result, and does the job need several rounds of tool calls?",
+  "signals": [
+   {
+    "label": "Words that point to the Batch API",
+    "words": [
+     "overnight",
+     "weekly",
+     "nightly report",
+     "audit",
+     "thousands of documents",
+     "cut costs",
+     "not urgent"
+    ]
+   },
+   {
+    "label": "Words that point to calling the API directly",
+    "words": [
+     "before merge",
+     "blocks the pipeline",
+     "developers wait",
+     "live chat",
+     "calls tools",
+     "multi-turn"
+    ]
+   }
+  ],
+  "best": "Put latency-tolerant, single-request work such as overnight reports on the Batch API for the 50% saving; keep blocking work and agent loops that call tools on synchronous calls.",
+  "lookalikes": [
+   {
+    "option": "Move the pre-merge review to the Batch API to halve its cost.",
+    "label": "too slow",
+    "why": "Works, but batches have no latency promise and can take up to 24 hours, so developers would sit blocked waiting on the merge."
+   },
+   {
+    "option": "Run the support agent's tool-calling conversations through the Batch API.",
+    "label": "not supported",
+    "why": "Works for single requests, but the Batch API can't do multi-turn tool calling within one request, so the agent can't finish its job."
+   },
+   {
+    "option": "Keep the weekly report synchronous so results come back fast.",
+    "label": "pays double",
+    "why": "Works, but nobody is waiting on a weekly report, so paying full price buys speed nobody needs."
+   },
+   {
+    "option": "Trim the prompt to cut cost instead of changing how you call the API.",
+    "label": "partial fix",
+    "why": "Works and helps either way, but for latency-tolerant volume the batch discount is the bigger, intended saving."
+   }
+  ],
+  "guideQuotes": [
+   "Message Batches API: 50% cost savings, up to 24-hour window, no latency SLA.",
+   "Good for non-blocking/latency-tolerant (overnight reports, weekly audits); bad for blocking (pre-merge).",
+   "Batch API does not support multi-turn tool calling in a single request."
+  ],
+  "remember": "Batch the work nobody waits for; call directly when someone waits or the job needs tool calls."
+ },
+ {
+  "n": 23,
+  "slug": "self-review",
+  "title": "Self-review",
+  "domain": "D4",
+  "guide": [
+   "4.6",
+   "3.6"
+  ],
+  "objMatch": "^(4\\.6|3\\.6 Session context isolation)",
+  "gym": null,
+  "mindmap": "Review with a separate Claude instance that didn't write the code, and review large changes file by file before one pass across all the files.",
+  "story": "When you proofread your own essay, you read what you meant to write, not what's on the page, so typos slip through. A friend who never saw your draft catches them in a minute. And a long report is checked best page by page first, then once more to see the pages agree with each other.",
+  "question": "Is the same session that produced the work also being asked to judge it?",
+  "signals": [
+   {
+    "label": "Words that point to an independent review instance",
+    "words": [
+     "the same session",
+     "reviews its own changes",
+     "misses subtle bugs",
+     "self-check",
+     "extended thinking didn't help"
+    ]
+   },
+   {
+    "label": "Words that point to multi-pass review",
+    "words": [
+     "dozens of files",
+     "contradictory comments",
+     "misses issues across files",
+     "attention spread thin"
+    ]
+   }
+  ],
+  "best": "Start a fresh instance with no memory of how the code was written to review it, and for big changes run a per-file pass followed by a cross-file integration pass.",
+  "lookalikes": [
+   {
+    "option": "Ask the same session to re-read its changes carefully before finishing.",
+    "label": "only usually works",
+    "why": "Works a little, but the session keeps its own reasoning and tends not to question it."
+   },
+   {
+    "option": "Turn on extended thinking for the generating session.",
+    "label": "same blind spot",
+    "why": "Works for harder reasoning, but more thinking in the same session still carries the same assumptions into the review."
+   },
+   {
+    "option": "Review the whole 40-file change in one large prompt.",
+    "label": "attention diluted",
+    "why": "Works for small changes, but on a large one attention spreads thin and findings contradict each other across files."
+   },
+   {
+    "option": "Add stricter review instructions to CLAUDE.md.",
+    "label": "different problem",
+    "why": "Works to set standards, but clearer criteria don't remove the blind spot of reviewing your own work."
+   }
+  ],
+  "guideQuotes": [
+   "Self-review is limited: a model retains generation reasoning and won't question itself in-session.",
+   "Independent review instances (no prior reasoning) catch subtle issues better than self-review/extended thinking.",
+   "Multi-pass: per-file local analysis + cross-file integration passes (avoid attention dilution, contradictions)."
+  ],
+  "remember": "The writer doesn't grade its own work: use a fresh reviewer, per file first, then across files."
+ },
+ {
+  "n": 24,
+  "slug": "context-meter",
+  "title": "Context meter",
+  "domain": "D5",
+  "guide": [
+   "5.1"
+  ],
+  "objMatch": "^5\\.1 .*([Ff]act|[Ff]igure|[Tt]rim|bloat)",
+  "gym": "context-meter",
+  "mindmap": "Keep exact facts such as amounts, dates and promises in a case-facts block and trim tool results to the fields you need; a bigger context window or a running summary blurs the numbers.",
+  "story": "A nurse handing over a shift doesn't retell the whole day. They fill in a chart: medicine, dose, time. A story of the day gets shorter and vaguer with each retelling, but the chart keeps the exact numbers every time.",
+  "question": "Are exact facts getting lost or blurred as the conversation grows, and where should they be kept so they can't fade?",
+  "signals": [
+   {
+    "label": "Words that point to a case-facts block",
+    "words": [
+     "exact amount",
+     "order number",
+     "date promised",
+     "after summarising",
+     "forgot what the customer was told",
+     "vague"
+    ]
+   },
+   {
+    "label": "Words that point to trimming tool results",
+    "words": [
+     "40 fields",
+     "verbose tool output",
+     "context fills up",
+     "many lookups"
+    ]
+   }
+  ],
+  "best": "Extract the transaction facts into a persistent case-facts block near the start of the context, trim each tool result to the fields that matter, and keep key summaries at the beginning under clear headers.",
+  "lookalikes": [
+   {
+    "option": "Move to a model with a larger context window.",
+    "label": "delays the problem",
+    "why": "Works for a while, but a longer context fills up later and the middle still gets missed."
+   },
+   {
+    "option": "Summarise older turns once the context is nearly full.",
+    "label": "blurs facts",
+    "why": "Works to save space, but summaries condense exact numbers, dates and promises into vague text."
+   },
+   {
+    "option": "Repeat the key facts in the system prompt of every turn by hand.",
+    "label": "overbuilt",
+    "why": "Works, but it is a manual copy of what a structured case-facts block does reliably."
+   },
+   {
+    "option": "Tell Claude to pay close attention to earlier details.",
+    "label": "only usually works",
+    "why": "Works sometimes, but an instruction can't bring back a number a summary already blurred."
+   }
+  ],
+  "guideQuotes": [
+   "Progressive summarization risks condensing numbers, %, dates, customer expectations into vague summaries.",
+   "Extract transactional facts into a persistent \"case facts\" block; trim verbose tool outputs to relevant fields; place key summaries at the beginning + explicit section headers."
+  ],
+  "remember": "Facts go in a block, not a summary; tool results get trimmed, not kept whole."
+ },
+ {
+  "n": 25,
+  "slug": "who-escalates",
+  "title": "Who escalates",
+  "domain": "D5",
+  "guide": [
+   "5.2"
+  ],
+  "objMatch": "^5\\.2 (?!Several|Ambiguity)",
+  "gym": "who-escalates",
+  "mindmap": "Escalate when the customer asks for a person, when there's a policy exception or gap, or when the agent can't make progress; never on sentiment or self-rated confidence.",
+  "story": "A receptionist calls the manager when a guest asks for the manager, when a request falls outside the hotel's rules, or when they're stuck. They don't call the manager just because a guest sounds annoyed about a missing towel, which they can fix in a minute.",
+  "question": "Does this case meet a clear escalation trigger, or is the rule leaning on a mood or a confidence score?",
+  "signals": [
+   {
+    "label": "Words that point to escalating now",
+    "words": [
+     "asks for a human",
+     "wants to speak to someone",
+     "policy doesn't cover",
+     "exception",
+     "can't progress"
+    ]
+   },
+   {
+    "label": "Words that point to resolving it first",
+    "words": [
+     "angry but simple",
+     "frustrated about a late box",
+     "straightforward",
+     "standard refund"
+    ]
+   }
+  ],
+  "best": "Give the agent explicit escalation criteria with a few examples, escalate immediately when a person is asked for, and offer to resolve straightforward cases even when the customer is upset.",
+  "lookalikes": [
+   {
+    "option": "Escalate whenever the sentiment score drops below a threshold.",
+    "label": "unreliable proxy",
+    "why": "Works for some angry complex cases, but angry customers with simple issues get escalated and calm customers with complex ones don't."
+   },
+   {
+    "option": "Escalate when the agent's self-rated confidence is under 70%.",
+    "label": "unreliable proxy",
+    "why": "Works occasionally, but self-reported confidence doesn't track how complex a case really is."
+   },
+   {
+    "option": "Try to resolve first even when the customer asks for a person.",
+    "label": "ignores the demand",
+    "why": "Works to save handoffs, but an explicit request for a human should be honoured immediately."
+   },
+   {
+    "option": "Escalate every refund to be safe.",
+    "label": "overbuilt",
+    "why": "Works, but it throws away the first-contact resolution the agent exists to provide."
+   }
+  ],
+  "guideQuotes": [
+   "Triggers: customer requests a human; policy exceptions/gaps; inability to progress.",
+   "Escalate immediately on explicit demand; offer resolution when straightforward.",
+   "Sentiment-based escalation and self-reported confidence are unreliable proxies for complexity."
+  ],
+  "remember": "Escalate on clear triggers, not on mood or a confidence score."
+ },
+ {
+  "n": 26,
+  "slug": "several-matches",
+  "title": "Several customer matches",
+  "domain": "D5",
+  "guide": [
+   "5.2"
+  ],
+  "objMatch": "^5\\.2 (Several customer matches|Ambiguity resolution)",
+  "gym": null,
+  "mindmap": "When a lookup returns more than one customer, ask the person for an identifier such as an order number or email; never guess which one is meant.",
+  "story": "A pharmacist finds three patients named Priya Sharma. They don't hand over the medicine to whoever seems likeliest; they ask for the date of birth. One quick question is cheaper than giving someone else's prescription away.",
+  "question": "Does the agent know for certain which record is meant, or would it be picking one?",
+  "signals": [
+   {
+    "label": "Words that point to asking for an identifier",
+    "words": [
+     "two accounts match",
+     "same name",
+     "several customers",
+     "more than one result",
+     "ambiguous"
+    ]
+   },
+   {
+    "label": "Words that point to going ahead",
+    "words": [
+     "one match",
+     "verified ID",
+     "order number given"
+    ]
+   }
+  ],
+  "best": "Pause and ask the customer for an identifier that singles out one record, then continue with the verified match.",
+  "lookalikes": [
+   {
+    "option": "Pick the account with the most recent order.",
+    "label": "heuristic guess",
+    "why": "Works most of the time, but when it's wrong the agent acts on someone else's account."
+   },
+   {
+    "option": "Pick the match whose details are closest to the conversation.",
+    "label": "heuristic guess",
+    "why": "Works often, but closeness is still a guess, and the cost of a wrong account is high."
+   },
+   {
+    "option": "Escalate to a human whenever there are several matches.",
+    "label": "overbuilt",
+    "why": "Works, but one clarifying question resolves it without a handoff."
+   },
+   {
+    "option": "Show the customer details of all matching accounts so they can choose.",
+    "label": "leaks data",
+    "why": "Works to settle the choice, but it exposes other customers' information."
+   }
+  ],
+  "guideQuotes": [
+   "Triggers: customer requests a human; policy exceptions/gaps; inability to progress.",
+   "ask for identifiers (not heuristic selection)."
+  ],
+  "remember": "Several matches means ask, never guess."
+ },
+ {
+  "n": 27,
+  "slug": "empty-or-failure",
+  "title": "Empty result or failure",
+  "domain": "D5",
+  "guide": [
+   "5.3",
+   "2.2"
+  ],
+  "objMatch": "^(2\\.2 (Access failure|Empty results)|5\\.3 (Access failure|Report access))",
+  "gym": "tool-failure",
+  "mindmap": "\"No results\" and \"couldn't reach the system\" are different answers: report a failure as a failure with what was tried, and an empty search as a valid empty result.",
+  "story": "You ask a friend to check whether the shop has your size. \"I looked, there are none\" and \"the shop was shut\" both mean you don't get the shoes today, but they lead to very different next steps. If your friend says \"none\" when the shop was shut, you give up on shoes that might be there.",
+  "question": "Did the tool actually look and find nothing, or did it fail to look?",
+  "signals": [
+   {
+    "label": "Words that point to reporting an access failure",
+    "words": [
+     "timed out",
+     "permission denied",
+     "service unavailable",
+     "connection failed",
+     "partial results"
+    ]
+   },
+   {
+    "label": "Words that point to a valid empty result",
+    "words": [
+     "no matching records",
+     "search completed",
+     "zero results",
+     "nothing on file"
+    ]
+   }
+  ],
+  "best": "Return a structured error for access failures (failure type, the query tried, any partial results, alternatives) so the coordinator can retry or work around it, and return a successful empty result only when the search really ran.",
+  "lookalikes": [
+   {
+    "option": "Return an empty list when the search times out, so the agent keeps going.",
+    "label": "falsifies information",
+    "why": "Works to keep the run alive, but the coordinator now believes there is nothing to find."
+   },
+   {
+    "option": "Return a generic \"Operation failed\" status.",
+    "label": "hides context",
+    "why": "Works to flag a problem, but without the type and what was tried, the coordinator can't decide whether to retry."
+   },
+   {
+    "option": "Stop the whole run when any one search fails.",
+    "label": "loses partial work",
+    "why": "Works to avoid bad output, but terminating on a single failure throws away the results that did succeed."
+   },
+   {
+    "option": "Retry the timed-out search with backoff inside the subagent.",
+    "label": "only part of it",
+    "why": "Works for a transient blip, and local recovery is good, but if it still fails the error must go up with its context, not vanish."
+   }
+  ],
+  "guideQuotes": [
+   "Distinguish access failures (retry) from valid empty results.",
+   "Generic statuses hide context; silently suppressing errors or terminating on single failure are both anti-patterns."
+  ],
+  "remember": "Empty means it looked and found nothing; failure means it couldn't look, so say which."
+ },
+ {
+  "n": 28,
+  "slug": "large-codebase",
+  "title": "Large codebase",
+  "domain": "D5",
+  "guide": [
+   "5.4"
+  ],
+  "objMatch": "^5\\.4 ",
+  "gym": null,
+  "mindmap": "In a long codebase exploration, save key findings to a scratchpad file, send verbose exploration to subagents, and use /compact when the context fills.",
+  "story": "A detective on a long case pins notes to a board instead of trusting memory, sends juniors to sift through the files and report back in a paragraph, and clears the desk every so often. Days later the board still says exactly what was found.",
+  "question": "Is the session starting to forget or blur what it found earlier, and where should those findings live instead?",
+  "signals": [
+   {
+    "label": "Words that point to a scratchpad or manifest",
+    "words": [
+     "inconsistent answers",
+     "typical patterns",
+     "forgot an earlier finding",
+     "session crashed",
+     "pick up tomorrow"
+    ]
+   },
+   {
+    "label": "Words that point to subagents or /compact",
+    "words": [
+     "verbose output",
+     "searching hundreds of files",
+     "context nearly full",
+     "long exploration"
+    ]
+   }
+  ],
+  "best": "Write key findings to a scratchpad or manifest file that survives context limits and crashes, delegate verbose searches to subagents that return summaries, and run /compact to cut context use.",
+  "lookalikes": [
+   {
+    "option": "Read every file in the module up front so nothing is missed.",
+    "label": "fills context",
+    "why": "Works on a small module, but on a large codebase it floods the context and earlier findings degrade."
+   },
+   {
+    "option": "Restart the session whenever answers get inconsistent.",
+    "label": "loses findings",
+    "why": "Works to clear the clutter, but without a saved record the new session starts from nothing."
+   },
+   {
+    "option": "Switch to a model with a bigger context window.",
+    "label": "delays the problem",
+    "why": "Works for a while, but the same degradation returns later in the run."
+   },
+   {
+    "option": "Ask Claude to keep earlier findings in mind.",
+    "label": "only usually works",
+    "why": "Works briefly, but an instruction isn't storage; the findings still fade as the context grows."
+   }
+  ],
+  "guideQuotes": [
+   "Context degradation: inconsistent answers, referencing \"typical patterns\" vs specific earlier findings.",
+   "Scratchpad files persist key findings across boundaries; subagent delegation isolates verbose output.",
+   "Structured state persistence (manifests) for crash recovery; /compact to reduce context usage."
+  ],
+  "remember": "Write findings down, delegate the noisy searching, and compact the rest."
+ },
+ {
+  "n": 29,
+  "slug": "confidence-sampling",
+  "title": "Confidence and sampling",
+  "domain": "D5",
+  "guide": [
+   "5.5"
+  ],
+  "objMatch": "^5\\.5 ",
+  "gym": null,
+  "mindmap": "A high overall accuracy can hide one weak document type or field, so measure accuracy by type and field with stratified random samples before automating.",
+  "story": "A school's average exam score is 85%, so the head says all classes are fine. Then someone checks class by class and finds one class at 40%. The average hid it, and only looking at each group showed it.",
+  "question": "Has accuracy been checked for each document type and field, or only as one overall number?",
+  "signals": [
+   {
+    "label": "Words that point to stratified, per-type checks",
+    "words": [
+     "97% overall",
+     "accuracy across all documents",
+     "ready to automate",
+     "one vendor's invoices",
+     "handwritten forms"
+    ]
+   },
+   {
+    "label": "Words that point to field-level confidence routing",
+    "words": [
+     "which fields to review",
+     "high-confidence errors",
+     "labelled set",
+     "calibrate"
+    ]
+   }
+  ],
+  "best": "Measure accuracy by document type and by field, using stratified random sampling to find errors even among high-confidence results, and route review using field-level confidence calibrated on a labelled set.",
+  "lookalikes": [
+   {
+    "option": "Automate fully because overall accuracy is 97%.",
+    "label": "masks weak spots",
+    "why": "Works for most documents, but the average can hide a type or field that fails badly."
+   },
+   {
+    "option": "Send only low-confidence extractions to human review.",
+    "label": "uncalibrated",
+    "why": "Works partly, but without calibration and sampling, confident errors pass straight through unseen."
+   },
+   {
+    "option": "Have humans review a random 5% of all documents.",
+    "label": "too thin",
+    "why": "Works to spot-check, but an unstratified sample can contain almost none of the rare, weak document type."
+   },
+   {
+    "option": "Ask Claude to rate its own confidence on every field.",
+    "label": "unreliable proxy",
+    "why": "Works as a signal, but self-rated confidence has to be calibrated against labelled data before it can route review."
+   }
+  ],
+  "guideQuotes": [
+   "Aggregate accuracy (97%) can mask poor performance on specific doc types/fields.",
+   "Stratified random sampling measures high-confidence error rates; field-level confidence calibrated on labeled sets routes review.",
+   "Validate accuracy by document type and field before automating."
+  ],
+  "remember": "Don't trust the average: check each type and field before you automate."
+ },
+ {
+  "n": 30,
+  "slug": "sources",
+  "title": "Sources",
+  "domain": "D5",
+  "guide": [
+   "5.6"
+  ],
+  "objMatch": "^5\\.6 ",
+  "gym": null,
+  "mindmap": "Keep every claim linked to its source through the synthesis, and when two sources disagree, show both with their sources and dates instead of picking one.",
+  "story": "Two newspapers report different crowd sizes for the same rally. A good reporter writes \"police said 8,000; organisers said 20,000\" rather than quietly choosing one. And a 2019 figure and a 2024 figure aren't a contradiction; they are two different years.",
+  "question": "Can a reader still tell which source each claim came from, and are disagreeing figures shown honestly?",
+  "signals": [
+   {
+    "label": "Words that point to keeping claim-source mappings",
+    "words": [
+     "lost track of which source",
+     "can't cite",
+     "summary dropped the references",
+     "reviewer needs to verify"
+    ]
+   },
+   {
+    "label": "Words that point to showing conflicts with dates",
+    "words": [
+     "two reports disagree",
+     "different figures",
+     "older study",
+     "published in different years"
+    ]
+   }
+  ],
+  "best": "Pass structured claim-source mappings (claim, source, date) through every synthesis step, annotate conflicting statistics with where each came from, and include publication dates so time differences aren't read as contradictions.",
+  "lookalikes": [
+   {
+    "option": "Use the most recent figure and drop the older one.",
+    "label": "picks one",
+    "why": "Works when the newer figure is right, but it hides a real disagreement the reader should see."
+   },
+   {
+    "option": "Average the two conflicting figures.",
+    "label": "invents a figure",
+    "why": "Works to give a single number, but that number appears in neither source."
+   },
+   {
+    "option": "Ask the synthesis agent to add citations at the end.",
+    "label": "too late",
+    "why": "Works partly, but once summaries have compressed the content, the links between claims and sources are already lost."
+   },
+   {
+    "option": "Have each subagent return a prose summary of its findings.",
+    "label": "loses provenance",
+    "why": "Works for reading, but prose without structured source fields lets attribution drop out during synthesis."
+   }
+  ],
+  "guideQuotes": [
+   "Source attribution is lost when summarization compresses without claim-source mappings.",
+   "Preserve structured claim-source mappings through synthesis; annotate conflicting statistics with source attribution (don't arbitrarily pick one).",
+   "Require publication/collection dates so temporal differences aren't misread as contradictions; render content types appropriately (financial as tables, news as prose)."
+  ],
+  "remember": "Every claim keeps its source and date; conflicts are shown, not settled by picking one."
+ }
+]

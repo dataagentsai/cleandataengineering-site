@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Code in CI</title>
+<meta name="description" content="CCA-F trap gym: how to run Claude Code in a CI pipeline. A simulator lets you switch -p, JSON output, a JSON schema, CLAUDE.md and an independent reviewer on and off, and shows the CI log and the pull request comments, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .tg { display: flex; flex-wrap: wrap; align-items: center; gap: 0 4px; padding: 4px 0; border-bottom: 1px dashed #d9dce3; }
+  .tg .tl { flex: 1 1 260px; font-size: .93rem; font-weight: 600; }
+  #sim-log { white-space: pre-wrap; word-break: break-word; min-height: 8em; background: #f4f5f7; margin: 12px 0; }
+  #sim-log span { opacity: 0; transition: opacity .15s; }
+  #sim-log span.show { opacity: 1; }
+  #sim-log .l-step { color: #3b55a0; font-weight: 600; }
+  #sim-log .l-cmd { color: #23262f; font-weight: 600; }
+  #sim-log .l-out { color: #23262f; }
+  #sim-log .l-note { color: #5b6070; font-style: italic; }
+  #sim-log .l-ok { color: #1f7a4d; font-weight: 600; }
+  #sim-log .l-err { color: #b0305f; font-weight: 600; }
+  #sim-pr { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; font-size: .92rem; background: #fff; }
+  #sim-pr .cm { border-left: 3px solid var(--peri); padding: 3px 0 3px 10px; margin: 6px 0; }
+  #sim-pr .cm.miss { border-left-color: #d46a92; color: var(--muted); }
+  #sim-pr .none { color: var(--muted); margin: 0; }
+  .meter { height: 12px; border: 1.5px solid var(--line); border-radius: 999px; overflow: hidden; background: #fff; margin: 4px 0 2px; }
+  .meter i { display: block; height: 100%; background: #ffd98a; transition: width .3s; }
+  .meter i.full { background: #a8dcc3; }
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+  .grid4 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/claude-code-ci/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · Claude Code in CI</div>
+  <h1>Claude Code in CI</h1>
+  <p class="lede">A pipeline runs Claude Code to review every pull request. The wrong answers all sort of work: pipe “yes” into it, ask for JSON in the prompt and parse it with a regex, paste the standards into the command. The trap is a workaround where the CLI already has the built-in setting. Ask who is there to answer, and who reads the output.</p>
+  <p><span class="chip peri">D3 Claude Code Configuration</span><span class="chip">Exam guide 3.6</span><span class="chip">About 15 minutes</span></p>
+
+  <div class="box peri"><b>At a glance:</b> In CI, run Claude Code with <code>-p</code> so it doesn't wait for input, use <code>--output-format json</code> with <code>--json-schema</code> for results a script can parse, and put the project's testing and review standards in <code>CLAUDE.md</code>.</div>
+
+  <h2>Start here: the overnight cleaning crew</h2>
+  <p>An office is cleaned at night, when nobody is there.</p>
+  <div class="grid2 grid4">
+    <div class="box mint"><b>They work without asking.</b> The crew can't ring you at 3 a.m. to ask where the mop is. They have to get on with it alone.</div>
+    <div class="box butter"><b>They leave a checklist, not a note.</b> In the morning the manager ticks through a form with fixed boxes, rather than reading a chatty note that's different every night.</div>
+    <div class="box peri"><b>The house rules are written down.</b> A sheet on the wall says which rooms, which products, what not to touch. Every crew reads the same sheet.</div>
+    <div class="box rose"><b>Someone else inspects.</b> The person who cleaned a room is the worst one to inspect it: they remember doing it, so they see it as done.</div>
+  </div>
+  <p>A CI job (continuous integration: the robot that runs checks on every pull request) is that night shift. <b><code>-p</code></b> (or <code>--print</code>) runs Claude Code non-interactively: it answers and exits instead of waiting at a prompt. <b><code>--output-format json</code></b> with <b><code>--json-schema</code></b> makes the output a fixed form that a script can read and turn into inline comments on the pull request. <b><code>CLAUDE.md</code></b> is the sheet on the wall: the project's testing standards, fixtures and review criteria. And the review should come from an <b>independent instance</b>, not the session that wrote the code.</p>
+
+  <svg viewBox="0 0 640 352" role="img" aria-label="The CI review pipeline: a pull request triggers claude -p, which loads CLAUDE.md for the team's standards and prints JSON that matches a schema. A script reads the JSON and posts inline comments back on the pull request. The review should be run by an independent instance, not the generator session that wrote the code." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M265,72 L265,106"/>
+      <path d="M140,142 L176,142"/><path d="M350,142 L386,142"/><path d="M500,142 L526,142"/>
+      <path d="M580,174 L580,318 L80,318 L80,178"/>
+    </g>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" stroke-dasharray="3 3">
+      <path d="M230,174 L230,228"/><path d="M300,174 L430,228"/>
+    </g>
+    <rect id="box-md" x="150" y="16" width="230" height="56" rx="12" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="265" y="39" text-anchor="middle" font-size="14" font-weight="600">CLAUDE.md</text>
+    <text x="265" y="58" text-anchor="middle" font-size="12">testing standards, review criteria</text>
+    <rect x="20" y="110" width="120" height="64" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="80" y="137" text-anchor="middle" font-size="14" font-weight="600">Pull request</text>
+    <text x="80" y="156" text-anchor="middle" font-size="12">opened or updated</text>
+    <rect id="box-p" x="180" y="110" width="170" height="64" rx="12" fill="#a3b5df" stroke="#23262f" stroke-width="1.5"/>
+    <text x="265" y="137" text-anchor="middle" font-size="14" font-weight="600">claude -p</text>
+    <text x="265" y="156" text-anchor="middle" font-size="12">answers, then exits</text>
+    <rect id="box-json" x="390" y="110" width="110" height="64" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="445" y="137" text-anchor="middle" font-size="14" font-weight="600">JSON</text>
+    <text x="445" y="156" text-anchor="middle" font-size="12">fits the schema</text>
+    <rect id="box-post" x="530" y="110" width="100" height="64" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="580" y="137" text-anchor="middle" font-size="14" font-weight="600">Script</text>
+    <text x="580" y="156" text-anchor="middle" font-size="12">posts comments</text>
+    <text x="242" y="206" font-size="12" fill="#5b6070">who reviews?</text>
+    <rect id="box-gen" x="130" y="232" width="200" height="60" rx="12" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="230" y="257" text-anchor="middle" font-size="14" font-weight="600">Session that wrote it</text>
+    <text x="230" y="276" text-anchor="middle" font-size="12">holds its own reasoning</text>
+    <rect id="box-indep" x="350" y="232" width="200" height="60" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="450" y="257" text-anchor="middle" font-size="14" font-weight="600">Independent instance</text>
+    <text x="450" y="276" text-anchor="middle" font-size="12">fresh eyes: reviews better</text>
+    <text x="330" y="340" text-anchor="middle" font-size="12">inline comments land on the pull request</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> will anyone be there to answer, and does a program or a person read the output?
+    <ul style="margin:.4em 0 0">
+      <li><b>Nobody is there to type</b> (a pipeline, a scheduled job): run with <b><code>-p</code></b>, the built-in non-interactive mode.</li>
+      <li><b>A script reads the result</b> (inline PR comments, a dashboard): <b><code>--output-format json</code> with <code>--json-schema</code></b>.</li>
+      <li><b>The review ignores the team's conventions</b>: put the testing standards, fixtures and review criteria in <b><code>CLAUDE.md</code></b>.</li>
+      <li><b>The same job wrote the code it reviews</b>: run the review as an <b>independent instance</b>.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2 grid4">
+    <div class="box mint side"><h3><code>-p</code> / <code>--print</code></h3><ul><li>“the job hangs”, “sits idle”</li><li>“waits for input”, “pipeline never finishes”</li><li>non-interactive, unattended</li></ul></div>
+    <div class="box butter side"><h3>JSON + schema</h3><ul><li>“post inline PR comments”</li><li>“parse the findings”, “a script reads the result”</li><li>“a key came back renamed”</li></ul></div>
+    <div class="box peri side"><h3><code>CLAUDE.md</code></h3><ul><li>“review ignores our standards”</li><li>testing conventions, fixtures</li><li>“developers get the same advice”</li></ul></div>
+    <div class="box rose side"><h3>Independent reviewer</h3><ul><li>“one call writes and reviews”</li><li>“the review never flags its own tests”</li></ul></div>
+  </div>
+
+  <h2>Try it: run the review job</h2>
+  <p>Switch each setting on or off. The simulator replays the same pull request, which has six planted issues: two general ones, two that break the team's testing standards, and two mistakes in tests that Claude generated earlier in the job. You see the CI log, what lands on the pull request, and how many of the six the review caught. The diagram above shows which parts are in place.</p>
+  <div class="box">
+    <div id="sim-k"></div>
+    <h3>CI log</h3>
+    <pre id="sim-log" aria-label="CI log"></pre>
+    <h3>On the pull request</h3>
+    <div id="sim-pr"></div>
+    <div style="font-size:.92rem;margin-top:10px">Planted issues the review caught: <b id="sim-q-n"></b><div class="meter"><i id="sim-q"></i></div></div>
+    <div id="sim-verdict" class="box"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">The log, the runs and the counts are illustrative, chosen to show the shape. They are not measurements. The exam guide's points: <code>-p</code> means no input hang, <code>--output-format json</code> with <code>--json-schema</code> gives machine-parseable findings for inline comments, <code>CLAUDE.md</code> carries the project's standards, and an independent instance reviews better than the session that generated the code.</p>
+  </div>
+  <p>Things to try: everything <b>off</b>, then turn on only <b>-p</b>: it stops hanging but posts nothing. Add <b>JSON</b>: three of five runs post. Add <b>schema</b>: every run posts, but only 2 of 6 issues. Then switch on <b>CLAUDE.md</b> and the <b>independent instance</b> one at a time to watch the meter fill.</p>
+
+  <h2>The four traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it loses</th></tr>
+    <tr><td><b>Only usually works</b></td><td>“Pipe ‘yes’ into the command so any prompt is answered automatically.”</td><td>A workaround. <code>-p</code> is the built-in non-interactive mode.</td></tr>
+    <tr><td><b>Only usually works</b></td><td>“Ask in the prompt for the findings as JSON and parse the text with a regex.”</td><td>Free-text JSON can break. <code>--output-format json</code> with <code>--json-schema</code> gives machine-parseable output.</td></tr>
+    <tr><td><b>Wrong home</b></td><td>“Paste the team's review standards into the CI command's prompt each run.”</td><td>The standards then live in a pipeline file instead of the <code>CLAUDE.md</code> that every session already loads.</td></tr>
+    <tr><td><b>Delays the problem</b></td><td>“Have a person run the review locally and paste the results into the PR.”</td><td>It isn't automated. The guide's pattern runs Claude Code in the pipeline itself.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>In CI, use <code>-p</code> so it never waits, JSON with a schema so code can read it, and <code>CLAUDE.md</code> for the standards.</b> Review with an independent instance, not the session that wrote the code.
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 3.6: “<code>-p</code> / <code>--print</code> = non-interactive mode (no input hang).” “<code>--output-format json</code> + <code>--json-schema</code> for machine-parseable findings → inline PR comments.” “CLAUDE.md provides project context (testing standards, fixtures, review criteria).” “Session context isolation: the session that generated code is less effective at reviewing its own changes than an independent instance.”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["m4p-s5-01", "m5p-s5-03", "m4p-s5-04"]);
+</script>
+</body>
+</html>

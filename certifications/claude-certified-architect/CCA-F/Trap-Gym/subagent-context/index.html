@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Subagent Context</title>
+<meta name="description" content="CCA-F trap gym: a subagent knows only what its Task prompt tells it. A simulator hands the same job to a writing subagent four ways, in parallel or one by one, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+  .step { border-left: 3px solid var(--peri); padding: 4px 0 4px 12px; margin: 10px 0; opacity: .15; transition: opacity .25s; }
+  .step.in { opacity: 1; }
+  .step pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; }
+  .step .chip { margin-bottom: 4px; white-space: normal; }
+  .told { border: 1.5px solid var(--line); border-radius: 12px; background: var(--grey-w); padding: 8px 12px; margin-top: 4px; }
+  .tl { margin: 12px 0 6px; }
+  .tl-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .tl-l { flex: 0 0 110px; font-size: .82rem; line-height: 1.2; }
+  .tl-l small { display: block; color: var(--muted); font-size: .72rem; }
+  .tl-t { position: relative; flex: 1; height: 24px; background: var(--grey-w); border-radius: 6px; min-width: 0; }
+  .tl-b { position: absolute; top: 2px; height: 20px; border: 1.5px solid var(--line); border-radius: 6px; font-size: .68rem; line-height: 17px; text-align: center; overflow: hidden; white-space: nowrap; }
+  .tl-b.co { background: var(--peri); } .tl-b.sub { background: var(--mint); } .tl-b.sub.warn { background: var(--butter); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border: 1.5px solid var(--line); border-radius: 3px; vertical-align: -1px; margin: 0 4px 0 10px; }
+  #sim-tally { line-height: 2; }
+  #sim-t .btn, #sim-p .btn, #sim-s .btn { white-space: normal; text-align: left; }
+  @media (max-width: 520px) { .tl-l { flex-basis: 84px; } }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/subagent-context/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · Subagent context</div>
+  <h1>Subagent context</h1>
+  <p class="lede">A subagent ignores what the user said, repeats research that was already done, or loses the sources. The options offer shared memory, a stricter system prompt or a shorter summary. The trap is forgetting that a subagent starts with an empty memory: if a fact isn't in its Task prompt, it doesn't know it.</p>
+  <p><span class="chip peri">D1 Agentic Architecture</span><span class="chip">Exam guide 1.3</span><span class="chip">About 12 minutes</span></p>
+
+  <div class="box peri"><b>At a glance:</b> a subagent knows only what its prompt tells it, so pass findings and sources explicitly, and launch parallel subagents as several Task calls in one response.</div>
+
+  <h2>Start here: the contractor who missed the meetings</h2>
+  <p>You hire a contractor to finish a room. They were not at last week's meetings, so they don't know the client hates grey. If you don't write it in their brief, they will paint it grey. And if your brief says “use the paint we agreed”, they still don't know which paint.</p>
+  <div class="grid2">
+    <div class="box mint"><b>A good brief</b> says what to do, every decision already made, and where each fact came from: “Room 2, sage green (client email, 3 May), no grey.” The contractor can start at once and you can check their work.</div>
+    <div class="box butter"><b>Several rooms at once.</b> If three rooms don't depend on each other, you hand out three briefs on the same morning. You don't wait for the first room to finish before writing the second brief.</div>
+  </div>
+  <p>Claude's multi-agent systems work the same way. The <b>coordinator</b> is the agent that talks to the user and splits the work. It hands a job to a <b>subagent</b> through the <b>Task tool</b>, and the text it writes in that call is the <b>Task prompt</b>. The subagent has <b>isolated context</b>: it does not see the coordinator's conversation, the user's rules or another subagent's results unless the Task prompt spells them out. And the coordinator can only use the Task tool if its <code>allowedTools</code> list (the tools the agent is permitted to call) includes <code>"Task"</code>.</p>
+
+  <svg viewBox="0 0 640 300" role="img" aria-label="The coordinator holds the history: the chair's rule, the research findings with sources. Its allowedTools must include Task. The history is not inherited by subagents. The Task prompt is the only channel to the three writing subagents, which start empty. Several Task calls in one response run them in parallel." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <rect id="box-fan" x="436" y="24" width="194" height="244" rx="14" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <rect x="16" y="24" width="230" height="244" rx="12" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="131" y="50" text-anchor="middle" font-size="15" font-weight="600">Coordinator</text>
+    <text x="131" y="70" text-anchor="middle" font-size="12">its own history</text>
+    <rect x="32" y="82" width="198" height="50" rx="10" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="131" y="103" text-anchor="middle" font-size="12">Chair: leave out trials</text>
+    <text x="131" y="121" text-anchor="middle" font-size="12">under 200 patients</text>
+    <rect x="32" y="140" width="198" height="50" rx="10" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="131" y="161" text-anchor="middle" font-size="12">Research findings:</text>
+    <text x="131" y="179" text-anchor="middle" font-size="12">3 trials, with sources</text>
+    <rect id="box-tools" x="32" y="198" width="198" height="56" rx="10" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="131" y="221" text-anchor="middle" font-size="12">allowedTools must</text>
+    <text x="131" y="240" text-anchor="middle" font-size="12">include "Task"</text>
+    <path d="M246,40 L414,40" stroke="#23262f" stroke-width="1.5" stroke-dasharray="5 4" fill="none"/>
+    <path d="M414,32 L430,48 M430,32 L414,48" stroke="#23262f" stroke-width="2" fill="none"/>
+    <text x="330" y="30" text-anchor="middle" font-size="12">history: not inherited</text>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M246,150 L272,150"/>
+      <path d="M394,136 L446,68"/><path d="M394,150 L446,150"/><path d="M394,164 L446,232"/>
+    </g>
+    <rect id="box-prompt" x="274" y="116" width="120" height="68" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="334" y="144" text-anchor="middle" font-size="14" font-weight="600">Task prompt</text>
+    <text x="334" y="163" text-anchor="middle" font-size="12">the only channel</text>
+    <g fill="#eef9f3" stroke="#23262f" stroke-width="1.5">
+      <rect x="448" y="38" width="170" height="58" rx="10"/><rect x="448" y="121" width="170" height="58" rx="10"/><rect x="448" y="204" width="170" height="58" rx="10"/>
+    </g>
+    <g text-anchor="middle">
+      <text x="533" y="62" font-size="14" font-weight="600">Efficacy writer</text><text x="533" y="82" font-size="12">starts empty</text>
+      <text x="533" y="145" font-size="14" font-weight="600">Safety writer</text><text x="533" y="165" font-size="12">starts empty</text>
+      <text x="533" y="228" font-size="14" font-weight="600">Cost writer</text><text x="533" y="248" font-size="12">starts empty</text>
+    </g>
+    <text x="533" y="288" text-anchor="middle" font-size="12">several Task calls in one response</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> was the fact the subagent got wrong actually in its Task prompt?
+    <ul style="margin:.4em 0 0">
+      <li><b>No:</b> write it in. Put the <b>complete earlier findings</b>, the user's rules for this request, and the <b>sources</b> (URLs, document names, page numbers) in a <b>structured format</b> that keeps content apart from metadata.</li>
+      <li><b>The subagents don't depend on each other but run one after another:</b> send <b>several Task calls in one response</b>.</li>
+      <li><b>The coordinator can't spawn subagents at all:</b> check that its <code>allowedTools</code> includes <code>"Task"</code>.</li>
+      <li><b>Yes, it was in the prompt and still went wrong:</b> now look at the subagent itself.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box mint side"><h3>Write it into the Task prompt</h3><ul><li>“ignores what the user said”</li><li>“repeats work already done”</li><li>“loses the sources”, “can't trace a figure”</li><li>“doesn't know the earlier findings”</li><li>“the issue we've been discussing”</li></ul></div>
+    <div class="box peri side"><h3>Send parallel Task calls</h3><ul><li>“subagents run one after another”</li><li>“independent searches”</li><li>“takes too long”, “most of the time goes on waiting”</li><li>“no search needs another's results”</li></ul></div>
+  </div>
+
+  <h2>Try it: brief the writers</h2>
+  <p>A drug-review committee asks for a summary of Dravelin, a made-up migraine drug. In earlier turns the chair told the coordinator to leave out trials under 200 patients, and a research subagent found three trials, each with its source. Now the coordinator hands the writing to three subagents: efficacy, safety and cost. Choose what goes in each Task prompt, how they are spawned, and whether the coordinator may use the Task tool at all.</p>
+  <div class="box">
+    <b>1. What the Task prompt contains</b>
+    <div id="sim-p"></div>
+    <b>2. How the three writers are spawned</b>
+    <div id="sim-s"></div>
+    <b>3. The coordinator's allowed tools</b>
+    <div id="sim-t"></div>
+    <div id="sim-trail" aria-live="polite"></div>
+    <div id="sim-tl" class="tl" aria-label="Timeline of the run"></div>
+    <div class="legend" style="font-size:.85rem"><i style="background:#a3b5df;margin-left:0"></i>coordinator writes a Task call<i style="background:#a8dcc3"></i>subagent, good result<i style="background:#ffd98a"></i>subagent, flawed result</div>
+    <p id="sim-tally"></p>
+    <div id="sim-verdict" class="box"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">The drug, trials, sources and times are made up and illustrative, chosen to show the shape. They are not measurements. The exam guide's points are that subagent context must be passed explicitly in the prompt, that complete findings go in a structured format separating content from metadata, and that parallel subagents are spawned as several Task calls in one response.</p>
+  </div>
+  <p>Things to try: <b>Nothing: “use what we found above”</b>, to see that a subagent has no “above”. Then <b>Just the task</b>: it searches again and brings back the excluded trial. Then <b>findings as prose</b>: the facts survive but the sources don't. Last, <b>structured findings + one Task call per turn</b>, then switch to <b>parallel</b> and watch the clock.</p>
+
+  <h2>The traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it loses</th></tr>
+    <tr><td><b>Doesn't exist</b></td><td>Give the subagents shared memory, or let them read the coordinator's history</td><td>Works in some other frameworks, but here subagents inherit nothing automatically. The prompt is the only channel.</td></tr>
+    <tr><td><b>Wrong home</b></td><td>Put this user's rules in the subagent's system prompt</td><td>Fine for rules that never change. Facts that belong to one request, like this chair's size rule, go in that request's Task prompt.</td></tr>
+    <tr><td><b>Loses information</b></td><td>Summarise the earlier findings in one short sentence to save tokens</td><td>The guide asks for complete prior findings. A one-line summary drops the numbers and the sources.</td></tr>
+    <tr><td><b>Wrong shape</b></td><td>Let the subagents talk to each other directly</td><td>Works in a mesh design, but the hub-and-spoke pattern keeps all communication going through the coordinator.</td></tr>
+    <tr><td><b>Waiting in a queue</b></td><td>One Task call per turn for jobs that don't depend on each other</td><td>Same results, several times the wait. Several Task calls in one response run them in parallel.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>If it isn't in the Task prompt, the subagent doesn't know it.</b> Send complete findings with their sources kept apart, and send independent jobs as several Task calls in one response.
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 1.3: “Subagent context must be provided <b>explicitly</b> in the prompt (no automatic inheritance / shared memory).” and “Include complete prior-agent findings in the subagent prompt; use structured formats to separate content from metadata (URLs, doc names, page numbers) for attribution; spawn parallel subagents by emitting <b>multiple Task calls in one response</b>”. Also 1.3: “<b>Task tool</b> spawns subagents; <code>allowedTools</code> must include <code>"Task"</code>.”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["m7p-s3-02", "m5p-s4-06", "m7p-s3-03"]);
+</script>
+</body>
+</html>

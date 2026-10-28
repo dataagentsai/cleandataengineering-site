@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Explicit Criteria</title>
+<meta name="description" content="CCA-F trap gym: to cut false positives, tell Claude exactly what to flag. A simulator runs a code-review bot over 40 spots in a pull request under each instruction and shows precision and developer trust, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .grp { margin: 6px 0 10px; }
+  .grp .gl { font-size: .88rem; color: var(--muted); }
+  .btn.sm { padding: 4px 12px; font-size: .92rem; }
+  .paper { font: 13px/1.6 ui-monospace, Menlo, monospace; background: var(--grey-w); border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; margin: 6px 0 12px; }
+  .ec-row { margin: 8px 0; }
+  .ec-cat { font-size: .9rem; font-weight: 600; margin-bottom: 3px; }
+  .ec-cat span { font-weight: 400; color: var(--muted); }
+  .ec-cells { display: flex; flex-wrap: wrap; gap: 5px; }
+  .ec-cell { width: 26px; height: 26px; border: 1.5px solid var(--line); border-radius: 6px; padding: 0; background: #eceef2; }
+  .ec-cell.tp { background: #a8dcc3; } .ec-cell.fp { background: #d46a92; } .ec-cell.miss { background: #f0b429; }
+  .ec-cell.skip { background: #fff; }
+  .ec-cell.slip { border-style: dashed; border-width: 2.5px; }
+  .ec-cell.sel { outline: 3px solid #3b55a0; outline-offset: 1px; }
+  .legend i { display: inline-block; width: 13px; height: 13px; border: 1.5px solid var(--line); border-radius: 3px; vertical-align: -2px; margin: 0 4px 0 10px; }
+  #ec-detail { margin: 10px 0; }
+  #ec-detail pre { margin: 8px 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+  .ec-dh .chip { white-space: normal; }
+  .meter { height: 20px; border: 1.5px solid var(--line); border-radius: 999px; background: #fff; overflow: hidden; margin: 6px 0; }
+  .meter .fill { height: 100%; transition: width .4s; }
+  .fill.mint { background: var(--mint); } .fill.butter { background: var(--butter); } .fill.rose { background: #d46a92; }
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/explicit-criteria/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · Explicit criteria</div>
+  <h1>Explicit criteria</h1>
+  <p class="lede">A review bot flags too much, and developers stop reading it. The tempting answers ask Claude to be more careful: “be conservative”, “only report high-confidence findings”, a second pass to double-check. The exam's answer is to tell Claude exactly what counts as a finding, and what each severity level looks like in code.</p>
+  <p><span class="chip peri">D4 Prompt Engineering &amp; Structured Output</span><span class="chip">Exam guide 4.1</span><span class="chip">About 15 minutes</span></p>
+
+  <h2>At a glance</h2>
+  <div class="box peri">To cut false positives, give categorical criteria such as “flag a comment only when it contradicts the code”. Telling Claude to “be conservative” or to report “only high-confidence” findings doesn't raise precision.</div>
+
+  <h2>Start here: the guard at the door</h2>
+  <p>An office hires a new security guard for the front door.</p>
+  <div class="grid2">
+    <div class="box rose"><b>“Be careful who you let in.”</b> The guard stops the courier, the cleaner and a visitor in a suit, and waves through someone who looked confident. Telling them to be <i>more</i> careful just means more people stopped, for the same fuzzy reasons.</div>
+    <div class="box mint"><b>“Let in anyone with a blue badge. Stop anyone without one.”</b> Now the guard knows exactly what counts. Add “visitors sign the book; contractors call facilities”, and every case has a clear action.</div>
+  </div>
+  <p>A review bot is the guard. A <b>false positive</b> is a finding that isn't a real problem, like a typo flagged as an “inaccurate comment”. <b>Precision</b> is the share of posted findings that are real. A mood word (“careful”, “conservative”, “confident”) doesn't tell Claude what counts, so the same kinds of noise keep coming. <b>Explicit criteria</b> (also called categorical criteria) do: they name what to flag, what to skip, and what each severity level looks like.</p>
+  <p>The noise also spreads. Developers don't read a review one category at a time. When half the comments are about typos, they skim the whole review, including the security finding that mattered.</p>
+
+  <svg viewBox="0 0 640 300" role="img" aria-label="Where each option acts. The review prompt holds one rule per category: the doc-comment rule (where the wording options act), the security rule and the performance rule, plus optional example findings. Claude reads the prompt and the pull request and writes findings. An optional second pass re-checks each finding. Posted findings reach the developer, whose trust covers the whole review." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M260,130 L286,130"/><path d="M360,64 L360,96"/><path d="M430,130 L466,130"/>
+      <path d="M550,160 L550,196"/><path d="M470,226 L434,226"/>
+    </g>
+    <rect x="10" y="10" width="250" height="226" rx="14" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="135" y="32" text-anchor="middle" font-size="14" font-weight="600">Review prompt</text>
+    <rect id="ec-rule" x="24" y="44" width="222" height="40" rx="10" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="135" y="62" text-anchor="middle" font-size="13" font-weight="600">Doc-comment rule</text>
+    <text x="135" y="77" text-anchor="middle" font-size="12">the wording you choose</text>
+    <rect x="24" y="92" width="222" height="32" rx="10" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="135" y="113" text-anchor="middle" font-size="13">Security rule (already explicit)</text>
+    <rect x="24" y="132" width="222" height="32" rx="10" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="135" y="153" text-anchor="middle" font-size="13">Performance rule (already explicit)</text>
+    <rect id="ec-ex" x="24" y="176" width="222" height="46" rx="10" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="135" y="196" text-anchor="middle" font-size="13" font-weight="600">Example findings</text>
+    <text x="135" y="212" text-anchor="middle" font-size="12">optional: show layout and levels</text>
+    <rect x="290" y="10" width="140" height="54" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="360" y="34" text-anchor="middle" font-size="14" font-weight="600">Pull request</text>
+    <text x="360" y="52" text-anchor="middle" font-size="12">40 spots to judge</text>
+    <rect x="290" y="100" width="140" height="60" rx="12" fill="#a3b5df" stroke="#23262f" stroke-width="1.5"/>
+    <text x="360" y="126" text-anchor="middle" font-size="15" font-weight="600">Claude</text>
+    <text x="360" y="145" text-anchor="middle" font-size="12">writes findings</text>
+    <rect id="ec-second" x="470" y="100" width="160" height="60" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="550" y="126" text-anchor="middle" font-size="14" font-weight="600">Second pass</text>
+    <text x="550" y="145" text-anchor="middle" font-size="12">optional re-check</text>
+    <rect x="470" y="200" width="160" height="52" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="550" y="223" text-anchor="middle" font-size="14" font-weight="600">Posted findings</text>
+    <text x="550" y="241" text-anchor="middle" font-size="12">inline PR comments</text>
+    <rect x="290" y="200" width="140" height="52" rx="12" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="360" y="223" text-anchor="middle" font-size="14" font-weight="600">Developer</text>
+    <text x="360" y="241" text-anchor="middle" font-size="12">one trust for all</text>
+    <text x="320" y="285" text-anchor="middle" font-size="13">Noise from one category makes the developer skim every category.</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> does the fix tell Claude exactly what counts, or only how cautious to feel?
+    <ul style="margin:.4em 0 0">
+      <li><b>Only how cautious</b> (“be conservative”, “only high-confidence”, “be more careful”, a second pass with the same rule): precision barely moves. Claude is confident about the wrong things.</li>
+      <li><b>Exactly what counts</b>: name what to flag and what to skip (“flag a comment only when its claimed behaviour contradicts the code”), and define each <b>severity</b> level with a concrete code example. This is the exam's answer.</li>
+      <li><b>The category is noisy but catches real bugs</b>: rewrite its criteria. Don't switch it off.</li>
+      <li><b>The rule is already clear, but the format or the borderline calls vary</b>: that is a different trap. Add a few examples (see <a href="../few-shot/">Few-shot examples</a>).</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box mint side"><h3>Points to explicit criteria</h3><ul><li>“too many false positives”</li><li>“developers ignore the findings”, “skip its output”</li><li>“a noisy category”, “flags things that are fine”</li><li>a vague rule: “check comments are accurate”, “flag anything questionable”</li></ul></div>
+    <div class="box rose side"><h3>Words in tempting wrong options</h3><ul><li>“be conservative”</li><li>“only high-confidence”</li><li>“be more careful”, “use your judgement”</li><li>“switch the category off”, “a second instance confirms each finding”</li></ul></div>
+  </div>
+
+  <h2>Try it: review one pull request</h2>
+  <p>The bot reviews 40 spots in a pull request for a travel-booking app: 24 doc comments, 8 security spots and 8 performance spots. The security and performance rules are already explicit; you choose how the <b>doc-comment</b> rule is written. Click any square to see the code and what the bot posted.</p>
+  <div class="box">
+    <div class="grp"><div class="gl">1. How the doc-comment rule is worded</div><div id="ec-w"></div></div>
+    <div class="grp"><div class="gl">2. Or keep the vague rule and work around it</div><div id="ec-f"></div></div>
+    <b>The doc-comment part of the prompt</b>
+    <div id="ec-prompt" class="paper"></div>
+    <b>What the bot did with the 40 spots</b>
+    <div id="ec-grid" aria-label="40 code spots, coloured by outcome"></div>
+    <div class="legend" style="font-size:.85rem"><i style="background:#a8dcc3;margin-left:0"></i>flagged, rightly<i style="background:#d46a92"></i>false positive<i style="background:#f0b429"></i>missed<i style="background:#fff"></i>left alone, rightly<i style="background:#a8dcc3;border-style:dashed;border-width:2.5px"></i>real, wrong severity</div>
+    <div id="ec-detail" class="box"></div>
+    <p id="ec-tally"></p>
+    <b>Developer trust in the review</b> <span id="ec-meter-n" style="font-weight:600"></span>/100
+    <div class="meter"><div id="ec-meter-fill" class="fill"></div></div>
+    <p id="ec-acted" style="font-size:.95rem"></p>
+    <div id="ec-verdict" class="box"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">The behaviours and the trust figures are illustrative, chosen to show the shape. They are not measurements, and every run is the same. Trust here starts at 100 and drops 5 points per false positive and 4 per wrong severity. The exam guide's points are that explicit criteria beat vague instructions, that confidence wording doesn't improve precision like categorical criteria, and that a high false-positive category erodes trust in the accurate ones.</p>
+  </div>
+  <p>Things to try: start with <b>“Check that comments are accurate”</b> and watch the trust meter. Then <b>+ “Be conservative”</b> and <b>+ “Only report high-confidence findings”</b>: the pink barely thins, and click the yellow square to see what high-confidence lost. Then <b>Explicit criteria</b>, and click the dashed squares. Last, <b>Explicit criteria + severity by example</b>, and compare it with <b>Drop the doc-comment category</b>.</p>
+
+  <h2>The four traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it loses</th></tr>
+    <tr><td><b>Confidence wording</b> <span class="chip butter">only usually works</span></td><td>“Be conservative”; “report only findings you are highly confident about”</td><td>It says how cautious to be, not what counts. Claude is confident a typo is a typo, so the same kinds of noise stay.</td></tr>
+    <tr><td><b>Switch the category off</b> <span class="chip butter">delays the problem</span></td><td>Drop the noisy category until its precision improves</td><td>The noise goes, and so do the real bugs in that category. Explicit criteria keep the category and remove the noise.</td></tr>
+    <tr><td><b>A second pass</b> <span class="chip butter">overbuilt</span></td><td>A second Claude call or instance double-checks each finding before it is posted</td><td>It re-checks against the same vague standard, for many more calls. Fix what gets flagged in the first place.</td></tr>
+    <tr><td><b>Examples for a vague rule</b> <span class="chip butter">different problem</span></td><td>Add a few example findings to the prompt</td><td>Examples mainly fix inconsistent format and borderline calls. When the flagging rule itself is vague, state the criteria first.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>Tell Claude exactly what to flag; telling it to be careful doesn't cut false positives.</b> Name what to flag and what to skip, and define each severity with a concrete code example.
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 4.1: “Explicit criteria beat vague instructions ("flag comments only when claimed behavior contradicts actual code" vs "check comments are accurate").” “"Be conservative" / "only high-confidence" don't improve precision like categorical criteria.” “High false-positive categories erode developer trust in accurate ones; define explicit severity criteria with concrete code examples.”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["m4p-s5-05", "m7p-s5-06", "m6p-s2-07"]);
+</script>
+</body>
+</html>

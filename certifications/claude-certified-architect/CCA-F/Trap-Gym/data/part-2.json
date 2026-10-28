@@ -1,0 +1,718 @@
+[
+ {
+  "n": 11,
+  "slug": "tool-choice",
+  "title": "tool_choice",
+  "domain": "D2",
+  "guide": [
+   "2.3",
+   "4.3"
+  ],
+  "objMatch": "^(2\\.3|4\\.3) .*(tool_choice|first)",
+  "gym": null,
+  "mindmap": "tool_choice set to \"auto\" lets Claude choose between text and a tool, \"any\" forces it to call some tool, and naming one tool forces that exact tool, for example to run extraction first.",
+  "story": "Think of a waiter taking an order. \"Whatever you like\" lets the guest chat or order. \"You must order something\" means the guest has to pick a dish, but any dish. \"You must start with the soup\" fixes the first dish exactly. tool_choice is the same three levels of firmness for Claude's next move.",
+  "question": "Does the step need any tool call at all, or one particular tool to run first?",
+  "signals": [
+   {
+    "label": "Words that point to \"any\"",
+    "words": [
+     "must always return structured output",
+     "never reply with plain text",
+     "one of several schemas",
+     "the document type is not known in advance"
+    ]
+   },
+   {
+    "label": "Words that point to forcing one named tool",
+    "words": [
+     "must run first",
+     "before any enrichment",
+     "always start with",
+     "extract_metadata"
+    ]
+   },
+   {
+    "label": "Words that point to \"auto\"",
+    "words": [
+     "may answer directly",
+     "a tool only when needed",
+     "a normal conversation"
+    ]
+   }
+  ],
+  "best": "Match the setting to the need: \"any\" when Claude must call a tool but may choose which, and a forced named tool when one specific tool has to run first.",
+  "lookalikes": [
+   {
+    "option": "Add a line to the system prompt telling Claude to always call the extraction tool first.",
+    "label": "only usually works",
+    "why": "Works, but a prompt instruction is followed most of the time, not every time; tool_choice makes the first call certain."
+   },
+   {
+    "option": "Leave tool_choice on \"auto\" and check the reply in code, asking again when it comes back as text.",
+    "label": "delays the problem",
+    "why": "Works, but it pays for a wasted call and a retry each time, when \"any\" would have stopped plain-text replies at the source."
+   },
+   {
+    "option": "Set tool_choice to \"any\" so Claude has to call a tool.",
+    "label": "different problem",
+    "why": "Works, but \"any\" lets Claude pick which tool; when one specific tool must run first, only forcing that named tool guarantees it."
+   },
+   {
+    "option": "Remove every tool except the extraction tool for the first request.",
+    "label": "overbuilt",
+    "why": "Works, but it changes the agent's tool set request by request; forcing the named tool does the same job with one setting."
+   }
+  ],
+  "guideQuotes": [
+   "tool_choice: \"auto\" (may return text), \"any\" (must call a tool), forced (specific named tool).",
+   "Force a tool to run first (e.g., extract_metadata before enrichment); \"any\" guarantees a tool call rather than text."
+  ],
+  "remember": "Use \"any\" to guarantee a tool call and a forced named tool to guarantee which one runs first."
+ },
+ {
+  "n": 12,
+  "slug": "mcp-where-what",
+  "title": "MCP: where and what",
+  "domain": "D2",
+  "guide": [
+   "2.4"
+  ],
+  "objMatch": "^2\\.4 .*(scop|[Ss]cope|secret|\\.mcp\\.json|[Rr]esource)",
+  "gym": "mcp-where-what",
+  "mindmap": "A server the team shares goes in the project .mcp.json with secrets written as ${VAR}, a personal or experimental one goes in your user config, and Claude gets a tool for things it must do and a resource for things it must read.",
+  "story": "A shared office kitchen has a list on the wall of what's stocked for everyone, and your own drawer holds your private snacks. If you put the team's coffee in your drawer, nobody else gets coffee. And a menu on the wall (something to read) is different from a coffee machine (something that acts). MCP servers have the same two questions: whose is it, and does Claude read it or use it?",
+  "question": "Who needs this server, and does Claude need to do something with it or just know what exists?",
+  "signals": [
+   {
+    "label": "Words that point to the project .mcp.json",
+    "words": [
+     "teammates",
+     "every engineer",
+     "CI",
+     "on clone"
+    ]
+   },
+   {
+    "label": "Words that point to ${VAR} expansion",
+    "words": [
+     "token",
+     "key",
+     "must not be committed"
+    ]
+   },
+   {
+    "label": "Words that point to user config",
+    "words": [
+     "trying out",
+     "personal",
+     "only me",
+     "experimental"
+    ]
+   },
+   {
+    "label": "Words that point to a resource",
+    "words": [
+     "catalog",
+     "list of issues",
+     "schema",
+     "many exploratory calls"
+    ]
+   }
+  ],
+  "best": "Put shared servers in the project .mcp.json with secrets as ${VAR}, personal ones in ~/.claude.json, and expose read-only catalogs such as schemas or issue lists as a resource.",
+  "lookalikes": [
+   {
+    "option": "Each engineer adds the server to their own ~/.claude.json following a setup page in the wiki.",
+    "label": "wrong home",
+    "why": "Works, but each person has to do it by hand, new hires and CI miss it, and the setups drift apart; the project .mcp.json gives everyone the same server on clone."
+   },
+   {
+    "option": "Commit the server config with the token pasted in, in a private repository.",
+    "label": "only usually works",
+    "why": "Works, but a secret ends up in git history; ${VAR} expansion keeps the same config shareable without the secret."
+   },
+   {
+    "option": "Add a list_tables tool so Claude can look up the schema when it needs it.",
+    "label": "different problem",
+    "why": "Works, but Claude has to explore with call after call; a resource gives it the catalog to read once."
+   },
+   {
+    "option": "Build your own Jira MCP server so it fits the team exactly.",
+    "label": "overbuilt",
+    "why": "Works, but for a standard integration the guide prefers a community server; build your own only for your own systems."
+   }
+  ],
+  "guideQuotes": [
+   "Scoping: project-level .mcp.json (shared) vs user-level ~/.claude.json (personal/experimental).",
+   "Env var expansion in .mcp.json (e.g., ${GITHUB_TOKEN}) — no committed secrets.",
+   "MCP resources expose content catalogs (issue summaries, doc hierarchies, schemas) to reduce exploratory tool calls."
+  ],
+  "remember": "Team needs it, put it in .mcp.json with ${VAR} secrets; only you need it, put it in ~/.claude.json; to act use a tool, to know what exists use a resource."
+ },
+ {
+  "n": 13,
+  "slug": "builtin-tools",
+  "title": "Built-in tools",
+  "domain": "D2",
+  "guide": [
+   "2.5"
+  ],
+  "objMatch": "^2\\.5 ",
+  "gym": null,
+  "mindmap": "Use Grep to search inside files and Glob to find files by name pattern, use Edit for a small targeted change, and when Edit fails because the text appears more than once, Read the whole file and Write it back.",
+  "story": "Looking for a recipe in a cookbook, you either flip to the index of dish names (that's Glob, finding by name) or scan the pages for the word \"saffron\" (that's Grep, finding by content). To fix one typo you cross it out (Edit); if the same phrase appears five times and you can't point to just one, you copy out the page fresh (Read, then Write).",
+  "question": "Am I looking for a file by its name, or for text inside files, and is the change small enough for one unique match?",
+  "signals": [
+   {
+    "label": "Words that point to Grep",
+    "words": [
+     "every place that calls",
+     "which files mention",
+     "find the function",
+     "search the contents"
+    ]
+   },
+   {
+    "label": "Words that point to Glob",
+    "words": [
+     "all files named",
+     "every *.test.tsx",
+     "files matching a pattern"
+    ]
+   },
+   {
+    "label": "Words that point to Read + Write",
+    "words": [
+     "Edit failed",
+     "the text appears more than once",
+     "not unique"
+    ]
+   }
+  ],
+  "best": "Pick the built-in tool that matches the job: Grep for content, Glob for paths, Edit for one unique change, and Read + Write when Edit can't find a unique match. Explore incrementally, starting from Grep hits and reading onward.",
+  "lookalikes": [
+   {
+    "option": "Use Glob with a broad pattern and Read every file it returns to find the callers.",
+    "label": "overbuilt",
+    "why": "Works, but it reads far more than needed; Grep finds the files that contain the name directly."
+   },
+   {
+    "option": "Run grep through the Bash tool instead.",
+    "label": "wrong tool",
+    "why": "Works, but the built-in Grep tool is made for content search; reaching for Bash adds nothing here."
+   },
+   {
+    "option": "Retry Edit with a longer piece of surrounding text until the match is unique.",
+    "label": "only usually works",
+    "why": "Works, but it can take several tries; the guide's fallback when Edit's match is not unique is Read + Write."
+   },
+   {
+    "option": "Read the whole codebase up front so Claude has the full picture.",
+    "label": "overbuilt",
+    "why": "Works, but it floods the context; build understanding incrementally by finding entry points with Grep and following imports with Read."
+   }
+  ],
+  "guideQuotes": [
+   "Grep = content search; Glob = file path patterns; Read/Write = full file ops; Edit = targeted change via unique text match.",
+   "Build understanding incrementally: Grep entry points"
+  ],
+  "remember": "Grep searches inside files, Glob finds files by name, Edit needs a unique match, and Read + Write is the fallback when it isn't unique."
+ },
+ {
+  "n": 14,
+  "slug": "instruction-home",
+  "title": "Where an instruction lives",
+  "domain": "D3",
+  "guide": [
+   "3.1",
+   "3.2",
+   "3.3"
+  ],
+  "objMatch": "^(3\\.1/3\\.3|3\\.1 (CLAUDE\\.md hierarchy|User vs project|User-level)|3\\.2 (Skills vs|Personal vs|Project commands)|3\\.3 Path-scoped)",
+  "gym": "instruction-home",
+  "mindmap": "Team rules go in the project CLAUDE.md, personal ones in ~/.claude/CLAUDE.md, rules for one kind of file spread across folders in .claude/rules with paths, a task you start yourself in a command, and a long procedure needed only sometimes in a skill.",
+  "story": "In a house, the rules everyone follows are on the fridge, your own reminders are in your pocket diary, the instructions for the washing machine are taped to the washing machine, and the recipe for a festive dish lives in a cookbook you open only on that day. Put the washing-machine notes in your diary and nobody else can do the laundry.",
+  "question": "Who must get this instruction, and when: always, only for certain files, or only when someone asks?",
+  "signals": [
+   {
+    "label": "Words that point to the repo (project CLAUDE.md, rules, project commands)",
+    "words": [
+     "every engineer",
+     "new hires",
+     "on clone",
+     "CI"
+    ]
+   },
+   {
+    "label": "Words that point to the home folder (~/.claude/)",
+    "words": [
+     "only me",
+     "every repository I open",
+     "teammates don't want it"
+    ]
+   },
+   {
+    "label": "Words that point to .claude/rules with paths",
+    "words": [
+     "all test files",
+     "wherever they sit",
+     "**/*.test.tsx",
+     "spread across folders"
+    ]
+   },
+   {
+    "label": "Words that point to a skill or command",
+    "words": [
+     "now and then",
+     "on request",
+     "a long procedure",
+     "a release checklist"
+    ]
+   }
+  ],
+  "best": "Choose the home by who needs it (repo or home folder) and when they need it (always, by file pattern, or on request).",
+  "lookalikes": [
+   {
+    "option": "Put the team's review criteria in your own ~/.claude/CLAUDE.md.",
+    "label": "wrong home",
+    "why": "Works, but only for you; user-level memory is not shared through version control, so teammates and CI never see it."
+   },
+   {
+    "option": "Put the test conventions in a CLAUDE.md inside one test folder.",
+    "label": "wrong home",
+    "why": "Works, but only for that folder; tests spread across directories need a .claude/rules file with a paths glob."
+   },
+   {
+    "option": "Paste the 40-step release runbook into the root CLAUDE.md.",
+    "label": "overbuilt",
+    "why": "Works, but it loads into every session even though it's needed only on release day; a skill loads on demand."
+   },
+   {
+    "option": "Copy the standards text into CLAUDE.md even though it already lives in a repo file.",
+    "label": "delays the problem",
+    "why": "Works, but the two copies drift apart; @import references the existing file."
+   }
+  ],
+  "guideQuotes": [
+   "User-level is not shared via version control.",
+   "Skills = on-demand task workflows; CLAUDE.md = always-loaded universal standards.",
+   "Project commands in .claude/commands/ (shared) vs user ~/.claude/commands/ (personal)."
+  ],
+  "remember": "Who needs it decides repo or home folder; when they need it decides always, by file pattern, or on request."
+ },
+ {
+  "n": 15,
+  "slug": "plan-or-do",
+  "title": "Plan or just do it",
+  "domain": "D3",
+  "guide": [
+   "3.4"
+  ],
+  "objMatch": "^3\\.4 ",
+  "gym": "plan-or-do",
+  "mindmap": "Make a small, settled change directly; use plan mode for big, many-file or undecided changes, and send long searches to the Explore subagent.",
+  "story": "You just hang a picture: no meeting needed. Redoing a kitchen, you measure and agree the layout before anyone knocks down a wall. If someone first has to measure every room, you send them off and ask for one sheet back, so the plan isn't buried in notes.",
+  "question": "Is the approach already decided, and is the change small?",
+  "signals": [
+   {
+    "label": "Words that point to direct execution",
+    "words": [
+     "one",
+     "single",
+     "a check",
+     "a typo",
+     "the file is known",
+     "the format already exists"
+    ]
+   },
+   {
+    "label": "Words that point to plan mode",
+    "words": [
+     "many files",
+     "two libraries",
+     "engineers disagree",
+     "not yet chosen",
+     "architectural"
+    ]
+   },
+   {
+    "label": "Words that point to the Explore subagent",
+    "words": [
+     "long search",
+     "verbose output",
+     "hundreds of files to scan"
+    ]
+   }
+  ],
+  "best": "Direct execution for a simple, well-scoped change; plan mode for large, multi-file or multi-approach changes. Plan mode plus an Explore subagent is also right when the planning needs a long search.",
+  "lookalikes": [
+   {
+    "option": "Use plan mode for a one-line validation check in a known file.",
+    "label": "overbuilt",
+    "why": "Works, but it adds a planning round to a change whose approach is already settled; direct execution is the guide's example."
+   },
+   {
+    "option": "Start editing the library migration directly and fix problems as they come up.",
+    "label": "too late",
+    "why": "Works, but editing first picks the approach by default, and later choices force rework across many files; plan mode prevents that."
+   },
+   {
+    "option": "Write a detailed plan for an export whose format nobody has specified.",
+    "label": "different problem",
+    "why": "Works, but a careful plan built on a guess still misses; the interview pattern finds out what's wanted first."
+   },
+   {
+    "option": "Use plan mode and send the codebase search to an Explore subagent.",
+    "label": "also right",
+    "why": "Works well and keeps context small, but when the question is plan versus direct, the exam's answer is plan mode itself."
+   }
+  ],
+  "guideQuotes": [
+   "Plan mode: large-scale changes, multiple valid approaches, architectural decisions, multi-file mods.",
+   "Direct execution: simple well-scoped changes (single validation check).",
+   "Explore subagent isolates verbose discovery output, returns summaries."
+  ],
+  "remember": "Small and settled, just do it; big or undecided, plan first; long searches go to the Explore subagent."
+ },
+ {
+  "n": 16,
+  "slug": "examples-tests-interview",
+  "title": "Examples, tests first or interview",
+  "domain": "D3",
+  "guide": [
+   "3.5"
+  ],
+  "objMatch": "^3\\.5 ",
+  "gym": null,
+  "mindmap": "Show concrete input and output examples for a transformation, write tests first when the right behaviour is known but fixes keep breaking cases, and let Claude interview you first when nobody has said exactly what's wanted.",
+  "story": "Explaining a haircut, a photo beats a paragraph (examples). If the tailor keeps fixing one sleeve and ruining the other, you mark every measurement on the cloth first (tests). And if you aren't sure what you want, a good tailor asks you questions before cutting anything (interview).",
+  "question": "Is the problem that Claude doesn't understand the transformation, that fixes keep breaking other cases, or that nobody has defined what's wanted?",
+  "signals": [
+   {
+    "label": "Words that point to input/output examples",
+    "words": [
+     "convert this format",
+     "the prose description keeps being misread",
+     "transformation"
+    ]
+   },
+   {
+    "label": "Words that point to tests first",
+    "words": [
+     "each fix breaks another case",
+     "the expected results are known",
+     "regressions"
+    ]
+   },
+   {
+    "label": "Words that point to the interview pattern",
+    "words": [
+     "the request is vague",
+     "requirements are unclear",
+     "several reasonable readings"
+    ]
+   },
+   {
+    "label": "Words that point to one message vs several",
+    "words": [
+     "the problems interact",
+     "independent issues"
+    ]
+   }
+  ],
+  "best": "Pick the refinement technique that matches what's missing: examples for understanding, tests for stability, an interview for unclear requirements. Send interacting problems in one message and independent ones one at a time.",
+  "lookalikes": [
+   {
+    "option": "Rewrite the instructions in more detail, describing the transformation step by step.",
+    "label": "only usually works",
+    "why": "Works, but concrete input and output examples communicate a transformation better than more prose."
+   },
+   {
+    "option": "Keep reporting each failing case to Claude as you find it.",
+    "label": "delays the problem",
+    "why": "Works, but each fix can break an earlier case; writing the tests first and sharing the failures keeps every case in view."
+   },
+   {
+    "option": "Write the spec yourself and hand it over before any work starts.",
+    "label": "only usually works",
+    "why": "Works, but your spec can still miss what you haven't thought of; the interview pattern lets Claude ask about the gaps."
+   },
+   {
+    "option": "Send three interacting bugs one at a time, in separate messages.",
+    "label": "different problem",
+    "why": "Works, but fixes to interacting problems collide; interacting problems go in a single message, independent ones in sequence."
+   }
+  ],
+  "guideQuotes": [
+   "Concrete input/output examples communicate transformations better than prose.",
+   "Test-driven iteration (write tests first, share failures); the interview pattern (Claude asks questions first); single message for interacting problems, sequential for independent ones."
+  ],
+  "remember": "Unclear transformation, show examples; fixes keep breaking things, write tests first; unclear request, let Claude ask first."
+ },
+ {
+  "n": 17,
+  "slug": "claude-code-ci",
+  "title": "Claude Code in CI",
+  "domain": "D3",
+  "guide": [
+   "3.6"
+  ],
+  "objMatch": "^3\\.6 (?!Session)",
+  "gym": null,
+  "mindmap": "In CI, run Claude Code with -p so it doesn't wait for input, use --output-format json with --json-schema for results a script can parse, and put the project's testing and review standards in CLAUDE.md.",
+  "story": "An overnight cleaning crew can't ring you at 3 a.m. to ask where the mop is, so you leave written instructions (CLAUDE.md), they work without asking (-p), and they fill in a checklist form, not a free-form note, so the morning manager can tick through it (JSON with a schema).",
+  "question": "Will anyone be there to answer, and does a program or a person read the output?",
+  "signals": [
+   {
+    "label": "Words that point to -p / --print",
+    "words": [
+     "the job hangs",
+     "waits for input",
+     "pipeline never finishes",
+     "non-interactive"
+    ]
+   },
+   {
+    "label": "Words that point to --output-format json and --json-schema",
+    "words": [
+     "post inline PR comments",
+     "parse the findings",
+     "a script reads the result"
+    ]
+   },
+   {
+    "label": "Words that point to CLAUDE.md",
+    "words": [
+     "review ignores our standards",
+     "testing conventions",
+     "fixtures"
+    ]
+   }
+  ],
+  "best": "Run non-interactively with -p, ask for JSON output against a schema so a script can post the findings, and give the project's standards through CLAUDE.md.",
+  "lookalikes": [
+   {
+    "option": "Pipe 'yes' into the command so any prompt is answered automatically.",
+    "label": "only usually works",
+    "why": "Works, but it's a workaround; -p is the built-in non-interactive mode."
+   },
+   {
+    "option": "Ask in the prompt for the findings as JSON and parse the text with a regex.",
+    "label": "only usually works",
+    "why": "Works, but free-text JSON can break; --output-format json with --json-schema gives machine-parseable output."
+   },
+   {
+    "option": "Paste the team's review standards into the CI command's prompt each run.",
+    "label": "wrong home",
+    "why": "Works, but the standards then live in a pipeline file instead of the CLAUDE.md that every session already loads."
+   },
+   {
+    "option": "Have a person run the review locally and paste the results into the PR.",
+    "label": "delays the problem",
+    "why": "Works, but it isn't automated; the guide's pattern runs Claude Code in the pipeline itself."
+   }
+  ],
+  "guideQuotes": [
+   "-p / --print = non-interactive mode (no input hang).",
+   "CLAUDE.md provides project context (testing standards, fixtures, review criteria)."
+  ],
+  "remember": "In CI, use -p so it never waits, JSON with a schema so code can read it, and CLAUDE.md for the standards."
+ },
+ {
+  "n": 18,
+  "slug": "explicit-criteria",
+  "title": "Explicit criteria",
+  "domain": "D4",
+  "guide": [
+   "4.1"
+  ],
+  "objMatch": "^4\\.1 ",
+  "gym": null,
+  "mindmap": "To cut false positives, give categorical criteria such as \"flag a comment only when it contradicts the code\"; telling Claude to \"be conservative\" or report \"only high-confidence\" findings doesn't raise precision.",
+  "story": "Telling a new security guard \"be careful who you let in\" changes little. Telling them \"let in anyone with a blue badge, and stop anyone without one\" changes everything. Clear categories beat a general mood.",
+  "question": "Does the fix tell Claude exactly what counts, or only how cautious to feel?",
+  "signals": [
+   {
+    "label": "Words that point to explicit criteria",
+    "words": [
+     "too many false positives",
+     "developers ignore the findings",
+     "noisy category",
+     "flags things that are fine"
+    ]
+   },
+   {
+    "label": "Words in tempting wrong options",
+    "words": [
+     "be conservative",
+     "only high-confidence",
+     "be more careful",
+     "use your judgement"
+    ]
+   }
+  ],
+  "best": "Write categorical criteria for what to flag and what to skip, with severity defined by concrete code examples.",
+  "lookalikes": [
+   {
+    "option": "Tell Claude to report only findings it is highly confident about.",
+    "label": "only usually works",
+    "why": "Works, but the guide says confidence wording doesn't improve precision the way categorical criteria do."
+   },
+   {
+    "option": "Drop the noisy category from the review entirely.",
+    "label": "delays the problem",
+    "why": "Works, but it loses the real issues in that category too; explicit criteria keep the category and remove the noise."
+   },
+   {
+    "option": "Add a second pass where Claude double-checks each finding.",
+    "label": "overbuilt",
+    "why": "Works, but it re-checks findings against the same vague standard; explicit criteria fix what gets flagged in the first place."
+   },
+   {
+    "option": "Add a few example findings to the prompt.",
+    "label": "different problem",
+    "why": "Works, but examples mainly fix inconsistent format and ambiguous cases; when the flagging rule itself is vague, state the criteria."
+   }
+  ],
+  "guideQuotes": [
+   "Explicit criteria beat vague instructions (\"flag comments only when claimed behavior contradicts actual code\" vs \"check comments are accurate\").",
+   "\"Be conservative\" / \"only high-confidence\" don't improve precision like categorical criteria.",
+   "High false-positive categories erode developer trust in accurate ones; define explicit severity criteria with concrete code examples."
+  ],
+  "remember": "Tell Claude exactly what to flag; telling it to be careful doesn't cut false positives."
+ },
+ {
+  "n": 19,
+  "slug": "few-shot",
+  "title": "Few-shot examples",
+  "domain": "D4",
+  "guide": [
+   "4.2"
+  ],
+  "objMatch": "^4\\.2 Few-shot (for ambiguous|for consistent|for consistency|examples|for actionable)",
+  "gym": null,
+  "mindmap": "If the output is inconsistent or the ambiguous cases go wrong even with clear instructions, add 2 to 4 targeted examples that show the reasoning and the format, instead of writing longer instructions.",
+  "story": "You can describe how to fold a shirt for a shop display, and each new helper still folds it differently. Fold two shirts in front of them, including the awkward one with a hood, and they all match from then on.",
+  "question": "Have the instructions already been tried and the output is still inconsistent, especially on the borderline cases?",
+  "signals": [
+   {
+    "label": "Words that point to few-shot examples",
+    "words": [
+     "inconsistent format",
+     "borderline cases",
+     "varied layouts",
+     "instructions alone",
+     "different every run"
+    ]
+   },
+   {
+    "label": "Words that point elsewhere",
+    "words": [
+     "vague rule for what to flag (explicit criteria)",
+     "value missing from the document (nullable field)",
+     "JSON syntax breaks (tool use with a schema)"
+    ]
+   }
+  ],
+  "best": "Add 2 to 4 targeted examples that cover the ambiguous cases, show the reasoning for the chosen action, and demonstrate the exact output format.",
+  "lookalikes": [
+   {
+    "option": "Expand the instructions with more detailed rules for each case.",
+    "label": "only usually works",
+    "why": "Works, but when instructions alone are inconsistent, the guide names few-shot as the most effective fix."
+   },
+   {
+    "option": "Add twenty examples covering every case seen so far.",
+    "label": "overbuilt",
+    "why": "Works, but the guide's pattern is 2 to 4 targeted examples that let Claude generalise to new cases."
+   },
+   {
+    "option": "Validate the output in code and retry when the format is wrong.",
+    "label": "delays the problem",
+    "why": "Works, but it catches the drift after the fact; examples prevent it."
+   },
+   {
+    "option": "Use a JSON schema through tool use to fix the format.",
+    "label": "different problem",
+    "why": "Works for syntax, but it doesn't teach how to handle the ambiguous cases; examples do."
+   }
+  ],
+  "guideQuotes": [
+   "Few-shot is the most effective technique for consistent, actionable output when instructions alone are inconsistent.",
+   "2-4 targeted examples showing reasoning for the chosen action; demonstrate desired output format (location, issue, severity, fix); handle varied doc structures."
+  ],
+  "remember": "When instructions alone give inconsistent output, show 2 to 4 examples of the tricky cases."
+ },
+ {
+  "n": 20,
+  "slug": "schema-nullable",
+  "title": "Schema and nullable fields",
+  "domain": "D4",
+  "guide": [
+   "4.3",
+   "4.4"
+  ],
+  "objMatch": "^(4\\.3 (Nullable|Optional|Syntactic|Extensible enum vs)|4\\.4 Retr)",
+  "gym": "extraction-honesty",
+  "mindmap": "A schema stops syntax errors but not wrong values, so make a field optional or nullable when the value may not be in the document, and retry with the specific error only when the information is actually there.",
+  "story": "A form that says \"Middle name (required)\" makes people without one write something made up. Add a box \"I don't have one\" and the form stays honest. And asking someone to look again only helps if the answer is on the page they're holding.",
+  "question": "Is the value actually on the page?",
+  "signals": [
+   {
+    "label": "Words that point to a nullable or optional field",
+    "words": [
+     "many documents don't show",
+     "left blank",
+     "cut off",
+     "returns 0",
+     "invented values"
+    ]
+   },
+   {
+    "label": "Words that point to retry with the specific error",
+    "words": [
+     "the value is printed",
+     "totals don't add up",
+     "wrong field picked"
+    ]
+   },
+   {
+    "label": "Words that point to an enum with \"other\" plus detail",
+    "words": [
+     "doesn't fit the list",
+     "new categories keep appearing"
+    ]
+   }
+  ],
+  "best": "Give the model an honest way to say \"not here\" with an optional or nullable field, and retry with the specific validation error only when the value is on the page.",
+  "lookalikes": [
+   {
+    "option": "Keep the field required and add \"never guess\" to the prompt.",
+    "label": "only usually works",
+    "why": "Works, but a required field still pushes Claude to fill it; a nullable field removes the pressure to invent."
+   },
+   {
+    "option": "Use a sentinel value such as 0 or \"N/A\" when the value is missing.",
+    "label": "only usually works",
+    "why": "Works, but a sentinel can be mistaken for a real value downstream; null says plainly that it isn't there."
+   },
+   {
+    "option": "Retry with the validation error until the field is filled.",
+    "label": "different problem",
+    "why": "Works when the value is on the page, but when it's absent from the source, retries can only produce an invented value."
+   },
+   {
+    "option": "Switch to tool use with a strict JSON schema.",
+    "label": "different problem",
+    "why": "Works for syntax errors, but a strict schema doesn't stop wrong or invented values."
+   }
+  ],
+  "guideQuotes": [
+   "Strict schemas eliminate syntax errors but not semantic errors (line items not summing, wrong fields).",
+   "Optional/nullable fields prevent fabrication; enum \"unclear\"/\"other\" + detail for extensible categories.",
+   "Retries are ineffective when info is absent from the source (vs format/structural errors)."
+  ],
+  "remember": "Give the model an honest way to say \"not here\", and retry with the specific error only when the value is on the page."
+ }
+]

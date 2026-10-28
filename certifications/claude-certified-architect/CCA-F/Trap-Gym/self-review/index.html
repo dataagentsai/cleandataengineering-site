@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Self-Review</title>
+<meta name="description" content="CCA-F trap gym: the session that wrote the code is the wrong one to review it. A simulator runs four reviewers over a 2-file and a 12-file change with seeded bugs, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  #sim-files { display: grid; grid-template-columns: repeat(auto-fill, minmax(145px, 1fr)); gap: 8px; margin: 10px 0; }
+  .fc { border: 1.5px solid var(--line); border-radius: 10px; padding: 6px 9px; font-size: .82rem; background: #fff; min-width: 0; }
+  .fc code { display: block; background: none; padding: 0; overflow-wrap: anywhere; font-size: .8rem; }
+  .fc .dp { display: block; color: var(--muted); }
+  .fc .mk i { font-style: normal; font-size: .75rem; border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; }
+  .fc .mk i.y { background: var(--mint-w); } .fc .mk i.n { background: #d46a92; color: #fff; }
+  .fc.ok { background: var(--mint-w); } .fc.miss { background: var(--rose-w); }
+  .fc.thin { border-style: dashed; }
+  #sim-bugs { margin-top: 6px; }
+  #sim-bugs td .fl { font-size: .8rem; color: var(--muted); overflow-wrap: anywhere; }
+  #sim-bugs tr.n td:first-child { background: var(--rose-w); }
+  #sim-says { font-size: .93rem; }
+  .lbl { font-size: .9rem; font-weight: 600; margin: 12px 0 0; }
+  .legend span { margin-right: 12px; }
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/self-review/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · Self-review</div>
+  <h1>Self-review</h1>
+  <p class="lede">Claude wrote the code, and the same session is asked to check it. It says the code looks right, and subtle bugs ship. The tempting answers make the same reviewer try harder: re-read carefully, turn on extended thinking, add stricter criteria. The exam's answer changes who reviews, and for a big change, how the review is split.</p>
+  <p><span class="chip peri">D4 Prompt Engineering &amp; Structured Output</span><span class="chip peri">D3 Claude Code</span><span class="chip">Exam guide 4.6 and 3.6</span><span class="chip">About 15 minutes</span></p>
+
+  <div class="box peri"><b>At a glance:</b> review with a separate Claude instance that didn't write the code, and review large changes file by file before one pass across all the files.</div>
+
+  <h2>Start here: proofreading your own essay</h2>
+  <p>Think about checking a piece of writing.</p>
+  <div class="grid2">
+    <div class="box rose"><b>Your own essay.</b> You read what you meant to write, not what is on the page, so the typos slip through. Reading it again, more slowly, mostly finds the same nothing: you are still reading with the same intentions in your head.</div>
+    <div class="box mint"><b>A friend who never saw the draft.</b> They only have the page, so they catch the slips in a minute. For a long report, they check it page by page first, then once more to see the pages agree with each other.</div>
+  </div>
+  <p>Claude works the same way. A <b>session</b> is one running conversation, with everything said and reasoned in it. The session that wrote the code still holds the reasoning behind every choice, so when it reviews, it checks the code against that reasoning and agrees with itself. <b>Extended thinking</b> (giving Claude more room to reason before answering) doesn't help here: more thinking in the same session carries the same assumptions. An <b>independent review instance</b> is a fresh Claude call, for example a separate <code>claude -p</code> run, that gets the code or the diff but none of the writing session's history. A <b>multi-pass review</b> splits a big change: one pass per file for local problems, then an <b>integration pass</b> across files for problems no single file shows.</p>
+
+  <svg viewBox="0 0 640 300" role="img" aria-label="The writer session holds its reasoning and produces the change. It can review itself, with or without extended thinking. Or a fresh instance reviews the change without that reasoning. For a big change the fresh review is split into per-file passes, then a cross-file pass." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M110,100 L110,166"/>
+      <path d="M200,60 L236,60"/>
+      <path d="M200,205 L236,205"/>
+      <path d="M410,205 L428,205 L428,160 L446,160"/>
+      <path d="M535,192 L535,224"/>
+    </g>
+    <rect x="20" y="20" width="180" height="80" rx="12" fill="#a3b5df" stroke="#23262f" stroke-width="1.5"/>
+    <text x="110" y="44" text-anchor="middle" font-size="14" font-weight="600">Writer session</text>
+    <text x="110" y="64" text-anchor="middle" font-size="12">keeps its own reasoning:</text>
+    <text x="110" y="82" text-anchor="middle" font-size="12">“round each line”</text>
+    <text x="118" y="140" font-size="11">writes</text>
+    <rect x="20" y="170" width="180" height="70" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="110" y="198" text-anchor="middle" font-size="14" font-weight="600">The change</text>
+    <text x="110" y="218" text-anchor="middle" font-size="12">2 files, or 12 files</text>
+    <rect id="box-self" x="240" y="20" width="180" height="80" rx="12" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="330" y="44" text-anchor="middle" font-size="14" font-weight="600">Reviews itself</text>
+    <text x="330" y="64" text-anchor="middle" font-size="12">same session, with or</text>
+    <text x="330" y="82" text-anchor="middle" font-size="12">without extended thinking</text>
+    <text x="436" y="56" font-size="12">agrees with its</text>
+    <text x="436" y="72" font-size="12">own reasoning</text>
+    <rect id="box-fresh" x="240" y="170" width="170" height="70" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="325" y="198" text-anchor="middle" font-size="14" font-weight="600">Fresh instance</text>
+    <text x="325" y="218" text-anchor="middle" font-size="12">sees the code, not</text>
+    <text x="325" y="233" text-anchor="middle" font-size="12">the reasoning</text>
+    <text x="325" y="262" text-anchor="middle" font-size="11">big change: split it</text>
+    <rect x="456" y="122" width="170" height="64" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <rect x="453" y="125" width="170" height="64" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <rect id="box-perfile" x="450" y="128" width="170" height="64" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="535" y="154" text-anchor="middle" font-size="14" font-weight="600">Per-file passes</text>
+    <text x="535" y="174" text-anchor="middle" font-size="12">local bugs, full attention</text>
+    <rect id="box-integ" x="450" y="228" width="170" height="64" rx="12" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="535" y="254" text-anchor="middle" font-size="14" font-weight="600">Cross-file pass</text>
+    <text x="535" y="274" text-anchor="middle" font-size="12">keys, signatures, units</text>
+  </svg>
+  <p style="font-size:.85rem;color:var(--muted);margin-top:0">The diagram follows the simulator: the reviewer you pick is outlined in bold.</p>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> is the same session that produced the work also being asked to judge it?
+    <ul style="margin:.4em 0 0">
+      <li><b>Yes</b>: run the review in an <b>independent instance</b> that sees the code or diff but none of the writing session's turns. More effort from the same session (re-reading, extended thinking, <code>/compact</code>) keeps the blind spot.</li>
+      <li><b>The reviewer is already independent, but the change is large</b> (thin in the middle, contradictory comments): split it into <b>per-file passes</b> plus a <b>cross-file integration pass</b>.</li>
+      <li><b>Per-file passes already run, but bugs between files slip through</b> (a renamed key, a changed signature): add the <b>cross-file pass</b>.</li>
+      <li><b>The reviewer lacks the team's standards</b>: that is a different problem; review criteria go in CLAUDE.md.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box rose side"><h3>Independent instance</h3><ul><li>“the same session”, “reviews its own changes”</li><li>“says the code looks right”, “approves nearly every patch”</li><li>“one call writes the tests, then reviews them”</li><li>“extended thinking didn't help”</li></ul></div>
+    <div class="box mint side"><h3>Multi-pass review</h3><ul><li>“dozens of files”, “14-file PR”, “about 70 changed files”</li><li>“thorough for the first few, thin in the middle”</li><li>“contradictory feedback”</li><li>“missed issues across files”, “a caller still uses the old name”</li></ul></div>
+  </div>
+
+  <h2>Try it: review the change</h2>
+  <p>Each change has bugs seeded into it. Some are plain slips. Some come from a decision the writer made on purpose, so the writer reads them as correct. Some only show when you compare two files. Pick a change, then pick the reviewer, and see what it finds.</p>
+  <div class="box">
+    <b>1. The change</b>
+    <div id="sim-c"></div>
+    <b>2. Who reviews it</b>
+    <div id="sim-v"></div>
+    <p class="lbl">The changed files</p>
+    <div id="sim-files" aria-label="Changed files and what the review found in each"></div>
+    <div class="legend" style="font-size:.82rem"><span><b style="background:var(--mint-w);border:1.5px solid #23262f;border-radius:4px;padding:0 6px">green</b> all bugs found</span><span><b style="background:var(--rose-w);border:1.5px solid #23262f;border-radius:4px;padding:0 6px">pink</b> a bug missed</span><span><b style="border:1.5px dashed #23262f;border-radius:4px;padding:0 6px">dashed</b> only skimmed</span></div>
+    <p id="sim-says"></p>
+    <div class="tablewrap"><table id="sim-bugs"></table></div>
+    <p id="sim-tally"></p>
+    <div id="sim-verdict" class="box"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">The bugs are seeded, and which ones each reviewer catches is illustrative, chosen to show the shape. It is not a measurement. The exam guide's point is that a session keeps its own reasoning and won't question it, that an independent instance catches subtle issues better than self-review or extended thinking, and that per-file plus cross-file passes avoid attention dilution and contradictions.</p>
+  </div>
+  <p>Things to try: <b>large + the same session</b>, then <b>+ extended thinking</b>: one more bug, the same blind spot. Then <b>large + an independent instance</b> to see the subtle bugs found and the middle skimmed, and <b>large + multi-pass</b>. Last, <b>small + multi-pass</b>, then <b>small + an independent instance</b>.</p>
+
+  <h2>The four traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it loses</th></tr>
+    <tr><td><b>Only usually works</b></td><td>“Ask the same session to re-read its changes carefully before finishing”</td><td>It finds plain slips, but the session keeps its own reasoning and tends not to question it.</td></tr>
+    <tr><td><b>Same blind spot</b></td><td>Turn on extended thinking for the review in the generating session; run <code>/compact</code> and review again there</td><td>More thinking in the same session carries the same assumptions into the review.</td></tr>
+    <tr><td><b>Attention diluted</b></td><td>Review the whole 12-file (or 40-file) change in one large prompt, or on a larger-context model</td><td>Fine for a small change. On a large one, attention spreads thin and findings contradict each other across files. A bigger window is not better attention.</td></tr>
+    <tr><td><b>Different problem</b></td><td>Add stricter review criteria to CLAUDE.md or the review prompt</td><td>Sets the standard, but clearer criteria don't remove the blind spot of reviewing your own work.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>The writer doesn't grade its own work: use a fresh reviewer, per file first, then across files.</b>
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 4.6: “Self-review is limited: a model retains generation reasoning and won't question itself in-session.” “Independent review instances (no prior reasoning) catch subtle issues better than self-review/extended thinking.” “Multi-pass: per-file local analysis + cross-file integration passes (avoid attention dilution, contradictions).” Exam guide 3.6: “Session context isolation: the session that generated code is less effective at reviewing its own changes than an independent instance.”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["m4p-s2-10", "m5p-s2-10", "m4p-s5-04"]);
+</script>
+</body>
+</html>

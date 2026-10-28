@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Large Codebase Exploration</title>
+<meta name="description" content="CCA-F trap gym: keeping findings exact in a long exploration of a large codebase. A simulator fills the context meter turn by turn, shows answers drifting to typical patterns, and which findings survive each strategy, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .meter { position: relative; height: 26px; border: 1.5px solid var(--line); border-radius: 999px; background: var(--grey-w); overflow: hidden; margin: 14px 0 4px; }
+  #lc-fill { height: 100%; width: 0; background: var(--mint); transition: width .02s linear; }
+  #lc-fill.hot { background: #f0b429; }
+  .meter .mark { position: absolute; top: 0; bottom: 0; border-left: 1.5px dashed var(--line); }
+  #lc-label { font-size: .88rem; color: var(--muted); }
+  .marks { font-size: .8rem; color: var(--muted); }
+  #lc-events { margin: 8px 0; min-height: 1.6em; }
+  #lc-events .chip { margin-bottom: 4px; white-space: normal; }
+  #lc-checks { margin: 8px 0; }
+  .ck { border-left: 3px solid var(--peri); padding: 2px 0 2px 12px; margin: 8px 0; font-size: .95rem; }
+  .ck .chip { white-space: normal; }
+  .ck-q { color: var(--muted); font-size: .88rem; }
+  #lc-table td:first-child { width: 34%; }
+  #lc-table .chip { white-space: normal; }
+  .trail { font-size: .8rem; color: var(--muted); }
+  #lc-m .btn, #lc-d .btn { text-align: left; }
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/large-codebase/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · Large codebase exploration</div>
+  <h1>Large codebase exploration</h1>
+  <p class="lede">A long Claude Code session in a big codebase starts to blur what it found in the morning. The tempting answers keep everything in the session: read more files, remind Claude, get a bigger window, or restart and hope. The exam wants the findings to live somewhere the context can't blur: written down, with the noisy searching done elsewhere.</p>
+  <p><span class="chip peri">D5 Context Management &amp; Reliability</span><span class="chip">Exam guide 5.4</span><span class="chip">About 12 minutes</span></p>
+
+  <div class="box peri"><b>At a glance:</b> in a long codebase exploration, save key findings to a scratchpad file, send verbose exploration to subagents, and use <code>/compact</code> when the context fills.</div>
+
+  <h2>Start here: the detective's board</h2>
+  <p>A detective works a long case with hundreds of files.</p>
+  <div class="grid2">
+    <div class="box rose"><b>Trust memory.</b> By the third day, “the suspect left at 9:40” has become “some time in the evening, as these things usually go”. Asked twice, the detective gives two different times.</div>
+    <div class="box mint"><b>Pin it to the board.</b> Every confirmed fact goes on the board with where it came from. Juniors sift the boxes of paper and come back with one paragraph each. Every so often, the desk is cleared. Days later, the board still says exactly what was found.</div>
+  </div>
+  <p>Claude Code works the same way. Everything Claude reads sits in its <b>context window</b>, the working memory for one session. In a long session that memory gets crowded, and the exam guide names the signs of <b>context degradation</b>: inconsistent answers, and talk of “typical patterns” instead of the specific files found earlier. Four habits fix it:</p>
+  <ul>
+    <li>A <b>scratchpad file</b> is the board: Claude writes each key finding, with file and line, to a file on disk, and reads it back when needed.</li>
+    <li>A <b>subagent</b> is the junior: it runs the broad search in its own context and returns a short summary, so the verbose output never enters the main session.</li>
+    <li><b><code>/compact</code></b> clears the desk: it condenses the conversation so far, freeing room.</li>
+    <li>A <b>manifest</b> is a structured state file (findings, modules done, modules left, next step) so a crashed session can pick up exactly where it stopped.</li>
+  </ul>
+
+  <svg viewBox="0 0 640 300" role="img" aria-label="The main session's context window in the middle. A subagent on the left takes broad searches and returns a summary. A scratchpad or manifest file on the right, on disk, receives findings and is read back; it survives /compact and crashes. /compact below condenses the history." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M200,92 L146,92"/><path d="M146,126 L200,126"/>
+      <path d="M440,82 L484,82"/><path d="M484,116 L440,116"/>
+      <path d="M320,214 L320,232"/>
+    </g>
+    <rect id="lc-sub" x="8" y="60" width="136" height="100" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="76" y="86" text-anchor="middle" font-size="14" font-weight="600">Subagent</text>
+    <text x="76" y="108" text-anchor="middle" font-size="12">reads hundreds</text>
+    <text x="76" y="124" text-anchor="middle" font-size="12">of files in its</text>
+    <text x="76" y="140" text-anchor="middle" font-size="12">own context</text>
+    <text x="173" y="84" text-anchor="middle" font-size="12">search</text>
+    <text x="173" y="144" text-anchor="middle" font-size="12">summary</text>
+
+    <rect id="lc-window" x="202" y="40" width="236" height="172" rx="12" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="320" y="64" text-anchor="middle" font-size="14" font-weight="600">Main session context</text>
+    <rect x="218" y="76" width="204" height="26" rx="6" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="320" y="94" text-anchor="middle" font-size="12">morning findings (blur first)</text>
+    <rect x="218" y="108" width="204" height="40" rx="6" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="320" y="132" text-anchor="middle" font-size="12">long search output</text>
+    <rect x="218" y="154" width="204" height="26" rx="6" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="320" y="172" text-anchor="middle" font-size="12">recent turns</text>
+    <text x="320" y="202" text-anchor="middle" font-size="12">fills turn by turn</text>
+
+    <rect id="lc-file" x="486" y="40" width="140" height="120" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text id="lc-file-title" x="556" y="66" text-anchor="middle" font-size="14" font-weight="600">Scratchpad file</text>
+    <text x="556" y="88" text-anchor="middle" font-size="12">on disk, with</text>
+    <text x="556" y="104" text-anchor="middle" font-size="12">file and line;</text>
+    <text x="556" y="126" text-anchor="middle" font-size="12">survives /compact</text>
+    <text x="556" y="142" text-anchor="middle" font-size="12">and crashes</text>
+    <text x="462" y="74" text-anchor="middle" font-size="12">write</text>
+    <text x="462" y="134" text-anchor="middle" font-size="12">read</text>
+
+    <rect id="lc-compact" x="202" y="236" width="236" height="52" rx="12" fill="#f4f5f7" stroke="#23262f" stroke-width="1.5"/>
+    <text x="320" y="258" text-anchor="middle" font-size="14" font-weight="600">/compact</text>
+    <text x="320" y="277" text-anchor="middle" font-size="12">condenses the history, frees room</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> is the session starting to forget or blur what it found earlier, and where should those findings live instead?
+    <ul style="margin:.4em 0 0">
+      <li><b>Answers drift to “typical patterns” or contradict earlier ones</b>: write confirmed findings to a <b>scratchpad file</b>.</li>
+      <li><b>Searches dump thousands of lines</b>: send them to a <b>subagent</b> that returns only what matters.</li>
+      <li><b>The context is nearly full, answers still accurate</b>: <b><code>/compact</code></b> now, before they blur.</li>
+      <li><b>The work must survive a crash or carry on tomorrow</b>: a <b>manifest</b> of findings and progress, read on every restart.</li>
+      <li><b>Read more, remind Claude, bigger window, restart</b>: each keeps the findings in the context, or throws them away.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box mint side"><h3>Scratchpad or manifest</h3><ul><li>“inconsistent answers”</li><li>“typical patterns” instead of the file it named</li><li>“forgot an earlier finding”</li><li>“session crashed”, “pick up tomorrow”</li></ul></div>
+    <div class="box butter side"><h3>Subagents or /compact</h3><ul><li>“verbose output”, “thousands of lines”</li><li>“searching hundreds of files”</li><li>“context nearly full”</li><li>“long exploration”</li></ul></div>
+  </div>
+
+  <h2>Try it: a day in a big codebase</h2>
+  <p>Pick the day, then a strategy. The meter fills turn by turn. At 95% Claude Code compacts on its own; with <code>/compact</code> you do it at 70%. Three times during the day the engineer asks the same question. At the end you see which findings are still exact, and where they live.</p>
+  <div class="box">
+    <b>1. The day</b>
+    <div id="lc-d"></div>
+    <p id="lc-intro" style="font-size:.92rem;color:var(--muted);margin:.3em 0 .8em"></p>
+    <b>2. Your strategy</b>
+    <div id="lc-m"></div>
+    <div class="meter" aria-label="Main session context used"><div id="lc-fill"></div><div class="mark" style="left:70%"></div><div class="mark" style="left:95%"></div></div>
+    <div id="lc-label"></div>
+    <div class="marks">Dashed lines: 70% (when you run /compact) and 95% (when auto-compact runs).</div>
+    <div id="lc-events"></div>
+    <div id="lc-checks"></div>
+    <div id="lc-result" style="visibility:hidden">
+      <div class="tablewrap"><table id="lc-table"></table></div>
+      <p id="lc-tally"></p>
+      <p id="lc-effort" style="font-size:.92rem;color:var(--muted)"></p>
+      <div id="lc-verdict" class="box"></div>
+    </div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">Token sizes and blur rates are illustrative, chosen to show the shape. They are not measurements. Each finding gets the same dice under every strategy, so the strategies differ only in how they work. The exam guide's point is that a long exploration degrades into inconsistent answers and “typical patterns”, and that findings kept on disk survive context limits and crashes.</p>
+  </div>
+  <p>Things to try: <b>long day + just keep going</b>, and read the three answers. Then <b>+ subagents</b>: the meter stays lower, but the morning still blurs. Then <b>+ scratchpad + subagents + /compact</b>. Last, <b>the crash</b> with <b>/compact</b>, with the <b>scratchpad</b>, and with the <b>manifest</b>.</p>
+
+  <h2>The four traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it loses</th></tr>
+    <tr><td><b>Fills context</b></td><td>“Read every file in the module up front so nothing is missed”</td><td>Fine on a small module. On a large codebase it floods the context, and the earlier findings degrade.</td></tr>
+    <tr><td><b>Loses findings</b></td><td>“Restart the session whenever answers get inconsistent”</td><td>It clears the clutter, but without a saved record the new session starts from nothing.</td></tr>
+    <tr><td><b>Delays the problem</b></td><td>“Switch to a model with a bigger context window”</td><td>It works for a while, then the same degradation returns later in the run.</td></tr>
+    <tr><td><b>Only usually works</b></td><td>“Ask Claude to keep earlier findings in mind”</td><td>An instruction isn't storage. The findings still live only in the context, and still fade as it grows.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>Write findings down, delegate the noisy searching, and compact the rest.</b>
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 5.4: “Context degradation: inconsistent answers, referencing "typical patterns" vs specific earlier findings.” “Scratchpad files persist key findings across boundaries; subagent delegation isolates verbose output.” “Structured state persistence (manifests) for crash recovery; <code>/compact</code> to reduce context usage.”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["m4p-s2-07", "m5p-s2-07", "m7p-s2-09"]);
+</script>
+</body>
+</html>

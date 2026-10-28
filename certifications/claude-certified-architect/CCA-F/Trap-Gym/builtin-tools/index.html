@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Which Built-in Tool?</title>
+<meta name="description" content="CCA-F trap gym: Grep, Glob, Read, Edit, Write or Bash. A simulator plays each job with each tool, shows the tool output, including Edit's non-unique match error and the Read + Write fallback, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+  #sim-story { color: var(--muted); font-size: .95rem; margin: 4px 0 10px; }
+  .step, .fallnote { border-left: 3px solid var(--peri); padding: 4px 0 4px 12px; margin: 10px 0; opacity: .15; transition: opacity .25s; }
+  .fallnote { border-left-color: var(--mint); }
+  .step.in, .fallnote.in { opacity: 1; }
+  .step pre { margin: 4px 0 8px; white-space: pre-wrap; word-break: break-word; }
+  .meter { height: 12px; border: 1.5px solid var(--line); border-radius: 999px; overflow: hidden; background: #fff; margin: 4px 0 2px; }
+  .meter i { display: block; height: 100%; background: #a3b5df; transition: width .3s; }
+  .meter i.hot { background: #d46a92; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/builtin-tools/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · Which built-in tool?</div>
+  <h1>Which built-in tool?</h1>
+  <p class="lede">The trap: almost any tool can be made to do the job, by reading everything, by running a shell command, by retrying an edit. The exam wants the one built for the job: Grep for text inside files, Glob for file names, Edit for one unique change, and Read + Write when Edit can't find a unique match.</p>
+  <p><span class="chip peri">D2 Tool Design &amp; MCP</span><span class="chip">Exam guide 2.5</span><span class="chip">About 12 minutes</span></p>
+
+  <div class="box peri"><b>At a glance:</b> use Grep to search inside files and Glob to find files by name pattern, use Edit for a small targeted change, and when Edit fails because the text appears more than once, Read the whole file and Write it back.</div>
+
+  <h2>Start here: the cookbook</h2>
+  <p>You are looking for a recipe in a thick cookbook.</p>
+  <div class="grid2">
+    <div class="box peri"><b>Finding.</b> You either flip to the index of dish names (that's <b>Glob</b>: finding by name) or scan the pages for the word “saffron” (that's <b>Grep</b>: finding by what is written inside).</div>
+    <div class="box mint"><b>Changing.</b> To fix one typo you cross it out and write the right word (<b>Edit</b>). If the same phrase appears five times and you can't point to just one, you copy the page out fresh, with the one change (<b>Read</b>, then <b>Write</b>).</div>
+  </div>
+  <p>Claude Code has six built-in tools for this. <b>Glob</b> matches file paths against a pattern such as <code>**/*.test.ts</code> (<code>**</code> means “any folder, any depth”). <b>Grep</b> searches the text inside files. <b>Read</b> opens one whole file. <b>Edit</b> swaps one piece of text for another, and only works when that text appears exactly once. <b>Write</b> replaces a whole file. <b>Bash</b> runs shell commands, such as tests or builds.</p>
+
+  <svg viewBox="0 0 640 300" role="img" aria-label="Find with Glob, by file name, or Grep, by text inside files. Grep leads to Read, which opens one whole file and follows imports. Read leads to Edit for one unique match. When Edit's text is not unique, fall back to Read plus Write, which replaces the whole file. Bash runs commands such as tests and builds." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <text x="160" y="22" text-anchor="middle" font-size="14" font-weight="600">Find</text>
+    <text x="397" y="22" text-anchor="middle" font-size="14" font-weight="600">Look</text>
+    <text x="557" y="22" text-anchor="middle" font-size="14" font-weight="600">Change</text>
+    <rect id="bt-glob" x="10" y="34" width="145" height="82" rx="12" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="82" y="60" text-anchor="middle" font-size="15" font-weight="600">Glob</text>
+    <text x="82" y="80" text-anchor="middle" font-size="12">files by name</text>
+    <text x="82" y="100" text-anchor="middle" font-size="12">**/*.test.ts</text>
+    <rect id="bt-grep" x="165" y="34" width="145" height="82" rx="12" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="237" y="60" text-anchor="middle" font-size="15" font-weight="600">Grep</text>
+    <text x="237" y="80" text-anchor="middle" font-size="12">text inside files</text>
+    <text x="237" y="100" text-anchor="middle" font-size="12">calculateTax(</text>
+    <rect id="bt-read" x="330" y="34" width="135" height="82" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="397" y="60" text-anchor="middle" font-size="15" font-weight="600">Read</text>
+    <text x="397" y="80" text-anchor="middle" font-size="12">one whole file</text>
+    <text x="397" y="100" text-anchor="middle" font-size="12">follow imports</text>
+    <rect id="bt-edit" x="485" y="34" width="145" height="82" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="557" y="60" text-anchor="middle" font-size="15" font-weight="600">Edit</text>
+    <text x="557" y="80" text-anchor="middle" font-size="12">one small change</text>
+    <text x="557" y="100" text-anchor="middle" font-size="12">unique match only</text>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M310,75 L326,75"/><path d="M465,75 L481,75"/><path d="M557,116 L557,176"/>
+    </g>
+    <text x="566" y="146" font-size="12">not unique</text>
+    <rect id="bt-bash" x="10" y="180" width="300" height="72" rx="12" fill="#f4f5f7" stroke="#23262f" stroke-width="1.5"/>
+    <text x="160" y="206" text-anchor="middle" font-size="15" font-weight="600">Bash</text>
+    <text x="160" y="226" text-anchor="middle" font-size="12">runs commands: tests, builds, git</text>
+    <text x="160" y="243" text-anchor="middle" font-size="12">not the pick for finding or editing</text>
+    <rect id="bt-write" x="465" y="180" width="165" height="72" rx="12" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="547" y="206" text-anchor="middle" font-size="15" font-weight="600">Read + Write</text>
+    <text x="547" y="226" text-anchor="middle" font-size="12">replace the whole file</text>
+    <text x="547" y="243" text-anchor="middle" font-size="12">the Edit fallback</text>
+    <text x="320" y="286" text-anchor="middle" font-size="12">To understand code: Grep the entry point, then Read along the imports, one file at a time.</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> am I looking for a file by its name, or for text inside files, and is the change small enough for one unique match?
+    <ul style="margin:.4em 0 0">
+      <li><b>A file by name or path pattern</b>: <b>Glob</b>.</li>
+      <li><b>Text inside files</b> (callers, a header, a setting): <b>Grep</b>, then Read the matches.</li>
+      <li><b>A small change whose text appears once</b>: <b>Edit</b>.</li>
+      <li><b>Edit failed because the text is not unique</b>: <b>Read</b> the whole file, then <b>Write</b> it back.</li>
+      <li><b>Learning how code flows</b>: Grep the entry points, then Read to follow imports. Not everything up front.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which tool</h3>
+  <div class="grid2">
+    <div class="box peri side"><h3>Points to Grep</h3><ul><li>every place that calls</li><li>which files mention</li><li>find the function, search the contents</li><li>“file names don't say which files use it”</li></ul></div>
+    <div class="box mint side"><h3>Points to Glob</h3><ul><li>all files named</li><li>every <code>*.test.tsx</code></li><li>files matching a pattern</li><li>“every generated file follows the naming rule”</li></ul></div>
+    <div class="box rose side"><h3>Points to Read + Write</h3><ul><li>Edit failed</li><li>the text appears more than once</li><li>not unique; identical blocks</li><li>told apart only by position</li></ul></div>
+  </div>
+
+  <h2>Try it: run the tool</h2>
+  <p>Pick a job, then pick a tool. The simulator plays the calls Claude would make, shows the tool output, and counts the tokens read into the session. For the “request flow” job, two whole strategies appear as extra choices. The diagram above highlights your tool.</p>
+  <div class="box">
+    <b>1. The job</b>
+    <div id="sim-j"></div>
+    <p id="sim-story"></p>
+    <b>2. The tool</b>
+    <div id="sim-t"></div>
+    <div id="sim-trail" aria-live="polite"></div>
+    <div style="font-size:.92rem">Tokens read into the session: <b id="sim-tok-n"></b><div class="meter"><i id="sim-tok"></i></div></div>
+    <div id="sim-verdict" class="box"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">The repo, outputs and token counts are illustrative, chosen to show the shape. They are not measurements, and the error text is paraphrased. The exam guide's point is that each built-in tool has one job, that Edit needs a unique match, and that understanding is built incrementally.</p>
+  </div>
+  <p>Things to try: <b>Find where calculateTax is called + Glob</b>, then <b>+ Grep</b>. Then <b>Change a line that appears 3 times + Edit</b> to see the error and the fallback, and <b>+ Bash</b> to see sed change all three. Then <b>Change one line + Read + Write</b>: it works, but it is overbuilt. Last, <b>Understand how a request flows + Read everything up front</b>, then <b>+ Grep entry points, then Read along imports</b>.</p>
+
+  <h2>The four traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it loses</th></tr>
+    <tr><td><b>Overbuilt</b></td><td>Use Glob with a broad pattern and Read every file it returns to find the callers</td><td>It reads far more than needed. Grep finds the files that contain the name directly.</td></tr>
+    <tr><td><b>Wrong tool</b></td><td>Run grep, find or sed through the Bash tool instead</td><td>The built-in tools are made for content search, path search and edits. Reaching for Bash adds nothing, and sed can change every match.</td></tr>
+    <tr><td><b>Only usually works</b></td><td>Retry Edit with a longer piece of surrounding text until the match is unique</td><td>It can take several tries, and with identical blocks the text may never be unique. The guide's fallback is Read + Write.</td></tr>
+    <tr><td><b>Overbuilt</b></td><td>Read the whole codebase up front so Claude has the full picture</td><td>It floods the context. Find entry points with Grep and follow imports with Read.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>Grep searches inside files, Glob finds files by name, Edit needs a unique match, and Read + Write is the fallback when it isn't unique.</b>
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 2.5: “<b>Grep</b> = content search; <b>Glob</b> = file path patterns; <b>Read/Write</b> = full file ops; <b>Edit</b> = targeted change via unique text match.” “When Edit fails on non-unique match → Read + Write fallback.” “Build understanding incrementally: Grep entry points → Read to follow imports/trace flows (not read-all-upfront).”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["m7p-s4-01", "m4p-s4-01", "m4p-s4-02"]);
+</script>
+</body>
+</html>

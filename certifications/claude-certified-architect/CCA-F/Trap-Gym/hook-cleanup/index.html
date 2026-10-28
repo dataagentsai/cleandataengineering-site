@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Hook Clean-up</title>
+<meta name="description" content="CCA-F trap gym: tools return dates and statuses in mixed formats. A simulator tries six fixes, from a prompt instruction to a PostToolUse hook, and shows what Claude sees and tells the customer, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+  #sim-ask { margin: 4px 0 10px; }
+  .step { border-left: 3px solid var(--peri); padding: 4px 0 4px 12px; margin: 10px 0; opacity: .15; transition: opacity .25s; }
+  .step.in { opacity: 1; }
+  .step pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; font-size: 12px; }
+  .step .chip { margin-bottom: 4px; }
+  .told { border: 1.5px solid var(--line); border-radius: 12px; background: var(--grey-w); padding: 8px 12px; margin-top: 4px; }
+  #sim-meter { height: 18px; border: 1.5px solid var(--line); border-radius: 999px; background: var(--rose-w); overflow: hidden; margin: 12px 0 4px; }
+  .meter-fill { height: 100%; background: var(--mint); border-right: 1.5px solid var(--line); transition: width .3s; }
+  #sim-tally { line-height: 2; }
+  #sim-h .btn { white-space: normal; text-align: left; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/hook-cleanup/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · Hook to clean up data</div>
+  <h1>Hook to clean up data</h1>
+  <p class="lede">Your tools return dates and statuses in different shapes: Unix timestamps, ISO 8601 strings, numeric status codes. Claude sometimes misreads them. The options offer to explain the formats in the prompt, to add a model, or to ask the tools' owners for a change. The trap is asking Claude to clean the data when plain code can do it, the same way every time, before Claude ever sees it.</p>
+  <p><span class="chip peri">D1 Agentic Architecture</span><span class="chip">Exam guide 1.5</span><span class="chip">About 10 minutes</span></p>
+
+  <div class="box peri"><b>At a glance:</b> use a PostToolUse hook to tidy mixed formats, such as dates and status codes, before Claude sees the result, instead of asking Claude to do it.</div>
+
+  <h2>Start here: the post room</h2>
+  <p>Three suppliers send invoices. One writes dates as 03/04, one as 4 March, one as a number of seconds. The accountant has to guess which is which, and now and then guesses wrong.</p>
+  <div class="grid2">
+    <div class="box butter"><b>Tell the accountant.</b> A note on the desk explains each supplier's habit. Mostly it works. On a busy Friday a date still gets misread.</div>
+    <div class="box mint"><b>Stamp it in the post room.</b> Before any invoice reaches the accountant, the post room stamps it with one date format. The accountant never has to guess, and a new supplier only needs a new stamp.</div>
+  </div>
+  <p>Claude works the same way. A <b>tool result</b> is what a tool sends back after Claude calls it. A <b>hook</b> is your own code that the Agent SDK runs at a fixed point in the loop. A <b>PostToolUse hook</b> runs after a tool returns and before Claude reads the result, so it can rewrite that result: turn <code>1775037600</code> (a Unix timestamp, the number of seconds since 1 January 1970) into <code>2026-04-01T10:00:00Z</code> (ISO 8601, the standard date-and-time text format), and status <code>3</code> into <code>"paid_out"</code>. A <b>PreToolUse hook</b> runs at the other end, on the outgoing call, before the tool runs.</p>
+
+  <svg viewBox="0 0 640 320" role="img" aria-label="Three tools return mixed formats. A PreToolUse hook sits on the outgoing call and never sees results. A PostToolUse hook sits on the way back and rewrites every result before Claude reads it. A system prompt can only ask Claude to convert. A normalising subagent would sit where the hook does, but adds a model call." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M547,84 L547,98"/><path d="M470,121 L422,121"/><path d="M250,121 L208,121"/>
+      <path d="M208,231 L248,231"/><path d="M420,231 L547,231 L547,202"/>
+    </g>
+    <rect id="box-tools" x="16" y="70" width="192" height="210" rx="14" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <g fill="#fff7e3" stroke="#23262f" stroke-width="1.5">
+      <rect x="28" y="84" width="168" height="56" rx="10"/><rect x="28" y="148" width="168" height="56" rx="10"/><rect x="28" y="212" width="168" height="56" rx="10"/>
+    </g>
+    <g text-anchor="middle">
+      <text x="112" y="106" font-size="13" font-weight="600">lookup_order</text><text x="112" y="126" font-size="12">1775037600</text>
+      <text x="112" y="170" font-size="13" font-weight="600">track_shipment</text><text x="112" y="190" font-size="12">2026-03-31T16:00Z</text>
+      <text x="112" y="234" font-size="13" font-weight="600">get_refund</text><text x="112" y="254" font-size="12">"status": 3</text>
+      <text x="112" y="60" font-size="12">three tools, three formats</text>
+    </g>
+    <rect id="box-prompt" x="470" y="24" width="154" height="60" rx="12" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="547" y="48" text-anchor="middle" font-size="14" font-weight="600">System prompt</text>
+    <text x="547" y="67" text-anchor="middle" font-size="12">asks Claude to convert</text>
+    <rect x="470" y="100" width="154" height="100" rx="12" fill="#a3b5df" stroke="#23262f" stroke-width="1.5"/>
+    <text x="547" y="146" text-anchor="middle" font-size="15" font-weight="600">Claude</text>
+    <text x="547" y="166" text-anchor="middle" font-size="12">reads what arrives</text>
+    <rect id="box-pre" x="250" y="96" width="170" height="50" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="335" y="117" text-anchor="middle" font-size="14" font-weight="600">PreToolUse hook</text>
+    <text x="335" y="135" text-anchor="middle" font-size="12">sees the call only</text>
+    <rect id="box-post" x="250" y="206" width="170" height="50" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="335" y="227" text-anchor="middle" font-size="14" font-weight="600">PostToolUse hook</text>
+    <text x="335" y="245" text-anchor="middle" font-size="12">rewrites every result</text>
+    <rect id="box-sub" x="250" y="268" width="170" height="44" rx="12" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="335" y="287" text-anchor="middle" font-size="12">or a normalising subagent:</text>
+    <text x="335" y="303" text-anchor="middle" font-size="12">same spot, plus a model call</text>
+    <text x="229" y="112" text-anchor="middle" font-size="11">call</text>
+    <text x="229" y="222" text-anchor="middle" font-size="11">result</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> is the problem in what the tool returns, and could plain code fix it the same way every time?
+    <ul style="margin:.4em 0 0">
+      <li><b>Yes, the result is messy</b> (mixed dates, numeric codes, a field to strip): a <b>PostToolUse hook</b> that rewrites the result before Claude reads it.</li>
+      <li><b>No, the problem is an action</b> (a refund over the limit must not run): a <b>PreToolUse hook</b> that blocks the call.</li>
+      <li><b>No, Claude picks the wrong tool</b>: that's tool descriptions, not a hook.</li>
+      <li><b>You don't own the tools</b>: that's exactly why the fix goes in your hook, not in their API.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box mint side"><h3>PostToolUse hook</h3><ul><li>“different formats”, “each source its own format”</li><li>Unix timestamps, ISO 8601, numeric status codes</li><li>“before the model sees”, “every tool result”</li><li>“strip a field”, “the team cannot change their responses”</li></ul></div>
+    <div class="box rose side"><h3>Somewhere else</h3><ul><li>“the agent calls the wrong tool”: tool descriptions</li><li>“the rule must block an action”: PreToolUse</li><li>“a style or a tone”: the prompt</li></ul></div>
+  </div>
+
+  <h2>Try it: three tools, one customer question</h2>
+  <p>A meal-kit support agent has three tools, owned by three different teams. <code>lookup_order</code> gives the weekly box's delivery date as a Unix timestamp. <code>track_shipment</code> gives the pantry box's arrival as ISO 8601. <code>get_refund</code> gives a numeric status code. Pick a customer, then pick how you handle the formats. The diagram above shows where your choice acts.</p>
+  <div class="box">
+    <b>1. The customer</b>
+    <div id="sim-c"></div>
+    <p id="sim-ask"></p>
+    <b>2. How you handle the formats</b>
+    <div id="sim-h"></div>
+    <div id="sim-trail" aria-live="polite"></div>
+    <div id="sim-meter" aria-hidden="true"></div>
+    <p id="sim-tally"></p>
+    <div id="sim-verdict" class="box"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">The customers, values and rates are made up and illustrative, chosen to show the shape. They are not measurements. The exam guide's point is that a PostToolUse hook transforms results before the model sees them, and that hooks are deterministic where prompt-based compliance is probabilistic.</p>
+  </div>
+  <p>Things to try: <b>Asha + Do nothing</b>: Claude guesses both the date and the status. Then <b>Chen + System-prompt instruction</b>: right for Asha and Ben, but Chen's timestamp slips. Then <b>Chen + PostToolUse hook</b>. Last, <b>PreToolUse hook</b>, the right family on the wrong side of the tool.</p>
+
+  <h2>The traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it loses</th></tr>
+    <tr><td><b>Only usually works</b></td><td>Tell Claude in the system prompt how to read each format; add few-shot conversion examples</td><td>Works most of the time, but Claude can still misread a timestamp. Code converts it the same way every time.</td></tr>
+    <tr><td><b>Slow and out of your hands</b></td><td>Ask each team that owns a tool to change its output format</td><td>Works eventually, but you don't control those tools, and the next new tool brings a new format.</td></tr>
+    <tr><td><b>Wrong hook</b></td><td>Use a PreToolUse hook</td><td>PreToolUse checks a call before it runs. The mess is in the result, which PreToolUse never sees.</td></tr>
+    <tr><td><b>Overbuilt</b></td><td>Add a separate normalising subagent, or a wrapper service per tool</td><td>Works, but adds a model call (or a service), cost and its own errors for a job a few lines of code do exactly.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>Fix messy tool results in code on the way back, before Claude reads them.</b>
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 1.5: “<code>PostToolUse</code> hooks intercept results for transformation before the model sees them.” and “Normalize heterogeneous formats (Unix ts, ISO 8601, numeric codes); block policy-violating actions (e.g., refunds &gt; $500) and redirect to escalation.” Also 1.5: “Hooks give deterministic guarantees vs prompt-based probabilistic compliance.”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["m6p-s3-06", "m5p-s6-04", "m4p-s1-03"]);
+</script>
+</body>
+</html>

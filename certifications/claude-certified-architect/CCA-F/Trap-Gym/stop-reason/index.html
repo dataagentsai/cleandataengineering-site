@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stop Reason</title>
+<meta name="description" content="CCA-F trap gym: an agent loop should keep going on stop_reason tool_use and stop on end_turn. A simulator lets you pick any of the six stop_reason values and five loop designs and watch the run, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+  #sim-pnote { color: var(--muted); font-size: .95rem; margin: 4px 0 10px; }
+  .step { border-left: 3px solid var(--peri); padding: 4px 0 4px 12px; margin: 12px 0; opacity: .15; transition: opacity .25s; }
+  .step.in { opacity: 1; }
+  .step.skipped { border-left-color: #d9dce3; color: var(--muted); font-style: italic; }
+  .step pre { margin: 4px 0 6px; white-space: pre-wrap; word-break: break-word; }
+  .step .lbl { font-size: .82rem; color: var(--muted); margin-top: 4px; }
+  .sees { border: 1.5px solid var(--line); border-radius: 12px; background: var(--grey-w); padding: 10px 14px; margin: 6px 0 10px; }
+  #sim-code { margin: 6px 0 0; }
+  td code { overflow-wrap: anywhere; }
+  @media (max-width: 560px) {
+    table.stack, table.stack tbody, table.stack tr, table.stack td { display: block; width: 100%; }
+    table.stack tr:first-child { display: none; }
+    table.stack tr { border: 1.5px solid var(--line); border-radius: 12px; margin: 10px 0; padding: 4px 0; }
+    table.stack td { border: 0; padding: 3px 12px; }
+    table.stack td::before { content: attr(data-h); display: block; font-size: .78rem; color: var(--muted); }
+  }
+  .glance { font-size: 1.08rem; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/stop-reason/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · Stop reason</div>
+  <h1>Stop reason</h1>
+  <p class="lede">Every agent runs a loop: ask Claude, run the tool it asks for, ask again. The trap is in how the loop decides to stop. The wrong options all stop on something that looks like a signal (some text, a polite closing line, a turn count) instead of the one field the API gives you for exactly this: <code>stop_reason</code>.</p>
+  <p><span class="chip peri">D1 Agentic Architecture</span><span class="chip">Exam guide 1.1</span><span class="chip">About 15 minutes</span></p>
+
+  <div class="box peri glance"><b>At a glance:</b> keep the loop going while <code>stop_reason</code> is <code>"tool_use"</code> and stop when it is <code>"end_turn"</code>; never stop because of the reply's wording or an iteration cap.</div>
+
+  <h2>Start here: the waiter and the menu</h2>
+  <p>A waiter keeps going back to the kitchen while the customer is still ordering, and stops when the customer closes the menu. The waiter does not stop because the customer said “great” halfway through, and does not stop after exactly three trips.</p>
+  <p>Claude's API tells your code the same thing in one field. Every response carries a <b>stop_reason</b>: a short label saying why Claude stopped writing. <code>"tool_use"</code> means “I want a tool run; send me the result”. <code>"end_turn"</code> means “I'm finished with this turn”. Your loop (the code that keeps calling Claude) reads that label after every call, and nothing else decides when it stops.</p>
+
+  <svg viewBox="0 0 640 300" role="img" aria-label="The agentic loop. Your code sends a request to Claude. The response carries content and a stop_reason. The loop reads stop_reason: on tool_use it runs the tool, appends the tool_result and sends again; on end_turn it shows the answer. Below, the three things the anti-patterns read instead: any text block, the wording, and a turn counter." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M110,68 L110,98"/>
+      <path d="M110,154 L110,184"/>
+      <path d="M200,226 L230,226 L230,140 L256,140"/>
+      <path d="M345,108 L345,51 L446,51"/>
+      <path d="M430,140 L446,140"/>
+      <path d="M535,24 L535,8 L110,8 L110,14"/>
+    </g>
+    <rect x="20" y="16" width="180" height="52" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="110" y="38" text-anchor="middle" font-size="14" font-weight="600">Your code sends</text>
+    <text x="110" y="57" text-anchor="middle" font-size="12">the conversation so far</text>
+    <rect x="20" y="102" width="180" height="52" rx="12" fill="#a3b5df" stroke="#23262f" stroke-width="1.5"/>
+    <text x="110" y="133" text-anchor="middle" font-size="15" font-weight="600">Claude</text>
+    <rect x="20" y="188" width="180" height="76" rx="12" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="110" y="212" text-anchor="middle" font-size="14" font-weight="600">Response</text>
+    <text x="110" y="231" text-anchor="middle" font-size="12">content blocks</text>
+    <text x="110" y="249" text-anchor="middle" font-size="12">+ stop_reason</text>
+    <rect id="box-sr" x="260" y="110" width="170" height="60" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="345" y="135" text-anchor="middle" font-size="14" font-weight="600">Read stop_reason</text>
+    <text x="345" y="154" text-anchor="middle" font-size="12">the field made for this</text>
+    <rect x="450" y="24" width="170" height="62" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="535" y="47" text-anchor="middle" font-size="14" font-weight="600">tool_use</text>
+    <text x="535" y="64" text-anchor="middle" font-size="12">run it, append the</text>
+    <text x="535" y="79" text-anchor="middle" font-size="12">tool_result, send again</text>
+    <rect x="450" y="110" width="170" height="60" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="535" y="135" text-anchor="middle" font-size="14" font-weight="600">end_turn</text>
+    <text x="535" y="154" text-anchor="middle" font-size="12">show the answer, stop</text>
+    <text x="440" y="208" text-anchor="middle" font-size="12" fill="#5b6070">What the anti-patterns read instead</text>
+    <rect id="box-text" x="260" y="220" width="112" height="44" rx="12" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="316" y="247" text-anchor="middle" font-size="12">any text block</text>
+    <rect id="box-words" x="384" y="220" width="112" height="44" rx="12" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="440" y="247" text-anchor="middle" font-size="12">the wording</text>
+    <rect id="box-count" x="508" y="220" width="112" height="44" rx="12" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="564" y="247" text-anchor="middle" font-size="12">a turn counter</text>
+    <text x="320" y="290" text-anchor="middle" font-size="12" fill="#5b6070">The simulator below thickens the box your chosen loop reads.</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> what does the code look at to decide whether to run another step: the <code>stop_reason</code> field, or something else?
+    <ul style="margin:.4em 0 0">
+      <li><b><code>stop_reason</code></b>: right. Continue on <code>"tool_use"</code>, stop on <code>"end_turn"</code>.</li>
+      <li><b>Any text in the reply</b>: wrong. Claude often writes a short line and asks for a tool in the same reply.</li>
+      <li><b>The wording</b> (“done”, “task complete”, “Anything else?”): wrong. Wording varies.</li>
+      <li><b>A turn counter</b>: fine as a safety net, wrong as the main stop.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box mint side"><h3>Points to reading stop_reason</h3><ul><li>“loop ends too early”, “loop never ends”</li><li>“decide when the agent is done”</li><li>“after each response”</li><li>“tool results”</li></ul></div>
+    <div class="box rose side"><h3>Points to the trap</h3><ul><li>“checks the reply for ‘done’”</li><li>“looks for phrases like ‘I have finished’”</li><li>“stops after 10 iterations”</li><li>“if the response contains text”</li></ul></div>
+  </div>
+
+  <h2>Try it: change the stop_reason, change the loop</h2>
+  <p>A customer asks a support agent: <b>“Where is my order 4471?”</b> The run is fixed. On turn 1 Claude says “Let me check that order.” and asks for <code>lookup_order</code> (<code>stop_reason: "tool_use"</code>). On turn 2 it asks for <code>check_carrier</code>, with no text (<code>"tool_use"</code> again). <b>You pick what turn 3 returns</b>, from all six real values, and <b>you pick how the loop decides to stop</b>.</p>
+  <div class="box">
+    <b>1. Turn 3's stop_reason</b>
+    <div id="sim-p"></div>
+    <p id="sim-pnote"></p>
+    <b>2. Your loop design</b>
+    <div id="sim-l"></div>
+    <div id="sim-trail" aria-live="polite"></div>
+    <b>What the customer sees</b>
+    <div id="sim-sees" class="sees"></div>
+    <p id="sim-tally" style="margin:6px 0"></p>
+    <div id="sim-verdict" class="box"></div>
+    <b>The loop you picked, in Python</b>
+    <pre id="sim-code"></pre>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0"><code>req</code> holds the model, <code>max_tokens</code> and tools. The replies, tool results and dates are made up for the example. The stop_reason values and what each one means are real. <code>run_tools</code>, <code>text_of</code>, <code>has_tool_calls</code> and <code>hand_to_person</code> stand for your own small helpers.</p>
+  </div>
+  <p>Things to try: <b><code>end_turn</code> + (b)</b>, the exam answer. Then <b><code>end_turn</code> + (c)</b>: whatever you pick, the customer only gets “Let me check that order.” Then <b><code>tool_use</code> + (e)</b>: the cap walks away from a tool call. Last, <b><code>max_tokens</code> + (b)</b>, then <b>+ (a)</b>, to see why real code handles the other four.</p>
+
+  <h2>All six values</h2>
+  <p>The exam guide tests two of them. The other four are real values in the Messages API, worth knowing so the extra ones in the simulator make sense.</p>
+  <div class="tablewrap"><table class="stack">
+    <tr><th>Value</th><th>What it means</th><th>What your loop should do</th><th>On the exam?</th></tr>
+    <tr><td data-h="Value"><code>tool_use</code></td><td data-h="What it means">Claude wants one or more tools run.</td><td data-h="What your loop should do">Run each tool, append the <code>tool_result</code> blocks to the conversation, call Claude again.</td><td data-h="On the exam?"><b>Yes</b> (guide 1.1)</td></tr>
+    <tr><td data-h="Value"><code>end_turn</code></td><td data-h="What it means">Claude has finished its turn.</td><td data-h="What your loop should do">Show the answer. End the loop.</td><td data-h="On the exam?"><b>Yes</b> (guide 1.1)</td></tr>
+    <tr><td data-h="Value"><code>max_tokens</code></td><td data-h="What it means">The reply hit the <code>max_tokens</code> limit you set and was cut off.</td><td data-h="What your loop should do">Don't show it as final. Raise <code>max_tokens</code> (or ask Claude to continue) and resend.</td><td data-h="On the exam?">Beyond the exam guide</td></tr>
+    <tr><td data-h="Value"><code>stop_sequence</code></td><td data-h="What it means">A stop sequence your app set has fired. The response's <code>stop_sequence</code> field says which.</td><td data-h="What your loop should do">Take the text before it, as your app intended.</td><td data-h="On the exam?">Beyond the exam guide</td></tr>
+    <tr><td data-h="Value"><code>pause_turn</code></td><td data-h="What it means">A long turn using a server tool (one Anthropic runs, such as web search) has paused.</td><td data-h="What your loop should do">Send the response back as-is so Claude continues.</td><td data-h="On the exam?">Beyond the exam guide</td></tr>
+    <tr><td data-h="Value"><code>refusal</code></td><td data-h="What it means">Claude declined for safety reasons. <code>stop_details</code> gives a category when there is one.</td><td data-h="What your loop should do">Don't blindly resend the same request. Tell the user, or route to a person.</td><td data-h="On the exam?">Beyond the exam guide</td></tr>
+  </table></div>
+
+  <h2>The traps</h2>
+  <div class="tablewrap"><table class="stack">
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it loses</th></tr>
+    <tr><td data-h="Trap"><b>Text as a stop sign</b></td><td data-h="What the wrong option looks like">Stop as soon as the response includes any text</td><td data-h="Why it loses">Claude often writes text and asks for a tool in the same response, so the loop ends before the tool runs. The exam guide names this anti-pattern.</td></tr>
+    <tr><td data-h="Trap"><b>Parsing the wording</b></td><td data-h="What the wrong option looks like">Stop when the reply contains a phrase such as “task complete”</td><td data-h="Why it loses">Only usually works. Wording varies, so the loop sometimes stops mid-task or runs on. The field exists so you don't have to parse text.</td></tr>
+    <tr><td data-h="Trap"><b>Cap as the main stop</b></td><td data-h="What the wrong option looks like">Stop after a fixed number of iterations, such as 10</td><td data-h="Why it loses">Cuts off long tasks and wastes calls on short ones. A cap is only a safety net.</td></tr>
+    <tr><td data-h="Trap"><b>Different problem</b></td><td data-h="What the wrong option looks like">Replace the loop with a fixed sequence of tool calls</td><td data-h="Why it loses">It removes Claude's ability to choose the next step from what it just learned. It answers a design question, not a stopping one.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>The loop's stop sign is stop_reason: keep going on “tool_use”, stop on “end_turn”.</b> Not the text, not the wording, not a counter.
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 1.1: “Continue the loop when <code>stop_reason == "tool_use"</code>; terminate when <code>"end_turn"</code>.” And: “<b>Anti-patterns:</b> parsing natural-language signals to determine termination; arbitrary iteration caps as the primary stop; checking assistant text content as a completion indicator.”</p>
+  </div>
+  <p><a href="../index.html">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["m7p-s1-01", "m7p-s6-06", "m5p-s1-01"]);
+</script>
+</body>
+</html>

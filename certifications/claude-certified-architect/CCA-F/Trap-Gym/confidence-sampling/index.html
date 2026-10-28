@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Confidence and Sampling</title>
+<meta name="description" content="CCA-F trap gym: why a 97% overall accuracy is not enough to automate an extraction pipeline. A simulator shows what each way of checking reveals, and how many wrong values then post unseen, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .lbl { font-size: .9rem; font-weight: 600; margin: 14px 0 6px; }
+  table.g { font-size: .82rem; background: #fff; }
+  table.g th, table.g td { padding: 5px 6px; }
+  table.g th span, table.g td:first-child span { font-weight: 400; color: var(--muted); }
+  table.g td:first-child { font-weight: 600; }
+  table.g td small { display: block; font-size: .74rem; color: var(--muted); line-height: 1.25; }
+  table.g td.g { background: var(--mint-w); } table.g td.y { background: var(--butter-w); }
+  table.g td.r { background: #f6d5e3; } table.g td.few { background: #eceef2; }
+  .one { border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 14px; background: var(--grey-w); }
+  .one b { font-size: 1.3rem; }
+  .one span { font-size: .85rem; color: var(--muted); }
+  .meter { height: 12px; border: 1.5px solid var(--line); border-radius: 999px; overflow: hidden; background: #fff; margin: 4px 0 2px; }
+  .meter i { display: block; height: 100%; transition: width .3s; }
+  #sim-bad { background: #d46a92; } #sim-rev { background: #ffd98a; }
+  @media (max-width: 520px) { table.g { font-size: .74rem; } table.g th, table.g td { padding: 4px 3px; } table.g td small { font-size: .68rem; } }
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/confidence-sampling/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · Confidence and sampling</div>
+  <h1>Confidence and sampling</h1>
+  <p class="lede">An extraction pipeline scores 97% overall, and the team wants to switch off human review. The tempting answers trust that number, or a thin random sample, or Claude's own sense of how sure it is. Each can hide one document type or field that fails badly. The exam's answer is to measure by type and field with stratified random samples, and route review by calibrated field confidence.</p>
+  <p><span class="chip peri">D5 Context &amp; Reliability</span><span class="chip">Exam guide 5.5</span><span class="chip">About 12 minutes</span></p>
+
+  <div class="box peri"><b>At a glance:</b> a high overall accuracy can hide one weak document type or field, so measure accuracy by type and field with stratified random samples before automating.</div>
+
+  <h2>Start here: the school average</h2>
+  <p>A school's average exam score is 85%, so the head says every class is doing fine.</p>
+  <div class="grid2">
+    <div class="box rose"><b>The average.</b> One number for the whole school. A class of 30 scoring 40% barely moves it, because hundreds of other pupils are doing well.</div>
+    <div class="box mint"><b>Class by class.</b> Someone checks each class, and the one at 40% stands out at once. Only looking at each group showed it.</div>
+  </div>
+  <p>An extraction pipeline is the same. Claude reads invoices, receipts, scans and handwritten forms and pulls out fields such as the amount. <b>Stratified random sampling</b> means picking a random sample <i>from each group</i> (each document type), so a rare type gets enough documents to measure. <b>Calibrated confidence</b> means a confidence score per field that has been checked against a <b>labelled set</b> (documents where people wrote down the right answers), so “90% confident” really means right about 90% of the time. Then low-scoring fields go to a person.</p>
+
+  <svg viewBox="0 0 640 320" role="img" aria-label="Where each check acts. Four document types go to Claude, which extracts four fields. A routing step decides whether each field posts by itself or goes to a person. Five ways of checking feed that decision: overall accuracy, a random sample, Claude rating itself, a stratified sample by type, and field confidence calibrated on a labelled set." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M150,63 L171,63"/><path d="M315,63 L336,63"/>
+      <path d="M460,52 L486,34"/><path d="M460,74 L486,92"/>
+      <path d="M400,170 L400,94"/>
+    </g>
+    <g stroke="#23262f" fill="none" stroke-width="1.5">
+      <path d="M74,170 L578,170"/>
+      <path d="M74,200 L74,170"/><path d="M200,200 L200,170"/><path d="M326,200 L326,170"/><path d="M452,200 L452,170"/><path d="M578,200 L578,170"/>
+    </g>
+    <rect x="20" y="36" width="130" height="56" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="85" y="59" text-anchor="middle" font-size="14" font-weight="600">Documents</text>
+    <text x="85" y="78" text-anchor="middle" font-size="12">four types</text>
+    <rect x="175" y="36" width="140" height="56" rx="12" fill="#a3b5df" stroke="#23262f" stroke-width="1.5"/>
+    <text x="245" y="59" text-anchor="middle" font-size="14" font-weight="600">Claude extracts</text>
+    <text x="245" y="78" text-anchor="middle" font-size="12">four fields each</text>
+    <rect x="340" y="36" width="120" height="56" rx="12" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="400" y="59" text-anchor="middle" font-size="14" font-weight="600">Route</text>
+    <text x="400" y="78" text-anchor="middle" font-size="12">each field</text>
+    <rect x="490" y="10" width="130" height="44" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="555" y="37" text-anchor="middle" font-size="13" font-weight="600">Posts by itself</text>
+    <rect x="490" y="72" width="130" height="44" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="555" y="99" text-anchor="middle" font-size="13" font-weight="600">A person checks</text>
+    <text x="212" y="150" text-anchor="middle" font-size="12">the check decides which fields may post</text>
+
+    <rect id="box-overall" x="20" y="200" width="108" height="58" rx="12" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="74" y="224" text-anchor="middle" font-size="13" font-weight="600">Overall</text>
+    <text x="74" y="243" text-anchor="middle" font-size="12">accuracy</text>
+    <rect id="box-random" x="146" y="200" width="108" height="58" rx="12" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="200" y="224" text-anchor="middle" font-size="13" font-weight="600">Random</text>
+    <text x="200" y="243" text-anchor="middle" font-size="12">sample</text>
+    <rect id="box-self" x="272" y="200" width="108" height="58" rx="12" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="326" y="224" text-anchor="middle" font-size="13" font-weight="600">Claude rates</text>
+    <text x="326" y="243" text-anchor="middle" font-size="12">itself</text>
+    <rect id="box-strat" x="398" y="200" width="108" height="58" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="452" y="224" text-anchor="middle" font-size="13" font-weight="600">Stratified</text>
+    <text x="452" y="243" text-anchor="middle" font-size="12">sample by type</text>
+    <rect id="box-calib" x="524" y="200" width="108" height="58" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="578" y="224" text-anchor="middle" font-size="13" font-weight="600">Calibrated</text>
+    <text x="578" y="243" text-anchor="middle" font-size="12">field confidence</text>
+    <text x="74" y="282" text-anchor="middle" font-size="12">one number</text>
+    <text x="200" y="282" text-anchor="middle" font-size="12">rare types</text>
+    <text x="200" y="298" text-anchor="middle" font-size="12">barely appear</text>
+    <text x="326" y="282" text-anchor="middle" font-size="12">never checked</text>
+    <text x="452" y="282" text-anchor="middle" font-size="12">each type and</text>
+    <text x="452" y="298" text-anchor="middle" font-size="12">field measured</text>
+    <text x="578" y="282" text-anchor="middle" font-size="12">on a labelled set,</text>
+    <text x="578" y="298" text-anchor="middle" font-size="12">routes each field</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> has accuracy been checked for each document type and field, or only as one overall number?
+    <ul style="margin:.4em 0 0">
+      <li><b>One overall number</b> (“97% across all documents”): not enough. Measure by type and by field first.</li>
+      <li><b>A plain random sample</b>: rare types barely appear in it. Sample each type on its own (stratified).</li>
+      <li><b>Deciding which fields people check</b>: use field-level confidence <b>calibrated on a labelled set</b>, not Claude's own unchecked rating.</li>
+      <li><b>After launch</b>: keep a stratified random sample of the confident, auto-posted fields, to measure how often they are wrong.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box rose side"><h3>Check by type and field</h3><ul><li>“97% overall”, “accuracy across all documents”</li><li>“ready to automate”</li><li>“one vendor's invoices”, “handwritten forms”</li><li>“a random sample”, “only a handful were in the set”</li></ul></div>
+    <div class="box mint side"><h3>Calibrated field-level routing</h3><ul><li>“which fields to review”</li><li>“high-confidence errors”</li><li>“labelled set”, “calibrate”</li><li>“the model returns a confidence for each field”</li></ul></div>
+  </div>
+
+  <h2>Try it: check before you automate</h2>
+  <p>The pipeline reads 10,000 documents a month, four fields each. Handwritten forms are only 2% of them. Pick how you check before switching off review. Every method gets the same budget: 400 labelled documents. The grid shows what your check lets you see; a field posts by itself only if it measures at least 97%.</p>
+  <div class="box">
+    <b>How you check before automating</b>
+    <div id="sim-m"></div>
+    <div id="sim-seen"></div>
+    <p style="margin:10px 0 0"><button class="btn go" id="sim-show">Show what is really true</button></p>
+    <div id="sim-truth"></div>
+    <p class="lbl">Wrong values posted without review, each month</p>
+    <div class="meter"><i id="sim-bad"></i></div>
+    <p class="lbl" style="margin-top:8px">Share of fields checked by people</p>
+    <div class="meter"><i id="sim-rev"></i></div>
+    <p id="sim-tally"></p>
+    <div id="sim-verdict" class="box"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">The accuracies, volumes and catch rates are illustrative, chosen to show the shape. The samples are drawn with a fixed seed, so each choice always gives the same grid. The exam guide's point is that aggregate accuracy can mask weak document types and fields.</p>
+  </div>
+  <p>Things to try: <b>overall accuracy only</b>, then press “Show what is really true” and find the handwritten row. Then <b>a plain random sample</b>: count the handwritten forms it picked. Then <b>stratified by type</b>, and last <b>stratified + calibrated</b>: watch the pink meter shrink.</p>
+
+  <h2>The four traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it loses</th></tr>
+    <tr><td><b>Masks weak spots</b></td><td>“Automate fully because overall accuracy is 97%”</td><td>It works for most documents, but the average can hide a type or field that fails badly.</td></tr>
+    <tr><td><b>Too thin</b></td><td>“Have people review a random 5% of all documents”</td><td>A useful spot check, but an unstratified sample can hold almost none of the rare, weak document type.</td></tr>
+    <tr><td><b>Uncalibrated</b></td><td>“Send only low-confidence extractions to human review”</td><td>It catches some errors, but without calibration and sampling, confident errors pass straight through unseen.</td></tr>
+    <tr><td><b>Unreliable proxy</b></td><td>“Ask Claude to rate its own confidence on every field”</td><td>A signal, but self-rated confidence has to be calibrated against labelled data before it can route review.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>Don't trust the average: check each type and field before you automate.</b> Sample each type on its own, and route review by field confidence calibrated on labelled data.
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 5.5: “Aggregate accuracy (97%) can mask poor performance on specific doc types/fields.” “Stratified random sampling measures high-confidence error rates; field-level confidence calibrated on labeled sets routes review.” “Validate accuracy by document type and field before automating.”</p>
+  </div>
+  <p><a href="../index.html">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["m4p-s6-06", "m7p-s6-09", "m6p-s1-09"]);
+</script>
+</body>
+</html>
