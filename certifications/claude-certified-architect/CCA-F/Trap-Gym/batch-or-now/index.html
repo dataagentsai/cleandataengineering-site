@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Batch or Now?</title>
+<meta name="description" content="CCA-F trap gym: when to send work to the Message Batches API at half price and when to call Claude synchronously. A simulator runs each job both ways, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; margin: 14px 0 6px; }
+  .stat { border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; font-size: .92rem; }
+  .stat .big { font-size: 1.35rem; font-weight: 600; display: block; line-height: 1.3; }
+  .stat .sub { color: var(--muted); font-size: .85rem; }
+  .meter { height: 12px; border: 1.5px solid var(--line); border-radius: 999px; overflow: hidden; background: #fff; margin: 6px 0 2px; }
+  .meter i { display: block; height: 100%; background: #a8dcc3; transition: width .4s; }
+  .meter i.full { background: #d9dce3; }
+  #sim-clock { position: relative; height: 34px; border: 1.5px solid var(--line); border-radius: 8px; background: #fff; margin: 8px 0 2px; overflow: hidden; }
+  #sim-clock .need { position: absolute; top: 0; bottom: 0; left: 0; background: #eef9f3; border-right: 2px solid #23262f; }
+  #sim-clock .got { position: absolute; top: 5px; width: 14px; height: 20px; margin-left: -7px; border-radius: 4px; border: 1.5px solid var(--line); background: #a3b5df; transition: left .5s; }
+  #sim-clock .got.late { background: #d46a92; }
+  .ticks { display: flex; justify-content: space-between; font-size: .75rem; color: var(--muted); }
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin: 0 4px 0 10px; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/batch-or-now/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · Batch or now?</div>
+  <h1>Batch or now?</h1>
+  <p class="lede">The Message Batches API halves the price, and that makes it a trap in both directions. Wrong answers put a job someone is waiting on into a batch that can take a day. Or they pay full price for an overnight report nobody reads until Monday. Ask who is waiting, and the choice is easy.</p>
+  <p><span class="chip peri">D4 Prompt Engineering &amp; Structured Output</span><span class="chip">Exam guide 4.5</span><span class="chip">About 15 minutes</span></p>
+
+  <h2>Start here: the dry cleaner</h2>
+  <p>A dry cleaner offers two services.</p>
+  <div class="grid2">
+    <div class="box peri"><b>Express, while you wait.</b> Full price. The shirt is ready in an hour. If you need it for a meeting this afternoon, this is the only service that helps, at any price.</div>
+    <div class="box mint"><b>Bulk, ready within a day.</b> Half price. Drop off a whole bag and collect it tomorrow. They don't promise an hour. And they won't phone you halfway to ask “starch or no starch?”, so everything they need must be written on the ticket.</div>
+  </div>
+  <p>Claude works the same way. A <b>synchronous call</b> to the Messages API is express: the reply comes back in seconds, and you can go back and forth, so Claude can ask for a tool, your code runs it and sends the result back. The <b>Message Batches API</b> is the bulk service: about half the cost, results within 24 hours, no promise on how fast. Each request gets one reply, with no back and forth, so a batch request can't run a tool loop. Each request has a <code>custom_id</code>, the ticket that matches every result to its request.</p>
+  <p>One more saving works for both services: <b>don't send the whole wardrobe when one shirt is dirty.</b> If a request carries far more than the job reads, trimming it cuts the cost on either API.</p>
+
+  <svg viewBox="0 0 640 300" role="img" aria-label="Two ways to call Claude. Synchronous: your code sends a request, Claude replies in seconds, and tool calls can loop back and forth. Message Batches API: many requests, each with a custom_id, are processed within 24 hours at half price, and each request gets one reply with no tool loop." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <text x="20" y="22" font-size="14" font-weight="600">Synchronous: full price, reply in seconds</text>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M180,58 L246,58"/><path d="M246,84 L180,84"/>
+      <path d="M420,64 L466,64"/><path d="M466,84 L420,84"/>
+      <path d="M180,208 L236,208"/><path d="M420,208 L456,208"/>
+    </g>
+    <rect id="box-code" x="20" y="38" width="160" height="62" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="100" y="64" text-anchor="middle" font-size="14" font-weight="600">Your code</text>
+    <text x="100" y="83" text-anchor="middle" font-size="12">or a person, waiting</text>
+    <rect id="box-sync" x="250" y="38" width="170" height="62" rx="12" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="335" y="64" text-anchor="middle" font-size="14" font-weight="600">Claude</text>
+    <text x="335" y="83" text-anchor="middle" font-size="12">Messages API</text>
+    <rect id="box-tool" x="470" y="38" width="150" height="62" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="545" y="64" text-anchor="middle" font-size="14" font-weight="600">Tool loop</text>
+    <text x="545" y="83" text-anchor="middle" font-size="12">tool call, result, again</text>
+    <text x="213" y="52" text-anchor="middle" font-size="10">request</text>
+    <text x="213" y="98" text-anchor="middle" font-size="10">reply</text>
+    <line x1="20" y1="136" x2="620" y2="136" stroke="#23262f" stroke-width="1" stroke-dasharray="4 4"/>
+    <text x="20" y="166" font-size="14" font-weight="600">Message Batches API: half price, within 24 hours</text>
+    <rect id="box-reqs" x="20" y="182" width="160" height="62" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="100" y="208" text-anchor="middle" font-size="14" font-weight="600">Many requests</text>
+    <text x="100" y="227" text-anchor="middle" font-size="12">each with a custom_id</text>
+    <rect id="box-batch" x="240" y="182" width="180" height="62" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="330" y="208" text-anchor="middle" font-size="14" font-weight="600">Batch queue</text>
+    <text x="330" y="227" text-anchor="middle" font-size="12">no promise how fast</text>
+    <rect id="box-results" x="460" y="182" width="160" height="62" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="540" y="208" text-anchor="middle" font-size="14" font-weight="600">Results</text>
+    <text x="540" y="227" text-anchor="middle" font-size="12">matched by custom_id</text>
+    <text x="330" y="272" text-anchor="middle" font-size="12">one reply per request: no tool loop inside a batch</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> is anyone waiting on this result?
+    <ul style="margin:.4em 0 0">
+      <li><b>Yes</b>, a person or a pipeline step is blocked (a pre-merge review, a live chat): call Claude <b>synchronously</b>.</li>
+      <li><b>No</b>, the result is used hours or days later (an overnight report, a weekly audit, a backfill due next week): use the <b>Message Batches API</b> at half the cost.</li>
+      <li><b>The job needs tool calls part-way through</b>: a batch request can't loop. Keep it synchronous, or fetch the data in code first so each request needs no tool.</li>
+      <li><b>Either way, the request carries far more than the job reads</b>: trim it. That saves on both APIs.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box rose side"><h3>Now (synchronous)</h3><ul><li>blocking, must pass before merge</li><li>developers wait, the customer is waiting, live</li><li>tool calls, agent loop, looks up then decides</li><li>“within seconds”, “before replying”</li></ul></div>
+    <div class="box mint side"><h3>Batch</h3><ul><li>overnight, weekly, nightly, quarterly</li><li>“read on Monday”, “due next week”</li><li>archive, backfill, re-extract thousands</li><li>one call each, no tools, “cut the cost”</li></ul></div>
+  </div>
+
+  <h2>Try it: run the job both ways</h2>
+  <p>Pick a job, an API and what each request carries. The simulator shows the cost, when the results arrive against when they are needed, and whether the job works at all.</p>
+  <div class="box">
+    <b>1. The job</b>
+    <div id="sim-j"></div>
+    <b>2. How you call Claude</b>
+    <div id="sim-a"></div>
+    <b>3. What each request carries</b>
+    <div id="sim-r"></div>
+    <div class="stats">
+      <div class="stat">Cost per run<span class="big" id="sim-cost"></span><div class="meter"><i id="sim-costbar"></i></div><span class="sub" id="sim-costsub"></span></div>
+      <div class="stat">Results arrive<span class="big" id="sim-when"></span><span class="sub" id="sim-whensub"></span></div>
+      <div class="stat">Does the job work?<span class="big" id="sim-works"></span><span class="sub" id="sim-workssub"></span></div>
+    </div>
+    <div style="font-size:.92rem;margin-top:10px">When the results are needed (green) and when they arrived (marker):</div>
+    <div id="sim-clock"><div class="need" id="sim-need"></div><div class="got" id="sim-got"></div></div>
+    <div class="ticks" id="sim-ticks"></div>
+    <div id="sim-verdict" class="box"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">The prices, token counts and batch times are illustrative, chosen to show the shape (input tokens only, at an example $3 per million standard and half that in a batch). They are not quotes. The batch time is a fixed example for each job, so it repeats when you record; real batches have no latency promise and can take up to 24 hours.</p>
+  </div>
+  <p>Things to try: <b>PR review + batch</b>, then <b>PR review + synchronous</b>, then switch on <b>trim</b>. Then <b>weekly report + synchronous</b> to see the trap in reverse. Last, <b>support agent + batch</b>: half price, and nothing gets done.</p>
+
+  <h2>The three traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it's wrong</th></tr>
+    <tr><td><b>Batch for a job someone waits on</b></td><td>“Move the pre-merge review to batch for the 50% saving”, “poll the batch every minute”, “batch with a timeout fallback”</td><td>A batch has no latency promise: up to 24 hours. Polling doesn't speed it up, and a fallback pays twice.</td></tr>
+    <tr><td><b>Full price for work nobody waits on</b></td><td>Running a weekly report, a nightly tagging job or a big backfill one live call at a time, or in parallel to finish sooner</td><td>Half the cost was available, and the speed you paid for is never used.</td></tr>
+    <tr><td><b>Batch for a tool loop</b></td><td>Moving an agent that calls tools mid-task into a batch as it is</td><td>A batch request returns one reply. Claude can't get a tool result back within it. Keep it synchronous, or fetch the data in code first.</td></tr>
+  </table></div>
+  <p>And the saving the wrong answers often miss: <b>trimming the request</b>. When most of the tokens are content the job never reads, cutting them saves money on either API without dropping any work.</p>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>Someone waiting → now. Nobody waiting, one call each → batch at half price. Tool loop → not in a batch.</b> Trim what each request carries either way.
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 4.5: “Message Batches API: 50% cost savings, up to 24-hour window, no latency SLA.” “Good for non-blocking/latency-tolerant (overnight reports, weekly audits); bad for blocking (pre-merge).” “Batch API does not support multi-turn tool calling in a single request.” “custom_id correlates request/response; resubmit only failed docs by custom_id.”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["tg-batch-or-now-1", "tg-batch-or-now-2", "tg-batch-or-now-3"]);
+</script>
+</body>
+</html>
