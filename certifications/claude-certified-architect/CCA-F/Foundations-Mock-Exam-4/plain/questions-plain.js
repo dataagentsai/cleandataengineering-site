@@ -3252,13 +3252,13 @@ window.EXAM = {
        "Continues one conversation"
       ],
       [
-       "Old tool results are stale or context is crowded",
+       "Many files changed, or context is crowded",
        "New session from a structured summary",
        "Clean, reliable start"
       ],
       [
-       "Resuming after files changed",
-       "Resume and tell the agent what changed",
+       "Only one or two named files changed",
+       "Resume and tell the agent which files changed",
        "Avoids acting on stale views"
       ]
      ]
