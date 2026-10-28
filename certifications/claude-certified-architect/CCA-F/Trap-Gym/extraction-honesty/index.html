@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Extraction Honesty</title>
+<meta name="description" content="CCA-F trap gym: an extraction design that forces a value gets an invented one. A simulator runs five insurance certificates through the schema, prompt and retry design you pick, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .grp { margin: 6px 0 10px; }
+  .grp .gl { font-size: .88rem; color: var(--muted); }
+  .btn.sm { padding: 4px 12px; font-size: .92rem; }
+  .paper { font: 13px/1.6 ui-monospace, Menlo, monospace; background: var(--grey-w); border: 1.5px solid var(--line); border-radius: 10px; padding: 10px 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+  #ex-trace { padding-left: 1.2em; margin: .4em 0; font-size: .95rem; }
+  #ex-trace li { margin: 3px 0; }
+  #ex-trace li.t-rose b { background: var(--rose-w); }
+  #ex-trace li.t-mint b { background: var(--mint-w); }
+  #ex-trace li.t-butter b { background: var(--butter-w); }
+  #ex-trace li.t-peri b { background: var(--peri-w); }
+  #ex-all .chip { white-space: normal; margin-bottom: 4px; }
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/extraction-honesty/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · Extraction honesty</div>
+  <h1>Extraction honesty</h1>
+  <p class="lede">When a document doesn't say something, a badly designed extraction makes it up. The trap answers push harder for a value: make the field required, retry until it passes, pick the nearest category. The exam's answers give the model an honest way out: null, “other” plus detail, a specific error when the value is on the page, and a person when it isn't.</p>
+  <p><span class="chip peri">D4 Prompt Engineering &amp; Structured Output</span><span class="chip">Exam guide 4.3, 4.4 and 4.2</span><span class="chip">About 15 minutes</span></p>
+
+  <h2>Start here: the temp and the form screen</h2>
+  <p>An office temp copies paper forms into a computer system. The screen won't save until every box is filled.</p>
+  <div class="grid2">
+    <div class="box rose"><b>The form has no fax number.</b> The temp types 0, or copies the phone number, to get past the screen. The record saves. Nobody can tell later which numbers were real.</div>
+    <div class="box mint"><b>Give the screen a “not given” tick box.</b> Now the temp can be honest. Add “Other: ____” to the drop-downs, and the odd cases stop being forced into the nearest option.</div>
+  </div>
+  <p>Two more habits help. When the supervisor sends a form back, “you swapped the start and end dates” gets it fixed in one go; “wrong, redo it” gets the same mistake again. And if the date is torn off the paper, no amount of “try again” brings it back: that form goes to someone who can phone the customer. Showing the temp three finished examples of the odd layouts helps them get it right first time.</p>
+  <p>Claude is the temp. The <b>JSON schema</b> on the tool is the form screen. Asking for <b>JSON in the reply</b> is a screen with no boxes at all: the syntax can break. A <b>required</b> field with nothing on the page is the box that must be filled.</p>
+
+  <svg viewBox="0 0 640 300" role="img" aria-label="The extraction pipeline: certificate, then Claude with the prompt and examples, then a tool call with a JSON schema, then a validator in code, then posting. A failed check with the value on the page loops back to Claude with the specific error. A null for a value not on the page goes to a person." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M112,70 L132,70"/><path d="M256,70 L276,70"/><path d="M400,70 L420,70"/><path d="M536,70 L548,70"/>
+      <path d="M452,100 L452,150 L196,150 L196,104"/><path d="M510,100 L510,196"/>
+    </g>
+    <rect x="8" y="40" width="104" height="60" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="60" y="66" text-anchor="middle" font-size="14" font-weight="600">Certificate</text><text x="60" y="84" text-anchor="middle" font-size="12">what's printed</text>
+    <rect id="ex-prompt" x="136" y="40" width="120" height="60" rx="12" fill="#a3b5df" stroke="#23262f" stroke-width="1.5"/>
+    <text x="196" y="66" text-anchor="middle" font-size="14" font-weight="600">Claude</text><text x="196" y="84" text-anchor="middle" font-size="12">prompt + examples</text>
+    <rect id="ex-schema" x="280" y="40" width="120" height="60" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="340" y="66" text-anchor="middle" font-size="14" font-weight="600">Tool call</text><text x="340" y="84" text-anchor="middle" font-size="12">JSON schema</text>
+    <rect id="ex-validator" x="424" y="40" width="112" height="60" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="480" y="66" text-anchor="middle" font-size="14" font-weight="600">Validator</text><text x="480" y="84" text-anchor="middle" font-size="12">checks in code</text>
+    <rect x="552" y="40" width="80" height="60" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="592" y="66" text-anchor="middle" font-size="14" font-weight="600">Post</text><text x="592" y="84" text-anchor="middle" font-size="12">to system</text>
+    <text x="324" y="170" text-anchor="middle" font-size="12">on the page but wrong:</text><text x="324" y="185" text-anchor="middle" font-size="12">retry with the specific error</text>
+    <text x="520" y="140" font-size="12">null: not</text><text x="520" y="155" font-size="12">on the page</text>
+    <rect x="420" y="200" width="200" height="46" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="520" y="228" text-anchor="middle" font-size="14" font-weight="600">A person checks it</text>
+    <text x="8" y="215" font-size="12">Schema choices:</text>
+    <text x="8" y="232" font-size="12">required · nullable</text>
+    <text x="8" y="249" font-size="12">enum + “other” + detail</text>
+    <text x="320" y="285" text-anchor="middle" font-size="13">A schema removes syntax errors. It can't stop a wrong or invented value.</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> is the value actually on the page?
+    <ul style="margin:.4em 0 0">
+      <li><b>It isn't there</b>: let the schema say so. An <b>optional or nullable</b> field, and a person if the business needs the value. Never a required field, a sentinel like 0, or another retry.</li>
+      <li><b>It's there, but doesn't fit the list</b>: an enum with <b>“other” plus a detail field</b> (or “unclear”).</li>
+      <li><b>It's there, but extracted wrong</b>: <b>retry with the specific validation error</b>. For layouts that trip it up every time, add <b>worked examples</b>.</li>
+      <li><b>The JSON itself breaks</b>: return it through a <b>tool with a JSON schema</b>, not as text in the reply.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box mint side"><h3>Not on the page</h3><ul><li>“many documents don't show …”, “cut off”, “left blank”</li><li>“returns 0”, “copies another field”, “looks real”</li><li>“a new category”, “forced into the nearest value”</li><li>“the retries keep failing” on a missing value</li></ul></div>
+    <div class="box rose side"><h3>On the page, extracted wrong</h3><ul><li>“both dates are printed clearly”</li><li>“the retry message says only ‘try again’”</li><li>“accuracy drops on carriers' own layouts”</li><li>“adds a sentence after the JSON”, “a missing bracket”</li></ul></div>
+  </div>
+
+  <h2>Try it: run the certificates</h2>
+  <p>Pick a certificate, then set up the design. The simulator shows what Claude returns, what the validator says, each retry, and what finally gets posted. The strip at the bottom runs all five certificates through the same design.</p>
+  <div class="box">
+    <b>1. The certificate</b>
+    <div id="ex-docs"></div>
+    <b>2. Your design</b>
+    <div id="ex-design"></div>
+    <div class="grid2">
+      <div><b>What's printed</b><div id="ex-printed" class="paper"></div></div>
+      <div><b>What happens</b><ol id="ex-trace"></ol></div>
+    </div>
+    <b id="ex-record-h">What got posted</b>
+    <div class="tablewrap"><table id="ex-record"></table></div>
+    <div id="ex-verdict" class="box"></div>
+    <p id="ex-tally"></p>
+    <div id="ex-all"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">The behaviours are illustrative, chosen to show the shape. They are not measurements, and every run is the same. The exam guide's points are that optional or nullable fields prevent fabrication, that a schema removes syntax errors but not semantic ones, and that retries help only when the information is in the document.</p>
+  </div>
+  <p>Things to try: <b>No deductible printed</b> with <b>Required</b>, then <b>Sentinel</b>, then <b>Optional / nullable</b>. Then <b>Policy number cut off</b> with <b>Retry with the specific error</b>: the retry produces an invented number. Then <b>Carrier's own schedule</b> with “try again”, then the specific error, then worked examples. Last, set every row to its last choice and read the strip.</p>
+
+  <h2>The three traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it loses</th></tr>
+    <tr><td><b>Forcing a value</b></td><td>Keep the field required; use 0 or “N/A” for missing; map new categories to the nearest listed value</td><td>The model fills the box with something plausible. Nothing downstream can tell an invented value from a printed one.</td></tr>
+    <tr><td><b>Retrying the impossible</b></td><td>More retries, a firmer retry message, or examples, when the value isn't in the document</td><td>Retries fix values that are on the page. Pressing for one that isn't invites an invention. Send it to a person.</td></tr>
+    <tr><td><b>Fixing the wrong layer</b></td><td>A blind “try again” for a mapping slip; a parser that cleans up JSON text; a prompt rule “do not guess”</td><td>The specific error tells the model what to fix. A tool with a schema removes syntax errors. A schema with a null option beats a rule asking for honesty.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>Give the model an honest way to say “not here”. Retry with the specific error only when the value is on the page.</b>
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 4.3: “Optional/nullable fields prevent fabrication; enum "unclear"/"other" + detail for extensible categories.” and “Strict schemas eliminate syntax errors but not semantic errors (line items not summing, wrong fields).” Exam guide 4.4: “Retries are ineffective when info is absent from the source (vs format/structural errors).”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["tg-extraction-honesty-1", "tg-extraction-honesty-2", "tg-extraction-honesty-3"]);
+</script>
+</body>
+</html>

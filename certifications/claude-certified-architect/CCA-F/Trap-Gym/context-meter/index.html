@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Context Meter</title>
+<meta name="description" content="CCA-F trap gym: when a long chat forgets amounts, dates and promises, the fix is structure, not more context. A simulator fills the context window and shows which facts survive each summary pass, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .meter { position: relative; height: 26px; border: 1.5px solid var(--line); border-radius: 999px; background: var(--grey-w); overflow: hidden; margin: 14px 0 4px; }
+  #cm-fill { height: 100%; width: 0; background: var(--mint); transition: width .02s linear; }
+  #cm-fill.hot { background: #f0b429; }
+  .meter .mark { position: absolute; top: 0; bottom: 0; left: 90%; border-left: 1.5px dashed var(--line); }
+  #cm-meter-label { font-size: .88rem; color: var(--muted); }
+  #cm-passes { margin: 8px 0; min-height: 1.6em; }
+  #cm-passes .chip { margin-bottom: 4px; white-space: normal; }
+  #cm-facts-table td:first-child { width: 34%; }
+  .trail { font-size: .8rem; color: var(--muted); }
+  .say { font-size: .97rem; }
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/context-meter/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · The context meter</div>
+  <h1>The context meter</h1>
+  <p class="lede">A long chat starts forgetting what it promised. The tempting answers add room: a bigger context window, longer summaries. The exam wants structure instead. Keep the facts that matter where no summary can touch them, cut what nobody reads, and put the key points where Claude reads best.</p>
+  <p><span class="chip peri">D5 Context Management &amp; Reliability</span><span class="chip">Exam guide 5.1 and 5.4</span><span class="chip">About 15 minutes</span></p>
+
+  <h2>Start here: the hospital handover</h2>
+  <p>A patient stays on a ward for a week. Every shift, one nurse hands over to the next.</p>
+  <div class="grid2">
+    <div class="box butter"><b>Retell it.</b> “40 mg at 6 pm, allergic to penicillin” becomes “had some pain relief earlier” after two handovers. After four, nobody mentions it. Each retelling is shorter than the last, and the numbers go first.</div>
+    <div class="box mint"><b>Write it on the chart.</b> Doses, times and allergies go on the chart at the foot of the bed. Nobody retells the chart; they read it. It stays exact however many shifts go by.</div>
+  </div>
+  <p>Two more habits keep the handover useful. Nobody staples every lab printout into it; they copy the three values that matter. And the allergy goes at the top in a box marked <i>Allergies</i>, not on page 9 of a thick folder. A bigger folder would not help: it only gives page 9 more pages around it.</p>
+  <p>Claude's context window works the same way. When a chat gets near the limit, older turns are replaced by a <b>summary</b>: the retelling. A <b>case-facts block</b> is the chart. <b>Trimming tool results</b> is copying three values instead of stapling the printout. <b>Key facts first, with headers</b>, is the allergy box at the top.</p>
+
+  <svg viewBox="0 0 640 300" role="img" aria-label="The context window as a bar. From left: system prompt, case-facts block kept exact by your code, summary of older turns that is rewritten each pass, recent turns, latest tool result that can be trimmed. Below it, the start and end are read well and the middle is easy to miss." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <text x="320" y="22" text-anchor="middle" font-size="15" font-weight="600">The context window: what Claude reads on every turn</text>
+    <rect id="cm-window" x="8" y="36" width="624" height="100" rx="16" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <rect x="20" y="48" width="100" height="76" rx="10" fill="#f4f5f7" stroke="#23262f" stroke-width="1.5"/>
+    <text x="70" y="82" text-anchor="middle" font-size="13" font-weight="600">System</text><text x="70" y="99" text-anchor="middle" font-size="13" font-weight="600">prompt</text>
+    <rect id="cm-facts" x="128" y="48" width="112" height="76" rx="10" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="184" y="82" text-anchor="middle" font-size="13" font-weight="600">Case-facts</text><text x="184" y="99" text-anchor="middle" font-size="13" font-weight="600">block</text>
+    <rect id="cm-summary" x="248" y="48" width="132" height="76" rx="10" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="314" y="82" text-anchor="middle" font-size="13" font-weight="600">Summary of</text><text x="314" y="99" text-anchor="middle" font-size="13" font-weight="600">older turns</text>
+    <rect x="388" y="48" width="112" height="76" rx="10" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="444" y="82" text-anchor="middle" font-size="13" font-weight="600">Recent</text><text x="444" y="99" text-anchor="middle" font-size="13" font-weight="600">turns</text>
+    <rect id="cm-tool" x="508" y="48" width="112" height="76" rx="10" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="564" y="82" text-anchor="middle" font-size="13" font-weight="600">Latest tool</text><text x="564" y="99" text-anchor="middle" font-size="13" font-weight="600">result</text>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M184,170 L184,140"/><path d="M314,170 L314,140"/><path d="M564,170 L564,140"/>
+    </g>
+    <text x="184" y="186" text-anchor="middle" font-size="12">kept word for word</text><text x="184" y="201" text-anchor="middle" font-size="12">by your code</text>
+    <text x="314" y="186" text-anchor="middle" font-size="12">rewritten each pass;</text><text x="314" y="201" text-anchor="middle" font-size="12">/compact rewrites it now</text>
+    <text x="564" y="186" text-anchor="middle" font-size="12">trim to the</text><text x="564" y="201" text-anchor="middle" font-size="12">fields used</text>
+    <rect x="8" y="222" width="140" height="30" rx="8" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <rect x="152" y="222" width="336" height="30" rx="8" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <rect x="492" y="222" width="140" height="30" rx="8" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="78" y="242" text-anchor="middle" font-size="12">start: read well</text>
+    <text x="320" y="242" text-anchor="middle" font-size="12">middle: easy to miss in a long context</text>
+    <text x="562" y="242" text-anchor="middle" font-size="12">end: read well</text>
+    <text x="320" y="282" text-anchor="middle" font-size="13">A bigger window makes the bar longer. The middle grows with it.</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> which facts must come out exact, and where do they live right now?
+    <ul style="margin:.4em 0 0">
+      <li><b>Amounts, dates or promises drift after summaries</b>: pull them into a <b>case-facts block</b> that sits outside the summarised history.</li>
+      <li><b>Tool results fill the window with fields nobody uses</b>: <b>trim them</b> to the relevant fields before they pile up.</li>
+      <li><b>One long input fits, but the middle gets missed</b>: put <b>key facts first</b> and give each section a <b>header</b>.</li>
+      <li><b>A Claude Code session is full of old output</b>: <b>/compact</b> it, and keep key findings in a <b>scratchpad file</b>.</li>
+      <li><b>A bigger window or a longer summary</b>: it postpones the problem. On the exam it is the tempting answer, not the best one.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box mint side"><h3>Structure problem (the usual case)</h3><ul><li>“after the summary”, “offers a smaller refund than it promised”</li><li>“forgets which items”, “the numbers were right earlier”</li><li>“about forty fields; the agent uses five”</li><li>“the whole spec fits”, “misses the middle sections”</li><li>“refers to typical patterns instead of the classes it found”</li></ul></div>
+    <div class="box rose side"><h3>Tempting “more room” answers</h3><ul><li>switch to a model with a larger context window</li><li>make the summary longer or more detailed</li><li>summarise more often</li><li>tell Claude to pay attention to the whole input</li><li>start a fresh session and explain again</li></ul></div>
+  </div>
+
+  <h2>Try it: fill the context meter</h2>
+  <p>Pick a situation, then a strategy. The meter fills turn by turn. When it passes 90%, older turns are replaced by a summary. At the end you see which facts are still exact and what the agent actually says.</p>
+  <div class="box">
+    <b>1. The situation</b>
+    <div id="cm-s"></div>
+    <p id="cm-intro" style="font-size:.92rem;color:var(--muted);margin:.3em 0 .8em"></p>
+    <b>2. Your strategy</b>
+    <div id="cm-m"></div>
+    <div class="meter" aria-label="Context used"><div id="cm-fill"></div><div class="mark" title="summary pass at 90%"></div></div>
+    <div id="cm-meter-label"></div>
+    <div id="cm-passes"></div>
+    <div id="cm-result" style="visibility:hidden">
+      <div class="tablewrap"><table id="cm-facts-table"></table></div>
+      <div class="box peri say"><div id="cm-ask" style="color:var(--muted);font-size:.9rem"></div><div id="cm-say" style="margin-top:6px"></div></div>
+      <p id="cm-tally"></p>
+      <p id="cm-effort" style="font-size:.92rem;color:var(--muted)"></p>
+      <div id="cm-verdict" class="box"></div>
+    </div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">Token sizes and blur rates are illustrative, chosen to show the shape. They are not measurements. Each fact gets the same dice under every strategy, so the strategies differ only in how they work. The exam guide's point is that summaries condense numbers, dates and expectations into vague text, and that the middle of a long context is the part most easily missed.</p>
+  </div>
+  <p>Things to try: <b>long refund dispute</b> with a <b>bigger window</b>, then a <b>case-facts block</b>. Then <b>many order lookups</b> with <b>trim tool results</b>, and watch the meter stay low. Then <b>one long input</b> with a <b>bigger window</b>: nothing changes, because it already fit.</p>
+
+  <h2>The three traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it loses</th></tr>
+    <tr><td><b>More room</b></td><td>“Switch to a model with a larger context window”, “raise the limit before summarising”</td><td>It postpones the summary, then the facts sit in the middle of a longer context. Every turn also re-sends more.</td></tr>
+    <tr><td><b>Better retelling</b></td><td>“Make the summary longer and more detailed”, “tell the summariser to keep all numbers”</td><td>Still a model rewriting the facts, pass after pass. Fewer slips, not none. Exact facts need a home outside the summary.</td></tr>
+    <tr><td><b>Right fix, wrong problem</b></td><td>Trim tool results when the middle of one input is missed; a case-facts block when tool results flood the window; /compact in an Agent SDK app</td><td>Each fix acts on one place in the window. Match it to where the facts are being lost.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>Facts that must stay exact go in a block no summary touches. Cut what nobody reads. Key points first, with headers. More room is never the fix.</b>
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 5.1: “Progressive summarization risks condensing numbers, %, dates, customer expectations into vague summaries.” and “Extract transactional facts into a persistent "case facts" block; trim verbose tool outputs to relevant fields; place key summaries at the beginning + explicit section headers.” Exam guide 5.4: “Scratchpad files persist key findings across boundaries; subagent delegation isolates verbose output.”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["tg-context-meter-1", "tg-context-meter-2", "tg-context-meter-3"]);
+</script>
+</body>
+</html>
