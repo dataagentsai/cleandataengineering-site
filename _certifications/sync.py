@@ -39,6 +39,7 @@ SOURCES = [
     },
 ]
 
+SKIP_FILES = {"publish_traps.sh", "link_plain.py", "build_plain_mocks.py"}
 SKIP_DIRS = {".git", "node_modules", "__pycache__", "parts", "src", ".claude"}
 SKIP_SUFFIXES = {".md", ".pyc"}
 SKIP_LINKS = ("http", "mailto:", "data:", "javascript:", "//", "/", "${")
@@ -47,6 +48,8 @@ LINK = re.compile(r'((?:href|src)\s*=\s*["\'])([^"\'#?]+)')
 
 def wanted(path: Path, root: Path) -> bool:
     parts = path.relative_to(root).parts
+    if path.name in SKIP_FILES:
+        return False
     if any(p in SKIP_DIRS or p.startswith(".") for p in parts):
         return False
     if path.suffix in SKIP_SUFFIXES:
