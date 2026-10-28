@@ -44,7 +44,7 @@ CSS = """<style>
   .insp h2 { font-size:28px; margin:0 0 6px; } .insp p { margin:0 0 10px; font-size:16.5px; }
   .insp pre, .panel pre { font-family:var(--mono); font-size:12px; line-height:1.45; background:#fff; border:1px solid var(--rule); border-radius:8px; padding:10px 12px; overflow-x:auto; margin:6px 0; white-space:pre; }
   .grid8 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-  .panel { border:1.5px solid #bbb; border-radius:14px; padding:10px 12px; background:#fff; min-width:0; transition:border-color .2s, box-shadow .2s; }
+  .panel { border:1.5px solid #bbb; border-radius:14px; padding:10px 12px; background:#fff; min-width:0; overflow-wrap:anywhere; transition:border-color .2s, box-shadow .2s; }
   .panel.focus { border:2.4px solid var(--ink); box-shadow:0 0 0 4px var(--butter-wash); }
   .panel.wide { grid-column:1 / -1; }
   .panel h3 { font-size:21px; margin:0 0 6px; display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
@@ -250,6 +250,11 @@ PROBLEM_SCENARIOS = [
     {"id": "scd2", "label": "3 · SCD Type 2 pitfalls", "steps": [7, 8, 9], "blurb": "Two changes in one batch, a no-op, a late older change."},
     {"id": "late", "label": "4 · Late-arriving data", "steps": [10, 11, 12], "blurb": "Yesterday's order arrives today."},
     {"id": "fail", "label": "5 · Failure mid-job", "steps": [13, 14, 15], "blurb": "Silver moved on, gold did not."},
+    {"id": "poison", "label": "6 · Poison records", "steps": [16, 17, 18], "blurb": "One bad line fails the whole load, every night."},
+    {"id": "drift", "label": "7 · Schema drift", "steps": [19, 20, 21], "blurb": "A column renamed upstream; revenue goes to zero."},
+    {"id": "deletes", "label": "8 · Hard deletes", "steps": [22, 23, 24], "blurb": "Incremental loads never see a deleted row."},
+    {"id": "backfill", "label": "9 · Reload and backfill", "steps": [25, 26, 27], "blurb": "A bug corrupted five days; the fix is in. Now what?"},
+    {"id": "smallfiles", "label": "10 · Small files", "steps": [28, 29, 30], "blurb": "The same query, slower with every small write."},
 ]
 PROBLEM_ORDER = [["inputs", "1 · Code"], ["checks", "2 · Checks"], ["layers", "3 · Tables"], ["dashboard", "4 · Dashboard"], ["storage", "5 · _delta_log"], ["logs", "6 · Logs"]]
 
@@ -273,10 +278,10 @@ SCENES = [
      "lede": "What Spark actually does with your code. Each step shows the code, the result, every stage with its tasks as a timeline (so you can see waves and the one slow task), the query plan, the jobs and the logs. Seven scenarios on 2 million orders, from 'an action becomes tasks' to 'AQE splits a skewed join'.",
      "real": "Every stage, task, byte shuffled, plan and timing comes from Spark's own event log and EXPLAIN. Timings are from a laptop with 2 cores: compare them with each other, not with a cluster."},
     {"slug": "problems", "data": "problems.json", "scenarios": PROBLEM_SCENARIOS, "order": PROBLEM_ORDER, "groups": {}, "tabs": {},
-     "nav": "Problem Lab", "eyebrow": "DataTwin Studio · Problem Lab · the five problems everyone hits",
+     "nav": "Problem Lab", "eyebrow": "DataTwin Studio · Problem Lab · ten problems every data team hits",
      "h1": "The Problem Lab: break it, try the naive fix, fix it right",
-     "title": "Problem Lab: duplicates, re-runs, SCD2, late data",
-     "desc": "Five hard data engineering problems, run for real: duplicates, idempotent re-runs, SCD Type 2 pitfalls, late-arriving data and failure mid-job, each with the naive fix and the right one.",
+     "title": "Problem Lab: ten data engineering problems, run for real",
+     "desc": "Ten data problems run on Spark and Delta: duplicates, re-runs, SCD2, late data, failures, poison rows, schema drift, deletes, backfill, small files.",
      "lede": "The problems that cost real teams their nights. Each one is told in three steps: what you see (the checks go red), the naive fix (applied for real, and it fails or makes things worse), and the right fix (the checks go green). Every table, check, error and commit comes from a real Spark and Delta Lake run.",
      "real": "The naive fixes were run too, so their failures are real, not described."},
 ]
@@ -294,7 +299,7 @@ def page(sc):
     scen_btns = "".join(f'<button data-s="{s["id"]}" title="{s["blurb"]}">{s["label"]}</button>' for s in sc["scenarios"])
     nav = "".join(f'<span class="real" style="background:var(--ink);color:#fff">{x["nav"]}</span>' if x is sc else f'<a href="/learn/data-platform-sim/{x["slug"] + "/" if x["slug"] else ""}" style="font-size:14px">{x["nav"]}</a>' for x in SCENES)
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › <a href="/learn/data-platform-sim/">DataTwin Studio</a>{" › " + sc["nav"] if sc["slug"] else ""}</p>
-<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> {nav} <span>· more coming: Spark internals, streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
+<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> {nav} <span>· more coming: performance stories, streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
 <p class="eyebrow" style="margin-top:16px">{sc["eyebrow"]}</p>
 <h1>{sc["h1"]}</h1>
 <p class="lede">{sc["lede"]}</p>

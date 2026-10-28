@@ -321,7 +321,12 @@ GUIDES = {"medallion": ("Medallion architecture, drawn right", "/learn/medallion
           "idempotency": ("DataTwin Studio: the same file sent twice (simulation)", "/learn/data-platform-sim/"),
           "cost-drivers": ("Spark internals: shuffle, joins, skew and AQE (simulation)", "/learn/data-platform-sim/spark/"),
           "scd": ("Problem Lab: SCD Type 2 pitfalls, the naive fix and the right one (simulation)", "/learn/data-platform-sim/problems/"),
-          "backfill": ("Problem Lab: re-runs, late data and failure mid-job (simulation)", "/learn/data-platform-sim/problems/")}
+          "backfill": ("Problem Lab: a backfill after a bug, re-runs and late data (simulation)", "/learn/data-platform-sim/problems/"),
+          "data-quality": ("Problem Lab: poison records, quarantined with a reason (simulation)", "/learn/data-platform-sim/problems/"),
+          "schema-evolution": ("Problem Lab: a renamed column, and why auto-evolve is not the fix (simulation)", "/learn/data-platform-sim/problems/"),
+          "data-contracts": ("Problem Lab: a contract check stops a breaking change (simulation)", "/learn/data-platform-sim/problems/"),
+          "cdc": ("Problem Lab: hard deletes that incremental loads never see (simulation)", "/learn/data-platform-sim/problems/"),
+          "partitioning": ("Problem Lab: partitioning too finely turns 300 files into thousands (simulation)", "/learn/data-platform-sim/problems/")}
 
 
 def concept_page(cid):
