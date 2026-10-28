@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>When a Tool Fails</title>
+<meta name="description" content="CCA-F trap gym: one tool failure handled five ways, from a structured error to a crash. A simulator shows what the agent knows and what the user is told, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+  #sim-story { color: var(--muted); font-size: .95rem; margin: 4px 0 10px; }
+  .step { border-left: 3px solid var(--peri); padding: 4px 0 4px 12px; margin: 10px 0; opacity: .15; transition: opacity .25s; }
+  .step.in { opacity: 1; }
+  .step pre { margin: 6px 0 0; white-space: pre-wrap; word-break: break-word; }
+  .step .chip { margin-bottom: 4px; }
+  .told { border: 1.5px solid var(--line); border-radius: 12px; background: var(--grey-w); padding: 8px 12px; margin-top: 4px; }
+  #sim-tally { line-height: 2; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/tool-failure/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · When a tool fails</div>
+  <h1>When a tool fails</h1>
+  <p class="lede">A tool times out, a service is down, or a rule says no. Every option in the question handles it somehow: a retry, a message, a safe-looking default, a hard stop. The trap is picking a handling that loses information (what failed, what was tried, what was already found) or, worse, invents it.</p>
+  <p><span class="chip peri">D5 Context Management &amp; Reliability</span><span class="chip peri">D2 Tool Design &amp; MCP</span><span class="chip">Exam guide 5.3 and 2.2</span><span class="chip">About 15 minutes</span></p>
+
+  <h2>Start here: the assistant and the phone call</h2>
+  <p>You ask an assistant to phone a supplier for five prices. After three prices, the line drops. Here are five assistants.</p>
+  <div class="grid2">
+    <div class="box mint"><b>The useful one</b> says: “The line dropped after three prices. Here they are. Their lines are often busy for a few minutes; I can ring back at ten, or check their website.” You can decide.</div>
+    <div class="box butter"><b>The vague one</b> says “It didn't work.” <b>The patient one</b> rings back three times, then says “Couldn't get through,” and forgets to hand over the three prices.</div>
+    <div class="box rose"><b>The inventor</b> says “They don't sell those.” <b>The quitter</b> throws the whole project folder in the bin because one call failed.</div>
+  </div>
+  <p>Agents work the same way. A tool's error result, and whatever a subagent passes up, is the only thing the next decision-maker sees. If it says what failed, whether a retry can help, what was tried and what is already in hand, the coordinator can recover. If not, it guesses, or acts on something false.</p>
+
+  <svg viewBox="0 0 640 250" role="img" aria-label="A failure travels from the tool, through the subagent, to the coordinator, and finally to the user. The tool returns isError, errorCategory, isRetryable and partial results. The subagent may retry a short blip, then passes up what is still unresolved. The coordinator decides: wait, use another source, go on with a stated gap, or escalate. The user is told the truth." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M140,72 L172,72"/><path d="M305,72 L337,72"/><path d="M470,72 L502,72"/>
+    </g>
+    <text x="156" y="30" text-anchor="middle" font-size="11">result</text>
+    <text x="321" y="30" text-anchor="middle" font-size="11">report</text>
+    <text x="486" y="30" text-anchor="middle" font-size="11">answer</text>
+    <rect id="box-tool" x="10" y="40" width="130" height="64" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="75" y="66" text-anchor="middle" font-size="14" font-weight="600">Tool</text>
+    <text x="75" y="85" text-anchor="middle" font-size="12">MCP server</text>
+    <rect id="box-sub" x="175" y="40" width="130" height="64" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="240" y="66" text-anchor="middle" font-size="14" font-weight="600">Subagent</text>
+    <text x="240" y="85" text-anchor="middle" font-size="12">first to see it</text>
+    <rect id="box-coord" x="340" y="40" width="130" height="64" rx="12" fill="#a3b5df" stroke="#23262f" stroke-width="1.5"/>
+    <text x="405" y="66" text-anchor="middle" font-size="14" font-weight="600">Coordinator</text>
+    <text x="405" y="85" text-anchor="middle" font-size="12">decides what next</text>
+    <rect id="box-user" x="505" y="40" width="130" height="64" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="570" y="66" text-anchor="middle" font-size="14" font-weight="600">User</text>
+    <text x="570" y="85" text-anchor="middle" font-size="12">customer, committee</text>
+    <g fill="#ffffff" stroke="#23262f" stroke-width="1.5">
+      <rect x="10" y="124" width="130" height="104" rx="10"/><rect x="175" y="124" width="130" height="104" rx="10"/>
+      <rect x="340" y="124" width="130" height="104" rx="10"/><rect x="505" y="124" width="130" height="104" rx="10"/>
+    </g>
+    <g font-size="11" text-anchor="middle">
+      <text x="75" y="146">isError: true</text><text x="75" y="164">errorCategory</text><text x="75" y="182">isRetryable</text><text x="75" y="200">plain reason</text><text x="75" y="218">partial results</text>
+      <text x="240" y="146">retry a short blip</text><text x="240" y="164">locally, then pass</text><text x="240" y="182">up only what is</text><text x="240" y="200">still unresolved,</text><text x="240" y="218">with what it has</text>
+      <text x="405" y="146">wait and retry</text><text x="405" y="164">use another source</text><text x="405" y="182">go on, gap stated</text><text x="405" y="200">escalate</text><text x="405" y="218">(not: end the run)</text>
+      <text x="570" y="146">told the truth:</text><text x="570" y="164">what is done,</text><text x="570" y="182">what isn't,</text><text x="570" y="200">and what happens</text><text x="570" y="218">next</text>
+    </g>
+  </svg>
+  <p style="font-size:.9rem;color:var(--muted)">In a single-agent chat there is no coordinator: the agent reads the tool result and decides itself. The same rules apply.</p>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> after this failure, does the next decision-maker know what happened, what was tried and what is still usable?
+    <ul style="margin:.4em 0 0">
+      <li><b>Transient</b> (timeout, outage): retry a short blip locally; if it persists, return a <b>structured error</b> with the attempted query, partial results and alternatives.</li>
+      <li><b>Business rule</b> (policy refusal): <b>not retryable</b>; return the reason in plain words and the alternative.</li>
+      <li><b>Validation</b> (bad input): say what was wrong, so the caller fixes the input instead of repeating the call.</li>
+      <li><b>Never</b> report “couldn't reach it” as “found nothing”, and don't end the whole run over one failure.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which way to lean</h3>
+  <div class="grid2">
+    <div class="box mint side"><h3>Points to structured error</h3><ul><li>“intelligent recovery”, “the coordinator decides what next”</li><li>“partial results”, “finished work is thrown away”</li><li>“the same text it returns for…”, “no results found” during an outage</li><li>“retries every failure”, “tells the customer the system is down”</li></ul></div>
+    <div class="box rose side"><h3>Tells you the category</h3><ul><li>times out, unreachable, outage → transient, retryable</li><li>policy, forbids, cut-off, limit → business, not retryable</li><li>wrong format, invalid ID → validation, fix the input</li><li>seconds later it works → retry locally first</li></ul></div>
+  </div>
+
+  <h2>Try it: one failure, five handlings</h2>
+  <p>Pick a failure, then pick how it is handled. The trail shows what the tool returns, what reaches the decision-maker, what it does, and what the user is finally told. The diagram above shows where your handling acts.</p>
+  <div class="box">
+    <b>1. The failure</b>
+    <div id="sim-f"></div>
+    <p id="sim-story"></p>
+    <b>2. How it is handled</b>
+    <div id="sim-h"></div>
+    <div id="sim-trail" aria-live="polite"></div>
+    <p id="sim-tally"></p>
+    <div id="sim-verdict" class="box"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">The delays are illustrative, chosen to show the shape. They are not measurements. The exam guide's point is that structured error context lets the coordinator recover, while generic statuses, silent empty results and run-ending exceptions each lose or falsify information.</p>
+  </div>
+  <p>Things to try: <b>Search times out + Empty result marked success</b>: read what the committee is told. Then <b>+ Retry with backoff</b>: the official sample's trap. Then <b>+ Structured error</b>. Last, <b>Business-rule refusal + Generic</b>: a rule becomes “the system is down”.</p>
+
+  <h2>The four traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it's wrong</th></tr>
+    <tr><td><b>Inventing information</b></td><td>Return an empty list or “not found” marked as success when the call failed</td><td>“We couldn't check” becomes “there is none”, and the agent acts on it as fact.</td></tr>
+    <tr><td><b>Losing information</b></td><td>A uniform “Operation failed”; retry with backoff, then a generic “unavailable”</td><td>The decider can't tell a blip from a rule, and the partial results never arrive.</td></tr>
+    <tr><td><b>Over-terminating</b></td><td>Raise an exception to a top-level handler that ends the workflow</td><td>One failure throws away all finished work and every chance to recover.</td></tr>
+    <tr><td><b>Retrying the unretryable</b></td><td>Backoff on a policy refusal or a bad input</td><td>Rules and wrong inputs don't change on retry. Only transient errors are worth retrying.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>Say what failed, whether to retry, what was tried and what you already have. Never dress a failure up as an empty success, and never end the whole run over one.</b>
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 5.3: “Structured error context (failure type, attempted query, partial results, alternatives) enables coordinator recovery.” and “Generic statuses hide context; silently suppressing errors or terminating on single failure are both anti-patterns.” Exam guide 2.2: “Uniform "Operation failed" prevents good recovery decisions.”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["tg-tool-failure-1", "tg-tool-failure-2", "tg-tool-failure-3"]);
+</script>
+</body>
+</html>

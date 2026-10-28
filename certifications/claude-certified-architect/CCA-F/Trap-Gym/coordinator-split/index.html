@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Coordinator's Split</title>
+<meta name="description" content="CCA-F trap gym: when a multi-agent report goes wrong, the fault is often in how the coordinator split and briefed the work, not in the subagents. A simulator replays the run for each fix, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+  #sim-story { color: var(--muted); font-size: .95rem; margin: 4px 0 10px; }
+  .tl { margin: 12px 0 6px; }
+  .tl-row { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+  .tl-l { flex: 0 0 120px; font-size: .82rem; line-height: 1.2; }
+  .tl-l small { display: block; color: var(--muted); font-size: .72rem; }
+  .tl-t { position: relative; flex: 1; height: 24px; background: var(--grey-w); border-radius: 6px; min-width: 0; }
+  .tl-b { position: absolute; top: 2px; height: 20px; border: 1.5px solid var(--line); border-radius: 6px; font-size: .68rem; line-height: 17px; text-align: center; overflow: hidden; white-space: nowrap; transition: width .25s; }
+  .tl-b.co { background: var(--peri); } .tl-b.sub { background: var(--mint); } .tl-b.sub.warn { background: var(--butter); }
+  .legend i { display: inline-block; width: 12px; height: 12px; border: 1.5px solid var(--line); border-radius: 3px; vertical-align: -1px; margin: 0 4px 0 10px; }
+  #sim-cov .chip { margin-bottom: 4px; }
+  #sim-brief { white-space: pre-wrap; margin: 4px 0 6px; }
+  @media (max-width: 520px) { .tl-l { flex-basis: 96px; } }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/coordinator-split/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · The coordinator's split</div>
+  <h1>The coordinator's split</h1>
+  <p class="lede">A multi-agent report comes back incomplete, wrong or slow, and the options offer to fix the subagents. Often the subagents did exactly what they were told. The trap is treating the symptom: blaming the subagent for a fault the coordinator made when it split and briefed the work.</p>
+  <p><span class="chip peri">D1 Agentic Architecture</span><span class="chip">Exam guide 1.2, 1.3 and 1.6</span><span class="chip">About 15 minutes</span></p>
+
+  <h2>Start here: the head chef and the order tickets</h2>
+  <p>A head chef is catering a dinner. She talks to the client, then writes a ticket for each cook.</p>
+  <div class="grid2">
+    <div class="box peri"><b>The chef decides.</b> Which dishes to make, what goes on each ticket, and whether the cooks start together or one after another. Only she heard the client say “one guest is vegetarian, and dinner is at seven”.</div>
+    <div class="box mint"><b>The cooks deliver.</b> Each cook reads only their own ticket. They never heard the client. A great cook given the ticket “soup” makes great soup, and nothing else.</div>
+  </div>
+  <p>If the dinner has no main course, every cook still did their job: the chef never wrote a ticket for it. If the soup has bacon in it, the cook didn't know about the vegetarian; it wasn't on the ticket. Retraining the cooks fixes neither. In Claude's multi-agent systems the chef is the <b>coordinator</b>, the cooks are <b>subagents</b>, and the ticket is the <b>Task prompt</b>. A subagent starts with an empty context and knows only what that prompt says.</p>
+
+  <svg viewBox="0 0 640 300" role="img" aria-label="The coordinator makes three choices: the split (which topics), the brief (what each Task prompt says) and the timing (all calls in one response or one by one). An optional gap check reviews the draft. Subagents start empty and know only their Task prompt. The coordinator writes the report from their results." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M190,50 L216,50"/><path d="M396,166 L396,204"/><path d="M450,204 L450,168"/><path d="M220,140 L105,140 L105,206"/>
+    </g>
+    <rect x="20" y="20" width="170" height="60" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="105" y="44" text-anchor="middle" font-size="14" font-weight="600">The request</text>
+    <text x="105" y="63" text-anchor="middle" font-size="12">topic, audience, rules</text>
+    <rect x="220" y="12" width="400" height="152" rx="14" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="420" y="33" text-anchor="middle" font-size="15" font-weight="600">Coordinator</text>
+    <rect id="box-split" x="234" y="44" width="120" height="62" rx="10" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="294" y="70" text-anchor="middle" font-size="13" font-weight="600">1. The split</text>
+    <text x="294" y="88" text-anchor="middle" font-size="11">which topics</text>
+    <rect id="box-brief" x="360" y="44" width="120" height="62" rx="10" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="420" y="70" text-anchor="middle" font-size="13" font-weight="600">2. The brief</text>
+    <text x="420" y="88" text-anchor="middle" font-size="11">what each knows</text>
+    <rect id="box-timing" x="486" y="44" width="120" height="62" rx="10" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="546" y="70" text-anchor="middle" font-size="13" font-weight="600">3. The timing</text>
+    <text x="546" y="88" text-anchor="middle" font-size="11">together or in turn</text>
+    <rect id="box-check" x="234" y="116" width="372" height="36" rx="10" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="420" y="139" text-anchor="middle" font-size="12">Gap check (optional): anything missing? send it out again</text>
+    <text x="388" y="190" text-anchor="end" font-size="11">Task prompts</text>
+    <text x="458" y="190" font-size="11">results</text>
+    <rect id="box-subs" x="220" y="206" width="400" height="80" rx="14" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="420" y="225" text-anchor="middle" font-size="12">Subagents: each starts empty and knows only its prompt</text>
+    <g fill="#ffffff" stroke="#23262f" stroke-width="1.5">
+      <rect x="232" y="236" width="86" height="38" rx="9"/><rect x="328" y="236" width="86" height="38" rx="9"/>
+      <rect x="424" y="236" width="86" height="38" rx="9"/><rect x="520" y="236" width="86" height="38" rx="9"/>
+    </g>
+    <text x="275" y="260" text-anchor="middle" font-size="12">Visual arts</text>
+    <text x="371" y="260" text-anchor="middle" font-size="12">Music</text>
+    <text x="467" y="260" text-anchor="middle" font-size="12">Writing</text>
+    <text x="563" y="260" text-anchor="middle" font-size="12">Film</text>
+    <rect x="20" y="210" width="170" height="64" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="105" y="236" text-anchor="middle" font-size="14" font-weight="600">The report</text>
+    <text x="105" y="255" text-anchor="middle" font-size="12">written by the coordinator</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> did each subagent do what it was asked? If yes, the fault is upstream, in what the coordinator asked.
+    <ul style="margin:.4em 0 0">
+      <li><b>Whole topics missing</b>, every subagent fine: the coordinator's <b>split was too narrow</b>. Widen the decomposition.</li>
+      <li><b>A subagent ignores something the user said</b>: it never received it. <b>Write it into the Task prompt</b>; subagents inherit nothing.</li>
+      <li><b>Independent searches run one after another</b>: send <b>several Task calls in one response</b> so they run in parallel.</li>
+      <li><b>Subagents follow a recipe and miss what matters</b>: brief them with <b>goals and quality criteria</b>, not step lists.</li>
+    </ul>
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box peri side"><h3>The coordinator's fault</h3><ul><li>“all subagents complete successfully”, “within its topic”</li><li>“the coordinator split the work into…”</li><li>“the user told the coordinator…”, “agreed earlier”</li><li>“no search needs another's results”</li><li>“follow the steps exactly”</li></ul></div>
+    <div class="box rose side"><h3>The subagent's own fault</h3><ul><li>the subagent <i>had</i> the facts in its prompt and still got it wrong</li><li>its results are poor for the topic it was given</li><li>it uses tools outside its role</li><li>only then: improve its prompt, examples or tools</li></ul></div>
+  </div>
+
+  <h2>Try it: replay the run</h2>
+  <p>A coordinator researches “How is AI changing the creative industries?” for a museum board. Pick what went wrong, then pick a fix. The simulator replays the run: who works when, what each subagent was told, and what the report covers. The diagram above shows where your fix acts.</p>
+  <div class="box">
+    <b>1. What went wrong</b>
+    <div id="sim-s"></div>
+    <p id="sim-story"></p>
+    <b>2. Your fix</b>
+    <div id="sim-f"></div>
+    <div id="sim-tl" class="tl" aria-label="Timeline of the run"></div>
+    <div class="legend" style="font-size:.85rem"><i style="background:#a3b5df;margin-left:0"></i>coordinator<i style="background:#a8dcc3"></i>subagent, good result<i style="background:#ffd98a"></i>subagent, weak result</div>
+    <p id="sim-cov" style="margin:10px 0 4px"></p>
+    <p id="sim-brief-h" style="font-size:.9rem;margin:10px 0 0"></p>
+    <pre id="sim-brief"></pre>
+    <p id="sim-unknown" style="font-size:.92rem;margin-top:0"></p>
+    <p id="sim-tally"></p>
+    <div id="sim-verdict" class="box"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">Times and counts are illustrative, chosen to show the shape. They are not measurements. The exam guide's points are that narrow decomposition leaves topics uncovered, subagents get context only through their prompt, parallel work goes out as several Task calls in one response, and briefs should be goals plus quality criteria.</p>
+  </div>
+  <p>Things to try: <b>Whole topics missing + Improve the subagents</b>, then <b>+ Widen the split</b>. Then <b>+ Add a gap check</b>: it works, but look at the clock. Last, <b>The user's rules ignored + Improve the subagents</b>: fewer old sources, never zero.</p>
+
+  <h2>The three traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it's wrong</th></tr>
+    <tr><td><b>Blaming the subagent</b></td><td>Better search terms, more sources per subagent, a stricter subagent system prompt, a new tool</td><td>The subagents did what they were asked. The missing topic or fact was never in their Task prompt.</td></tr>
+    <tr><td><b>Catching it late</b></td><td>A gap check after synthesis, a reviewer, a filter that drops bad results</td><td>A good safety net, but it pays for a wasted round and leaves the cause in place for the next run.</td></tr>
+    <tr><td><b>Right layer, wrong lever</b></td><td>Parallel calls for a coverage gap; a wider split for missing context; more steps for a recipe that is too rigid</td><td>Split, brief and timing fix different symptoms. Match the lever to what went wrong.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>Every subagent did its job and the result is still wrong? Fix the coordinator: the split, the brief or the timing.</b>
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 1.2: “Risk: overly narrow decomposition → incomplete coverage of broad topics.” Exam guide 1.3: “Subagent context must be provided <b>explicitly</b> in the prompt (no automatic inheritance / shared memory).” and “spawn parallel subagents by emitting <b>multiple Task calls in one response</b>; write coordinator prompts as goals + quality criteria, not step-by-step procedures.”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["tg-coordinator-split-1", "tg-coordinator-split-2", "tg-coordinator-split-3"]);
+</script>
+</body>
+</html>
