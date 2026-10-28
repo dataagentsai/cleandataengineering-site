@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Who Escalates?</title>
+<meta name="description" content="CCA-F trap gym: decide when a support agent hands a case to a person. Explicit criteria and examples against sentiment, self-rated confidence and a separate classifier, in a simulator that replays a day of 100 tickets, then three exam-style practice questions.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;600&family=Patrick+Hand&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../assets/gym.css">
+<style>
+  #sim-grid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 3px; margin: 12px 0; max-width: 520px; }
+  #sim-grid i { aspect-ratio: 1; border-radius: 3px; background: #eceef2; }
+  #sim-grid i.res { background: #a8dcc3; } #sim-grid i.esc { background: #a3b5df; }
+  #sim-grid i.wrong { background: #f0b429; } #sim-grid i.kept { background: #d46a92; }
+  #sim-grid i.dim { opacity: .22; }
+  .legend i { display: inline-block; width: 12px; height: 12px; border-radius: 2px; vertical-align: -1px; margin: 0 4px 0 10px; }
+  .side h3 { margin-top: 0; }
+  .side ul { margin: .3em 0 0; padding-left: 1.2em; }
+  .lbl { font-size: .9rem; font-weight: 600; margin: 12px 0 6px; }
+  table.ho { font-size: .85rem; margin-top: 6px; background: #fff; }
+  table.ho td { padding: 4px 6px; }
+  table.ho td:first-child { font-weight: 600; white-space: nowrap; }
+</style>
+<link rel="canonical" href="https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/who-escalates/">
+</head>
+<body>
+<main>
+  <div class="crumbs"><a href="../../">CCA-F start here</a> · <a href="../">Trap gym</a> · Who escalates?</div>
+  <h1>Who escalates?</h1>
+  <p class="lede">A support agent hands the wrong cases to people: angry customers with easy problems go up, calm customers with hard ones stay. The tempting answers swap in a signal that seems objective: a mood score, the model's own confidence, a trained classifier. Each is an unreliable stand-in for what matters. The exam's answer is to say plainly when to escalate, and show a few examples.</p>
+  <p><span class="chip peri">D5 Context &amp; Reliability</span><span class="chip peri">D1 Agentic Architecture</span><span class="chip">Exam guide 5.2 and 1.4</span><span class="chip">About 15 minutes</span></p>
+
+  <h2>Start here: the new shop assistant</h2>
+  <p>A shop hires a new assistant and says: “call the manager when you need to.” A week later:</p>
+  <div class="grid2">
+    <div class="box rose"><b>What went wrong.</b> They call the manager whenever a customer raises their voice, even about a $5 return. A calm customer asks for a refund the shop never gives, and the assistant quietly says yes.</div>
+    <div class="box mint"><b>What fixes it.</b> “Call me for anything over $150, anything the refund policy doesn't cover, or anyone who asks for the manager. Everything else, you handle.” Then you walk through four real cases together.</div>
+  </div>
+  <p>You could give the assistant a mood meter, or ask “how sure do you feel?” before each sale, or build a system that learns from last year's calls. Each one measures something <i>near</i> the real question. None of them tells the assistant <b>where the line is</b>. And when they do call the manager, “someone needs help” is not enough: the manager needs who, what went wrong, how much, and what to do.</p>
+
+  <svg viewBox="0 0 640 380" role="img" aria-label="Where each escalation rule acts. Explicit criteria and examples live in the system prompt that guides Claude. A sentiment score reads the customer's message. A separate classifier reads the message as well. Self-rated confidence is a number Claude reports about itself. The decision leads either to resolving the case or to escalate_to_human with a structured summary for the person." style="width:100%;max-width:640px;display:block;margin:10px auto">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#23262f"/></marker></defs>
+    <g stroke="#23262f" fill="none" stroke-width="1.5" marker-end="url(#ar)">
+      <path d="M180,140 L236,140"/><path d="M320,68 L320,108"/><path d="M320,168 L320,212"/>
+      <path d="M400,140 L456,140"/><path d="M540,168 L540,192 L384,192 L384,212"/>
+      <path d="M100,112 L100,72"/><path d="M100,168 L100,212"/><path d="M180,244 L236,244"/>
+      <path d="M180,42 L222,42 L222,226 L236,226"/>
+      <path d="M400,244 L456,244"/><path d="M320,272 L320,308"/><path d="M540,272 L540,308"/>
+    </g>
+    <rect id="box-clf" x="20" y="16" width="160" height="52" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="100" y="38" text-anchor="middle" font-size="14" font-weight="600">Separate classifier</text>
+    <text x="100" y="56" text-anchor="middle" font-size="12">trained on old tickets</text>
+    <rect id="box-prompt" x="240" y="16" width="160" height="52" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="320" y="38" text-anchor="middle" font-size="14" font-weight="600">System prompt</text>
+    <text x="320" y="56" text-anchor="middle" font-size="12">criteria + examples</text>
+
+    <rect x="20" y="112" width="160" height="56" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="100" y="135" text-anchor="middle" font-size="14" font-weight="600">Customer message</text>
+    <text x="100" y="154" text-anchor="middle" font-size="12">the ticket</text>
+    <rect x="240" y="112" width="160" height="56" rx="12" fill="#a3b5df" stroke="#23262f" stroke-width="1.5"/>
+    <text x="320" y="135" text-anchor="middle" font-size="15" font-weight="600">Claude</text>
+    <text x="320" y="154" text-anchor="middle" font-size="12">the support agent</text>
+    <rect id="box-conf" x="460" y="112" width="160" height="56" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="540" y="135" text-anchor="middle" font-size="14" font-weight="600">Self-rated confidence</text>
+    <text x="540" y="154" text-anchor="middle" font-size="12">“I'm 0.8 sure”</text>
+
+    <rect id="box-sent" x="20" y="216" width="160" height="56" rx="12" fill="#fff7e3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="100" y="239" text-anchor="middle" font-size="14" font-weight="600">Sentiment score</text>
+    <text x="100" y="258" text-anchor="middle" font-size="12">how upset they sound</text>
+    <rect x="240" y="216" width="160" height="56" rx="12" fill="#eef2fb" stroke="#23262f" stroke-width="1.5"/>
+    <text x="320" y="239" text-anchor="middle" font-size="14" font-weight="600">Escalate or resolve?</text>
+    <text x="320" y="258" text-anchor="middle" font-size="12">the decision</text>
+    <rect x="460" y="216" width="160" height="56" rx="12" fill="#fbf0f5" stroke="#23262f" stroke-width="1.5"/>
+    <text x="540" y="239" text-anchor="middle" font-size="14" font-weight="600">escalate_to_human</text>
+    <text x="540" y="258" text-anchor="middle" font-size="12">with a structured summary</text>
+
+    <rect x="240" y="312" width="160" height="52" rx="12" fill="#eef9f3" stroke="#23262f" stroke-width="1.5"/>
+    <text x="320" y="334" text-anchor="middle" font-size="14" font-weight="600">Resolve</text>
+    <text x="320" y="352" text-anchor="middle" font-size="12">refund, reply, done</text>
+    <rect x="460" y="312" width="160" height="52" rx="12" fill="#ffffff" stroke="#23262f" stroke-width="1.5"/>
+    <text x="540" y="334" text-anchor="middle" font-size="14" font-weight="600">A person</text>
+    <text x="540" y="352" text-anchor="middle" font-size="12">acts on the summary</text>
+    <text x="428" y="132" text-anchor="middle" font-size="11">rates</text>
+  </svg>
+
+  <div class="box butter">
+    <b>The one question to ask:</b> is this a trigger, or a feeling?
+    <ul style="margin:.4em 0 0">
+      <li><b>The customer asks for a person</b>: escalate <b>at once</b>, even if the agent could fix it.</li>
+      <li><b>Policy exception or gap</b> (over the limit, a case policy doesn't cover): escalate.</li>
+      <li><b>The agent can't make progress</b>: escalate.</li>
+      <li><b>Upset but simple</b>: resolve it. Mood is not a trigger.</li>
+      <li><b>Unsure who the customer is</b> (two accounts match): ask for an identifier. Don't guess, and don't escalate.</li>
+    </ul>
+    Write those triggers into the prompt and show a few example chats on each side. When it escalates, send a <b>structured summary</b> (customer ID, cause, amount, recommended action), not the transcript.
+  </div>
+
+  <h3>Words in the question that tell you which side you're on</h3>
+  <div class="grid2">
+    <div class="box mint side"><h3>Criteria + examples</h3><ul><li>“escalates simple cases, attempts complex ones”</li><li>“improve escalation calibration”</li><li>“the prompt says escalate when needed”</li><li>“asks for a real person” → escalate now</li></ul></div>
+    <div class="box rose side"><h3>Unreliable proxies</h3><ul><li>sentiment, frustration, tone of the message</li><li>“confidence score”, “rate how sure it is”</li><li>“classifier trained on past tickets” (overbuilt)</li><li>“pick the most likely account” (heuristic)</li></ul></div>
+  </div>
+
+  <h2>Try it: replay a day of 100 tickets</h2>
+  <p>Pick a ticket type to follow, then pick the escalation rule. The grid is one day of 100 tickets in arrival order; the type you picked is highlighted. The diagram above shows where your rule acts.</p>
+  <div class="box">
+    <b>1. The ticket type to follow</b>
+    <div id="sim-t"></div>
+    <b>2. The escalation rule</b>
+    <div id="sim-r"></div>
+    <p id="sim-msg" style="margin:10px 0 0"></p>
+    <div id="sim-grid" aria-label="One day of 100 tickets"></div>
+    <div class="legend" style="font-size:.85rem"><i style="background:#a8dcc3;margin-left:0"></i>resolved, right<i style="background:#a3b5df"></i>escalated, right<i style="background:#f0b429"></i>escalated, no need<i style="background:#d46a92"></i>kept, needed a person</div>
+    <p id="sim-tally"></p>
+    <p id="sim-day" style="font-size:.95rem"></p>
+    <p id="sim-effort" style="font-size:.92rem;color:var(--muted)"></p>
+    <div id="sim-verdict" class="box"></div>
+    <p class="lbl">What the person receives</p>
+    <div id="sim-handoff"></div>
+    <p style="font-size:.82rem;color:var(--muted);margin-bottom:0">The rates are illustrative, chosen to show the shape. They are not measurements. The day's mix is 55 simple, 15 angry but simple, 12 policy exceptions, 8 calm but complex and 10 requests for a person, so the best possible first-contact resolution is 70%. The exam guide's point is that sentiment and self-reported confidence are unreliable proxies for complexity.</p>
+  </div>
+  <p>Things to try: <b>Angry but simple + Sentiment score</b>, then <b>Calm but complex + Sentiment score</b>: the same rule fails both ways. Then <b>Policy exception + Self-rated confidence</b>. Last, any type with <b>Criteria + examples</b>, and watch the day's resolution rate.</p>
+
+  <h2>The three traps</h2>
+  <div class="tablewrap"><table>
+    <tr><th>Trap</th><th>What the wrong option looks like</th><th>Why it loses</th></tr>
+    <tr><td><b>Unreliable proxy</b></td><td>Escalate on negative sentiment; escalate when Claude's self-rated confidence is low; pick the “most likely” account when two match</td><td>Mood is not complexity, and the model is often most confident on the cases it gets wrong. A heuristic pick sometimes acts on the wrong customer.</td></tr>
+    <tr><td><b>Overbuilt fix</b></td><td>A separate classifier trained on historical tickets</td><td>Needs labelled data and retraining, learns past habits, and misses new kinds of case. Criteria and examples in the prompt fix an unclear boundary for far less.</td></tr>
+    <tr><td><b>Losing the handoff</b></td><td>Resolve first when the customer asked for a person; escalate with “needs help” and a link, or with the whole transcript</td><td>An explicit request is a trigger on its own. The person needs a structured summary (customer ID, cause, amount, recommended action) to act without reading the chat.</td></tr>
+  </table></div>
+
+  <h2>Practice: three exam-style questions</h2>
+  <p>Answer first, then open “Think it through”.</p>
+  <div id="qs"></div>
+
+  <h2>Rule to remember</h2>
+  <div class="box butter">
+    <b>Escalate on triggers, not feelings: write the criteria, show examples, and hand over a structured summary.</b> A customer who asks for a person goes at once.
+    <p style="font-size:.9rem;margin:.6em 0 0">Exam guide 5.2: “Triggers: customer requests a human; policy exceptions/gaps; inability to progress.” “Escalate immediately on explicit demand; offer resolution when straightforward.” “Sentiment-based escalation and self-reported confidence are unreliable proxies for complexity.” Exam guide 1.4: “compile structured handoff summaries (customer ID, root cause, refund amount, recommended action) for humans without the transcript.”</p>
+  </div>
+  <p><a href="../">← All traps</a></p>
+</main>
+<script src="../assets/plain-data.js"></script>
+<script src="../assets/plainq.js"></script>
+<script src="sim.js"></script>
+<script>
+  renderPlain(document.getElementById("qs"), window.PLAIN, ["tg-who-escalates-1", "tg-who-escalates-2", "tg-who-escalates-3"]);
+</script>
+</body>
+</html>
