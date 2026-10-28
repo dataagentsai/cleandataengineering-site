@@ -177,7 +177,7 @@
 </header>
 <main class="wrap">
 <p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › <a href="/learn/data-platform-sim/">DataTwin Studio</a> › Spark internals</p>
-<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> <a href="/learn/data-platform-sim/" style="font-size:14px">One batch, end to end</a><a href="/learn/data-platform-sim/delta/" style="font-size:14px">Delta Lake internals</a><span class="real" style="background:var(--ink);color:#fff">Spark internals</span> <span>· more coming: Spark internals, streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
+<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> <a href="/learn/data-platform-sim/" style="font-size:14px">One batch, end to end</a><a href="/learn/data-platform-sim/delta/" style="font-size:14px">Delta Lake internals</a><span class="real" style="background:var(--ink);color:#fff">Spark internals</span><a href="/learn/data-platform-sim/problems/" style="font-size:14px">Problem Lab</a> <span>· more coming: Spark internals, streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
 <p class="eyebrow" style="margin-top:16px">DataTwin Studio · Spark internals</p>
 <h1>Spark internals, recorded</h1>
 <p class="lede">What Spark actually does with your code. Each step shows the code, the result, every stage with its tasks as a timeline (so you can see waves and the one slow task), the query plan, the jobs and the logs. Seven scenarios on 2 million orders, from 'an action becomes tasks' to 'AQE splits a skewed join'.</p>
@@ -283,6 +283,13 @@ const R = {
         '<p class="count">task time: slowest ' + mx + ' ms, median ' + med + ' ms' + (skew ? ' · <b style="color:#b0281a">one task ' + (mx / Math.max(med, 1)).toFixed(1) + '× the median: skew</b>' : '') + '</p></div>';
     }).join('') + '<p class="note">Each bar is one task, placed on its stage\'s own timeline. Two cores means at most two bars overlap: that is a wave.</p>';
   },
+  checks(p) {
+    if (!p) return '<p class="empty">No checks yet.</p>';
+    const ok = p.items.filter(c => c[2]).length;
+    return '<p class="kv"><b>' + ok + ' of ' + p.items.length + ' checks pass</b></p>' +
+      p.items.map(c => '<div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px dashed var(--rule)"><b style="font-size:20px;color:' + (c[2] ? '#1d6b3a' : '#b0281a') + '">' + (c[2] ? '✓' : '✗') + '</b><span style="flex:1">' + esc(c[0]) + '</span><code style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + esc(c[1]) + '</code></div>').join('') +
+      '<p class="note" style="margin-top:6px">These are the checks a real pipeline should run after every load. Red means the problem is still there.</p>';
+  },
   files(p) {
     if (!p) return '<p class="empty">No files yet.</p>';
     const ix = [0, 5, 2, 3, 4, 1], re = r => ix.map(i => r[i]);
@@ -307,8 +314,8 @@ const R = {
     return h;
   },
   dashboard(p) {
-    if (!p) return '<p class="empty">No data yet.</p>';
-    return '<div class="tiles">' + p.tiles.map(t => '<div class="tile' + (/✗|2,500/.test(t[1]) ? ' bad' : '') + '"><span>' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b></div>').join('') + '</div>' + (p.note ? '<p class="note" style="margin-top:6px">' + esc(p.note) + '</p>' : '');
+    if (!p) return '<p class="empty">' + (D.order.some(o => o[0] === 'checks') ? 'Not used in this problem.' : 'No data yet.') + '</p>';
+    return '<div class="tiles">' + p.tiles.map(t => '<div class="tile' + (/✗|2,500/.test(t[1]) ? ' bad' : /✓/.test(t[1]) ? '' : '') + '"><span>' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b></div>').join('') + '</div>' + (p.note ? '<p class="note" style="margin-top:6px">' + esc(p.note) + '</p>' : '');
   },
 };
 const ORDER = D.order;

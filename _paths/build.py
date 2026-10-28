@@ -319,7 +319,9 @@ GUIDES = {"medallion": ("Medallion architecture, drawn right", "/learn/medallion
           "table-formats": ("Delta Lake internals, recorded (simulation)", "/learn/data-platform-sim/delta/"),
           "small-files": ("Delta Lake internals: 300 tiny files, then OPTIMIZE (simulation)", "/learn/data-platform-sim/delta/"),
           "idempotency": ("DataTwin Studio: the same file sent twice (simulation)", "/learn/data-platform-sim/"),
-          "cost-drivers": ("Spark internals: shuffle, joins, skew and AQE (simulation)", "/learn/data-platform-sim/spark/")}
+          "cost-drivers": ("Spark internals: shuffle, joins, skew and AQE (simulation)", "/learn/data-platform-sim/spark/"),
+          "scd": ("Problem Lab: SCD Type 2 pitfalls, the naive fix and the right one (simulation)", "/learn/data-platform-sim/problems/"),
+          "backfill": ("Problem Lab: re-runs, late data and failure mid-job (simulation)", "/learn/data-platform-sim/problems/")}
 
 
 def concept_page(cid):

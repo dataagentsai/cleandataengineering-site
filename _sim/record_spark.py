@@ -19,6 +19,8 @@ import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+os.environ["TZ"] = "UTC"   # show timestamps as stored (UTC), not in this machine's time zone
+time.tzset()
 os.environ["PYSPARK_PYTHON"] = sys.executable
 os.environ["PYSPARK_DRIVER_PYTHON"] = sys.executable
 from pyspark.sql import SparkSession, functions as F  # noqa: E402

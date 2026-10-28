@@ -162,6 +162,13 @@ const R = {
         '<p class="count">task time: slowest ' + mx + ' ms, median ' + med + ' ms' + (skew ? ' · <b style="color:#b0281a">one task ' + (mx / Math.max(med, 1)).toFixed(1) + '× the median: skew</b>' : '') + '</p></div>';
     }).join('') + '<p class="note">Each bar is one task, placed on its stage\'s own timeline. Two cores means at most two bars overlap: that is a wave.</p>';
   },
+  checks(p) {
+    if (!p) return '<p class="empty">No checks yet.</p>';
+    const ok = p.items.filter(c => c[2]).length;
+    return '<p class="kv"><b>' + ok + ' of ' + p.items.length + ' checks pass</b></p>' +
+      p.items.map(c => '<div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px dashed var(--rule)"><b style="font-size:20px;color:' + (c[2] ? '#1d6b3a' : '#b0281a') + '">' + (c[2] ? '✓' : '✗') + '</b><span style="flex:1">' + esc(c[0]) + '</span><code style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + esc(c[1]) + '</code></div>').join('') +
+      '<p class="note" style="margin-top:6px">These are the checks a real pipeline should run after every load. Red means the problem is still there.</p>';
+  },
   files(p) {
     if (!p) return '<p class="empty">No files yet.</p>';
     const ix = [0, 5, 2, 3, 4, 1], re = r => ix.map(i => r[i]);
@@ -186,8 +193,8 @@ const R = {
     return h;
   },
   dashboard(p) {
-    if (!p) return '<p class="empty">No data yet.</p>';
-    return '<div class="tiles">' + p.tiles.map(t => '<div class="tile' + (/✗|2,500/.test(t[1]) ? ' bad' : '') + '"><span>' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b></div>').join('') + '</div>' + (p.note ? '<p class="note" style="margin-top:6px">' + esc(p.note) + '</p>' : '');
+    if (!p) return '<p class="empty">' + (D.order.some(o => o[0] === 'checks') ? 'Not used in this problem.' : 'No data yet.') + '</p>';
+    return '<div class="tiles">' + p.tiles.map(t => '<div class="tile' + (/✗|2,500/.test(t[1]) ? ' bad' : /✓/.test(t[1]) ? '' : '') + '"><span>' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b></div>').join('') + '</div>' + (p.note ? '<p class="note" style="margin-top:6px">' + esc(p.note) + '</p>' : '');
   },
 };
 const ORDER = D.order;
@@ -237,6 +244,15 @@ SPARK_SCENARIOS = [
 ]
 SPARK_ORDER = [["inputs", "1 · Code"], ["layers", "2 · Result"], ["stages", "3 · Stages & tasks"], ["engine", "4 · Query plan"], ["cluster", "5 · Jobs"], ["logs", "6 · Logs"]]
 
+PROBLEM_SCENARIOS = [
+    {"id": "dupes", "label": "1 · Duplicates", "steps": [1, 2, 3], "blurb": "At-least-once delivery counts an order three times."},
+    {"id": "idem", "label": "2 · Re-runs (idempotency)", "steps": [4, 5, 6], "blurb": "A retried job doubles a day."},
+    {"id": "scd2", "label": "3 · SCD Type 2 pitfalls", "steps": [7, 8, 9], "blurb": "Two changes in one batch, a no-op, a late older change."},
+    {"id": "late", "label": "4 · Late-arriving data", "steps": [10, 11, 12], "blurb": "Yesterday's order arrives today."},
+    {"id": "fail", "label": "5 · Failure mid-job", "steps": [13, 14, 15], "blurb": "Silver moved on, gold did not."},
+]
+PROBLEM_ORDER = [["inputs", "1 · Code"], ["checks", "2 · Checks"], ["layers", "3 · Tables"], ["dashboard", "4 · Dashboard"], ["storage", "5 · _delta_log"], ["logs", "6 · Logs"]]
+
 SCENES = [
     {"slug": "", "data": "batch.json", "scenarios": SCENARIOS, "order": BATCH_ORDER, "groups": GROUP_FOR_STEP, "tabs": TAB_FOR_STEP,
      "nav": "One batch, end to end", "eyebrow": "DataTwin Studio · scene 1 · one batch, end to end", "h1": "Watch one batch go through a data platform",
@@ -256,6 +272,13 @@ SCENES = [
      "desc": "See Spark from the inside: jobs, stages and tasks, lazy evaluation, the shuffle, Catalyst query plans, broadcast vs sort-merge joins, skew and AQE, and caching.",
      "lede": "What Spark actually does with your code. Each step shows the code, the result, every stage with its tasks as a timeline (so you can see waves and the one slow task), the query plan, the jobs and the logs. Seven scenarios on 2 million orders, from 'an action becomes tasks' to 'AQE splits a skewed join'.",
      "real": "Every stage, task, byte shuffled, plan and timing comes from Spark's own event log and EXPLAIN. Timings are from a laptop with 2 cores: compare them with each other, not with a cluster."},
+    {"slug": "problems", "data": "problems.json", "scenarios": PROBLEM_SCENARIOS, "order": PROBLEM_ORDER, "groups": {}, "tabs": {},
+     "nav": "Problem Lab", "eyebrow": "DataTwin Studio · Problem Lab · the five problems everyone hits",
+     "h1": "The Problem Lab: break it, try the naive fix, fix it right",
+     "title": "Problem Lab: duplicates, re-runs, SCD2, late data",
+     "desc": "Five hard data engineering problems, run for real: duplicates, idempotent re-runs, SCD Type 2 pitfalls, late-arriving data and failure mid-job, each with the naive fix and the right one.",
+     "lede": "The problems that cost real teams their nights. Each one is told in three steps: what you see (the checks go red), the naive fix (applied for real, and it fails or makes things worse), and the right fix (the checks go green). Every table, check, error and commit comes from a real Spark and Delta Lake run.",
+     "real": "The naive fixes were run too, so their failures are real, not described."},
 ]
 
 
