@@ -105,8 +105,28 @@
     <div class="box rose side"><h3>Words in tempting wrong options</h3><ul><li>“be conservative”</li><li>“only high-confidence”</li><li>“be more careful”, “use your judgement”</li><li>“switch the category off”, “a second instance confirms each finding”</li></ul></div>
   </div>
 
+  <h2 id="six">The whole idea on six comments</h2>
+  <p>Below are six code comments from the same pull request, each judged by three versions of the review rule. The team's real question is only this: <b>does the comment say something the code doesn't do?</b> Two of the six do. The other four are fine.</p>
+  <ul>
+    <li><b>Rule A</b> (vague): “Check that comments are accurate.”</li>
+    <li><b>Rule B</b> (vague, plus confidence wording): Rule A + “Only report findings you are highly confident about.”</li>
+    <li><b>Rule C</b> (explicit criteria): “Flag a comment only when what it claims contradicts what the code does. Don't flag spelling, missing comments, old-looking wording or TODOs.”</li>
+  </ul>
+  <div class="tablewrap"><table>
+    <tr><th>Comment in the code</th><th>Should it be flagged?</th><th>Rule A</th><th>Rule B</th><th>Rule C</th></tr>
+    <tr><td><code>// Returns null when not found</code>, but the code throws an error</td><td><b>Yes</b>, the comment is false</td><td>Flags it</td><td>Flags it</td><td>Flags it</td></tr>
+    <tr><td><code>// Thread-safe</code>, but the code uses a plain map with no lock</td><td><b>Yes</b>, the comment is false</td><td>Flags it</td><td><b>Misses it</b>: the bug is subtle, so Claude isn't “highly confident”</td><td>Flags it</td></tr>
+    <tr><td><code>// Recieve the confirmation</code> (a spelling slip)</td><td>No, it's still true</td><td><b>Flags it</b>, noise</td><td><b>Flags it</b>: Claude is very sure it's a typo</td><td>Leaves it</td></tr>
+    <tr><td>A public function with no comment at all</td><td>No, nothing to contradict</td><td><b>Flags it</b>, noise</td><td><b>Flags it</b>, noise</td><td>Leaves it</td></tr>
+    <tr><td><code>// Added for JIRA-1234 (2019)</code></td><td>No, old but true</td><td><b>Flags it</b>, noise</td><td><b>Flags it</b>, noise</td><td>Leaves it</td></tr>
+    <tr><td><code>// Round down: partners round down too</code></td><td>No, a good comment</td><td>Leaves it</td><td>Leaves it</td><td>Leaves it</td></tr>
+    <tr><td><b>Verdict</b></td><td></td><td><b>Drop.</b> 2 real findings buried in 3 noisy ones</td><td><b>Drop.</b> Same noise, and it lost a real bug</td><td><b>Use.</b> 2 real findings, no noise. The exam's answer.</td></tr>
+  </table></div>
+  <p>That's the whole trap. “Accurate” is a mood word: Claude has to guess what you mean, and it guesses that typos, missing comments and old tickets count. Adding “high-confidence” doesn't help, because Claude is <i>most</i> confident about the obvious noise, like a typo, and least confident about the subtle real bug. Only Rule C changes <i>what counts</i>, so only Rule C removes the noise.</p>
+
   <h2>Try it: review one pull request</h2>
-  <p>The bot reviews 40 spots in a pull request for a travel-booking app: 24 doc comments, 8 security spots and 8 performance spots. The security and performance rules are already explicit; you choose how the <b>doc-comment</b> rule is written. Click any square to see the code and what the bot posted.</p>
+  <p>The same idea at full size: the bot reviews 40 spots in a pull request for a travel-booking app. <b>Watch the top row, “Doc comments”</b>. That's the rule you change, and pink squares are noise. The security and performance rows have fixed, explicit rules. They are there to show one thing: the trust meter drops for <i>all</i> findings when one row is noisy. Click any square to see the code and what the bot posted.</p>
+  <p>Try the buttons in this order: “Check that comments are accurate”, then “+ Only report high-confidence findings”, then “Explicit criteria”. The last button, “+ severity by example”, adds a second, smaller point: once Claude flags the right things, concrete examples also make it label each finding with the right level (critical, major or minor). Squares with a dashed outline are real findings with the wrong level.</p>
   <div class="box">
     <div class="grp"><div class="gl">1. How the doc-comment rule is worded</div><div id="ec-w"></div></div>
     <div class="grp"><div class="gl">2. Or keep the vague rule and work around it</div><div id="ec-f"></div></div>
