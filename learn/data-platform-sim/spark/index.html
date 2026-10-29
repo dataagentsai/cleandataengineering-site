@@ -177,7 +177,7 @@
 </header>
 <main class="wrap">
 <p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › <a href="/learn/data-platform-sim/">DataTwin Studio</a> › Spark internals</p>
-<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> <a href="/learn/data-platform-sim/" style="font-size:14px">One batch, end to end</a><a href="/learn/data-platform-sim/delta/" style="font-size:14px">Delta Lake internals</a><span class="real" style="background:var(--ink);color:#fff">Spark internals</span><a href="/learn/data-platform-sim/problems/" style="font-size:14px">Problem Lab</a><a href="/learn/data-platform-sim/performance/" style="font-size:14px">Performance stories</a> <span>· more coming: streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
+<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> <a href="/learn/data-platform-sim/" style="font-size:14px">One batch, end to end</a><a href="/learn/data-platform-sim/delta/" style="font-size:14px">Delta Lake internals</a><span class="real" style="background:var(--ink);color:#fff">Spark internals</span><a href="/learn/data-platform-sim/problems/" style="font-size:14px">Problem Lab</a><a href="/learn/data-platform-sim/data-quality/" style="font-size:14px">Data quality</a><a href="/learn/data-platform-sim/performance/" style="font-size:14px">Performance stories</a> <span>· more coming: streaming, Kafka, Unity Catalog, dimensional modelling, cost</span></p>
 <p class="eyebrow" style="margin-top:16px">DataTwin Studio · Spark internals</p>
 <h1>Spark internals, recorded</h1>
 <p class="lede">What Spark actually does with your code. Each step shows the code, the result, every stage with its tasks as a timeline (so you can see waves and the one slow task), the query plan, the jobs and the logs. Seven scenarios on 2 million orders, from 'an action becomes tasks' to 'AQE splits a skewed join'.</p>
@@ -224,7 +224,7 @@ const R = {
     const cur = tabState.config && names.includes(tabState.config) ? tabState.config : names[names.length - 1];
     let h = tabs('config', names, cur, ch.includes('merged') ? ['merged config'] : ch.includes('db') ? ['metadata DB'] : []);
     if (cur === 'yaml') h += '<pre>' + esc(p.yaml) + '</pre>';
-    if (cur === 'metadata DB') h += Object.entries(p.db).map(([t, v]) => '<details class="c"' + (t.startsWith('dataset_config') ? ' open' : '') + '><summary>' + t + ' (' + v.rows.length + ')</summary>' + tbl(v) + '</details>').join('');
+    if (cur === 'metadata DB') h += Object.entries(p.db).map(([t, v]) => '<details class="c"' + (t.startsWith('dataset_config') || t === 'dq_rule' ? ' open' : '') + '><summary>' + t + ' (' + v.rows.length + ')</summary>' + tbl(v) + '</details>').join('');
     if (cur === 'merged config') h += '<p class="note">platform &lt; source &lt; dataset</p><div class="tw"><table class="d"><tr><th>key</th><th>value</th><th>from</th></tr>' +
       Object.entries(p.merged).map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + esc(v) + '</td><td>' + (k in p.view.dataset ? 'dataset' : k in p.view.source ? 'source' : 'platform') + (k in p.view.platform && k in p.view.dataset ? ' (overrides platform: ' + esc(p.view.platform[k]) + ')' : '') + '</td></tr>').join('') +
       '</table></div><p class="kv">fingerprint: <b>' + esc(p.fingerprint) + '</b></p>';
@@ -297,6 +297,7 @@ const R = {
       '<p class="note">live = part of the current version. removed = no longer in the current version, but still on disk so older versions can be read, until VACUUM.</p>';
   },
   engine(p) {
+    if (p && p.compiled) return '<p class="note">' + esc(p.note || '') + '</p>' + Object.entries(p.compiled).map(([k, v]) => '<p class="kv" style="margin:8px 0 2px"><b>' + esc(k) + '</b></p><pre>' + esc(v) + '</pre>').join('');
     if (!p) return '<p class="empty">' + (scen.id === 'naive' && curStep > 4 ? 'Plans were not recorded for the naive pipeline; see scenario 1 for the plans of each hop.' : D.order.some(o => o[0] === 'stages') ? 'No plan captured for this step.' : 'Nothing yet.') + '</p>';
     if (p.error || p.history || p.metrics) {
       let h = '';

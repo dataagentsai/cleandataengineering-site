@@ -103,7 +103,7 @@ const R = {
     const cur = tabState.config && names.includes(tabState.config) ? tabState.config : names[names.length - 1];
     let h = tabs('config', names, cur, ch.includes('merged') ? ['merged config'] : ch.includes('db') ? ['metadata DB'] : []);
     if (cur === 'yaml') h += '<pre>' + esc(p.yaml) + '</pre>';
-    if (cur === 'metadata DB') h += Object.entries(p.db).map(([t, v]) => '<details class="c"' + (t.startsWith('dataset_config') ? ' open' : '') + '><summary>' + t + ' (' + v.rows.length + ')</summary>' + tbl(v) + '</details>').join('');
+    if (cur === 'metadata DB') h += Object.entries(p.db).map(([t, v]) => '<details class="c"' + (t.startsWith('dataset_config') || t === 'dq_rule' ? ' open' : '') + '><summary>' + t + ' (' + v.rows.length + ')</summary>' + tbl(v) + '</details>').join('');
     if (cur === 'merged config') h += '<p class="note">platform &lt; source &lt; dataset</p><div class="tw"><table class="d"><tr><th>key</th><th>value</th><th>from</th></tr>' +
       Object.entries(p.merged).map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + esc(v) + '</td><td>' + (k in p.view.dataset ? 'dataset' : k in p.view.source ? 'source' : 'platform') + (k in p.view.platform && k in p.view.dataset ? ' (overrides platform: ' + esc(p.view.platform[k]) + ')' : '') + '</td></tr>').join('') +
       '</table></div><p class="kv">fingerprint: <b>' + esc(p.fingerprint) + '</b></p>';
@@ -176,6 +176,7 @@ const R = {
       '<p class="note">live = part of the current version. removed = no longer in the current version, but still on disk so older versions can be read, until VACUUM.</p>';
   },
   engine(p) {
+    if (p && p.compiled) return '<p class="note">' + esc(p.note || '') + '</p>' + Object.entries(p.compiled).map(([k, v]) => '<p class="kv" style="margin:8px 0 2px"><b>' + esc(k) + '</b></p><pre>' + esc(v) + '</pre>').join('');
     if (!p) return '<p class="empty">' + (scen.id === 'naive' && curStep > 4 ? 'Plans were not recorded for the naive pipeline; see scenario 1 for the plans of each hop.' : D.order.some(o => o[0] === 'stages') ? 'No plan captured for this step.' : 'Nothing yet.') + '</p>';
     if (p.error || p.history || p.metrics) {
       let h = '';
@@ -287,6 +288,14 @@ PERF_SCENARIOS = [
 ]
 PERF_ORDER = [["inputs", "1 · Code"], ["dashboard", "2 · Before / after"], ["checks", "3 · Clues"], ["stages", "4 · Stages & tasks"], ["engine", "5 · Query plan"], ["logs", "6 · Logs"]]
 
+DQ_SCENARIOS = [
+    {"id": "rules", "label": "1 · Rules as metadata", "steps": [1, 2, 3, 4], "blurb": "YAML → metadata DB → one port → Spark SQL or Deequ."},
+    {"id": "profile", "label": "2 · Profile and suggest", "steps": [5, 6], "blurb": "Deequ profiles the data and proposes rules; a person decides."},
+    {"id": "trend", "label": "3 · Metrics over time", "steps": [7], "blurb": "A metrics history and an anomaly check."},
+    {"id": "onboard", "label": "4 · Onboard with YAML only", "steps": [8], "blurb": "A new dataset, no code."},
+]
+DQ_ORDER = [["inputs", "1 · YAML / code"], ["config", "2 · Metadata DB"], ["engine", "3 · Compiled checks"], ["checks", "4 · Results"], ["layers", "5 · Tables"], ["dashboard", "6 · Dashboard"], ["logs", "7 · Logs"]]
+
 PROBLEM_ORDER = [["inputs", "1 · Code"], ["checks", "2 · Checks"], ["layers", "3 · Tables"], ["dashboard", "4 · Dashboard"], ["storage", "5 · _delta_log"], ["logs", "6 · Logs"]]
 
 SCENES = [
@@ -311,14 +320,21 @@ SCENES = [
     {"slug": "problems", "data": "problems.json", "scenarios": PROBLEM_SCENARIOS, "order": PROBLEM_ORDER, "groups": {}, "tabs": {},
      "nav": "Problem Lab", "eyebrow": "DataTwin Studio · Problem Lab · nineteen problems every data team hits",
      "h1": "The Problem Lab: break it, try the naive fix, fix it right",
-     "title": "Problem Lab: 19 data engineering problems, run for real",
+     "title": "Problem Lab: 19 data problems, run for real",
      "desc": "Nineteen data problems run on Spark and Delta: duplicates, SCD2, late data, schema drift, deletes, skew, time zones, PII, self-healing and more.",
      "lede": "The problems that cost real teams their nights. Each one is told in three steps: what you see (the checks go red), the naive fix (applied for real, and it fails or makes things worse), and the right fix (the checks go green). Every table, check, error and commit comes from a real Spark and Delta Lake run.",
      "real": "The naive fixes were run too, so their failures are real, not described."},
+    {"slug": "data-quality", "data": "dq.json", "scenarios": DQ_SCENARIOS, "order": DQ_ORDER, "groups": {}, "tabs": {},
+     "nav": "Data quality", "eyebrow": "DataTwin Studio · Data quality and profiling · metadata-driven, low-code",
+     "h1": "Data quality as metadata: one port, two engines",
+     "title": "Data quality as metadata: Deequ and Spark SQL",
+     "desc": "Data quality rules written as YAML, stored in a metadata DB and run through one interface on Spark SQL or Deequ: quarantine, alerts, profiling, anomaly checks.",
+     "lede": "Data quality rules belong in metadata, not in pipeline code. A YAML file per dataset says what to check, how serious a failure is, and what to do about it. One interface (a port) compiles the rules for whichever engine the YAML names, Spark SQL or Deequ today, Great Expectations as another adapter. Change the engine by changing one line. Onboard a dataset by adding one file.",
+     "real": "Deequ 2.0.7 (through PyDeequ 1.4.0) did the Deequ runs, profiling, suggestions and anomaly checks; the metadata DB is a real SQLite database. Great Expectations has an adapter slot in the design but was not installed for these recordings."},
     {"slug": "performance", "data": "perf.json", "scenarios": PERF_SCENARIOS, "order": PERF_ORDER, "groups": {}, "tabs": {},
      "nav": "Performance stories", "eyebrow": "DataTwin Studio · Performance stories · from slow to fast, measured",
      "h1": "Performance stories: the slow job, the clue, the fix",
-     "title": "Spark performance stories: slow job, clue, fix, measured",
+     "title": "Spark performance stories, measured",
      "desc": "Twelve Spark and Delta performance stories run for real: full reloads, tiny files, skew, exploding joins, MERGE, spill, Python UDFs, broadcast, collect().",
      "lede": "Every data team has a job that takes three hours. It is almost never one problem; it is four small ones stacked up. Story 0 removes them one at a time and measures each fix. Stories 1 to 12 take one problem each: what you see, the clue that gives it away (in the event log, the query plan or the table's metadata), and the fix with its measured gain.",
      "real": "Every time is measured on a laptop with 2 cores and 1 GB of memory, on millions of rows rather than billions, and the scale is stated on each story. Compare before with after, not with a cluster. Story 12 (the cloud bill) is arithmetic with example prices, and is labelled illustrative."},
@@ -344,7 +360,7 @@ def page(sc):
     scen_btns = "".join(f'<button data-s="{s["id"]}" title="{s["blurb"]}">{s["label"]}</button>' for s in sc["scenarios"])
     nav = "".join(f'<span class="real" style="background:var(--ink);color:#fff">{x["nav"]}</span>' if x is sc else f'<a href="/learn/data-platform-sim/{x["slug"] + "/" if x["slug"] else ""}" style="font-size:14px">{x["nav"]}</a>' for x in SCENES)
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › <a href="/learn/data-platform-sim/">DataTwin Studio</a>{" › " + sc["nav"] if sc["slug"] else ""}</p>
-<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> {nav} <span>· more coming: streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
+<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> {nav} <span>· more coming: streaming, Kafka, Unity Catalog, dimensional modelling, cost</span></p>
 <p class="eyebrow" style="margin-top:16px">{sc["eyebrow"]}</p>
 <h1>{sc["h1"]}</h1>
 <p class="lede">{sc["lede"]}</p>

@@ -1,0 +1,1400 @@
+{
+ "env": {
+  "spark": "3.5.1",
+  "delta": "3.2.0",
+  "deequ": "2.0.7-spark-3.5",
+  "master": "local[2]",
+  "executors": [
+   {
+    "id": "driver",
+    "host": "localhost",
+    "cores": 2
+   }
+  ],
+  "recorded_at": "2026-10-29T05:24:12Z"
+ },
+ "jobs": {},
+ "steps": [
+  {
+   "n": 1,
+   "scenario": "rules",
+   "title": "Rules are data: a YAML file, not code",
+   "plain": "A data engineer describes the checks for the orders dataset in a YAML file: seven rules, each with a severity (error or warn) and an action (quarantine the bad rows, stop the load, or just alert). No Python, no SQL. The file also names the engine that runs the checks (dq_engine), and that one line is the binding: the pipeline never imports Deequ or Great Expectations directly. Today's bronze batch has 50,012 orders.",
+   "code": "# datasets/orders.dq.yaml  (owned by the data team; reviewed by PR)\ndataset: orders\nowner: sales-data\ndq_engine: spark_sql          # binding: spark_sql | deequ   (great_expectations: adapter slot, not installed here)\nchecks:\n  - {id: DQ-01, rule: is_complete,           column: customer_id, severity: error, action: quarantine}\n  - {id: DQ-02, rule: is_unique,             column: order_id,    severity: error, action: quarantine}\n  - {id: DQ-03, rule: is_non_negative,       column: amount,      severity: error, action: quarantine}\n  - {id: DQ-04, rule: is_contained_in,       column: country,     severity: warn,  action: alert, params: {values: [IN, US, GB, AE, SG]}}\n  - {id: DQ-05, rule: completeness_at_least, column: coupon,      severity: warn,  action: alert, params: {min: 0.05}}\n  - {id: DQ-06, rule: row_count_between,                          severity: error, action: stop,  params: {min: 40000, max: 60000}}\n  - {id: DQ-07, rule: references,            column: customer_id, severity: warn,  action: alert, params: {table: customers, key: customer_id}}\n",
+   "group": null,
+   "focus": [
+    "inputs",
+    "config"
+   ],
+   "panels": {
+    "inputs": {
+     "user": "",
+     "file": "",
+     "text": "# datasets/orders.dq.yaml  (owned by the data team; reviewed by PR)\ndataset: orders\nowner: sales-data\ndq_engine: spark_sql          # binding: spark_sql | deequ   (great_expectations: adapter slot, not installed here)\nchecks:\n  - {id: DQ-01, rule: is_complete,           column: customer_id, severity: error, action: quarantine}\n  - {id: DQ-02, rule: is_unique,             column: order_id,    severity: error, action: quarantine}\n  - {id: DQ-03, rule: is_non_negative,       column: amount,      severity: error, action: quarantine}\n  - {id: DQ-04, rule: is_contained_in,       column: country,     severity: warn,  action: alert, params: {values: [IN, US, GB, AE, SG]}}\n  - {id: DQ-05, rule: completeness_at_least, column: coupon,      severity: warn,  action: alert, params: {min: 0.05}}\n  - {id: DQ-06, rule: row_count_between,                          severity: error, action: stop,  params: {min: 40000, max: 60000}}\n  - {id: DQ-07, rule: references,            column: customer_id, severity: warn,  action: alert, params: {table: customers, key: customer_id}}\n"
+    },
+    "config": {
+     "yaml": "# datasets/orders.dq.yaml  (owned by the data team; reviewed by PR)\ndataset: orders\nowner: sales-data\ndq_engine: spark_sql          # binding: spark_sql | deequ   (great_expectations: adapter slot, not installed here)\nchecks:\n  - {id: DQ-01, rule: is_complete,           column: customer_id, severity: error, action: quarantine}\n  - {id: DQ-02, rule: is_unique,             column: order_id,    severity: error, action: quarantine}\n  - {id: DQ-03, rule: is_non_negative,       column: amount,      severity: error, action: quarantine}\n  - {id: DQ-04, rule: is_contained_in,       column: country,     severity: warn,  action: alert, params: {values: [IN, US, GB, AE, SG]}}\n  - {id: DQ-05, rule: completeness_at_least, column: coupon,      severity: warn,  action: alert, params: {min: 0.05}}\n  - {id: DQ-06, rule: row_count_between,                          severity: error, action: stop,  params: {min: 40000, max: 60000}}\n  - {id: DQ-07, rule: references,            column: customer_id, severity: warn,  action: alert, params: {table: customers, key: customer_id}}\n"
+    }
+   },
+   "logs": [],
+   "run_log": []
+  },
+  {
+   "n": 2,
+   "scenario": "rules",
+   "title": "Loaded into the metadata DB, compiled by the port",
+   "plain": "A loader validates the YAML and writes it to the metadata database: one row per rule in dq_rule, and the dataset row with the engine binding and a fingerprint of the rules (c9850a44be01). Every run records which fingerprint it checked against, so 'which rules were in force on 27 Oct?' has an answer. The port compiles each rule for the bound engine. Both compilations are shown: the same seven rules as Spark SQL, and as Deequ checks. Deequ has no referential-integrity rule, so the port routes DQ-07 to Spark SQL: the adapter declares what it supports instead of failing.",
+   "code": "loader: validate YAML -> INSERT INTO dataset_master, dq_rule; fingerprint = sha256(canonical rules)\nport.compile(rules, binding)",
+   "group": null,
+   "focus": [
+    "config",
+    "engine",
+    "logs"
+   ],
+   "panels": {
+    "inputs": {
+     "user": "",
+     "file": "",
+     "text": "loader: validate YAML -> INSERT INTO dataset_master, dq_rule; fingerprint = sha256(canonical rules)\nport.compile(rules, binding)"
+    },
+    "config": {
+     "yaml": "# datasets/orders.dq.yaml  (owned by the data team; reviewed by PR)\ndataset: orders\nowner: sales-data\ndq_engine: spark_sql          # binding: spark_sql | deequ   (great_expectations: adapter slot, not installed here)\nchecks:\n  - {id: DQ-01, rule: is_complete,           column: customer_id, severity: error, action: quarantine}\n  - {id: DQ-02, rule: is_unique,             column: order_id,    severity: error, action: quarantine}\n  - {id: DQ-03, rule: is_non_negative,       column: amount,      severity: error, action: quarantine}\n  - {id: DQ-04, rule: is_contained_in,       column: country,     severity: warn,  action: alert, params: {values: [IN, US, GB, AE, SG]}}\n  - {id: DQ-05, rule: completeness_at_least, column: coupon,      severity: warn,  action: alert, params: {min: 0.05}}\n  - {id: DQ-06, rule: row_count_between,                          severity: error, action: stop,  params: {min: 40000, max: 60000}}\n  - {id: DQ-07, rule: references,            column: customer_id, severity: warn,  action: alert, params: {table: customers, key: customer_id}}\n",
+     "db": {
+      "dataset_master": {
+       "cols": [
+        "dataset",
+        "owner",
+        "dq_engine",
+        "rules_fingerprint"
+       ],
+       "rows": [
+        [
+         "orders",
+         "sales-data",
+         "spark_sql",
+         "c9850a44be01"
+        ]
+       ]
+      },
+      "dq_rule": {
+       "cols": [
+        "dataset",
+        "rule_id",
+        "rule",
+        "column_name",
+        "params",
+        "severity",
+        "action",
+        "is_active"
+       ],
+       "rows": [
+        [
+         "orders",
+         "DQ-01",
+         "is_complete",
+         "customer_id",
+         "{}",
+         "error",
+         "quarantine",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-02",
+         "is_unique",
+         "order_id",
+         "{}",
+         "error",
+         "quarantine",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-03",
+         "is_non_negative",
+         "amount",
+         "{}",
+         "error",
+         "quarantine",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-04",
+         "is_contained_in",
+         "country",
+         "{\"values\": [\"IN\", \"US\", \"GB\", \"AE\", \"SG\"]}",
+         "warn",
+         "alert",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-05",
+         "completeness_at_least",
+         "coupon",
+         "{\"min\": 0.05}",
+         "warn",
+         "alert",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-06",
+         "row_count_between",
+         "None",
+         "{\"min\": 40000, \"max\": 60000}",
+         "error",
+         "stop",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-07",
+         "references",
+         "customer_id",
+         "{\"table\": \"customers\", \"key\": \"customer_id\"}",
+         "warn",
+         "alert",
+         "1"
+        ]
+       ]
+      }
+     }
+    },
+    "engine": {
+     "compiled": {
+      "spark_sql (current binding)": "-- DQ-01 is_complete\nSELECT avg(CASE WHEN customer_id IS NOT NULL THEN 1D ELSE 0D END) AS metric FROM bronze_orders   -- pass if = 1.0\n-- DQ-02 is_unique\nSELECT sum(CASE WHEN n = 1 THEN n ELSE 0 END) / sum(n) AS metric FROM (SELECT order_id, count(*) n FROM bronze_orders GROUP BY order_id)   -- pass if = 1.0\n-- DQ-03 is_non_negative\nSELECT avg(CASE WHEN amount IS NULL OR amount >= 0 THEN 1D ELSE 0D END) AS metric FROM bronze_orders   -- pass if = 1.0\n-- DQ-04 is_contained_in\nSELECT avg(CASE WHEN country IS NULL OR country IN ('IN', 'US', 'GB', 'AE', 'SG') THEN 1D ELSE 0D END) AS metric FROM bronze_orders   -- pass if = 1.0\n-- DQ-05 completeness_at_least\nSELECT avg(CASE WHEN coupon IS NOT NULL THEN 1D ELSE 0D END) AS metric FROM bronze_orders   -- pass if >= 0.05\n-- DQ-06 row_count_between\nSELECT count(*) AS metric FROM bronze_orders   -- pass if between 40000 and 60000\n-- DQ-07 references\nSELECT avg(CASE WHEN bronze_orders.customer_id IS NULL OR r.customer_id IS NOT NULL THEN 1D ELSE 0D END) AS metric FROM bronze_orders LEFT JOIN customers r ON bronze_orders.customer_id = r.customer_id   -- pass if = 1.0",
+      "deequ (same rules, if the binding said deequ)": "VerificationSuite(spark).onData(bronze_orders)\n  .addCheck(Check(spark, CheckLevel.Error, 'DQ-01').isComplete('customer_id'))\n  .addCheck(Check(spark, CheckLevel.Error, 'DQ-02').isUnique('order_id'))\n  .addCheck(Check(spark, CheckLevel.Error, 'DQ-03').isNonNegative('amount'))\n  .addCheck(Check(spark, CheckLevel.Warning, 'DQ-04').isContainedIn('country', ['IN', 'US', 'GB', 'AE', 'SG']))\n  .addCheck(Check(spark, CheckLevel.Warning, 'DQ-05').hasCompleteness('coupon', lambda x: x >= 0.05))\n  .addCheck(Check(spark, CheckLevel.Error, 'DQ-06').hasSize(lambda x: 40000 <= x <= 60000))\n  # DQ-07 references: Deequ has no referential check -> the port routes it to spark_sql\n  .run()"
+     },
+     "note": "What the port generates from the rules, per adapter (recorded)."
+    }
+   },
+   "logs": [
+    [
+     "05:23:53",
+     "INFO",
+     "loaded datasets/orders.dq.yaml into the metadata DB: 7 rules, fingerprint c9850a44be01"
+    ]
+   ],
+   "run_log": []
+  },
+  {
+   "n": 3,
+   "scenario": "rules",
+   "title": "Run with the Spark SQL adapter: results, quarantine, alerts",
+   "plain": "The pipeline calls the port; the binding says spark_sql. 5 of 7 rules fail, and each failure does what its action says. Rows that break an error rule (no customer, a duplicate order delivered again, a negative amount) go to quarantine with the rule IDs (232 rows). Warnings (country 'Ind', customers missing from the customer table) raise alerts but keep the rows. The row count is in range, so the load is not stopped: 49,780 rows published to silver. Checks took 2793 ms.",
+   "code": "results = dq_port.run(rules, 'bronze_orders')        # binding: spark_sql\napply_actions(results)   # quarantine | stop | alert, per rule",
+   "group": null,
+   "focus": [
+    "checks",
+    "layers",
+    "dashboard",
+    "logs"
+   ],
+   "panels": {
+    "inputs": {
+     "user": "",
+     "file": "",
+     "text": "results = dq_port.run(rules, 'bronze_orders')        # binding: spark_sql\napply_actions(results)   # quarantine | stop | alert, per rule"
+    },
+    "checks": {
+     "items": [
+      [
+       "DQ-01 is complete \u00b7 customer_id [error \u2192 quarantine]",
+       "99.60%",
+       false
+      ],
+      [
+       "DQ-02 is unique \u00b7 order_id [error \u2192 quarantine]",
+       "99.95%",
+       false
+      ],
+      [
+       "DQ-03 is non negative \u00b7 amount [error \u2192 quarantine]",
+       "99.96%",
+       false
+      ],
+      [
+       "DQ-04 is contained in \u00b7 country [warn \u2192 alert]",
+       "99.90%",
+       false
+      ],
+      [
+       "DQ-05 completeness at least \u00b7 coupon [warn \u2192 alert]",
+       "10.00%",
+       true
+      ],
+      [
+       "DQ-06 row count between [error \u2192 stop]",
+       "50,012 rows",
+       true
+      ],
+      [
+       "DQ-07 references \u00b7 customer_id [warn \u2192 alert]",
+       "98.80%",
+       false
+      ]
+     ]
+    },
+    "layers": {
+     "quarantine (by rule)": {
+      "cols": [
+       "failed_rules",
+       "rows"
+      ],
+      "rows": [
+       [
+        "DQ-01",
+        "200"
+       ],
+       [
+        "DQ-02",
+        "12"
+       ],
+       [
+        "DQ-03",
+        "20"
+       ]
+      ],
+      "count": 3
+     },
+     "quarantine": {
+      "cols": [
+       "order_id",
+       "customer_id",
+       "amount",
+       "country",
+       "placed_at",
+       "failed_rules"
+      ],
+      "rows": [
+       [
+        "O-0000000",
+        null,
+        "50.0",
+        "IN",
+        "2026-10-27 00:00:00",
+        "DQ-01"
+       ],
+       [
+        "O-0000007",
+        "C-00007",
+        "-17.0",
+        "US",
+        "2026-10-27 00:00:07",
+        "DQ-03"
+       ],
+       [
+        "O-0000011",
+        "C-00011",
+        "457.0",
+        "IN",
+        "2026-10-27 00:00:18",
+        "DQ-02"
+       ],
+       [
+        "O-0000250",
+        null,
+        "1300.0",
+        "IN",
+        "2026-10-27 00:04:10",
+        "DQ-01"
+       ],
+       [
+        "O-0000500",
+        null,
+        "550.0",
+        "IN",
+        "2026-10-27 00:08:20",
+        "DQ-01"
+       ],
+       [
+        "O-0000750",
+        null,
+        "1800.0",
+        "IN",
+        "2026-10-27 00:12:30",
+        "DQ-01"
+       ],
+       [
+        "O-0001000",
+        null,
+        "1050.0",
+        "IN",
+        "2026-10-27 00:16:40",
+        "DQ-01"
+       ],
+       [
+        "O-0001250",
+        null,
+        "300.0",
+        "IN",
+        "2026-10-27 00:20:50",
+        "DQ-01"
+       ],
+       [
+        "O-0001500",
+        null,
+        "1550.0",
+        "IN",
+        "2026-10-27 00:25:00",
+        "DQ-01"
+       ],
+       [
+        "O-0001750",
+        null,
+        "800.0",
+        "IN",
+        "2026-10-27 00:29:10",
+        "DQ-01"
+       ]
+      ],
+      "count": 232
+     },
+     "silver": {
+      "cols": [
+       "order_id",
+       "customer_id",
+       "amount",
+       "country",
+       "coupon",
+       "placed_at"
+      ],
+      "rows": [
+       [
+        "O-0000001",
+        "C-00001",
+        "87.0",
+        "IN",
+        null,
+        "2026-10-27 00:00:01"
+       ],
+       [
+        "O-0000002",
+        "C-00002",
+        "124.0",
+        "IN",
+        null,
+        "2026-10-27 00:00:02"
+       ],
+       [
+        "O-0000003",
+        "C-00003",
+        "161.0",
+        "Ind",
+        null,
+        "2026-10-27 00:00:03"
+       ],
+       [
+        "O-0000004",
+        "C-00004",
+        "198.0",
+        "IN",
+        null,
+        "2026-10-27 00:00:04"
+       ],
+       [
+        "O-0000005",
+        "C-00005",
+        "235.0",
+        "IN",
+        null,
+        "2026-10-27 00:00:05"
+       ],
+       [
+        "O-0000006",
+        "C-00006",
+        "272.0",
+        "IN",
+        null,
+        "2026-10-27 00:00:06"
+       ],
+       [
+        "O-0000008",
+        "C-00008",
+        "346.0",
+        "GB",
+        null,
+        "2026-10-27 00:00:08"
+       ],
+       [
+        "O-0000009",
+        "C-00009",
+        "383.0",
+        "AE",
+        null,
+        "2026-10-27 00:00:09"
+       ]
+      ],
+      "count": 49780
+     }
+    },
+    "dashboard": {
+     "tiles": [
+      [
+       "Rows in",
+       "50,012"
+      ],
+      [
+       "Published",
+       "49,780"
+      ],
+      [
+       "Quarantined",
+       "232"
+      ],
+      [
+       "Alerts",
+       "2"
+      ]
+     ]
+    }
+   },
+   "logs": [
+    [
+     "05:23:59",
+     "ERROR",
+     "DQ-01 is_complete failed (99.60%) \u2192 quarantine"
+    ],
+    [
+     "05:23:59",
+     "ERROR",
+     "DQ-02 is_unique failed (99.95%) \u2192 quarantine"
+    ],
+    [
+     "05:23:59",
+     "ERROR",
+     "DQ-03 is_non_negative failed (99.96%) \u2192 quarantine"
+    ],
+    [
+     "05:23:59",
+     "WARN",
+     "DQ-04 is_contained_in failed (99.90%) \u2192 alert"
+    ],
+    [
+     "05:23:59",
+     "WARN",
+     "DQ-07 references failed (98.80%) \u2192 alert"
+    ],
+    [
+     "05:23:59",
+     "INFO",
+     "published 49,780 rows to silver; quarantined 232; alerts: DQ-04, DQ-07"
+    ]
+   ],
+   "run_log": []
+  },
+  {
+   "n": 4,
+   "scenario": "rules",
+   "title": "Change one line: the same rules on Deequ",
+   "plain": "The binding changes from spark_sql to deequ, in the YAML and therefore in the metadata DB. No pipeline code changes. The port builds a Deequ VerificationSuite from the same rows: 6 rules run on Deequ, and DQ-07 (referential integrity) is routed to Spark SQL because the Deequ adapter declares it cannot do that. Every verdict agrees (yes), and 6 of the 6 metrics Deequ computed match the Spark SQL ones to six significant digits. One lesson from building the port: Deequ's 'uniqueness' means 'share of rows whose value appears exactly once', so the Spark SQL adapter computes exactly that, not 'distinct values / rows'. A port is only swappable if every adapter means the same thing by each rule. Running both adapters side by side also caught a bug in our own: the first Spark SQL adapter averaged decimal literals, and Spark rounded the metrics (0.996 instead of 0.99600096). It now averages doubles, and that comparison is kept as a contract test for the port.",
+   "code": "dq_engine: deequ        # the only change\n\nresults = dq_port.run(rules, 'bronze_orders')   # same call",
+   "group": null,
+   "focus": [
+    "inputs",
+    "checks",
+    "layers",
+    "config"
+   ],
+   "panels": {
+    "inputs": {
+     "user": "",
+     "file": "",
+     "text": "dq_engine: deequ        # the only change\n\nresults = dq_port.run(rules, 'bronze_orders')   # same call"
+    },
+    "checks": {
+     "items": [
+      [
+       "DQ-01 is complete \u00b7 customer_id [error \u2192 quarantine]",
+       "99.60%",
+       false
+      ],
+      [
+       "DQ-02 is unique \u00b7 order_id [error \u2192 quarantine]",
+       "99.95%",
+       false
+      ],
+      [
+       "DQ-03 is non negative \u00b7 amount [error \u2192 quarantine]",
+       "99.96%",
+       false
+      ],
+      [
+       "DQ-04 is contained in \u00b7 country [warn \u2192 alert]",
+       "99.90%",
+       false
+      ],
+      [
+       "DQ-05 completeness at least \u00b7 coupon [warn \u2192 alert]",
+       "10.00%",
+       true
+      ],
+      [
+       "DQ-06 row count between [error \u2192 stop]",
+       "50,012 rows",
+       true
+      ],
+      [
+       "DQ-07 references \u00b7 customer_id [warn \u2192 alert]",
+       "98.80%",
+       false
+      ]
+     ]
+    },
+    "layers": {
+     "spark_sql vs deequ": {
+      "cols": [
+       "rule",
+       "type",
+       "spark_sql",
+       "deequ"
+      ],
+      "rows": [
+       [
+        "DQ-01",
+        "is_complete",
+        "99.60% \u2717",
+        "99.60% \u2717"
+       ],
+       [
+        "DQ-02",
+        "is_unique",
+        "99.95% \u2717",
+        "99.95% \u2717"
+       ],
+       [
+        "DQ-03",
+        "is_non_negative",
+        "99.96% \u2717",
+        "99.96% \u2717"
+       ],
+       [
+        "DQ-04",
+        "is_contained_in",
+        "99.90% \u2717",
+        "99.90% \u2717"
+       ],
+       [
+        "DQ-05",
+        "completeness_at_least",
+        "10.00% \u2713",
+        "10.00% \u2713"
+       ],
+       [
+        "DQ-06",
+        "row_count_between",
+        "50,012 \u2713",
+        "50,012 \u2713"
+       ],
+       [
+        "DQ-07",
+        "references",
+        "98.80% \u2717",
+        "routed to spark_sql"
+       ]
+      ],
+      "count": 7
+     },
+     "Deequ's own check results": {
+      "cols": [
+       "check",
+       "constraint",
+       "status",
+       "message"
+      ],
+      "rows": [
+       [
+        "DQ-01",
+        "CompletenessConstraint(Completeness(customer_id,None,None))",
+        "Failure",
+        "Value: 0.9960009597696553 does not meet the constraint requirement!"
+       ],
+       [
+        "DQ-06",
+        "SizeConstraint(Size(None))",
+        "Success",
+        ""
+       ],
+       [
+        "DQ-02",
+        "UniquenessConstraint(Uniqueness(List(order_id),None,None))",
+        "Failure",
+        "Value: 0.9995201151723586 does not meet the constraint requirement!"
+       ],
+       [
+        "DQ-05",
+        "CompletenessConstraint(Completeness(coupon,None,None))",
+        "Success",
+        ""
+       ],
+       [
+        "DQ-04",
+        "ComplianceConstraint(Compliance(country contained in IN,US,GB,AE,SG,`country` IS NULL OR `",
+        "Failure",
+        "Value: 0.9990002399424138 does not meet the constraint requirement!"
+       ],
+       [
+        "DQ-03",
+        "ComplianceConstraint(Compliance(amount is non-negative,COALESCE(CAST(amount AS DECIMAL(20,",
+        "Failure",
+        "Value: 0.9996000959769655 does not meet the constraint requirement!"
+       ]
+      ],
+      "count": 6
+     }
+    },
+    "config": {
+     "yaml": "# datasets/orders.dq.yaml  (owned by the data team; reviewed by PR)\ndataset: orders\nowner: sales-data\ndq_engine: deequ              # binding: spark_sql | deequ   (great_expectations: adapter slot, not installed here)\nchecks:\n  - {id: DQ-01, rule: is_complete,           column: customer_id, severity: error, action: quarantine}\n  - {id: DQ-02, rule: is_unique,             column: order_id,    severity: error, action: quarantine}\n  - {id: DQ-03, rule: is_non_negative,       column: amount,      severity: error, action: quarantine}\n  - {id: DQ-04, rule: is_contained_in,       column: country,     severity: warn,  action: alert, params: {values: [IN, US, GB, AE, SG]}}\n  - {id: DQ-05, rule: completeness_at_least, column: coupon,      severity: warn,  action: alert, params: {min: 0.05}}\n  - {id: DQ-06, rule: row_count_between,                          severity: error, action: stop,  params: {min: 40000, max: 60000}}\n  - {id: DQ-07, rule: references,            column: customer_id, severity: warn,  action: alert, params: {table: customers, key: customer_id}}\n",
+     "db": {
+      "dataset_master": {
+       "cols": [
+        "dataset",
+        "owner",
+        "dq_engine",
+        "rules_fingerprint"
+       ],
+       "rows": [
+        [
+         "orders",
+         "sales-data",
+         "deequ",
+         "c9850a44be01"
+        ]
+       ]
+      },
+      "dq_rule": {
+       "cols": [
+        "dataset",
+        "rule_id",
+        "rule",
+        "column_name",
+        "params",
+        "severity",
+        "action",
+        "is_active"
+       ],
+       "rows": [
+        [
+         "orders",
+         "DQ-01",
+         "is_complete",
+         "customer_id",
+         "{}",
+         "error",
+         "quarantine",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-02",
+         "is_unique",
+         "order_id",
+         "{}",
+         "error",
+         "quarantine",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-03",
+         "is_non_negative",
+         "amount",
+         "{}",
+         "error",
+         "quarantine",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-04",
+         "is_contained_in",
+         "country",
+         "{\"values\": [\"IN\", \"US\", \"GB\", \"AE\", \"SG\"]}",
+         "warn",
+         "alert",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-05",
+         "completeness_at_least",
+         "coupon",
+         "{\"min\": 0.05}",
+         "warn",
+         "alert",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-06",
+         "row_count_between",
+         "None",
+         "{\"min\": 40000, \"max\": 60000}",
+         "error",
+         "stop",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-07",
+         "references",
+         "customer_id",
+         "{\"table\": \"customers\", \"key\": \"customer_id\"}",
+         "warn",
+         "alert",
+         "1"
+        ]
+       ]
+      }
+     }
+    }
+   },
+   "logs": [
+    [
+     "05:24:01",
+     "INFO",
+     "binding changed to deequ (one line); 6 rules ran on Deequ, DQ-07 routed to spark_sql; verdicts agree: True"
+    ]
+   ],
+   "run_log": []
+  },
+  {
+   "n": 5,
+   "scenario": "profile",
+   "title": "Profile the data before writing rules",
+   "plain": "Deequ's column profiler reads the table once and describes every column: type, completeness, approximate distinct count, and for numbers the minimum, maximum and mean. It took 1520 ms for 50,012 rows. The profile already shows the problems: customer_id is not 100% complete, amount has a negative minimum, and the country histogram includes 'Ind', which is not an ISO code. Profile first, then write rules: it is cheaper than guessing.",
+   "code": "ColumnProfilerRunner(spark).onData(bronze_orders).run()",
+   "group": null,
+   "focus": [
+    "inputs",
+    "layers",
+    "dashboard"
+   ],
+   "panels": {
+    "inputs": {
+     "user": "",
+     "file": "",
+     "text": "ColumnProfilerRunner(spark).onData(bronze_orders).run()"
+    },
+    "layers": {
+     "profile": {
+      "cols": [
+       "column",
+       "type",
+       "complete",
+       "distinct (approx)",
+       "min",
+       "max",
+       "mean"
+      ],
+      "rows": [
+       [
+        "order_id",
+        "String",
+        "100.00%",
+        "49,518",
+        "",
+        "",
+        ""
+       ],
+       [
+        "customer_id",
+        "String",
+        "99.60%",
+        "7,015",
+        "",
+        "",
+        ""
+       ],
+       [
+        "coupon",
+        "String",
+        "10.00%",
+        "1",
+        "",
+        "",
+        ""
+       ],
+       [
+        "country",
+        "String",
+        "100.00%",
+        "5",
+        "",
+        "",
+        ""
+       ],
+       [
+        "amount",
+        "Fractional",
+        "100.00%",
+        "1,934",
+        "-217.00",
+        "2,049.00",
+        "1,048.89"
+       ],
+       [
+        "placed_at",
+        "String",
+        "100.00%",
+        "55,492",
+        "",
+        "",
+        ""
+       ]
+      ],
+      "count": 6
+     },
+     "country histogram": {
+      "cols": [
+       "value",
+       "rows",
+       "share"
+      ],
+      "rows": [
+       [
+        "IN",
+        "34,962",
+        "69.91%"
+       ],
+       [
+        "US",
+        "5,000",
+        "10.00%"
+       ],
+       [
+        "Ind",
+        "50",
+        "0.10%"
+       ],
+       [
+        "AE",
+        "5,000",
+        "10.00%"
+       ],
+       [
+        "GB",
+        "5,000",
+        "10.00%"
+       ]
+      ],
+      "count": 5
+     }
+    },
+    "dashboard": {
+     "tiles": [
+      [
+       "Columns",
+       "6"
+      ],
+      [
+       "Rows",
+       "50,012"
+      ],
+      [
+       "Profile time",
+       "1520 ms"
+      ],
+      [
+       "Passes over data",
+       "1"
+      ]
+     ]
+    }
+   },
+   "logs": [
+    [
+     "05:24:03",
+     "INFO",
+     "profiled 6 columns in 1520 ms"
+    ]
+   ],
+   "run_log": []
+  },
+  {
+   "n": 6,
+   "scenario": "profile",
+   "title": "Let Deequ suggest rules; a person decides",
+   "plain": "Deequ's suggestion runner proposes 10 rules from the data itself (complete columns, value ranges, allowed values). Useful, but they describe today's data, not the business: here it suggests that customer_id may have up to 1% missing values, and that country may be 'Ind'. Accepted blindly, those rules would bless today's bugs. So suggestions are written to a draft YAML in a pull request, labelled proposed, and a person accepts or rejects each one. Suggestions touch columns with no rule yet: placed_at. Nothing here changes a rule automatically.",
+   "code": "ConstraintSuggestionRunner(spark).onData(bronze_orders).addConstraintRule(DEFAULT()).run()\n# -> datasets/orders.dq.suggested.yaml, opened as a draft PR for review",
+   "group": null,
+   "focus": [
+    "inputs",
+    "layers",
+    "logs"
+   ],
+   "panels": {
+    "inputs": {
+     "user": "",
+     "file": "",
+     "text": "ConstraintSuggestionRunner(spark).onData(bronze_orders).addConstraintRule(DEFAULT()).run()\n# -> datasets/orders.dq.suggested.yaml, opened as a draft PR for review"
+    },
+    "layers": {
+     "suggestions": {
+      "cols": [
+       "column",
+       "description",
+       "Deequ code"
+      ],
+      "rows": [
+       [
+        "order_id",
+        "'order_id' is not null",
+        ".isComplete(\"order_id\")"
+       ],
+       [
+        "order_id",
+        "'order_id' is unique",
+        ".isUnique(\"order_id\")"
+       ],
+       [
+        "customer_id",
+        "'customer_id' has less than 1% missing values",
+        ".hasCompleteness(\"customer_id\", lambda x: x >= 0.99, \"It should be abo"
+       ],
+       [
+        "coupon",
+        "'coupon' has value range 'DIWALI10'",
+        ".isContainedIn(\"coupon\", [\"DIWALI10\"])"
+       ],
+       [
+        "coupon",
+        "'coupon' has value range '' for at least 89.0% of values",
+        ".isContainedIn(\"coupon\", [\"\"], lambda x: x >= 0.89, \"It should be abov"
+       ],
+       [
+        "country",
+        "'country' has value range 'IN', 'GB', 'AE', 'US', 'Ind'",
+        ".isContainedIn(\"country\", [\"IN\", \"GB\", \"AE\", \"US\", \"Ind\"])"
+       ],
+       [
+        "country",
+        "'country' is not null",
+        ".isComplete(\"country\")"
+       ],
+       [
+        "country",
+        "'country' has value range 'IN', 'US', 'AE', 'GB' for at least 99.0% of values",
+        ".isContainedIn(\"country\", [\"IN\", \"US\", \"AE\", \"GB\"], lambda x: x >= 0.9"
+       ],
+       [
+        "amount",
+        "'amount' is not null",
+        ".isComplete(\"amount\")"
+       ],
+       [
+        "placed_at",
+        "'placed_at' is not null",
+        ".isComplete(\"placed_at\")"
+       ]
+      ],
+      "count": 10
+     }
+    }
+   },
+   "logs": [
+    [
+     "05:24:03",
+     "INFO",
+     "10 rule suggestions; written to a draft PR, not applied"
+    ]
+   ],
+   "run_log": []
+  },
+  {
+   "n": 7,
+   "scenario": "trend",
+   "title": "Five days of metrics, and the day the count fell",
+   "plain": "Every run stores its metrics in Deequ's metrics repository (5 Size metrics stored, one per day). An anomaly check compares today's row count with the history: fail if it fell by more than half since the last run. It needs at least one previous run, so it starts on the second day. Days 23\u201326 Oct are normal (about 50,000 orders). On 27 Oct only 19,812 rows arrived: the anomaly check fails, and so does DQ-06 (row count between 40,000 and 60,000), whose action is stop. Silver keeps yesterday's data instead of publishing a third of today's. A fixed range catches the obvious; the anomaly check also catches a drop inside the range, because it learns from history.",
+   "code": "VerificationSuite(spark).onData(day_orders)\n  .useRepository(FileSystemMetricsRepository(spark, path))\n  .saveOrAppendResult(ResultKey(spark, day_ts, {'day': day}))\n  .addAnomalyCheck(RelativeRateOfChangeStrategy(maxRateDecrease=0.5), Size())\n  .addCheck(...DQ-01, DQ-06...)\n  .run()",
+   "group": null,
+   "focus": [
+    "inputs",
+    "layers",
+    "checks",
+    "dashboard",
+    "logs"
+   ],
+   "panels": {
+    "inputs": {
+     "user": "",
+     "file": "",
+     "text": "VerificationSuite(spark).onData(day_orders)\n  .useRepository(FileSystemMetricsRepository(spark, path))\n  .saveOrAppendResult(ResultKey(spark, day_ts, {'day': day}))\n  .addAnomalyCheck(RelativeRateOfChangeStrategy(maxRateDecrease=0.5), Size())\n  .addCheck(...DQ-01, DQ-06...)\n  .run()"
+    },
+    "layers": {
+     "metrics history": {
+      "cols": [
+       "day",
+       "rows",
+       "customer_id complete",
+       "anomaly check",
+       "DQ-06 range"
+      ],
+      "rows": [
+       [
+        "2026-10-23",
+        "50,012",
+        "99.60%",
+        "\u2014 (no history yet)",
+        "\u2713"
+       ],
+       [
+        "2026-10-24",
+        "51,212",
+        "99.60%",
+        "\u2713",
+        "\u2713"
+       ],
+       [
+        "2026-10-25",
+        "49,812",
+        "99.60%",
+        "\u2713",
+        "\u2713"
+       ],
+       [
+        "2026-10-26",
+        "50,512",
+        "99.60%",
+        "\u2713",
+        "\u2713"
+       ],
+       [
+        "2026-10-27",
+        "19,812",
+        "99.60%",
+        "\u2717 anomaly",
+        "\u2717 stop"
+       ]
+      ],
+      "count": 5
+     }
+    },
+    "checks": {
+     "items": [
+      [
+       "2026-10-23: anomaly check and row-count range",
+       "50,012 rows",
+       true
+      ],
+      [
+       "2026-10-24: anomaly check and row-count range",
+       "51,212 rows",
+       true
+      ],
+      [
+       "2026-10-25: anomaly check and row-count range",
+       "49,812 rows",
+       true
+      ],
+      [
+       "2026-10-26: anomaly check and row-count range",
+       "50,512 rows",
+       true
+      ],
+      [
+       "2026-10-27: anomaly check and row-count range",
+       "19,812 rows",
+       false
+      ]
+     ]
+    },
+    "dashboard": {
+     "tiles": [
+      [
+       "27 Oct rows",
+       "19,812"
+      ],
+      [
+       "Usual",
+       "\u2248 50,000"
+      ],
+      [
+       "Anomaly",
+       "\u2717 detected"
+      ],
+      [
+       "Silver",
+       "not updated"
+      ]
+     ]
+    }
+   },
+   "logs": [
+    [
+     "05:24:05",
+     "INFO",
+     "2026-10-23: 50,012 rows; anomaly check passed"
+    ],
+    [
+     "05:24:07",
+     "INFO",
+     "2026-10-24: 51,212 rows; anomaly check passed"
+    ],
+    [
+     "05:24:09",
+     "INFO",
+     "2026-10-25: 49,812 rows; anomaly check passed"
+    ],
+    [
+     "05:24:10",
+     "INFO",
+     "2026-10-26: 50,512 rows; anomaly check passed"
+    ],
+    [
+     "05:24:11",
+     "ERROR",
+     "2026-10-27: 19,812 rows; anomaly check FAILED: size fell more than 50% vs the previous run; DQ-06 \u2192 stop: silver not updated"
+    ]
+   ],
+   "run_log": []
+  },
+  {
+   "n": 8,
+   "scenario": "onboard",
+   "title": "A new dataset, onboarded with nine lines of YAML",
+   "plain": "The CRM team wants checks on their customers table. The whole change is one new YAML file, reviewed as a pull request: three rules, bound to Deequ. The loader adds it to the metadata DB, the same port runs it, the same actions apply. No pipeline code, no new job. The tier rule catches three rows written as 'gold' instead of 'Gold'; it is a warning, so the owner is alerted and the rows are kept. This is what metadata-driven, low-code data quality means: the engine is built once, and each dataset is a file.",
+   "code": "# datasets/customers.dq.yaml  (a new dataset: this file is the whole change)\ndataset: customers\nowner: crm-data\ndq_engine: deequ\nchecks:\n  - {id: DQ-11, rule: is_complete,     column: customer_id, severity: error, action: stop}\n  - {id: DQ-12, rule: is_unique,       column: customer_id, severity: error, action: stop}\n  - {id: DQ-13, rule: is_contained_in, column: tier,        severity: warn,  action: alert, params: {values: [Gold, Standard]}}\n",
+   "group": null,
+   "focus": [
+    "inputs",
+    "config",
+    "checks",
+    "logs"
+   ],
+   "panels": {
+    "inputs": {
+     "user": "",
+     "file": "",
+     "text": "# datasets/customers.dq.yaml  (a new dataset: this file is the whole change)\ndataset: customers\nowner: crm-data\ndq_engine: deequ\nchecks:\n  - {id: DQ-11, rule: is_complete,     column: customer_id, severity: error, action: stop}\n  - {id: DQ-12, rule: is_unique,       column: customer_id, severity: error, action: stop}\n  - {id: DQ-13, rule: is_contained_in, column: tier,        severity: warn,  action: alert, params: {values: [Gold, Standard]}}\n"
+    },
+    "config": {
+     "yaml": "# datasets/customers.dq.yaml  (a new dataset: this file is the whole change)\ndataset: customers\nowner: crm-data\ndq_engine: deequ\nchecks:\n  - {id: DQ-11, rule: is_complete,     column: customer_id, severity: error, action: stop}\n  - {id: DQ-12, rule: is_unique,       column: customer_id, severity: error, action: stop}\n  - {id: DQ-13, rule: is_contained_in, column: tier,        severity: warn,  action: alert, params: {values: [Gold, Standard]}}\n",
+     "db": {
+      "dataset_master": {
+       "cols": [
+        "dataset",
+        "owner",
+        "dq_engine",
+        "rules_fingerprint"
+       ],
+       "rows": [
+        [
+         "orders",
+         "sales-data",
+         "deequ",
+         "c9850a44be01"
+        ],
+        [
+         "customers",
+         "crm-data",
+         "deequ",
+         "faa34d0c3ca3"
+        ]
+       ]
+      },
+      "dq_rule": {
+       "cols": [
+        "dataset",
+        "rule_id",
+        "rule",
+        "column_name",
+        "params",
+        "severity",
+        "action",
+        "is_active"
+       ],
+       "rows": [
+        [
+         "orders",
+         "DQ-01",
+         "is_complete",
+         "customer_id",
+         "{}",
+         "error",
+         "quarantine",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-02",
+         "is_unique",
+         "order_id",
+         "{}",
+         "error",
+         "quarantine",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-03",
+         "is_non_negative",
+         "amount",
+         "{}",
+         "error",
+         "quarantine",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-04",
+         "is_contained_in",
+         "country",
+         "{\"values\": [\"IN\", \"US\", \"GB\", \"AE\", \"SG\"]}",
+         "warn",
+         "alert",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-05",
+         "completeness_at_least",
+         "coupon",
+         "{\"min\": 0.05}",
+         "warn",
+         "alert",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-06",
+         "row_count_between",
+         "None",
+         "{\"min\": 40000, \"max\": 60000}",
+         "error",
+         "stop",
+         "1"
+        ],
+        [
+         "orders",
+         "DQ-07",
+         "references",
+         "customer_id",
+         "{\"table\": \"customers\", \"key\": \"customer_id\"}",
+         "warn",
+         "alert",
+         "1"
+        ],
+        [
+         "customers",
+         "DQ-11",
+         "is_complete",
+         "customer_id",
+         "{}",
+         "error",
+         "stop",
+         "1"
+        ],
+        [
+         "customers",
+         "DQ-12",
+         "is_unique",
+         "customer_id",
+         "{}",
+         "error",
+         "stop",
+         "1"
+        ],
+        [
+         "customers",
+         "DQ-13",
+         "is_contained_in",
+         "tier",
+         "{\"values\": [\"Gold\", \"Standard\"]}",
+         "warn",
+         "alert",
+         "1"
+        ]
+       ]
+      }
+     }
+    },
+    "checks": {
+     "items": [
+      [
+       "DQ-11 is complete \u00b7 customer_id [error \u2192 stop]",
+       "100.00%",
+       true
+      ],
+      [
+       "DQ-12 is unique \u00b7 customer_id [error \u2192 stop]",
+       "100.00%",
+       true
+      ],
+      [
+       "DQ-13 is contained in \u00b7 tier [warn \u2192 alert]",
+       "99.25%",
+       false
+      ]
+     ]
+    },
+    "layers": {
+     "Deequ's own check results": {
+      "cols": [
+       "check",
+       "constraint",
+       "status",
+       "message"
+      ],
+      "rows": [
+       [
+        "DQ-11",
+        "CompletenessConstraint(Completeness(customer_id,None,None))",
+        "Success",
+        ""
+       ],
+       [
+        "DQ-12",
+        "UniquenessConstraint(Uniqueness(List(customer_id),None,None))",
+        "Success",
+        ""
+       ],
+       [
+        "DQ-13",
+        "ComplianceConstraint(Compliance(tier contained in Gold,Standard,`tier` IS NULL OR `tier` I",
+        "Failure",
+        "Value: 0.9925 does not meet the constraint requirement!"
+       ]
+      ],
+      "count": 3
+     }
+    },
+    "dashboard": {
+     "tiles": [
+      [
+       "Files changed",
+       "1 (YAML)"
+      ],
+      [
+       "Code changed",
+       "0 lines"
+      ],
+      [
+       "Rules",
+       "3"
+      ],
+      [
+       "Engine",
+       "deequ"
+      ]
+     ]
+    }
+   },
+   "logs": [
+    [
+     "05:24:12",
+     "INFO",
+     "new dataset 'customers' onboarded from YAML only: 3 rules, fingerprint faa34d0c3ca3"
+    ],
+    [
+     "05:24:12",
+     "WARN",
+     "DQ-13 is_contained_in failed (99.25%) \u2192 alert"
+    ]
+   ],
+   "run_log": []
+  }
+ ]
+}

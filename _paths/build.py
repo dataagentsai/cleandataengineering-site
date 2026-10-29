@@ -322,7 +322,7 @@ GUIDES = {"medallion": ("Medallion architecture, drawn right", "/learn/medallion
           "cost-drivers": ("Performance stories: the slow job, the clue, the fix, measured (simulation)", "/learn/data-platform-sim/performance/"),
           "scd": ("Problem Lab: SCD Type 2 pitfalls, the naive fix and the right one (simulation)", "/learn/data-platform-sim/problems/"),
           "backfill": ("Problem Lab: a backfill after a bug, re-runs and late data (simulation)", "/learn/data-platform-sim/problems/"),
-          "data-quality": ("Problem Lab: bad rows and poison records, quarantined with a reason (simulation)", "/learn/data-platform-sim/problems/"),
+          "data-quality": ("Data quality as metadata: YAML rules, one port, Spark SQL or Deequ (simulation)", "/learn/data-platform-sim/data-quality/"),
           "schema-evolution": ("Problem Lab: a renamed column, and why auto-evolve is not the fix (simulation)", "/learn/data-platform-sim/problems/"),
           "data-contracts": ("Problem Lab: a contract check stops a breaking change (simulation)", "/learn/data-platform-sim/problems/"),
           "cdc": ("Problem Lab: hard deletes that incremental loads never see (simulation)", "/learn/data-platform-sim/problems/"),

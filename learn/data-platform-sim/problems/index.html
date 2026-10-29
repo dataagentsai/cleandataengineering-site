@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Problem Lab: 19 data engineering problems, run for real · Clean Data Engineering</title>
+<title>Problem Lab: 19 data problems, run for real · Clean Data Engineering</title>
 <meta name="description" content="Nineteen data problems run on Spark and Delta: duplicates, SCD2, late data, schema drift, deletes, skew, time zones, PII, self-healing and more."><link rel="canonical" href="https://cleandataengineering.ai/learn/data-platform-sim/problems/">
-<meta property="og:title" content="Problem Lab: 19 data engineering problems, run for real"><meta property="og:description" content="Nineteen data problems run on Spark and Delta: duplicates, SCD2, late data, schema drift, deletes, skew, time zones, PII, self-healing and more."><meta property="og:url" content="https://cleandataengineering.ai/learn/data-platform-sim/problems/">
+<meta property="og:title" content="Problem Lab: 19 data problems, run for real"><meta property="og:description" content="Nineteen data problems run on Spark and Delta: duplicates, SCD2, late data, schema drift, deletes, skew, time zones, PII, self-healing and more."><meta property="og:url" content="https://cleandataengineering.ai/learn/data-platform-sim/problems/">
 <meta name="color-scheme" content="light">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
@@ -177,7 +177,7 @@
 </header>
 <main class="wrap">
 <p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › <a href="/learn/data-platform-sim/">DataTwin Studio</a> › Problem Lab</p>
-<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> <a href="/learn/data-platform-sim/" style="font-size:14px">One batch, end to end</a><a href="/learn/data-platform-sim/delta/" style="font-size:14px">Delta Lake internals</a><a href="/learn/data-platform-sim/spark/" style="font-size:14px">Spark internals</a><span class="real" style="background:var(--ink);color:#fff">Problem Lab</span><a href="/learn/data-platform-sim/performance/" style="font-size:14px">Performance stories</a> <span>· more coming: streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
+<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> <a href="/learn/data-platform-sim/" style="font-size:14px">One batch, end to end</a><a href="/learn/data-platform-sim/delta/" style="font-size:14px">Delta Lake internals</a><a href="/learn/data-platform-sim/spark/" style="font-size:14px">Spark internals</a><span class="real" style="background:var(--ink);color:#fff">Problem Lab</span><a href="/learn/data-platform-sim/data-quality/" style="font-size:14px">Data quality</a><a href="/learn/data-platform-sim/performance/" style="font-size:14px">Performance stories</a> <span>· more coming: streaming, Kafka, Unity Catalog, dimensional modelling, cost</span></p>
 <p class="eyebrow" style="margin-top:16px">DataTwin Studio · Problem Lab · nineteen problems every data team hits</p>
 <h1>The Problem Lab: break it, try the naive fix, fix it right</h1>
 <p class="lede">The problems that cost real teams their nights. Each one is told in three steps: what you see (the checks go red), the naive fix (applied for real, and it fails or makes things worse), and the right fix (the checks go green). Every table, check, error and commit comes from a real Spark and Delta Lake run.</p>
@@ -224,7 +224,7 @@ const R = {
     const cur = tabState.config && names.includes(tabState.config) ? tabState.config : names[names.length - 1];
     let h = tabs('config', names, cur, ch.includes('merged') ? ['merged config'] : ch.includes('db') ? ['metadata DB'] : []);
     if (cur === 'yaml') h += '<pre>' + esc(p.yaml) + '</pre>';
-    if (cur === 'metadata DB') h += Object.entries(p.db).map(([t, v]) => '<details class="c"' + (t.startsWith('dataset_config') ? ' open' : '') + '><summary>' + t + ' (' + v.rows.length + ')</summary>' + tbl(v) + '</details>').join('');
+    if (cur === 'metadata DB') h += Object.entries(p.db).map(([t, v]) => '<details class="c"' + (t.startsWith('dataset_config') || t === 'dq_rule' ? ' open' : '') + '><summary>' + t + ' (' + v.rows.length + ')</summary>' + tbl(v) + '</details>').join('');
     if (cur === 'merged config') h += '<p class="note">platform &lt; source &lt; dataset</p><div class="tw"><table class="d"><tr><th>key</th><th>value</th><th>from</th></tr>' +
       Object.entries(p.merged).map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + esc(v) + '</td><td>' + (k in p.view.dataset ? 'dataset' : k in p.view.source ? 'source' : 'platform') + (k in p.view.platform && k in p.view.dataset ? ' (overrides platform: ' + esc(p.view.platform[k]) + ')' : '') + '</td></tr>').join('') +
       '</table></div><p class="kv">fingerprint: <b>' + esc(p.fingerprint) + '</b></p>';
@@ -297,6 +297,7 @@ const R = {
       '<p class="note">live = part of the current version. removed = no longer in the current version, but still on disk so older versions can be read, until VACUUM.</p>';
   },
   engine(p) {
+    if (p && p.compiled) return '<p class="note">' + esc(p.note || '') + '</p>' + Object.entries(p.compiled).map(([k, v]) => '<p class="kv" style="margin:8px 0 2px"><b>' + esc(k) + '</b></p><pre>' + esc(v) + '</pre>').join('');
     if (!p) return '<p class="empty">' + (scen.id === 'naive' && curStep > 4 ? 'Plans were not recorded for the naive pipeline; see scenario 1 for the plans of each hop.' : D.order.some(o => o[0] === 'stages') ? 'No plan captured for this step.' : 'Nothing yet.') + '</p>';
     if (p.error || p.history || p.metrics) {
       let h = '';

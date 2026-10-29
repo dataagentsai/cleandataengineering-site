@@ -1,8 +1,8 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Spark performance stories: slow job, clue, fix, measured · Clean Data Engineering</title>
+<title>Spark performance stories, measured · Clean Data Engineering</title>
 <meta name="description" content="Twelve Spark and Delta performance stories run for real: full reloads, tiny files, skew, exploding joins, MERGE, spill, Python UDFs, broadcast, collect()."><link rel="canonical" href="https://cleandataengineering.ai/learn/data-platform-sim/performance/">
-<meta property="og:title" content="Spark performance stories: slow job, clue, fix, measured"><meta property="og:description" content="Twelve Spark and Delta performance stories run for real: full reloads, tiny files, skew, exploding joins, MERGE, spill, Python UDFs, broadcast, collect()."><meta property="og:url" content="https://cleandataengineering.ai/learn/data-platform-sim/performance/">
+<meta property="og:title" content="Spark performance stories, measured"><meta property="og:description" content="Twelve Spark and Delta performance stories run for real: full reloads, tiny files, skew, exploding joins, MERGE, spill, Python UDFs, broadcast, collect()."><meta property="og:url" content="https://cleandataengineering.ai/learn/data-platform-sim/performance/">
 <meta name="color-scheme" content="light">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
@@ -177,7 +177,7 @@
 </header>
 <main class="wrap">
 <p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › <a href="/learn/data-platform-sim/">DataTwin Studio</a> › Performance stories</p>
-<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> <a href="/learn/data-platform-sim/" style="font-size:14px">One batch, end to end</a><a href="/learn/data-platform-sim/delta/" style="font-size:14px">Delta Lake internals</a><a href="/learn/data-platform-sim/spark/" style="font-size:14px">Spark internals</a><a href="/learn/data-platform-sim/problems/" style="font-size:14px">Problem Lab</a><span class="real" style="background:var(--ink);color:#fff">Performance stories</span> <span>· more coming: streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
+<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> <a href="/learn/data-platform-sim/" style="font-size:14px">One batch, end to end</a><a href="/learn/data-platform-sim/delta/" style="font-size:14px">Delta Lake internals</a><a href="/learn/data-platform-sim/spark/" style="font-size:14px">Spark internals</a><a href="/learn/data-platform-sim/problems/" style="font-size:14px">Problem Lab</a><a href="/learn/data-platform-sim/data-quality/" style="font-size:14px">Data quality</a><span class="real" style="background:var(--ink);color:#fff">Performance stories</span> <span>· more coming: streaming, Kafka, Unity Catalog, dimensional modelling, cost</span></p>
 <p class="eyebrow" style="margin-top:16px">DataTwin Studio · Performance stories · from slow to fast, measured</p>
 <h1>Performance stories: the slow job, the clue, the fix</h1>
 <p class="lede">Every data team has a job that takes three hours. It is almost never one problem; it is four small ones stacked up. Story 0 removes them one at a time and measures each fix. Stories 1 to 12 take one problem each: what you see, the clue that gives it away (in the event log, the query plan or the table's metadata), and the fix with its measured gain.</p>
@@ -224,7 +224,7 @@ const R = {
     const cur = tabState.config && names.includes(tabState.config) ? tabState.config : names[names.length - 1];
     let h = tabs('config', names, cur, ch.includes('merged') ? ['merged config'] : ch.includes('db') ? ['metadata DB'] : []);
     if (cur === 'yaml') h += '<pre>' + esc(p.yaml) + '</pre>';
-    if (cur === 'metadata DB') h += Object.entries(p.db).map(([t, v]) => '<details class="c"' + (t.startsWith('dataset_config') ? ' open' : '') + '><summary>' + t + ' (' + v.rows.length + ')</summary>' + tbl(v) + '</details>').join('');
+    if (cur === 'metadata DB') h += Object.entries(p.db).map(([t, v]) => '<details class="c"' + (t.startsWith('dataset_config') || t === 'dq_rule' ? ' open' : '') + '><summary>' + t + ' (' + v.rows.length + ')</summary>' + tbl(v) + '</details>').join('');
     if (cur === 'merged config') h += '<p class="note">platform &lt; source &lt; dataset</p><div class="tw"><table class="d"><tr><th>key</th><th>value</th><th>from</th></tr>' +
       Object.entries(p.merged).map(([k, v]) => '<tr><td>' + esc(k) + '</td><td>' + esc(v) + '</td><td>' + (k in p.view.dataset ? 'dataset' : k in p.view.source ? 'source' : 'platform') + (k in p.view.platform && k in p.view.dataset ? ' (overrides platform: ' + esc(p.view.platform[k]) + ')' : '') + '</td></tr>').join('') +
       '</table></div><p class="kv">fingerprint: <b>' + esc(p.fingerprint) + '</b></p>';
@@ -297,6 +297,7 @@ const R = {
       '<p class="note">live = part of the current version. removed = no longer in the current version, but still on disk so older versions can be read, until VACUUM.</p>';
   },
   engine(p) {
+    if (p && p.compiled) return '<p class="note">' + esc(p.note || '') + '</p>' + Object.entries(p.compiled).map(([k, v]) => '<p class="kv" style="margin:8px 0 2px"><b>' + esc(k) + '</b></p><pre>' + esc(v) + '</pre>').join('');
     if (!p) return '<p class="empty">' + (scen.id === 'naive' && curStep > 4 ? 'Plans were not recorded for the naive pipeline; see scenario 1 for the plans of each hop.' : D.order.some(o => o[0] === 'stages') ? 'No plan captured for this step.' : 'Nothing yet.') + '</p>';
     if (p.error || p.history || p.metrics) {
       let h = '';
