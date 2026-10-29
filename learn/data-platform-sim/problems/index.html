@@ -130,7 +130,7 @@
   .scen button.on { background:var(--ink); color:#fff; }
   .ctl { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
   .ctl .pos { font-size:14px; color:var(--muted); margin-left:6px; }
-  .studio { display:grid; grid-template-columns:260px 1fr; gap:16px; margin-top:8px; }
+  .studio { display:grid; grid-template-columns:260px minmax(0,1fr); gap:16px; margin-top:8px; } .studio > div { min-width:0; }
   .steps { border:var(--line); border-radius:14px; padding:8px; background:#fff; align-self:start; position:sticky; top:10px; max-height:92vh; overflow:auto; }
   .steps { min-width:0; } .steps button { box-sizing:border-box; display:flex; gap:8px; width:100%; text-align:left; font:inherit; font-size:14px; border:0; background:none; padding:7px 8px; border-radius:10px; cursor:pointer; color:var(--ink-soft); }
   .steps button b { font-family:var(--hand); font-size:19px; min-width:24px; color:var(--ink); }
@@ -177,7 +177,7 @@
 </header>
 <main class="wrap">
 <p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › <a href="/learn/data-platform-sim/">DataTwin Studio</a> › Problem Lab</p>
-<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> <a href="/learn/data-platform-sim/" style="font-size:14px">One batch, end to end</a><a href="/learn/data-platform-sim/delta/" style="font-size:14px">Delta Lake internals</a><a href="/learn/data-platform-sim/spark/" style="font-size:14px">Spark internals</a><span class="real" style="background:var(--ink);color:#fff">Problem Lab</span> <span>· more coming: performance stories, streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
+<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> <a href="/learn/data-platform-sim/" style="font-size:14px">One batch, end to end</a><a href="/learn/data-platform-sim/delta/" style="font-size:14px">Delta Lake internals</a><a href="/learn/data-platform-sim/spark/" style="font-size:14px">Spark internals</a><span class="real" style="background:var(--ink);color:#fff">Problem Lab</span><a href="/learn/data-platform-sim/performance/" style="font-size:14px">Performance stories</a> <span>· more coming: streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
 <p class="eyebrow" style="margin-top:16px">DataTwin Studio · Problem Lab · nineteen problems every data team hits</p>
 <h1>The Problem Lab: break it, try the naive fix, fix it right</h1>
 <p class="lede">The problems that cost real teams their nights. Each one is told in three steps: what you see (the checks go red), the naive fix (applied for real, and it fails or makes things worse), and the right fix (the checks go green). Every table, check, error and commit comes from a real Spark and Delta Lake run.</p>
@@ -279,7 +279,7 @@ const R = {
       const bars = ts.slice(0, 60).map(t => '<div style="position:relative;height:7px;margin:1px 0"><i title="task ' + t.i + ': ' + t.ms + ' ms" style="position:absolute;left:' + (100 * t.offset / span).toFixed(1) + '%;width:' + Math.max(0.6, 100 * t.ms / span).toFixed(1) + '%;height:7px;border-radius:2px;background:' + (skew && t.ms === mx ? '#d9534f' : 'var(--peri)') + ';border:0.5px solid var(--ink)"></i></div>').join('');
       return '<div style="border-top:1px dashed var(--rule-firm);padding:6px 0"><p class="kv" style="margin:0"><b>stage ' + s.id + '</b> · ' + esc(s.name.replace(/ at .*$/, '')) + ' · <b>' + s.tasks + ' task' + (s.tasks === 1 ? '' : 's') + '</b> · ' + s.ms + ' ms' +
         (s.sw ? ' · shuffle write ' + kb(s.sw) : '') + (s.sr ? ' · shuffle read ' + kb(s.sr) : '') + (s.spill ? ' · <b style="color:#b0281a">spill ' + kb(s.spill) + '</b>' : '') + '</p>' +
-        '<div style="margin:4px 0 2px">' + bars + '</div>' + (ts.length > 60 ? '<p class="count">first 60 of ' + ts.length + ' tasks</p>' : '') +
+        '<div style="margin:4px 0 2px">' + bars + '</div>' + (s.tasks > 60 ? '<p class="count">first 60 of ' + s.tasks + ' tasks</p>' : '') +
         '<p class="count">task time: slowest ' + mx + ' ms, median ' + med + ' ms' + (skew ? ' · <b style="color:#b0281a">one task ' + (mx / Math.max(med, 1)).toFixed(1) + '× the median: skew</b>' : '') + '</p></div>';
     }).join('') + '<p class="note">Each bar is one task, placed on its stage\'s own timeline. Two cores means at most two bars overlap: that is a wave.</p>';
   },
@@ -288,7 +288,7 @@ const R = {
     const ok = p.items.filter(c => c[2]).length;
     return '<p class="kv"><b>' + ok + ' of ' + p.items.length + ' checks pass</b></p>' +
       p.items.map(c => '<div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px dashed var(--rule)"><b style="font-size:20px;color:' + (c[2] ? '#1d6b3a' : '#b0281a') + '">' + (c[2] ? '✓' : '✗') + '</b><span style="flex:1">' + esc(c[0]) + '</span><code style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + esc(c[1]) + '</code></div>').join('') +
-      '<p class="note" style="margin-top:6px">These are the checks a real pipeline should run after every load. Red means the problem is still there.</p>';
+      '<p class="note" style="margin-top:6px">' + (D.order.some(o => o[0] === 'stages') ? 'Clues from the event log, the query plan and the table\'s metadata. Red marks the problem; green means the fix removed it.' : 'These are the checks a real pipeline should run after every load. Red means the problem is still there.') + '</p>';
   },
   files(p) {
     if (!p) return '<p class="empty">No files yet.</p>';
@@ -315,7 +315,12 @@ const R = {
   },
   dashboard(p) {
     if (!p) return '<p class="empty">' + (D.order.some(o => o[0] === 'checks') ? 'Not used in this problem.' : 'No data yet.') + '</p>';
-    return '<div class="tiles">' + p.tiles.map(t => '<div class="tile' + (/✗|2,500/.test(t[1]) ? ' bad' : /✓/.test(t[1]) ? '' : '') + '"><span>' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b></div>').join('') + '</div>' + (p.note ? '<p class="note" style="margin-top:6px">' + esc(p.note) + '</p>' : '');
+    let wf = '';
+    if (p.waterfall) {
+      const mx = Math.max(...p.waterfall.map(w => w[1]), 1);
+      wf = '<p class="kv" style="margin:10px 0 2px"><b>Waterfall: job time after each fix</b></p><div class="bars">' + p.waterfall.map((w, i) => '<div class="bar"><i style="width:' + Math.max(2, Math.round(180 * w[1] / mx)) + 'px;background:' + (i === 0 ? '#e8a598' : i === p.waterfall.length - 1 ? '#9fd3b0' : 'var(--peri)') + '"></i>' + (w[1] >= 1000 ? (w[1] / 1000).toFixed(1) + ' s' : w[1] + ' ms') + ' · ' + esc(w[0]) + '</div>').join('') + '</div>';
+    }
+    return '<div class="tiles">' + p.tiles.map(t => '<div class="tile' + (/✗|2,500/.test(t[1]) ? ' bad' : /✓/.test(t[1]) ? '' : '') + '"><span>' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b></div>').join('') + '</div>' + wf + (p.note ? '<p class="note" style="margin-top:6px">' + esc(p.note) + '</p>' : '');
   },
 };
 const ORDER = D.order;

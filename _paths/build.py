@@ -319,7 +319,7 @@ GUIDES = {"medallion": ("Medallion architecture, drawn right", "/learn/medallion
           "table-formats": ("Delta Lake internals, recorded (simulation)", "/learn/data-platform-sim/delta/"),
           "small-files": ("Delta Lake internals: 300 tiny files, then OPTIMIZE (simulation)", "/learn/data-platform-sim/delta/"),
           "idempotency": ("DataTwin Studio: the same file sent twice (simulation)", "/learn/data-platform-sim/"),
-          "cost-drivers": ("Spark internals: shuffle, joins, skew and AQE (simulation)", "/learn/data-platform-sim/spark/"),
+          "cost-drivers": ("Performance stories: the slow job, the clue, the fix, measured (simulation)", "/learn/data-platform-sim/performance/"),
           "scd": ("Problem Lab: SCD Type 2 pitfalls, the naive fix and the right one (simulation)", "/learn/data-platform-sim/problems/"),
           "backfill": ("Problem Lab: a backfill after a bug, re-runs and late data (simulation)", "/learn/data-platform-sim/problems/"),
           "data-quality": ("Problem Lab: bad rows and poison records, quarantined with a reason (simulation)", "/learn/data-platform-sim/problems/"),

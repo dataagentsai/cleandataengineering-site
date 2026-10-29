@@ -34,7 +34,7 @@ CSS = """<style>
   .scen button.on { background:var(--ink); color:#fff; }
   .ctl { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:10px 0; }
   .ctl .pos { font-size:14px; color:var(--muted); margin-left:6px; }
-  .studio { display:grid; grid-template-columns:260px 1fr; gap:16px; margin-top:8px; }
+  .studio { display:grid; grid-template-columns:260px minmax(0,1fr); gap:16px; margin-top:8px; } .studio > div { min-width:0; }
   .steps { border:var(--line); border-radius:14px; padding:8px; background:#fff; align-self:start; position:sticky; top:10px; max-height:92vh; overflow:auto; }
   .steps { min-width:0; } .steps button { box-sizing:border-box; display:flex; gap:8px; width:100%; text-align:left; font:inherit; font-size:14px; border:0; background:none; padding:7px 8px; border-radius:10px; cursor:pointer; color:var(--ink-soft); }
   .steps button b { font-family:var(--hand); font-size:19px; min-width:24px; color:var(--ink); }
@@ -158,7 +158,7 @@ const R = {
       const bars = ts.slice(0, 60).map(t => '<div style="position:relative;height:7px;margin:1px 0"><i title="task ' + t.i + ': ' + t.ms + ' ms" style="position:absolute;left:' + (100 * t.offset / span).toFixed(1) + '%;width:' + Math.max(0.6, 100 * t.ms / span).toFixed(1) + '%;height:7px;border-radius:2px;background:' + (skew && t.ms === mx ? '#d9534f' : 'var(--peri)') + ';border:0.5px solid var(--ink)"></i></div>').join('');
       return '<div style="border-top:1px dashed var(--rule-firm);padding:6px 0"><p class="kv" style="margin:0"><b>stage ' + s.id + '</b> · ' + esc(s.name.replace(/ at .*$/, '')) + ' · <b>' + s.tasks + ' task' + (s.tasks === 1 ? '' : 's') + '</b> · ' + s.ms + ' ms' +
         (s.sw ? ' · shuffle write ' + kb(s.sw) : '') + (s.sr ? ' · shuffle read ' + kb(s.sr) : '') + (s.spill ? ' · <b style="color:#b0281a">spill ' + kb(s.spill) + '</b>' : '') + '</p>' +
-        '<div style="margin:4px 0 2px">' + bars + '</div>' + (ts.length > 60 ? '<p class="count">first 60 of ' + ts.length + ' tasks</p>' : '') +
+        '<div style="margin:4px 0 2px">' + bars + '</div>' + (s.tasks > 60 ? '<p class="count">first 60 of ' + s.tasks + ' tasks</p>' : '') +
         '<p class="count">task time: slowest ' + mx + ' ms, median ' + med + ' ms' + (skew ? ' · <b style="color:#b0281a">one task ' + (mx / Math.max(med, 1)).toFixed(1) + '× the median: skew</b>' : '') + '</p></div>';
     }).join('') + '<p class="note">Each bar is one task, placed on its stage\'s own timeline. Two cores means at most two bars overlap: that is a wave.</p>';
   },
@@ -167,7 +167,7 @@ const R = {
     const ok = p.items.filter(c => c[2]).length;
     return '<p class="kv"><b>' + ok + ' of ' + p.items.length + ' checks pass</b></p>' +
       p.items.map(c => '<div style="display:flex;gap:10px;align-items:baseline;padding:6px 0;border-bottom:1px dashed var(--rule)"><b style="font-size:20px;color:' + (c[2] ? '#1d6b3a' : '#b0281a') + '">' + (c[2] ? '✓' : '✗') + '</b><span style="flex:1">' + esc(c[0]) + '</span><code style="font-family:var(--mono);font-size:12px;color:var(--muted)">' + esc(c[1]) + '</code></div>').join('') +
-      '<p class="note" style="margin-top:6px">These are the checks a real pipeline should run after every load. Red means the problem is still there.</p>';
+      '<p class="note" style="margin-top:6px">' + (D.order.some(o => o[0] === 'stages') ? 'Clues from the event log, the query plan and the table\'s metadata. Red marks the problem; green means the fix removed it.' : 'These are the checks a real pipeline should run after every load. Red means the problem is still there.') + '</p>';
   },
   files(p) {
     if (!p) return '<p class="empty">No files yet.</p>';
@@ -194,7 +194,12 @@ const R = {
   },
   dashboard(p) {
     if (!p) return '<p class="empty">' + (D.order.some(o => o[0] === 'checks') ? 'Not used in this problem.' : 'No data yet.') + '</p>';
-    return '<div class="tiles">' + p.tiles.map(t => '<div class="tile' + (/✗|2,500/.test(t[1]) ? ' bad' : /✓/.test(t[1]) ? '' : '') + '"><span>' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b></div>').join('') + '</div>' + (p.note ? '<p class="note" style="margin-top:6px">' + esc(p.note) + '</p>' : '');
+    let wf = '';
+    if (p.waterfall) {
+      const mx = Math.max(...p.waterfall.map(w => w[1]), 1);
+      wf = '<p class="kv" style="margin:10px 0 2px"><b>Waterfall: job time after each fix</b></p><div class="bars">' + p.waterfall.map((w, i) => '<div class="bar"><i style="width:' + Math.max(2, Math.round(180 * w[1] / mx)) + 'px;background:' + (i === 0 ? '#e8a598' : i === p.waterfall.length - 1 ? '#9fd3b0' : 'var(--peri)') + '"></i>' + (w[1] >= 1000 ? (w[1] / 1000).toFixed(1) + ' s' : w[1] + ' ms') + ' · ' + esc(w[0]) + '</div>').join('') + '</div>';
+    }
+    return '<div class="tiles">' + p.tiles.map(t => '<div class="tile' + (/✗|2,500/.test(t[1]) ? ' bad' : /✓/.test(t[1]) ? '' : '') + '"><span>' + esc(t[0]) + '</span><b>' + esc(t[1]) + '</b></div>').join('') + '</div>' + wf + (p.note ? '<p class="note" style="margin-top:6px">' + esc(p.note) + '</p>' : '');
   },
 };
 const ORDER = D.order;
@@ -265,6 +270,23 @@ PROBLEM_SCENARIOS = [
     {"id": "pii", "label": "18 · Personal data", "steps": [52, 53, 54], "blurb": "An analyst can read every phone number."},
     {"id": "heal", "label": "19 · Self-healing", "steps": [55, 56, 57], "blurb": "A check goes red at 2 a.m. Who may fix it?"},
 ]
+PERF_SCENARIOS = [
+    {"id": "case", "label": "0 · The 3-hour job", "steps": [1, 2, 3, 4, 5], "blurb": "Four problems in one job, removed one fix at a time."},
+    {"id": "t1", "label": "1 · Full reload", "steps": [6, 7], "blurb": "Rebuilding all history to add one day."},
+    {"id": "t2", "label": "2 · Reading the whole lake", "steps": [8, 9], "blurb": "JSON, SELECT *, no partition filter."},
+    {"id": "t3", "label": "3 · Tiny files", "steps": [10, 11], "blurb": "3,000 files of a few KB."},
+    {"id": "t4", "label": "4 · One slow task", "steps": [12, 13], "blurb": "A hot key in a join; AQE splits it."},
+    {"id": "t5", "label": "5 · Exploding join", "steps": [14, 15], "blurb": "A non-unique key multiplies rows by 20."},
+    {"id": "t6", "label": "6 · MERGE rewrites all", "steps": [16, 17], "blurb": "2,000 changes, every file rewritten."},
+    {"id": "t7", "label": "7 · Spill", "steps": [18, 19], "blurb": "One shuffle partition that does not fit."},
+    {"id": "t8", "label": "8 · Python UDF", "steps": [20, 21], "blurb": "Every row crosses into Python."},
+    {"id": "t9", "label": "9 · Broadcast", "steps": [22, 23], "blurb": "A tiny lookup joined by shuffle."},
+    {"id": "t10", "label": "10 · collect()", "steps": [24, 25], "blurb": "3 million rows into the driver."},
+    {"id": "t11", "label": "11 · Too many partitions", "steps": [26, 27], "blurb": "Partitioned by customer: thousands of files."},
+    {"id": "t12", "label": "12 · The weekend bill", "steps": [28, 29], "blurb": "A cluster left running (illustrative)."},
+]
+PERF_ORDER = [["inputs", "1 · Code"], ["dashboard", "2 · Before / after"], ["checks", "3 · Clues"], ["stages", "4 · Stages & tasks"], ["engine", "5 · Query plan"], ["logs", "6 · Logs"]]
+
 PROBLEM_ORDER = [["inputs", "1 · Code"], ["checks", "2 · Checks"], ["layers", "3 · Tables"], ["dashboard", "4 · Dashboard"], ["storage", "5 · _delta_log"], ["logs", "6 · Logs"]]
 
 SCENES = [
@@ -293,6 +315,13 @@ SCENES = [
      "desc": "Nineteen data problems run on Spark and Delta: duplicates, SCD2, late data, schema drift, deletes, skew, time zones, PII, self-healing and more.",
      "lede": "The problems that cost real teams their nights. Each one is told in three steps: what you see (the checks go red), the naive fix (applied for real, and it fails or makes things worse), and the right fix (the checks go green). Every table, check, error and commit comes from a real Spark and Delta Lake run.",
      "real": "The naive fixes were run too, so their failures are real, not described."},
+    {"slug": "performance", "data": "perf.json", "scenarios": PERF_SCENARIOS, "order": PERF_ORDER, "groups": {}, "tabs": {},
+     "nav": "Performance stories", "eyebrow": "DataTwin Studio · Performance stories · from slow to fast, measured",
+     "h1": "Performance stories: the slow job, the clue, the fix",
+     "title": "Spark performance stories: slow job, clue, fix, measured",
+     "desc": "Twelve Spark and Delta performance stories run for real: full reloads, tiny files, skew, exploding joins, MERGE, spill, Python UDFs, broadcast, collect().",
+     "lede": "Every data team has a job that takes three hours. It is almost never one problem; it is four small ones stacked up. Story 0 removes them one at a time and measures each fix. Stories 1 to 12 take one problem each: what you see, the clue that gives it away (in the event log, the query plan or the table's metadata), and the fix with its measured gain.",
+     "real": "Every time is measured on a laptop with 2 cores and 1 GB of memory, on millions of rows rather than billions, and the scale is stated on each story. Compare before with after, not with a cluster. Story 12 (the cloud bill) is arithmetic with example prices, and is labelled illustrative."},
 ]
 
 
@@ -302,13 +331,20 @@ def page(sc):
     data["order"] = sc["order"]
     data["group_for_step"] = sc["groups"]
     data["tab_for_step"] = sc["tabs"]
+    used = {s.get("group") for s in data["steps"]} | {g for gs in sc["groups"].values() for g in gs}
+    if data.get("jobs"):                     # keep only the jobs a step shows, and cap very long task lists
+        data["jobs"] = {k: v for k, v in data["jobs"].items() if k in used}
+        for js in data["jobs"].values():
+            for j in js:
+                for s in j["stages"]:
+                    if "task_list" in s: s["task_list"] = s["task_list"][:400]
     blob = json.dumps(data, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     env = data["env"]
     url = URL + (sc["slug"] + "/" if sc["slug"] else "")
     scen_btns = "".join(f'<button data-s="{s["id"]}" title="{s["blurb"]}">{s["label"]}</button>' for s in sc["scenarios"])
     nav = "".join(f'<span class="real" style="background:var(--ink);color:#fff">{x["nav"]}</span>' if x is sc else f'<a href="/learn/data-platform-sim/{x["slug"] + "/" if x["slug"] else ""}" style="font-size:14px">{x["nav"]}</a>' for x in SCENES)
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › <a href="/learn/data-platform-sim/">DataTwin Studio</a>{" › " + sc["nav"] if sc["slug"] else ""}</p>
-<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> {nav} <span>· more coming: performance stories, streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
+<p class="note" style="margin:10px 0 0;display:flex;gap:12px;flex-wrap:wrap;align-items:center"><b>Scenes:</b> {nav} <span>· more coming: streaming, Kafka, data quality, Unity Catalog, dimensional modelling, cost</span></p>
 <p class="eyebrow" style="margin-top:16px">{sc["eyebrow"]}</p>
 <h1>{sc["h1"]}</h1>
 <p class="lede">{sc["lede"]}</p>
