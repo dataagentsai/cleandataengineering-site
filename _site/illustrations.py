@@ -243,7 +243,55 @@ def surfer(x, y, s=1.0):
             + person(x, y, PAL["coral"], PAL["navy"], 1, reach=(x + 54 * s, y - 120 * s), scale=0.62 * s))
 
 
+def lion(x, y, s=1.0, d=1):
+    """A friendly cartoon lion standing side-on, facing direction d. (x, y) = middle of the body."""
+    gold, mane = PAL["yellow"], PAL["orange"]
+    k = lambda v: v * s  # noqa: E731
+    X = lambda v: x + v * s * d  # noqa: E731
+    g = []
+    # tail with a tuft
+    g.append(f'<path d="M{X(-66)},{y - k(6)} C{X(-96)},{y - k(10)} {X(-96)},{y - k(52)} {X(-76)},{y - k(70)}" fill="none" stroke="{INK}" stroke-width="{k(12)}" stroke-linecap="round"/>')
+    g.append(f'<path d="M{X(-66)},{y - k(6)} C{X(-96)},{y - k(10)} {X(-96)},{y - k(52)} {X(-76)},{y - k(70)}" fill="none" stroke="{gold}" stroke-width="{k(7.6)}" stroke-linecap="round"/>')
+    g.append(f'<ellipse cx="{X(-70)}" cy="{y - k(80)}" rx="{k(11)}" ry="{k(14)}" fill="{mane}" class="o"/>')
+    # legs (back pair a shade darker), then body
+    for lx, col in ((-40, "#F2B240"), (36, "#F2B240"), (-56, gold), (20, gold)):
+        g.append(f'<rect x="{X(lx) - k(11)}" y="{y + k(4)}" width="{k(22)}" height="{k(66)}" rx="{k(10)}" fill="{col}" class="o"/>')
+    g.append(f'<ellipse cx="{x}" cy="{y}" rx="{k(74)}" ry="{k(40)}" fill="{gold}" class="o"/>')
+    g.append(f'<ellipse cx="{X(-6)}" cy="{y + k(16)}" rx="{k(48)}" ry="{k(16)}" fill="{PAL["butter"]}"/>')
+    # mane: scalloped ring, then a solid disc to hide the inner outlines
+    mx, my = X(66), y - k(46)
+    import math
+    for i in range(14):
+        a = 2 * math.pi * i / 14
+        g.append(f'<circle cx="{mx + k(42) * math.cos(a)}" cy="{my + k(42) * math.sin(a)}" r="{k(17)}" fill="{mane}" class="o"/>')
+    g.append(f'<circle cx="{mx}" cy="{my}" r="{k(44)}" fill="{mane}"/>')
+    # ears, head, muzzle, face
+    hx, hy = X(72), y - k(46)
+    for ex in (-18, 20):
+        g.append(f'<circle cx="{hx + k(ex) * d}" cy="{hy - k(28)}" r="{k(9)}" fill="{gold}" class="o"/>')
+    g.append(f'<circle cx="{hx}" cy="{hy}" r="{k(32)}" fill="{gold}" class="o"/>')
+    g.append(f'<ellipse cx="{X(84)}" cy="{hy + k(12)}" rx="{k(17)}" ry="{k(12)}" fill="{PAL["butter"]}" class="o" style="stroke-width:1.8"/>')
+    g.append(f'<path d="M{X(78)},{hy + k(2)} L{X(92)},{hy + k(2)} L{X(85)},{hy + k(10)} Z" fill="{PAL["navy"]}" class="o" style="stroke-width:1.6"/>')
+    g.append(f'<circle cx="{X(64)}" cy="{hy - k(8)}" r="{k(3.2)}" fill="{INK}"/><circle cx="{X(88)}" cy="{hy - k(10)}" r="{k(3.2)}" fill="{INK}"/>')
+    g.append(f'<path d="M{X(76)},{hy + k(15)} C{X(80)},{hy + k(20)} {X(90)},{hy + k(20)} {X(94)},{hy + k(14)}" class="t" style="stroke-width:2"/>')
+    g.append(f'<circle cx="{X(58)}" cy="{hy + k(6)}" r="{k(5)}" fill="{PAL["coral"]}" opacity=".5"/>')
+    return "".join(g)
+
+
+def sun(x, y, r=26):
+    rays = "".join(f'<line x1="{x + (r + 8) * c}" y1="{y + (r + 8) * s_}" x2="{x + (r + 20) * c}" y2="{y + (r + 20) * s_}"/>'
+                   for c, s_ in ((1, 0), (-1, 0), (0, -1), (0, 1), (.7, .7), (-.7, .7), (.7, -.7), (-.7, -.7)))
+    return f'<g class="t" style="stroke:#F2A93B;stroke-width:4">{rays}</g><circle cx="{x}" cy="{y}" r="{r}" fill="{PAL["yellow"]}" class="o"/>'
+
+
 SCENES.update({
+    "lion": (520, 320,
+             blob(260, 176, 240, 118, PAL["peach"]) + sun(440, 74) +
+             "".join(f'<ellipse cx="{cx}" cy="{cy}" rx="{rx}" ry="{rx * .38}" fill="#fff" class="o" style="stroke-width:1.8"/>' for cx, cy, rx in ((90, 64, 38), (330, 46, 30))) +
+             f'<path d="M70,320 C80,268 120,250 180,248 L400,246 C440,248 468,270 476,320 Z" fill="{PAL["lav"]}" class="o"/>'
+             f'<path d="M150,276 C190,270 220,272 250,268 M330,282 C360,278 390,280 420,286" class="t" style="stroke-width:1.8;stroke:#B9B6CC"/>' +
+             lion(290, 180, 1.0, d=1) + person(130, 252, PAL["blue"], PAL["navy"], 1, reach=(232, 192), scale=0.6),
+             "A friendly lion stands on a rock at sunrise, with a person beside it, both looking ahead."),
     "dragon-attack": (520, 320,
                       blob(260, 200, 240, 110, PAL["peach"]) + house(60, 300, 1.1) + house(130, 300, 0.9, PAL["peri"], PAL["plum"]) +
                       house(190, 300, 1.0, PAL["rose"], PAL["coral"]) + flames(262, 54, 0.9, -1) + dragon(390, 130, 0.8, d=-1),
