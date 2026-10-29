@@ -62,6 +62,15 @@ def story():
 
 <div class="moral"><strong>AI is the dragon.</strong> It is real, and it is powerful. It will change many jobs, and some people will be hurt; pretending otherwise would be dishonest. But all around you, people are learning it in a particular way: building things, creating things, solving problems, and letting AI help them fly. The difference between the villages was never the dragon. It was the decision.</div>
 
+<h2 id="the-lion">The lion mindset</h2>
+<p>The dragon, the surfer and the lion all teach the same thing. <strong>The best way to survive is not to try to survive.</strong> A lion doesn't spend the day hiding from the jungle; it moves first. Be the driver, the builder, the innovator. Use AI to fly, and to build something that didn't exist before.</p>
+<div class="cards4">
+<div class="c1"><b>Front foot, not back foot</b><span>Don't defend the old work. Go after new problems, and let AI do what used to need a team.</span></div>
+<div class="c2"><b>Be a giver</b><span>Teach, help and mentor. Reach out to graduates who can't find a first job and to people losing theirs. Lift them with you.</span></div>
+<div class="c3"><b>Choose who you build for</b><span>Say no to organisations that want AI only to cut jobs. Say yes to the ones using it to build something new.</span></div>
+<div class="c4"><b>Ride, don't hide</b><span>Learn how the dragon works, paddle towards the wave, and fly.</span></div>
+</div>
+
 <h2>Four pages, in order</h2>
 <div class="cards4">
 <a class="c1" href="/mindset/"><b>1 · Train the dragon</b><span>The story, and the decision it asks of you.</span></a>
@@ -96,7 +105,7 @@ def builder():
 <div class="c4"><b>The entrepreneur</b><span>You look for problems people would pay to make go away, and you take responsibility for the whole solution.</span><span class="wk">This week: talk to three people who have that problem.</span></div>
 </div>
 
-<h2>The surfer</h2>
+<h2 id="the-surfer">The surfer</h2>
 <div class="panel flip">{IMG('surfer')}<div>
 <p>When a high tide comes, it comes for everyone on the beach. Some people are knocked over. Some swim away from it. And a prepared surfer paddles <em>towards</em> the wave, stands up at exactly the right moment, and rides on top of it.</p>
 <p>The wave is the same for all of them. What decides who ends up on top is preparation and mindset, built long before the wave arrived.</p></div></div>
@@ -159,7 +168,7 @@ def start():
 def main():
     out = ROOT / "mindset"
     bodies = {"": story(), "builder": builder(), "first-30-days": first30(), "start-something": start()}
-    meta = {"": ("Train the dragon", "For anyone scared or confused about AI: a story, and the decision it asks of you."),
+    meta = {"": ("Train the dragon", "For anyone scared or confused about AI: the dragon story, the lion mindset, and the decision it asks of you."),
             "builder": ("From surviving to building", "The builder, innovator, problem-solver and entrepreneur mindsets, and the surfer."),
             "first-30-days": ("Your first 30 days", "A month that turns worry about AI into something built and a clear next step."),
             "start-something": ("Start something", "Solve a customer's problem, or one many share, with AI as your wings.")}
