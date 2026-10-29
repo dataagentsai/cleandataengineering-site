@@ -255,6 +255,15 @@ PROBLEM_SCENARIOS = [
     {"id": "deletes", "label": "8 · Hard deletes", "steps": [22, 23, 24], "blurb": "Incremental loads never see a deleted row."},
     {"id": "backfill", "label": "9 · Reload and backfill", "steps": [25, 26, 27], "blurb": "A bug corrupted five days; the fix is in. Now what?"},
     {"id": "smallfiles", "label": "10 · Small files", "steps": [28, 29, 30], "blurb": "The same query, slower with every small write."},
+    {"id": "quality", "label": "11 · Bad data", "steps": [31, 32, 33], "blurb": "Nulls, a negative amount, country 'Ind'."},
+    {"id": "latedim", "label": "12 · Late dimensions", "steps": [34, 35, 36], "blurb": "An order arrives before its customer."},
+    {"id": "dark", "label": "13 · Source goes dark", "steps": [37, 38, 39], "blurb": "Six hours of nothing, then a flood."},
+    {"id": "recon", "label": "14 · Reconciliation", "steps": [40, 41, 42], "blurb": "The source says 10,418; gold says 10,404."},
+    {"id": "tz", "label": "15 · Time zones", "steps": [43, 44, 45], "blurb": "Late-night sales on the wrong day; a 25-hour day."},
+    {"id": "writers", "label": "16 · Two writers", "steps": [46, 47, 48], "blurb": "Both jobs succeed; one change is lost."},
+    {"id": "skew", "label": "17 · Skew", "steps": [49, 50, 51], "blurb": "One customer, 70% of the rows, one task."},
+    {"id": "pii", "label": "18 · Personal data", "steps": [52, 53, 54], "blurb": "An analyst can read every phone number."},
+    {"id": "heal", "label": "19 · Self-healing", "steps": [55, 56, 57], "blurb": "A check goes red at 2 a.m. Who may fix it?"},
 ]
 PROBLEM_ORDER = [["inputs", "1 · Code"], ["checks", "2 · Checks"], ["layers", "3 · Tables"], ["dashboard", "4 · Dashboard"], ["storage", "5 · _delta_log"], ["logs", "6 · Logs"]]
 
@@ -278,10 +287,10 @@ SCENES = [
      "lede": "What Spark actually does with your code. Each step shows the code, the result, every stage with its tasks as a timeline (so you can see waves and the one slow task), the query plan, the jobs and the logs. Seven scenarios on 2 million orders, from 'an action becomes tasks' to 'AQE splits a skewed join'.",
      "real": "Every stage, task, byte shuffled, plan and timing comes from Spark's own event log and EXPLAIN. Timings are from a laptop with 2 cores: compare them with each other, not with a cluster."},
     {"slug": "problems", "data": "problems.json", "scenarios": PROBLEM_SCENARIOS, "order": PROBLEM_ORDER, "groups": {}, "tabs": {},
-     "nav": "Problem Lab", "eyebrow": "DataTwin Studio · Problem Lab · ten problems every data team hits",
+     "nav": "Problem Lab", "eyebrow": "DataTwin Studio · Problem Lab · nineteen problems every data team hits",
      "h1": "The Problem Lab: break it, try the naive fix, fix it right",
-     "title": "Problem Lab: ten data engineering problems, run for real",
-     "desc": "Ten data problems run on Spark and Delta: duplicates, re-runs, SCD2, late data, failures, poison rows, schema drift, deletes, backfill, small files.",
+     "title": "Problem Lab: 19 data engineering problems, run for real",
+     "desc": "Nineteen data problems run on Spark and Delta: duplicates, SCD2, late data, schema drift, deletes, skew, time zones, PII, self-healing and more.",
      "lede": "The problems that cost real teams their nights. Each one is told in three steps: what you see (the checks go red), the naive fix (applied for real, and it fails or makes things worse), and the right fix (the checks go green). Every table, check, error and commit comes from a real Spark and Delta Lake run.",
      "real": "The naive fixes were run too, so their failures are real, not described."},
 ]

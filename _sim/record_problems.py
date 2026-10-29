@@ -455,6 +455,10 @@ def run():
     spark.sparkContext.setLogLevel("ERROR")
     R = Rec(spark)
     sql = R.sql
+    if os.environ.get("ONLY3"):          # quick test of the third set only
+        from record_problems3 import more2
+        more2(R, spark, wh)
+        return {"env": {}, "jobs": {}, "steps": R.steps}
     for d in ("dupes", "idem", "scd", "late", "fail"):
         sql(f"CREATE DATABASE {d}")
 
@@ -754,8 +758,10 @@ FROM versions"""
             {"tiles": [["Revenue", money(rev2)], ["Truth", money(TRUE_REV)], ["Silver rows", str(s2)], ["Correct", "✓ yes"]]}, "fail.silver2")
 
     more(R, spark, wh)
+    from record_problems3 import more2
+    more2(R, spark, wh)
 
-    env = {"spark": spark.version, "delta": "3.2.0", "master": "local[2]", "executors": [{"id": "driver", "host": "localhost", "cores": 2}], "recorded_at": now()}
+    env ={"spark": spark.version, "delta": "3.2.0", "master": "local[2]", "executors": [{"id": "driver", "host": "localhost", "cores": 2}], "recorded_at": now()}
     spark.stop()
     shutil.rmtree(wh, ignore_errors=True)
     return {"env": env, "jobs": {}, "steps": R.steps}
@@ -764,5 +770,7 @@ FROM versions"""
 if __name__ == "__main__":
     t = time.time()
     data = run()
+    if os.environ.get("ONLY3"):
+        OUT = OUT.with_name("problems3-test.json")
     OUT.write_text(json.dumps(data, indent=1, default=str))
     print(f"{len(data['steps'])} steps -> {OUT} in {time.time() - t:.0f}s")

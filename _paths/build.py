@@ -322,11 +322,18 @@ GUIDES = {"medallion": ("Medallion architecture, drawn right", "/learn/medallion
           "cost-drivers": ("Spark internals: shuffle, joins, skew and AQE (simulation)", "/learn/data-platform-sim/spark/"),
           "scd": ("Problem Lab: SCD Type 2 pitfalls, the naive fix and the right one (simulation)", "/learn/data-platform-sim/problems/"),
           "backfill": ("Problem Lab: a backfill after a bug, re-runs and late data (simulation)", "/learn/data-platform-sim/problems/"),
-          "data-quality": ("Problem Lab: poison records, quarantined with a reason (simulation)", "/learn/data-platform-sim/problems/"),
+          "data-quality": ("Problem Lab: bad rows and poison records, quarantined with a reason (simulation)", "/learn/data-platform-sim/problems/"),
           "schema-evolution": ("Problem Lab: a renamed column, and why auto-evolve is not the fix (simulation)", "/learn/data-platform-sim/problems/"),
           "data-contracts": ("Problem Lab: a contract check stops a breaking change (simulation)", "/learn/data-platform-sim/problems/"),
           "cdc": ("Problem Lab: hard deletes that incremental loads never see (simulation)", "/learn/data-platform-sim/problems/"),
-          "partitioning": ("Problem Lab: partitioning too finely turns 300 files into thousands (simulation)", "/learn/data-platform-sim/problems/")}
+          "partitioning": ("Problem Lab: partitioning too finely turns 600 files into thousands (simulation)", "/learn/data-platform-sim/problems/"),
+          "dimensional": ("Problem Lab: an order before its customer, and inferred members (simulation)", "/learn/data-platform-sim/problems/"),
+          "freshness": ("Problem Lab: a source goes dark, and a freshness SLO that alerts once (simulation)", "/learn/data-platform-sim/problems/"),
+          "lineage": ("Problem Lab: count and sum at every hop to find lost rows (simulation)", "/learn/data-platform-sim/problems/"),
+          "transactions": ("Problem Lab: two writers, a lost update, and optimistic concurrency (simulation)", "/learn/data-platform-sim/problems/"),
+          "governance": ("Problem Lab: tags, masking by role and an audit trail (simulation)", "/learn/data-platform-sim/problems/"),
+          "human-approval": ("Problem Lab: self-healing with a runbook and gates, not an agent in production (simulation)", "/learn/data-platform-sim/problems/"),
+          "retries": ("Problem Lab: a conflict, a back-off and a retry (simulation)", "/learn/data-platform-sim/problems/")}
 
 
 def concept_page(cid):
