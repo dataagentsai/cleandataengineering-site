@@ -537,6 +537,7 @@ FAQ = [
     ("Why judge the world's state instead of the conversation?", "Because agents can say the right thing and do the wrong thing, or the reverse. 'Your refund is on its way' is only true if a refund exists. The world knows; the transcript does not."),
     ("Can I use it on my agent?", "If your agent calls its tools over MCP and you can write its spec, yes: scaffold the world from the spec, write one binding function, run the gates. It is open source under Apache 2.0."),
     ("Does it replace LangWatch, promptfoo or DeepEval?", "No. It uses them. LangWatch Scenario plays the customer, PyRIT and AgentDojo supply attacks, and DeepEval or Inspect are planned for soft grading. AgentTwin adds the spec-driven world and the judges that read it."),
+    ("Can't AI just generate every test case, like for a calculator?", "It can generate inputs and run every line of code. It can't try every input (two 64-bit numbers alone make 3.4 × 10^38 pairs), and it can't know the right answer unless something states it. Maths states it for a calculator; for an agent, the written spec has to, which is why AgentTwin starts there."),
     ("Is 100% coverage possible?", "100% of what an agent owes can be accounted for: each check proved by a test or signed off as a known gap. 100% of everything that could happen cannot, and nobody can promise that. See the section on coverage."),
 ]
 
@@ -564,7 +565,7 @@ def page():
 <li><a href="#plain">In plain words</a></li><li><a href="#twin">AgentTwin vs a digital twin</a></li><li><a href="#ipo">Input, processing, output</a></li>
 <li class="part">Part 2 · How it works</li>
 <li><a href="#setup">How the system is set up</a></li><li><a href="#per-agent">What you do for each agent</a></li>
-<li><a href="#which-tests">How we know which tests a given agent needs</a></li><li><a href="#mocks">How the pretend systems are made</a></li>
+<li><a href="#which-tests">How we know which tests a given agent needs</a></li><li><a href="#not-miss">How we help the tester not miss</a></li><li><a href="#mocks">How the pretend systems are made</a></li>
 <li><a href="#data">How test data is made, per case</a></li><li><a href="#sim">Play it: a tiny library agent</a></li>
 <li><a href="#bigger">Scaling up to a bigger agent</a></li><li><a href="#coverage">Coverage of the Assurance Catalog</a></li>
 <li><a href="#executed">How we know the tests really ran</a></li><li><a href="#enough">Enough to call it ready for production?</a></li>
@@ -623,6 +624,43 @@ def page():
 </ul>
 <p>Every test then says which items it proves (<code>discharges: [AAC-0047, op:renew]</code>). The gate builds a map: each owed item is <b>proved</b>, an <b>accepted gap</b> (with a reason, an owner and a review date), <b>not applicable</b> (with a reason), or <b>not exercised</b>. Any "not exercised" item fails the gate, with its name. So the answer to "are these the right tests?" is checkable: the right tests are the ones that leave nothing unaccounted for.</p>
 <div class="answer warn"><b>The honest catch.</b> This proves the tests are complete <i>against what is written down</i>. If a rule is missing from the spec, nothing asks for its test. Three things push against that: generation runs (build an agent from the spec alone and route every surprise back into the spec), a model-played customer who says things nobody scripted, and production misses becoming cases.</div></section>
+
+<section id="not-miss"><p class="q">Writing the world and scenarios is a lot for a tester. How do we stop them missing things?</p><h2>How we help the tester not miss</h2>
+<p>The tester should never start from a blank page, and should never have to remember the common cases. Six layers of help, from what the spec gives for free to what only production can teach:</p>
+<div class="tw"><table class="t"><tr><th>Layer</th><th>What it does for the tester</th><th>Status</th></tr>
+<tr><td><b>1 · From the spec</b></td><td><code>scaffold</code> writes the world's rows on every rule's edge, and scenarios for each tool (allowed and refused), each refusal, a stranger, and an attack per untrusted field</td><td><span class="tag ok">built</span></td></tr>
+<tr><td><b>2 · What's missing</b></td><td><code>coverage</code> lists uncovered pairs of intent, state, customer type (6 built in) and fault (8 kinds), and state changes never walked; <code>--pairwise</code> writes starters for them</td><td><span class="tag ok">built</span></td></tr>
+<tr><td><b>3 · The common pack</b></td><td>Scenarios every agent needs whatever its business: the same message twice, a long chat that should fetch a person, an approver who never answers, the kill switch, the model provider down, never quoting a figure no tool gave. Sized by the catalogs (118 assurance checks, 118 harness parts), not by a guess; each template fills itself from the spec</td><td><span class="tag no">to build</span> they exist, hand-written, in two agents</td></tr>
+<tr><td><b>4 · Variety</b></td><td>Many wordings, languages and moods per scenario, from a model-played customer (LangWatch), generated conversations (DeepEval) and attack rewrites (PyRIT)</td><td><span class="tag part">partly</span></td></tr>
+<tr><td><b>5 · Search</b></td><td>An adversarial customer: a model given the spec and a goal ("get a refund you aren't owed") that keeps trying, with the judges deciding if it won. Finds what nobody thought to write</td><td><span class="tag no">to build</span></td></tr>
+<tr><td><b>6 · Test the tests</b></td><td>Mutation testing: break the agent on purpose (remove a check, loosen 7 days to 8, drop the idempotency key) and see if any scenario notices. A break nobody notices is a named missing test</td><td><span class="tag no">to build, first</span></td></tr></table></div>
+<p>The gate stays the backstop: anything owed and unproved is named and blocks the release.</p>
+
+<h3>Hasn't AI already solved this? The calculator question</h3>
+<p><b>"If I want to test a calculator API, can't I generate all the test cases automatically and cover 100%?"</b> Partly. Three different things hide inside "100%":</p>
+<div class="tw"><table class="t"><tr><th>"100%" of…</th><th>For a calculator</th></tr>
+<tr><td><b>Every line of code run</b> (code coverage)</td><td><span class="tag ok">easy</span> Tools like Pynguin (Python) and EvoSuite (Java), and AI coding assistants, generate tests that run every line. But a test can run every line of a buggy divide and still pass.</td></tr>
+<tr><td><b>Every possible input</b></td><td><span class="tag no">impossible</span> Two 64-bit numbers make about 3.4 × 10<sup>38</sup> pairs. At a billion tests a second that is about 10<sup>22</sup> years; the universe is about 10<sup>10</sup> years old.</td></tr>
+<tr><td><b>The right answer for each input</b></td><td><span class="tag part">the hard part</span> Generated tests often just record what the code does today, bugs included. Someone must say what is <i>right</i>. Testers call this the <b>oracle problem</b>.</td></tr></table></div>
+<p>A calculator is the easy case, because maths gives an oracle for free: compare with a trusted library, or check rules that must always hold (a + b = b + a; (a + b) − b = a). Pick inputs smartly (zero, negatives, huge numbers, the edges) and a machine can test a calculator very well, without trying every input.</p>
+<p><b>An agent has no free oracle.</b> Whether "refund this order" is right depends on the shop's rules, the order's state, who is asking and what was promised. AI can generate endless conversations, but it can't know which outcome is correct unless the rules are written down. That is why AgentTwin starts from the agent's spec: the spec is the oracle, and the four judges apply it to the world's state.</p>
+
+<h3>How the software world handles it</h3>
+<p>Nobody has fully solved "complete tests". Mature teams combine six habits, and each has an AgentTwin counterpart:</p>
+<div class="tw"><table class="t"><tr><th>Habit</th><th>Software example</th><th>In AgentTwin</th></tr>
+<tr><td><b>Derive cases from the spec mechanically</b></td><td>Equivalence classes, boundary values, decision tables, state-transition testing</td><td><span class="tag ok">built</span> scaffold and the state walker</td></tr>
+<tr><td><b>Cover every pair, not every combination</b></td><td>PICT, allpairspy</td><td><span class="tag ok">built</span></td></tr>
+<tr><td><b>A standard checklist per kind of system</b></td><td>OWASP ASVS for web security; ISO 25010 quality traits</td><td><span class="tag part">partly</span> the Assurance Catalog, not yet turned into templates</td></tr>
+<tr><td><b>Trace every requirement to a test</b></td><td>Aviation (DO-178C), medical devices (IEC 62304)</td><td><span class="tag ok">built</span> <code>discharges</code> and the gate</td></tr>
+<tr><td><b>Let a machine hunt for failures</b></td><td>Fuzzing, property-based testing (Hypothesis, Schemathesis)</td><td><span class="tag part">partly</span> Hypothesis for edges; no adversarial customer yet</td></tr>
+<tr><td><b>Test the tests</b></td><td>Mutation testing (mutmut for Python, Stryker for JavaScript and C#)</td><td><span class="tag no">to build</span></td></tr></table></div>
+
+<h3>How LangWatch handles it</h3>
+<p>In LangWatch Scenario, developers write scenarios in code: a model plays the user, a model judge scores the chat against criteria. An autopilot mode lets the simulated user improvise towards a goal, and LangWatch describes generating multi-step scenarios from a list of business policies, including where two policies overlap. Its answer is breadth: let a model write many scenarios. What it doesn't publish is a count of what's missing. AgentTwin's difference is that it counts the gaps; the idea worth borrowing is drafting scenarios where two rules meet.</p>
+
+<h3>What PyRIT-style tools add</h3>
+<p>PyRIT, Microsoft's red-teaming kit, is built from four parts: <b>seeds</b> (attack goals), <b>converters</b> (rewrite one attack many ways), <b>attacker models</b> (read the reply and try again, turn by turn) and <b>scorers</b>. Two of those ideas reach beyond security. Converters become "one scenario, many wordings, languages and moods", which takes the phrasing work off the tester. The attacker model becomes the adversarial customer in layer 5. PyRIT knows nothing of your business rules, so AgentTwin supplies the goals from the spec and does the scoring with its judges.</p>
+<p><b>Every tool named here, explained in one card each:</b> <a href="/learn/agenttwin/open-source/">the open-source tools behind AgentTwin</a>.</p></section>
 
 <section id="mocks"><p class="q">How are the pretend systems made?</p><h2>How the pretend systems are made</h2>
 <p>Not by writing mocks by hand, and not by asking a model to play the system. AgentTwin reads the agent's spec and <b>projects</b> each system as a stand-in that holds state and enforces the spec's rules. Ask it to cancel a shipped order and it refuses, the way the real system would.</p>
@@ -714,6 +752,7 @@ def page():
 
 <section id="oss"><p class="q">How does it use open source?</p><h2>The open-source tools it uses</h2>
 <p>AgentTwin is an <b>assembler</b>: wherever a proven open-source tool already does a job well, it uses it, behind a seam, and builds only what nobody does.</p>
+<p><b>The full list, opted in and out, with a short card for each tool</b> (what it is, input, processing, output, team effort, why): <a href="/learn/agenttwin/open-source/">the open-source tools behind AgentTwin</a>.</p>
 <figure class="diagram">{oss_svg}<figcaption>{E(oss_cap)}</figcaption></figure>
 <div class="tw"><table class="t"><tr><th>Job</th><th>Tool</th><th>Status</th></tr>
 <tr><td>Model-played customer</td><td>LangWatch Scenario's user simulator (only that part)</td><td><span class="tag ok">in use</span></td></tr>
