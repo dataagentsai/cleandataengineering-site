@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenTelemetry is here to stay: instrument your agent once, send traces anywhere · Clean Data Engineering</title>
+<meta name="description" content="Almost everything in an agent stack changes every few months, but how you send traces out of it has settled: OpenTelemetry. Write your spans once with its library and its standard GenAI field names, put a Collector in between, and the backend becomes one line of config. The standard is settled; some GenAI field names are still moving, so keep them in one file."><link rel="canonical" href="https://cleandataengineering.ai/writing/opentelemetry-for-agents/">
+<meta property="og:title" content="OpenTelemetry is here to stay: instrument your agent once, send traces anywhere"><meta property="og:description" content="Almost everything in an agent stack changes every few months, but how you send traces out of it has settled: OpenTelemetry. Write your spans once with its library and its standard GenAI field names, put a Collector in between, and the backend becomes one line of config. The standard is settled; some GenAI field names are still moving, so keep them in one file."><meta property="og:url" content="https://cleandataengineering.ai/writing/opentelemetry-for-agents/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>OpenTelemetry is here to stay: instrument your agent once, send traces anywhere</h1>
+  </div>
+  <div class="summary">Almost everything in an agent stack changes every few months, but how you send traces out of it has settled: OpenTelemetry. Write your spans once with its library and its standard GenAI field names, put a Collector in between, and the backend becomes one line of config. The standard is settled; some GenAI field names are still moving, so keep them in one file.</div>
+<p>Pick any part of an agent stack and ask what you'd choose today. The model? It'll change by spring. The framework? There's a new one every month. The eval tool, the gateway, the vector store? All moving.</p>
+<p>Now ask how your traces should leave the agent. That question has an answer, and it isn't going to change: <strong>OpenTelemetry</strong>.</p>
+<p>This post is about that one settled bet. It is not about <em>what</em> to put in a trace; <a href="/writing/tracing-agents/">tracing autonomous agents</a> covers that. This one is about the plumbing: the standard, the pipe, and why choosing the backend becomes a line of config instead of a rewrite.</p>
+<h2>One plug, many sockets</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 345" role="img" aria-label="A cartoon: your agent has one cable ending in one plug. The plug goes into an OpenTelemetry adapter, which fans out to five wall sockets labelled Langfuse, Arize Phoenix, Datadog, Azure Monitor and Grafana."><rect class="pf pf-bx" x="14" y="114" width="198" height="98" rx="12"/><rect class="bx ol" x="10" y="110" width="200" height="100" rx="12"/><text class="tt" x="110.0" y="156.5" text-anchor="middle">Your agent</text><text class="sm" x="110.0" y="180.5" text-anchor="middle">spans written once</text><path class="lnc" d="M210,160 Q260,160 296,160"/><rect class="hz" x="296" y="140" width="46" height="40" rx="8"/><rect class="hk" x="342" y="149" width="16" height="6" rx="2"/><rect class="hk" x="342" y="165" width="16" height="6" rx="2"/><rect class="pf pf-solid" x="364" y="104" width="208" height="118" rx="12"/><rect class="solid ol" x="360" y="100" width="210" height="120" rx="12"/><text class="tt inv" x="465.0" y="147.0" text-anchor="middle">OpenTelemetry</text><text class="inv sm2" x="465.0" y="171.0" text-anchor="middle">one plug shape:</text><text class="inv sm2" x="465.0" y="190.0" text-anchor="middle">OTLP, standard names</text><path class="ln" d="M572,160 Q640,160 700,48" marker-end="url(#ar)"/><circle class="hz" cx="730" cy="48" r="20"/><rect class="hk" x="721" y="39" width="5" height="14" rx="2"/><rect class="hk" x="734" y="39" width="5" height="14" rx="2"/><text class="tx" x="764" y="54" text-anchor="start">Langfuse</text><path class="ln" d="M572,160 Q640,160 700,110" marker-end="url(#ar)"/><circle class="hz" cx="730" cy="110" r="20"/><rect class="hk" x="721" y="101" width="5" height="14" rx="2"/><rect class="hk" x="734" y="101" width="5" height="14" rx="2"/><text class="tx" x="764" y="116" text-anchor="start">Arize Phoenix</text><path class="ln" d="M572,160 Q640,160 700,172" marker-end="url(#ar)"/><circle class="hz" cx="730" cy="172" r="20"/><rect class="hk" x="721" y="163" width="5" height="14" rx="2"/><rect class="hk" x="734" y="163" width="5" height="14" rx="2"/><text class="tx" x="764" y="178" text-anchor="start">Datadog</text><path class="ln" d="M572,160 Q640,160 700,234" marker-end="url(#ar)"/><circle class="hz" cx="730" cy="234" r="20"/><rect class="hk" x="721" y="225" width="5" height="14" rx="2"/><rect class="hk" x="734" y="225" width="5" height="14" rx="2"/><text class="tx" x="764" y="240" text-anchor="start">Azure Monitor</text><path class="ln" d="M572,160 Q640,160 700,296" marker-end="url(#ar)"/><circle class="hz" cx="730" cy="296" r="20"/><rect class="hk" x="721" y="287" width="5" height="14" rx="2"/><rect class="hk" x="734" y="287" width="5" height="14" rx="2"/><text class="tx" x="764" y="302" text-anchor="start">Grafana</text><text class="sm" x="110" y="250" text-anchor="middle">no rewiring</text><text class="sm" x="465" y="250" text-anchor="middle">the adapter you keep</text><text class="sm" x="830" y="336" text-anchor="middle">sockets you can swap</text></svg><figcaption>One plug in your agent, many sockets. You change the socket, never the wiring.</figcaption></figure>
+<p>Think of a travel adapter. You don't buy a new charger for every country you visit. You keep one charger and carry an adapter that fits any socket.</p>
+<p>Agent tracing used to work the other way. Each vendor shipped its own library. You called it in your agent's code, wrote spans in its format, and used its field names. Moving to another vendor meant finding every one of those calls and rewriting it.</p>
+<p>OpenTelemetry is the one plug. Your agent writes spans in one standard way, and every serious backend now has a socket that accepts them.</p>
+<h2>What OpenTelemetry is, in plain words</h2>
+<p><strong>OpenTelemetry</strong>, often shortened to OTel, is an open standard for three kinds of signal: <strong>traces</strong> (what happened, step by step), <strong>metrics</strong> (numbers counted over time) and <strong>logs</strong> (lines of text). It is run by the Cloud Native Computing Foundation, the same open body that looks after Kubernetes, and no single vendor owns it.</p>
+<p>It has four parts you need to know.</p>
+<ol><li><strong>The SDK.</strong> A library in your code, available for Python, Java, .NET, JavaScript and more. You open and close spans with it, and attach fields to them.</li><li><strong>The exporter.</strong> A small piece inside the SDK that decides where finished spans go.</li><li><strong>OTLP</strong>, the OpenTelemetry Protocol. This is the wire format: the agreed shape of the data as it travels, over HTTP or gRPC. Any backend that speaks OTLP can read any agent that writes it.</li><li><strong>The Collector.</strong> A separate program that sits between your agent and the backends. It receives OTLP, batches it, retries when a backend is down, and sends copies wherever you tell it.</li></ol>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 275" role="img" aria-label="A pipeline left to right: agent code with the OpenTelemetry SDK sends OTLP over the wire to the Collector, which receives, batches, queues, retries and drops fields, then sends to two backends at once, Langfuse and Prometheus."><rect class="pf pf-bx" x="14" y="74" width="228" height="118" rx="12"/><rect class="bx ol" x="10" y="70" width="230" height="120" rx="12"/><text class="tt" x="125.0" y="117.0" text-anchor="middle">Agent code</text><text class="sm" x="125.0" y="141.0" text-anchor="middle">+ the OpenTelemetry SDK</text><text class="sm" x="125.0" y="160.0" text-anchor="middle">opens spans, adds fields</text><circle class="nm" cx="24" cy="70" r="14"/><text class="nmt" x="24" y="76" text-anchor="middle">1</text><line class="ln" x1="242" y1="130" x2="318" y2="130" marker-end="url(#ar)"/><text class="sm" x="280.0" y="118" text-anchor="middle">OTLP</text><text class="sm" x="280" y="156" text-anchor="middle">the wire</text><rect class="pf pf-solid" x="324" y="54" width="258" height="158" rx="12"/><rect class="solid ol" x="320" y="50" width="260" height="160" rx="12"/><text class="tt inv" x="450.0" y="107.5" text-anchor="middle">The Collector</text><text class="inv sm2" x="450.0" y="131.5" text-anchor="middle">receives, batches,</text><text class="inv sm2" x="450.0" y="150.5" text-anchor="middle">queues and retries,</text><text class="inv sm2" x="450.0" y="169.5" text-anchor="middle">drops fields, fans out</text><circle class="nm" cx="334" cy="50" r="14"/><text class="nmt" x="334" y="56" text-anchor="middle">2</text><line class="ln" x1="582" y1="100" x2="688" y2="60" marker-end="url(#ar)"/><line class="ln" x1="582" y1="160" x2="688" y2="200" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="694" y="24" width="288" height="78" rx="12"/><rect class="bxs ol" x="690" y="20" width="290" height="80" rx="12"/><text class="tt" x="835.0" y="56.5" text-anchor="middle">Backend A</text><text class="sm" x="835.0" y="80.5" text-anchor="middle">say, Langfuse</text><rect class="pf pf-bxs" x="694" y="164" width="288" height="78" rx="12"/><rect class="bxs ol" x="690" y="160" width="290" height="80" rx="12"/><text class="tt" x="835.0" y="196.5" text-anchor="middle">Backend B</text><text class="sm" x="835.0" y="220.5" text-anchor="middle">say, Prometheus for numbers</text><text class="sm" x="500" y="262" text-anchor="middle">the agent only knows the Collector&#x27;s address; the Collector knows the rest</text></svg><figcaption>The pipe. Your code talks OTLP to a Collector, and the Collector sends copies to as many backends as you like.</figcaption></figure>
+<p>The reference agent behind our <a href="/learn/agent-harness/">Agent Harness tutorial</a> runs exactly this. The agent sends OTLP to a Collector on the same machine. The Collector sends traces on to Langfuse and metrics to Prometheus. The agent knows nothing about either.</p>
+<h2>Why put a Collector in the middle?</h2>
+<p>It's tempting to skip it. The SDK can send straight to a backend, so why run another program?</p>
+<p>Our reference agent did skip it at first. Traces went straight from the agent to Langfuse. Then, on the first live run of its overnight monitoring job, Langfuse timed out on three batches, and two of seven turns never reached the backend, so they were never evaluated. The SDK's batch exporter doesn't have the queue and retries a Collector has. Ours now queues what a slow backend can't take yet and keeps retrying for up to ten minutes. It also counts what it sent and what it failed to send, so a loss shows up as a number instead of a silent gap.</p>
+<p>The Collector is also where you do the things your agent shouldn't have to know about: send to two backends at once while you compare them, drop a field before it leaves your network, or sample only some traces for an expensive backend.</p>
+<h2>The GenAI semantic conventions</h2>
+<p>A standard pipe is half the story. The other half is agreeing on what the fields are called.</p>
+<p>OpenTelemetry publishes <strong>semantic conventions</strong>: standard names for common facts, so every backend knows where to look. HTTP calls have had these for years. The <strong>GenAI conventions</strong> do the same for model calls. These are the names our harness uses, copied from its <code>names.py</code> file and checked against OpenTelemetry's own Python package:</p>
+<div class="tw"><table><tr><th>Field</th><th>What it holds</th></tr><tr><td><code>gen_ai.provider.name</code></td><td>who served the call, such as a model provider</td></tr><tr><td><code>gen_ai.operation.name</code></td><td>what kind of call, such as a chat</td></tr><tr><td><code>gen_ai.request.model</code></td><td>the model you asked for</td></tr><tr><td><code>gen_ai.response.model</code></td><td>the model that actually answered</td></tr><tr><td><code>gen_ai.usage.input_tokens</code></td><td>tokens sent in</td></tr><tr><td><code>gen_ai.usage.output_tokens</code></td><td>tokens that came back</td></tr><tr><td><code>gen_ai.tool.name</code></td><td>the tool the model asked to call</td></tr></table></div>
+<p>Two general names matter just as much: <code>session.id</code> for the conversation, and <code>user.id</code> for who was talking. Our harness uses these standard names on purpose. A backend that groups traces by session will do it with no setup, while our own <code>agent.tenant</code> field is understood by nothing.</p>
+<h2>What's settled and what's still moving</h2>
+<p>Here is the honest part.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 360" role="img" aria-label="Two columns. Settled, in green: the SDK, OTLP, the Collector, and core names such as http and service.name. Still moving, in yellow: the gen_ai names have development status, prompt_tokens was renamed to input_tokens, gen_ai.system was renamed to provider.name, and the GenAI conventions moved to their own repository."><path class="zg" d="M10,50 L480,50 L480,348 L10,348 Z"/><path class="zy" d="M520,50 L990,50 L990,348 L520,348 Z"/><text class="lbl" x="245" y="34" text-anchor="middle">SETTLED: BUILD ON IT</text><text class="lbl" x="755" y="34" text-anchor="middle">STILL MOVING: KEEP IT TIDY</text><rect class="pf pf-bx" x="44" y="70" width="408" height="54" rx="12"/><rect class="bx ol" x="40" y="66" width="410" height="56" rx="12"/><text class="tt" x="245.0" y="90.5" text-anchor="middle">The SDK</text><text class="sm" x="245.0" y="114.5" text-anchor="middle">open a span, add fields</text><rect class="pf pf-bxs" x="554" y="70" width="408" height="54" rx="12"/><rect class="bxs ol" x="550" y="66" width="410" height="56" rx="12"/><text class="tt" x="755.0" y="90.5" text-anchor="middle">gen_ai.* names</text><text class="sm" x="755.0" y="114.5" text-anchor="middle">status: development</text><rect class="pf pf-bx" x="44" y="142" width="408" height="54" rx="12"/><rect class="bx ol" x="40" y="138" width="410" height="56" rx="12"/><text class="tt" x="245.0" y="162.5" text-anchor="middle">OTLP</text><text class="sm" x="245.0" y="186.5" text-anchor="middle">the wire format</text><rect class="pf pf-bxs" x="554" y="142" width="408" height="54" rx="12"/><rect class="bxs ol" x="550" y="138" width="410" height="56" rx="12"/><text class="tt" x="755.0" y="162.5" text-anchor="middle">prompt_tokens</text><text class="sm" x="755.0" y="186.5" text-anchor="middle">renamed to input_tokens</text><rect class="pf pf-bx" x="44" y="214" width="408" height="54" rx="12"/><rect class="bx ol" x="40" y="210" width="410" height="56" rx="12"/><text class="tt" x="245.0" y="234.5" text-anchor="middle">The Collector</text><text class="sm" x="245.0" y="258.5" text-anchor="middle">the program in between</text><rect class="pf pf-bxs" x="554" y="214" width="408" height="54" rx="12"/><rect class="bxs ol" x="550" y="210" width="410" height="56" rx="12"/><text class="tt" x="755.0" y="234.5" text-anchor="middle">gen_ai.system</text><text class="sm" x="755.0" y="258.5" text-anchor="middle">renamed to provider.name</text><rect class="pf pf-bx" x="44" y="286" width="408" height="54" rx="12"/><rect class="bx ol" x="40" y="282" width="410" height="56" rx="12"/><text class="tt" x="245.0" y="306.5" text-anchor="middle">Core names</text><text class="sm" x="245.0" y="330.5" text-anchor="middle">http.*, service.name</text><rect class="pf pf-bxs" x="554" y="286" width="408" height="54" rx="12"/><rect class="bxs ol" x="550" y="282" width="410" height="56" rx="12"/><text class="tt" x="755.0" y="306.5" text-anchor="middle">Where they live</text><text class="sm" x="755.0" y="330.5" text-anchor="middle">moved to their own repo</text></svg><figcaption>The pipe is settled. The GenAI field names are still moving a little, so keep them in one file.</figcaption></figure>
+<p><strong>Settled:</strong> the SDK, the OTLP wire format, the Collector, and the core conventions for things like HTTP and service names. These are marked stable, and every major backend accepts them.</p>
+<p><strong>Still moving:</strong> the GenAI conventions. In OpenTelemetry's own Python package they sit in the module for conventions that are not yet stable, and the project calls their status "development". Names have already changed. <code>gen_ai.usage.prompt_tokens</code> became <code>gen_ai.usage.input_tokens</code>. <code>gen_ai.system</code> became <code>gen_ai.provider.name</code> in version 1.37.0. And the whole <code>gen_ai</code> family has since moved into its own repository, separate from the main conventions.</p>
+<p>That isn't a reason to wait. It's a reason to be tidy:</p>
+<ol><li>Keep every field name in one file. Our harness keeps them all in <code>names.py</code>, so a rename is one line, not a search across the codebase.</li><li>During a rename, send both names for one release. Ours sends <code>gen_ai.system</code> and <code>gen_ai.provider.name</code> side by side, because a dashboard grouping by the old name would go dark the day the libraries around it updated.</li><li>Put your own fields under your own prefix, such as <code>agent.</code>, so nobody mistakes them for the standard. Cost, the prompt version and which check fired have no standard name yet, so ours are <code>agent.cost.usd</code>, <code>agent.config.fingerprint</code> and <code>agent.policy.blocked_by</code>.</li></ol>
+<h2>Switching backends: one line</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 405" role="img" aria-label="Agent code in the middle, unchanged. Below it, three config files: on a laptop the telemetry adapter is console and spans stay in memory; on Azure it is azure-monitor-otel and spans go to Application Insights; in the reference agent it is otel-to-langfuse and spans go through a Collector to Langfuse."><rect class="pf pf-solid" x="374" y="24" width="258" height="118" rx="12"/><rect class="solid ol" x="370" y="20" width="260" height="120" rx="12"/><text class="tt inv" x="500.0" y="67.0" text-anchor="middle">Agent code</text><text class="inv sm2" x="500.0" y="91.0" text-anchor="middle">the same spans,</text><text class="inv sm2" x="500.0" y="110.0" text-anchor="middle">the same names</text><text class="sm" x="645" y="86" text-anchor="start">not touched</text><path class="hz" d="M10,200 L306,200 L330,224 L330,300 L10,300 Z"/><path class="ln" d="M306,200 L306,224 L330,224"/><text class="sm" x="26" y="226" text-anchor="start">config/local.yaml</text><text class="sm" x="26" y="252" text-anchor="start">telemetry:</text><rect class="pf pf-bxs" x="22" y="262" width="290" height="30" rx="6"/><text class="bd" x="40" y="283" text-anchor="start">adapter: console</text><line class="ln" x1="170" y1="302" x2="170" y2="340" marker-end="url(#ar)"/><rect class="pf pf-bx" x="34" y="346" width="278" height="48" rx="12"/><rect class="bx ol" x="30" y="342" width="280" height="50" rx="12"/><text class="tt" x="170.0" y="363.5" text-anchor="middle">spans stay in memory</text><text class="sm" x="170.0" y="387.5" text-anchor="middle"></text><path class="hz" d="M340,200 L636,200 L660,224 L660,300 L340,300 Z"/><path class="ln" d="M636,200 L636,224 L660,224"/><text class="sm" x="356" y="226" text-anchor="start">config/azure.yaml</text><text class="sm" x="356" y="252" text-anchor="start">telemetry:</text><rect class="pf pf-bxs" x="352" y="262" width="290" height="30" rx="6"/><text class="bd" x="370" y="283" text-anchor="start">adapter: azure-monitor-otel</text><line class="ln" x1="500" y1="302" x2="500" y2="340" marker-end="url(#ar)"/><rect class="pf pf-bx" x="364" y="346" width="278" height="48" rx="12"/><rect class="bx ol" x="360" y="342" width="280" height="50" rx="12"/><text class="tt" x="500.0" y="363.5" text-anchor="middle">Application Insights</text><text class="sm" x="500.0" y="387.5" text-anchor="middle"></text><path class="hz" d="M670,200 L966,200 L990,224 L990,300 L670,300 Z"/><path class="ln" d="M966,200 L966,224 L990,224"/><text class="sm" x="686" y="226" text-anchor="start">reference agent config</text><text class="sm" x="686" y="252" text-anchor="start">telemetry:</text><rect class="pf pf-bxs" x="682" y="262" width="290" height="30" rx="6"/><text class="bd" x="700" y="283" text-anchor="start">adapter: otel-to-langfuse</text><line class="ln" x1="830" y1="302" x2="830" y2="340" marker-end="url(#ar)"/><rect class="pf pf-bx" x="694" y="346" width="278" height="48" rx="12"/><rect class="bx ol" x="690" y="342" width="280" height="50" rx="12"/><text class="tt" x="830.0" y="363.5" text-anchor="middle">Collector, then Langfuse</text><text class="sm" x="830.0" y="387.5" text-anchor="middle"></text><line class="ln" x1="440" y1="142" x2="180" y2="196" marker-end="url(#ar)"/><line class="ln" x1="500" y1="142" x2="500" y2="196" marker-end="url(#ar)"/><line class="ln" x1="560" y1="142" x2="820" y2="196" marker-end="url(#ar)"/></svg><figcaption>Switching backends: one line in a config file changes. The agent code stays the same.</figcaption></figure>
+<p>The claims assistant in our tutorial is a motor insurer's chat assistant on Azure. It has three config files, one for tests, one for a laptop and one for Azure. The telemetry part of each is a single choice of adapter:</p>
+<pre><code># config/local.yaml
+telemetry:
+  adapter: console
+
+# config/azure.yaml
+telemetry:
+  adapter: azure-monitor-otel
+  connection_string: {key_vault: appinsights-connection-string}</code></pre>
+<p>On a laptop, spans stay in memory, where tests can read them. On Azure, Microsoft's Azure Monitor OpenTelemetry distro, which is the OpenTelemetry SDK packaged with an exporter for Application Insights, sends the same spans to Application Insights. The span code, the field names and the tests are the same in both. The reference agent has a third adapter that sends OTLP to a Collector with Langfuse behind it. Same spans again.</p>
+<p>The list of backends that accept OTLP keeps growing. Langfuse, Arize Phoenix, Datadog, Grafana and Azure Monitor all take OpenTelemetry data, either directly or through their own agent or distro. The details differ, such as which endpoint, which headers and whether there's a free tier, so check each one's own docs before you commit. But the agent side stays the same.</p>
+<p>So the vendor question gets smaller. Pick the backend your team can afford and will actually open. If it disappoints you in six months, you change a config file, not your agent.</p>
+<h2>Four mistakes we see often</h2>
+<ol><li><strong>Vendor libraries sprinkled through the agent.</strong> A tracing call from one vendor's library in every tool and every model call. It's quick on day one. On the day you switch, every one of them has to go. Write OpenTelemetry spans through one helper, and keep any vendor code inside the exporter or the Collector.</li><li><strong>No Collector.</strong> Sending straight from the agent to a SaaS backend works until that backend is slow. Then spans are lost, and nothing tells you. That is exactly how our reference agent lost two of seven turns.</li><li><strong>Sending personal data to a SaaS backend.</strong> Once a customer's Aadhaar number or phone number is in a span, it is in the vendor's storage, their backups and every export. Redact in the agent before anything is exported, and use the Collector as a second net. Better still, keep the words out of spans entirely unless a turn is chosen for capture.</li><li><strong>Making up names when a standard one exists.</strong> <code>model</code>, <code>tokens_in</code>, <code>conversation</code>: each needs a mapping in every backend you ever use. <code>gen_ai.request.model</code>, <code>gen_ai.usage.input_tokens</code> and <code>session.id</code> need none.</li></ol>
+<h2>Five questions to check your own agent</h2>
+<ol><li>If you had to move to a different tracing backend next week, how many files would you change?</li><li>Do your model-call spans use <code>gen_ai.*</code> names, or names you invented?</li><li>Are all your field names in one file, so a rename in the standard is a one-line change?</li><li>Is there a Collector, or anything with a queue and retries, between your agent and your backend?</li><li>Could you send the same traces to two backends at once, to compare them, without a code change?</li></ol>
+<p>Everything else in the stack will keep moving. Make this the one part you only have to build once.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/tech-l11.html">the observability layer of the Agent Harness, with what we chose and why</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
