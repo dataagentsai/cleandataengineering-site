@@ -1,0 +1,243 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Answer without the model first: 104 ms vs 7 seconds · Clean Data Engineering</title>
+<meta name="description" content="Our claims assistant answers some questions without calling the model at all. When a customer names the claim, a few plain rules send the message down a direct path of one read and one approved template: 104 ms and $0, against about 7 seconds through the model loop. This build log shows how the router decides, which checks the direct path still passes, and when not to do it."><link rel="canonical" href="https://cleandataengineering.ai/writing/answer-without-the-model/">
+<meta property="og:title" content="Answer without the model first: 104 ms vs 7 seconds"><meta property="og:description" content="Our claims assistant answers some questions without calling the model at all. When a customer names the claim, a few plain rules send the message down a direct path of one read and one approved template: 104 ms and $0, against about 7 seconds through the model loop. This build log shows how the router decides, which checks the direct path still passes, and when not to do it."><meta property="og:url" content="https://cleandataengineering.ai/writing/answer-without-the-model/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Build log · AI Engineering · Builders · 7 min read · 2026-10-31</p>
+    <h1>Answer without the model first: 104 ms vs 7 seconds</h1>
+  </div>
+  <div class="summary">Our claims assistant answers some questions without calling the model at all. When a customer names the claim, a few plain rules send the message down a direct path of one read and one approved template: 104 ms and $0, against about 7 seconds through the model loop. This build log shows how the router decides, which checks the direct path still passes, and when not to do it.</div>
+<p>Rohan is a policyholder with a motor insurer. He opens the chat and types: "What's the status of claim CLM-019002?" The reply comes back in 104 milliseconds. No language model was called. It cost nothing.</p>
+<p>Now he asks almost the same thing without the number: "what is the status of my claim". This time the reply takes 7,076 milliseconds, two model calls and $0.00058 in model tokens.</p>
+<p>Both answers came from the same claims assistant, the reference agent in our <a href="/learn/agent-harness/">Agent Harness tutorial</a>. This is the build log of the part that made the first one fast: the <strong>direct path</strong>, where plain code answers before the model is ever asked.</p>
+<h2>The receptionist who doesn't call the manager</h2>
+<p>Ask a good receptionist what time the shop closes and she tells you. She doesn't knock on the manager's door. Ask her for a refund and she does, because that needs someone with authority and judgement.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 325" role="img" aria-label="Cartoon: a customer asks a receptionist what time they close, and she answers 8 pm herself. A dashed line to the manager&#x27;s closed door is crossed out. Below, two boxes: she answers closing time, the address and bookings she can see; she calls the manager for a refund, a complaint or anything she is not sure of."><text class="sm" x="500" y="24" text-anchor="middle">she answers what she can see on her own desk, and calls the manager for the rest</text><circle class="bx" cx="110" cy="110" r="14"/><line class="lnc" x1="110" y1="124" x2="110" y2="162"/><line class="lnc" x1="110" y1="162" x2="98" y2="186"/><line class="lnc" x1="110" y1="162" x2="122" y2="186"/><line class="lnc" x1="110" y1="136" x2="92" y2="152"/><line class="lnc" x1="110" y1="136" x2="128" y2="152"/><path class="hz" d="M40,40 L250,40 Q262,40 262,52 L262,78 Q262,90 250,90 L150,90 L128,104 L134,90 L52,90 Q40,90 40,78 L40,52 Q40,40 52,40 Z"/><text class="tx" x="151" y="71" text-anchor="middle">What time do you close?</text><circle class="bxs" cx="400" cy="110" r="14"/><line class="lnc" x1="400" y1="124" x2="400" y2="162"/><line class="lnc" x1="400" y1="162" x2="388" y2="186"/><line class="lnc" x1="400" y1="162" x2="412" y2="186"/><line class="lnc" x1="400" y1="136" x2="382" y2="152"/><line class="lnc" x1="400" y1="136" x2="418" y2="152"/><rect class="hz" x="320" y="160" width="160" height="40" rx="6"/><rect class="hz" x="440" y="146" width="26" height="14" rx="3"/><path class="hz" d="M300,40 L470,40 Q482,40 482,52 L482,78 Q482,90 470,90 L420,90 L404,104 L404,90 L312,90 Q300,90 300,78 L300,52 Q300,40 312,40 Z"/><text class="tx" x="391" y="71" text-anchor="middle">8 pm, every day.</text><rect class="hz" x="780" y="50" width="110" height="150" rx="6"/><circle class="hk" cx="870" cy="128" r="5"/><text class="lbl" x="835" y="40" text-anchor="middle">MANAGER</text><line class="lnd" x1="490" y1="130" x2="770" y2="130"/><line class="lnc" x1="615" y1="112" x2="645" y2="148"/><line class="lnc" x1="645" y1="112" x2="615" y2="148"/><text class="sm" x="630" y="176" text-anchor="middle">no call needed</text><rect class="pf pf-bxs" x="44" y="234" width="438" height="78" rx="12"/><rect class="bxs ol" x="40" y="230" width="440" height="80" rx="12"/><text class="tt" x="260.0" y="257.0" text-anchor="middle">Answers herself</text><text class="sm" x="260.0" y="281.0" text-anchor="middle">closing time, the address,</text><text class="sm" x="260.0" y="300.0" text-anchor="middle">a booking she can see on screen</text><rect class="bxm ol" x="520" y="230" width="440" height="80" rx="12"/><text class="tt" x="740.0" y="257.0" text-anchor="middle">Calls the manager</text><text class="sm" x="740.0" y="281.0" text-anchor="middle">a refund, a complaint,</text><text class="sm" x="740.0" y="300.0" text-anchor="middle">anything she is not sure of</text></svg><figcaption>A good receptionist. The manager's time goes to the questions that need a manager.</figcaption></figure>
+<p>That is the whole idea, which we call <strong>deterministic first</strong>. Deterministic means the same input always gives the same output, so it can be tested completely. Build as much of the system as you can from parts like that, and hand control to a model only where you really need its flexibility.</p>
+<p>A claim status, when the customer names the claim, is a closing-time question. The answer is one row in the claims system.</p>
+<h2>Two roads from one fork</h2>
+<p>Every message passes a <strong>router</strong> first. The router is not a model. It is a short list of rules written as regular expressions, which are text patterns, and it runs in about 0 ms. It sends each message down the cheapest road that is still safe.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 350" role="img" aria-label="A message goes to the router at a fork. If it names claim CLM-019002 it takes the direct path, one read and one template, in 104 ms with no model call and $0. If it says my claim, it takes the model loop, two trips, in 7,076 ms with two model calls and $0.00058. Both roads end at the reply."><text class="sm" x="500" y="22" text-anchor="middle">two real messages from the same customer, sent to the claims assistant in October 2026</text><rect class="bxm ol" x="10" y="130" width="190" height="90" rx="12"/><text class="tt" x="105.0" y="162.0" text-anchor="middle">Rohan&#x27;s message</text><text class="sm" x="105.0" y="186.0" text-anchor="middle">names a claim,</text><text class="sm" x="105.0" y="205.0" text-anchor="middle">or doesn&#x27;t</text><line class="ln" x1="202" y1="175" x2="243" y2="175" marker-end="url(#ar)"/><rect class="pf pf-solid" x="249" y="139" width="138" height="78" rx="12"/><rect class="solid ol" x="245" y="135" width="140" height="80" rx="12"/><text class="tt inv" x="315.0" y="171.5" text-anchor="middle">Router</text><text class="inv sm2" x="315.0" y="195.5" text-anchor="middle">plain rules</text><line class="ln" x1="387" y1="160" x2="468" y2="92" marker-end="url(#ar)"/><text class="sm" x="405" y="108" text-anchor="end">names CLM-019002</text><rect class="pf pf-bx" x="474" y="49" width="268" height="88" rx="12"/><rect class="bx ol" x="470" y="45" width="270" height="90" rx="12"/><text class="tt" x="605.0" y="77.0" text-anchor="middle">Direct path</text><text class="sm" x="605.0" y="101.0" text-anchor="middle">one read from the claims</text><text class="sm" x="605.0" y="120.0" text-anchor="middle">system, one template</text><text class="bd" x="605" y="160" text-anchor="middle">104 ms · 0 model calls · $0</text><line class="ln" x1="387" y1="190" x2="468" y2="258" marker-end="url(#ar)"/><text class="sm" x="405" y="258" text-anchor="end">&quot;my claim&quot;</text><rect class="pf pf-bx" x="474" y="219" width="268" height="88" rx="12"/><rect class="bx ol" x="470" y="215" width="270" height="90" rx="12"/><text class="tt" x="605.0" y="247.0" text-anchor="middle">Model loop</text><text class="sm" x="605.0" y="271.0" text-anchor="middle">2 trips: look up his</text><text class="sm" x="605.0" y="290.0" text-anchor="middle">claims, then write</text><text class="bd" x="605" y="330" text-anchor="middle">7,076 ms · 2 model calls · $0.00058</text><line class="ln" x1="742" y1="90" x2="818" y2="158" marker-end="url(#ar)"/><line class="ln" x1="742" y1="260" x2="818" y2="192" marker-end="url(#ar)"/><rect class="bxm ol" x="820" y="135" width="170" height="80" rx="12"/><text class="tt" x="905.0" y="171.5" text-anchor="middle">Reply</text><text class="sm" x="905.0" y="195.5" text-anchor="middle">to Rohan</text></svg><figcaption>One fork, two roads. Flow 1a took the top road; flow 1b took the bottom one.</figcaption></figure>
+<p>Here are the two real turns side by side, from the assistant running on Azure in October 2026.</p>
+<div class="tw"><table><tr><th></th><th>Flow 1a: names the claim</th><th>Flow 1b: "my claim"</th></tr><tr><td>Road</td><td>Direct</td><td>Model loop</td></tr><tr><td>Model calls</td><td>0</td><td>2</td></tr><tr><td>Tool calls</td><td>1</td><td>1</td></tr><tr><td>Time</td><td>104 ms</td><td>7,076 ms</td></tr><tr><td>Model cost</td><td>$0</td><td>$0.00058</td></tr><tr><td>Trace spans</td><td>14</td><td>38</td></tr></table></div>
+<p>On the direct road the harness made one read, <code>get_claim</code> for CLM-019002, and poured the result into wording a person approved in advance: "Claim CLM-019002 is registered. An assessor will look at it and tell you what they need next."</p>
+<p>On the loop road the model first asked for <code>list_claims</code>, because Rohan never said which claim, then wrote the answer on a second trip. Look at where the 7 seconds went: the model provider, Groq, took only 0.6 and 1.0 seconds. Most of the rest was the gateway waking up and a content-safety check on each prompt and answer. The direct path skips all of that.</p>
+<p>That is about 70 times faster. The money is small per turn, but <a href="/writing/agent-cost-mistakes/">cost mistakes</a> compound with volume, and the time is what the customer feels.</p>
+<h2>How the router decides</h2>
+<p>The router asks four questions, always in the same order. The first "yes" picks the road. If all four say no, the message goes to the model loop.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 395" role="img" aria-label="An index card pinned at the top, titled router rules version v1, the first yes wins. Four numbered questions: must a person handle this (Escalate), must we refuse (Refuse), which intents are in it, exactly one read and one reference (Direct, highlighted). Below: if all four say no, send it to the model loop. Direct needs one intent, read-only, one claim or policy number."><rect class="hz" x="150" y="50" width="700" height="330" rx="10"/><circle class="hk" cx="500.0" cy="54" r="7"/><text class="lbl" x="180" y="90" text-anchor="start">ROUTER RULES · VERSION v1</text><text class="sm" x="820" y="90" text-anchor="end">the first yes wins</text><line class="ln" x1="170" y1="106" x2="830" y2="106"/><circle class="nm" cx="194" cy="136" r="14"/><text class="nmt" x="194" y="142" text-anchor="middle">1</text><text class="tx" x="222" y="142" text-anchor="start">Must a person handle this?</text><text class="bd" x="740" y="142" text-anchor="middle">Escalate</text><circle class="nm" cx="194" cy="184" r="14"/><text class="nmt" x="194" y="190" text-anchor="middle">2</text><text class="tx" x="222" y="190" text-anchor="start">Must we refuse?</text><text class="bd" x="740" y="190" text-anchor="middle">Refuse</text><circle class="nm" cx="194" cy="232" r="14"/><text class="nmt" x="194" y="238" text-anchor="middle">3</text><text class="tx" x="222" y="238" text-anchor="start">Which intents are in it?</text><text class="sm" x="740" y="238" text-anchor="middle">(just counts them)</text><circle class="nm" cx="194" cy="280" r="14"/><text class="nmt" x="194" y="286" text-anchor="middle">4</text><text class="tx" x="222" y="286" text-anchor="start">Exactly one read, one reference?</text><rect class="bxs" x="660" y="262" width="160" height="34" rx="8"/><text class="bd" x="740" y="286" text-anchor="middle">Direct</text><line class="lnd" x1="170" y1="312" x2="830" y2="312"/><text class="bd" x="180" y="342" text-anchor="start">all four say no: send it to the model loop</text><text class="sm" x="180" y="368" text-anchor="start">Direct needs all three: one intent, it only reads, one CLM- or POL- number</text></svg><figcaption>The whole router fits on a card. Four questions, always in the same order.</figcaption></figure>
+<ol><li><strong>Must a person handle this?</strong> An injury, a request for a human, or a tow. Yes means hand it to a person. "Nobody was hurt" does not count as an injury.</li><li><strong>Must we refuse?</strong> Six rules, such as promising cover or discussing someone else's policy. Yes means a polite, pre-written refusal.</li><li><strong>Which intents are in it?</strong> An intent is what the person wants, such as <code>claim_status</code> or <code>report_claim</code>. There are seven. This step only counts them.</li><li><strong>Exactly one read, one reference?</strong> Yes means the direct path.</li></ol>
+<p>Question 4 is strict on purpose. All three must hold: exactly one intent, that intent only reads (claim status, payout status or policy status), and exactly one reference of the right kind, a CLM- or POL- number. Two claim numbers, a typo like "pol 1", or anything that writes all go to the loop.</p>
+<p>The order matters: hand-offs come first, so an injury in half a message is never ignored. The rules carry a version, <code>v1</code> today, written on every trace, and a test runs every example message from the spec.</p>
+<p>The guiding rule is one line: <strong>when in doubt, use the loop; never guess on the cheap road.</strong> "My claim" could mean any of Rohan's nine claims, so the router doesn't pick one. Choosing a worker for every step is in <a href="/writing/model-per-step/">a model per step</a>; this is the step where the right worker is no model at all.</p>
+<h2>The cheap road still passes the checks</h2>
+<p>The direct path is not a shortcut around the harness. It skips the model, and nothing else.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 325" role="img" aria-label="A front door check, then the router splits into the direct path and the model loop. Both join at the same before-reply check: no promise of cover, no personal data echoed, money in rupees. Then save and reply."><text class="sm" x="500" y="22" text-anchor="middle">the cheap road skips the model, not the checks</text><rect class="pf pf-bxs" x="14" y="124" width="148" height="88" rx="12"/><rect class="bxs ol" x="10" y="120" width="150" height="90" rx="12"/><text class="tt" x="85.0" y="152.0" text-anchor="middle">Front door</text><text class="sm" x="85.0" y="176.0" text-anchor="middle">token, kill</text><text class="sm" x="85.0" y="195.0" text-anchor="middle">switch, ledger</text><line class="ln" x1="162" y1="165" x2="193" y2="165" marker-end="url(#ar)"/><rect class="pf pf-solid" x="199" y="129" width="118" height="78" rx="12"/><rect class="solid ol" x="195" y="125" width="120" height="80" rx="12"/><text class="tt inv" x="255.0" y="161.5" text-anchor="middle">Router</text><text class="inv sm2" x="255.0" y="185.5" text-anchor="middle"></text><line class="ln" x1="317" y1="150" x2="353" y2="95" marker-end="url(#ar)"/><line class="ln" x1="317" y1="180" x2="353" y2="235" marker-end="url(#ar)"/><rect class="pf pf-bx" x="359" y="54" width="178" height="78" rx="12"/><rect class="bx ol" x="355" y="50" width="180" height="80" rx="12"/><text class="tt" x="445.0" y="86.5" text-anchor="middle">Direct path</text><text class="sm" x="445.0" y="110.5" text-anchor="middle">read + template</text><rect class="pf pf-bx" x="359" y="204" width="178" height="78" rx="12"/><rect class="bx ol" x="355" y="200" width="180" height="80" rx="12"/><text class="tt" x="445.0" y="236.5" text-anchor="middle">Model loop</text><text class="sm" x="445.0" y="260.5" text-anchor="middle">checks on every trip</text><line class="ln" x1="537" y1="90" x2="578" y2="145" marker-end="url(#ar)"/><line class="ln" x1="537" y1="240" x2="578" y2="185" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="584" y="89" width="238" height="158" rx="12"/><rect class="bxs ol" x="580" y="85" width="240" height="160" rx="12"/><text class="tt" x="700.0" y="133.0" text-anchor="middle">Before the reply</text><text class="sm" x="700.0" y="157.0" text-anchor="middle">no promise of cover</text><text class="sm" x="700.0" y="176.0" text-anchor="middle">no personal data echoed</text><text class="sm" x="700.0" y="195.0" text-anchor="middle">money in rupees</text><text class="sm" x="700.0" y="214.0" text-anchor="middle">same rules, both roads</text><line class="ln" x1="822" y1="165" x2="853" y2="165" marker-end="url(#ar)"/><rect class="bxm ol" x="855" y="125" width="135" height="80" rx="12"/><text class="tt" x="922.5" y="161.5" text-anchor="middle">Save, reply</text><text class="sm" x="922.5" y="185.5" text-anchor="middle"></text><text class="sm" x="500" y="312" text-anchor="middle">the claims system also checks the read is Rohan&#x27;s own, the same as for any tool call</text></svg><figcaption>Both roads go through the same front door and the same last check. The direct path is not a side door.</figcaption></figure>
+<p>Before the router, every message goes through the same front door: the sign-in token is checked, the kill switch is checked, and a ledger row stops the same message being handled twice. The read itself is made with Rohan's identity, so the claims system checks that CLM-019002 is his, exactly as it would for a model's tool call.</p>
+<p>After the template is filled, the reply goes through the same before-reply check as a model's answer. Three rules run there: no promise of cover, no personal data echoed back, and money shown in rupees. Approved wording gets checked anyway, because a template filled with the wrong value is still wrong. And if a value is missing, the template engine fails rather than printing a blank.</p>
+<h2>How much traffic it can take</h2>
+<p>For the loop, the ceiling today is the model quota, not our servers. Groq's free tier allows 8,000 tokens a minute, and one loop turn uses 1,500 to 2,500, so the whole assistant manages only 3 to 5 loop turns a minute. The gateway in front of the model also allows 30 calls a minute.</p>
+<p>The direct path uses none of that. No model tokens, no gateway calls, no content-safety checks. Its limits are our own servers, which hold no state and scale out on Azure Container Apps without code changes, and the claims system it reads from.</p>
+<p>To be honest about what we know: no load test exists yet. The plan is Azure Load Testing at three times the expected peak. And 104 ms is the best real case, not a promise. Another direct answer, a policy status, took 643 ms, because 287 ms of it was fetching the token to read on Rohan's behalf. Every direct answer we recorded was still under a second.</p>
+<h2>Why it is safer, not only cheaper</h2>
+<ol><li><strong>It can't make anything up.</strong> Every fact came from one read. No model fills a gap with a plausible guess.</li><li><strong>It can't be talked into anything.</strong> A message full of clever instructions has no model to fool.</li><li><strong>A person approved the wording.</strong> Nobody hopes the model phrased it carefully.</li><li><strong>It can be tested completely.</strong> Same message, same road, same reply, every time.</li></ol>
+<h2>When not to do it</h2>
+<ul><li><strong>Anything that writes.</strong> Releasing a payment or registering a claim never takes the direct path, even with a clean claim number.</li><li><strong>Anything that needs judgement.</strong> "Will my claim be approved?" is refused by a rule, and anything needing real reasoning goes to the loop.</li><li><strong>When the rules would have to guess.</strong> If you find yourself writing a rule to pick "the most likely claim", stop.</li><li><strong>Rare questions.</strong> A template has to be written, approved and kept up to date. Spend that on the questions people ask every day.</li></ul>
+<h2>What goes wrong</h2>
+<p><strong>A router that guesses.</strong> Someone loosens question 4 so "my claim" picks the newest claim. It is right most of the time, and wrong for the customer with two open claims. A wrong confident answer is worse than a slow right one.</p>
+<p><strong>A direct path that skips checks.</strong> It is tempting to wire the template straight to the reply because "we wrote the wording ourselves". Then a template prints another customer's data, or a status nobody approved, with nothing in the way.</p>
+<p><strong>Templates that go stale.</strong> Example: the claims system adds a status called "on hold", and the template only knows the old ones. A strict engine fails loudly instead of printing a blank, but someone still has to own the templates and change them when the business does.</p>
+<h2>5 questions to check your own agent</h2>
+<ol><li>Which of your most common questions could be answered from one read and a fixed sentence?</li><li>When your router isn't sure, does it send the message to the model, or guess?</li><li>Do template replies pass the same final check as model replies?</li><li>Is your router versioned, and is the version written on every trace?</li><li>Do you know where the seconds in a slow turn actually go?</li></ol>
+<p>The fastest, cheapest and safest model call is the one you never had to make.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/router-paths.html">The direct path, in the Agent Harness tutorial</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
