@@ -153,13 +153,10 @@ def main():
         s = s.replace("<head>", '<head>\n<meta name="color-scheme" content="light">', 1)
         if "family=Patrick+Hand" not in s:
             s = s.replace("<style>", FONTS + "\n<style>", 1)
-        if rel == "index.html":
-            a, b = "<!-- hero-art:start -->", "<!-- hero-art:end -->"
-            if a not in s:
-                s = s.replace('<div class="hero">', '<div class="hero art-hero"><div>', 1)
-                s = s.replace("</p>\n  </div>", f"</p>\n  </div>\n  {a}{b}\n  </div>", 1)
+        a, b = "<!-- hero-art:start -->", "<!-- hero-art:end -->"
+        if rel == "index.html" and a in s:  # the 31 Oct home (the four-door loop) has no cartoon
             s = s[: s.index(a) + len(a)] + hero_art() + s[s.index(b):]
-        if rel == "index.html":
+        if rel == "index.html" and 'class="loop"' not in s:
             for sec, art in (("learn", "learn"), ("projects", "projects"), ("standards", "standards"),
                              ("research", "research"), ("writing", "writing"), ("about", "about")):
                 tag = f'<section id="{sec}">'
