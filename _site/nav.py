@@ -8,9 +8,9 @@ footer from the home page (_writing/build.py site_parts), so a rebuild keeps the
 small script sit inside the header block on purpose: anything that copies the header copies them.
 
 Layout (31 Oct 2026), agreed with the owner: a left panel on every page, grouped by purpose
-(Learn · Build with us · For leaders · For business), fixed and scrolling on its own on wide
+(Learn · Build with us · For leaders · About), fixed and scrolling on its own on wide
 screens, opened from a Menu button below 1180px. The page's own link is marked and its group
-opened. The top bar keeps the name, Blog, Find my path and Talk to us.
+opened. The top bar keeps the name, Certifications, Blog, Find my path and For leaders.
 """
 import re
 from pathlib import Path
@@ -66,13 +66,9 @@ SECTIONS = [
         ("Technical papers", "/papers/", []),
         ("Blog", "/writing/", []),
     ]),
-    ("For business", [
-        ("Work with us", "/business/", []),
-        ("Readiness reviews", "/business/#reviews", []),
-        ("Team cohorts", "/business/#cohorts", []),
-        ("Adopt the specs and code", "/business/#adopt", []),
-        ("Sponsor the work", "/business/#sponsor", []),
-        ("About", "/about/", []),
+    ("About", [
+        ("About this site", "/about/", []),
+        ("Sponsor the work", "/sponsor/", []),
     ]),
 ]
 
@@ -150,7 +146,7 @@ def header():
             "    <nav class=\"topbar\" aria-label=\"Site\"><button class=\"menubtn\" id=\"menubtn\" aria-label=\"Open menu\">☰ Menu</button>"
             "<a class=\"brand\" href=\"/\">Clean Data Engineering</a>"
             "<a class=\"lnk\" href=\"/certifications/\">Certifications</a><a class=\"lnk\" href=\"/writing/\">Blog</a><a class=\"act\" href=\"/paths/\">Find my path</a>"
-            "<a class=\"act dark\" href=\"/business/\">Talk to us</a></nav>\n"
+            "<a class=\"act dark\" href=\"/leaders/\">For leaders</a></nav>\n"
             "    " + panel() + "<div class=\"scrim\" id=\"scrim\"></div>\n    " + JS + "\n  </div>\n</header>")
 
 

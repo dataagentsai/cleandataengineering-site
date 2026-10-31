@@ -252,8 +252,8 @@ QUESTIONS = [
      "Decide the design first, without product names; then map it to your cloud. Our specifications name no product, and each cloud gets its own binding.",
      [("One harness, five homes", "/writing/harness-five-homes/"), ("What has settled, what is still open", "/writing/moving-ship/")]),
     ("How do we get our team ready?",
-     "Free paths for six roles on every major cloud, from beginner to advanced; a guided cohort for your team if you want one.",
-     [("Find a path", "/paths/"), ("Team cohorts", "/business/#cohorts"), ("Data engineer to AI engineer", "/writing/data-engineer-to-ai-engineer/")]),
+     "Free paths for six roles on every major cloud, from beginner to advanced. Point each person at their role and cloud.",
+     [("Find a path", "/paths/"), ("Data engineer to AI engineer", "/writing/data-engineer-to-ai-engineer/"), ("The AI engineer roadmap", "/writing/ai-engineer-roadmap/")]),
 ]
 
 
@@ -264,47 +264,34 @@ def leaders():
         ("What exists today", "Two open checklists (118 things an AI application must have, 118 it must prove). A test world that judges an agent by what it changed, not what it said. A full reference agent that passes all four quality gates. A claims assistant deployed on Azure. A 167-page course and ten simulators."),
         ("Proof so far", "180 planted attacks, all held. On 2,472 recorded runs from an outside benchmark (τ²-bench), our verdicts matched theirs on every rule-breaking change in two of three domains. 19 data problems recorded on real Spark and Delta."),
         ("What isn't done", "Tests use a scripted model, not live models run many times. The test worlds haven't been checked against real systems yet. The data-platform test tool (DataTwin) is designed, due early 2027."),
-        ("What it costs you", "Nothing to use: code under Apache 2.0, specifications under CC BY 4.0. Readiness reviews, team cohorts and sponsorship are by arrangement."),
+        ("What it costs you", "Nothing. Code under Apache 2.0, specifications under CC BY 4.0, no sign-up. Your teams can use all of it as it is."),
     ]
     rows = "".join(f"<tr><th>{a}</th><td>{b}</td></tr>" for a, b in one)
     qs = "".join(f'<div class="qa"><h3>{q}</h3><p>{a}</p><div class="links">{"".join(f"<a href={chr(34)}{h}{chr(34)}>{n}</a>" for n, h in ls)}</div></div>' for q, a, ls in QUESTIONS)
     body = crumbs("For leaders") + f"""
-<p class="eyebrow" style="margin-top:22px">For leaders · CEO, CTO, head of data or AI</p>
+<p class="eyebrow" style="margin-top:22px">For leaders · business and technology</p>
 <h1>What's going on here, in one minute</h1>
 <table class="one">{rows}</table>
-<div class="cta"><b>Want this applied to your own systems?</b> <a href="/business/#reviews">Readiness reviews</a> · <a href="/business/#cohorts">team cohorts</a> · <a href="/business/">all the ways to work with us</a></div>
+<div class="cta"><b>Hand it to your team:</b> the <a href="/research/">open specifications</a> are a ready-made definition of "ready", the <a href="/assets/">open-source code</a> is a starting point, and the <a href="/paths/">paths</a> skill people up for free.</div>
 <section class="group" id="questions"><h2>Questions leaders ask</h2><p>Each answer is two lines, with the evidence one click away.</p>{qs}</section>"""
-    desc = "The one-minute version for CEOs, CTOs and data and AI leaders: the problem, what exists today, the proof, what isn't done, and short answers to the questions leaders ask about AI agents and data platforms."
+    desc = "The one-minute version for business and technology leaders: the problem, what exists today, the proof, what isn't done, and short answers to the questions leaders ask about AI agents and data platforms."
     return "leaders", wb.page("For leaders: the one-minute version", desc, f"{SITE}/leaders/", body, CSS + LEAD_CSS)
 
 
-# ---------------------------------------------------------------- business
-def business():
-    mail = "mailto:basant@cleandataengineering.ai?subject="
-    offers = [
-        ("reviews", "Readiness reviews", "var(--peri-wash)",
-         "We review an AI agent or a data platform against the open checklists and tell you, in plain words, what is proved, what is a known gap and what is missing, with the evidence for each. You keep the checklist and can rerun it.",
-         "by arrangement", mail + "Readiness%20review", "Ask for a review"),
-        ("cohorts", "Team cohorts", "var(--mint-wash)",
-         "A guided cohort for your team on the free paths: each person on their role and cloud, regular sessions, and a real project at the end that your team keeps.",
-         "by arrangement", mail + "Team%20cohort", "Ask about a cohort"),
-        ("adopt", "Adopt the specs and code", "var(--rose-wash)",
-         "Use the checklists as your team's definition of ready and the code as your starting point. Code under Apache 2.0, specifications under CC BY 4.0: no fee, no sign-up. Questions go to GitHub, where the answers help everyone.",
-         "free", "/assets/", "See the assets"),
-        ("sponsor", "Sponsor the work", "var(--butter-wash)",
-         "Fund a specification, a simulator, or free cohorts for people starting out or between jobs. Sponsors are thanked by name if they wish. They never steer what a specification says, which is why the specifications name no product.",
-         "by arrangement", mail + "Sponsorship", "Talk about sponsoring"),
-    ]
-    cards = "".join(f'<div class="card" id="{i}" style="--w:{w}"><h3>{t}</h3><p class="v">{v}</p><p>{d}</p><div class="links"><a href="{h}"><b>{c} →</b></a></div></div>' for i, t, w, d, v, h, c in offers)
-    body = crumbs("For business") + f"""
-<p class="eyebrow" style="margin-top:22px">For business</p>
-<h1>Work with us</h1>
-<p class="lede">Everything on this site is free and open, and stays that way. For companies that want more than the free material, there are four ways to work together.</p>
-<div class="cards" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr))">{cards}</div>
-<h2 style="margin-top:34px">How to start</h2>
-<p>Write to <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a> with a few lines on what you have (an agent, a data platform, a team) and what you need to know. If you are a leader new to this, <a href="/leaders/">the one-minute version</a> is the best place to begin.</p>"""
-    desc = "Work with Clean Data Engineering: readiness reviews of AI agents and data platforms, team cohorts, adopting the open specifications and code, and sponsoring the work."
-    return "business", wb.page("Work with us", desc, f"{SITE}/business/", body, CSS)
+# ---------------------------------------------------------------- sponsor
+def sponsor():
+    body = crumbs("Sponsor the work") + """
+<p class="eyebrow" style="margin-top:22px">About</p>
+<h1>Sponsor the work</h1>
+<p class="lede">Everything here is free, with no ads and no sign-up, and it stays that way. Sponsors make more of it possible: a new specification, a new simulator, or free learning for people starting out or between jobs.</p>
+<ul>
+<li><b>What a sponsorship can fund:</b> a specification, a simulator or course, or free cohorts for learners.</li>
+<li><b>What it can't buy:</b> any say in what a specification says. That is why the specifications name no product.</li>
+<li><b>Thanks:</b> sponsors are named on the page they funded, if they wish.</li>
+</ul>
+<p>Write to <a href="mailto:basant@cleandataengineering.ai?subject=Sponsorship">basant@cleandataengineering.ai</a>.</p>"""
+    desc = "Sponsor Clean Data Engineering: fund open specifications, simulators and free learning. Sponsors are thanked by name and never steer the specifications."
+    return "sponsor", wb.page("Sponsor the work", desc, f"{SITE}/sponsor/", body, CSS)
 
 
 # ---------------------------------------------------------------- papers
@@ -339,7 +326,7 @@ def papers():
 
 
 def main():
-    for fn in (simulators, research, about, assets, leaders, business, papers):
+    for fn in (simulators, research, about, assets, leaders, sponsor, papers):
         slug, html = fn()
         out = ROOT / slug
         out.mkdir(exist_ok=True)
