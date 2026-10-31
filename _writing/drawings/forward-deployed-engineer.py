@@ -56,18 +56,18 @@ def drawing_fde_path():
 
 def drawing_fde_skills():
     b, t = kit.box, kit.text
-    d = t(500, 22, "a T-shape: one deep skill, three wide ones across the top", "sm", "middle")
-    # top bar of the T: three wide skills
-    d += b(120, 45, 245, 90, "Listening", ["hear the problem", "inside the request"], "bxs")
-    d += b(380, 45, 245, 90, "Writing", ["scope, notes,", "runbook, updates"], "bxs")
-    d += b(640, 45, 245, 90, "Judgement", ["what not to build,", "what to say early"], "bxs")
-    # the stem: engineering
-    d += b(380, 150, 245, 170, "Engineering", ["build, debug and", "deploy in someone", "else's environment"], "solid")
-    d += t(250, 220, ["the stem gets you", "in the door"], "sm", "middle")
-    d += t(760, 220, ["the bar makes it", "work for them"], "sm", "middle")
+    d = t(500, 22, "a T-shape: one deep skill, five wide ones across the top", "sm", "middle")
+    tops = [("Listening", ["the problem inside", "the request"]), ("Writing", ["scope, notes,", "runbook"]),
+            ("Judgement", ["what not to", "build"]), ("Ownership", ["their result,", "not my code"]),
+            ("Big picture", ["upstream, downstream,", "company goals"])]
+    for i, (title, sub) in enumerate(tops):
+        d += b(15 + i * 197, 45, 182, 90, title, sub, "bxs")
+    d += b(378, 150, 245, 170, "Engineering", ["build, debug and", "deploy in someone", "else's environment"], "solid")
+    d += t(220, 230, ["the stem gets you", "in the door"], "sm", "middle")
+    d += t(780, 230, ["the bar makes it", "work for them"], "sm", "middle")
     return figure(1000, 335, d,
-                  "A T-shape. The stem is engineering: build, debug and deploy in someone else's environment. The top bar has three skills: listening, writing and judgement.",
-                  "Engineering is the stem. Listening, writing and judgement are what turn it into the FDE job.")
+                  "A T-shape. The stem is engineering: build, debug and deploy in someone else's environment. The top bar has five traits: listening, writing, judgement, ownership of the customer's result, and the big picture of upstream, downstream and company goals.",
+                  "Engineering is the stem. Five traits across the top turn it into the FDE job.")
 
 
 def drawing_fde_roles():

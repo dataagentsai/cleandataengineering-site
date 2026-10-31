@@ -2,7 +2,7 @@
 title: What a forward-deployed engineer actually does
 published: false
 canonical_url: https://cleandataengineering.ai/writing/forward-deployed-engineer/
-description: A forward-deployed engineer works inside a customer's team to make a product or AI system actually work in their world. The job runs in six steps: discovery, a scope that does as much as possible without a model, a prototype, deploying in the customer's own cloud, proving it with evals and cost numbers, and handing over. It needs engineering plus listening, writing and judgement.
+description: A forward-deployed engineer works inside a customer's team to make a product or AI system actually work in their world. The job runs in six steps: discovery, a scope that does as much as possible without a model, a prototype, deploying in the customer's own cloud, proving it with evals and cost numbers, and handing over. It needs engineering plus five traits: listening, writing, judgement, ownership of the customer's result, and the big picture.
 ---
 
 *Originally published at [cleandataengineering.ai](https://cleandataengineering.ai/writing/forward-deployed-engineer/).*
@@ -41,15 +41,17 @@ The posts on [offline evals](/writing/offline-evals/) and [measuring agent ROI](
 
 ## The skills mix
 
-Engineering is the base. You need to build things that run, read unfamiliar systems quickly and debug in someone else's environment. But engineering alone is not enough, and it is the other three that make the job.
+Engineering is the base. You need to build things that run, read unfamiliar systems quickly and debug in someone else's environment. But engineering alone is not enough, and it is the other five that make the job.
 
 {{drawing: fde-skills}}
 
 - **Listening.** Customers describe solutions, not problems. "We need a chatbot" often means "our support team answers the same forty questions all day". Hearing the second sentence inside the first is most of discovery.
 - **Writing.** You will write more than you expect: a one-page scope, a decision note, a weekly update, the runbook. Short, plain writing is how a busy customer team keeps up with you, and how the work survives after you leave.
 - **Judgement.** Deciding what not to build. Saying "this part does not need a model". Telling the customer early that their data cannot support what they hoped. Choosing the boring, reliable option when the exciting one would make a better demo.
+- **Ownership.** You are measured by whether the customer succeeds, not by whether your code is correct. If the data turns out to be scanned PDFs, that is your problem too, because it decides the result. Report bad news early with a next step, and measure the outcome ("claims cleared in 12 minutes instead of 40") rather than the activity ("six features shipped").
+- **The big picture.** Every system sits in a chain. Know who feeds the data you depend on, who uses your output next, and which company goal the work serves. A change that works in your piece but breaks the payments team downstream is not a working change.
 
-A useful test: could you explain what you built, and why, to the customer's finance lead in five minutes? If yes, the three soft skills are working.
+A useful test: could you explain what you built, why, and which company goal it moves, to the customer's finance lead in five minutes? If yes, the other five are working. The habit underneath all of them is in [fail fast, own the result](/writing/fail-fast-own-the-result/).
 
 ## How it differs from nearby roles
 
@@ -73,6 +75,7 @@ These are generalisations; real jobs blur the lines. The short version: a consul
 - **Building in your own cloud first.** Moving it into theirs later turns into a second project, with a security review you didn't plan for.
 - **No numbers at the end.** Without an eval score and a cost per task, the customer has nothing to decide with, and the pilot quietly stalls.
 - **Becoming the system.** If every fix needs you, you have built a dependency, not a hand-over.
+- **Fixing your piece, breaking theirs.** Changing a field, a schedule or a format without asking who reads it next.
 
 ## How to grow into it
 
@@ -85,13 +88,15 @@ You don't need the title to practise the job. Most FDEs started as data, softwar
 5. **Write the hand-over note even when nobody asks.** Then ask a colleague to make one change using only that note.
 6. **Build one end-to-end project as if for a customer.** On this site, [projects](/projects/) carrying the "Forward-deployed ready" label are good ones to copy: take one, run it through the six steps above, and finish with an eval score, a cost and a hand-over note.
 
-## Five questions to check your own FDE readiness
+## Seven questions to check your own FDE readiness
 
 1. Can you name the problem, the data and the rules for the last thing you built, in the user's words?
 2. Which part of it could have been done without a model or a new service?
 3. Could it run in someone else's cloud account by next week?
 4. Do you know its pass rate and its cost per task?
 5. Could someone else change it tomorrow without calling you?
+6. What is the customer better off by, in their own numbers?
+7. Who upstream and downstream would notice if your piece changed?
 
 The product gets them interested; the forward-deployed engineer gets it working, proves it, and leaves it in good hands.
 

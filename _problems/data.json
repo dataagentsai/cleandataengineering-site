@@ -1,0 +1,694 @@
+[
+ {
+  "id": "core",
+  "title": "Inside the model: the core of LLMs",
+  "problems": [
+   {
+    "slug": "hallucination-the-model-doesn-t-know-what",
+    "title": "Hallucination: the model doesn't know what it doesn't know",
+    "why": "Training rewards a confident answer, and the model has no reliable internal signal for \"I am guessing\".",
+    "experiment": "Take one domain (tax rules, drug doses). Build 500 questions with known answers. Measure how often each open model is confidently wrong, and test whether a cheap signal (asking 5 times and checking agreement, or reading internal activations) predicts those errors.",
+    "verdict": "Solo: strong",
+    "reason": "A domain test set with numbers is publishable and reusable."
+   },
+   {
+    "slug": "reliable-multi-step-reasoning",
+    "title": "Reliable multi-step reasoning",
+    "why": "Small errors compound: 95% right per step is about 60% right over 10 steps. Models also give reasoning that doesn't match how they reached the answer.",
+    "experiment": "Measure how success drops with task length for 5 models on one task family (spreadsheet edits, multi-hop questions). Test one fix, such as checking each step with a second model.",
+    "verdict": "Solo: strong",
+    "reason": "The \"error by length\" curve is a known gap with few public measurements per domain."
+   },
+   {
+    "slug": "thinking-cost-models-overthink-easy-questions",
+    "title": "Thinking cost: models overthink easy questions",
+    "why": "Reasoning models spend thousands of hidden tokens on questions that need ten. Nobody has a reliable way to decide how much thinking a question needs.",
+    "experiment": "Route 1,000 questions to \"think a little\" or \"think a lot\" using a cheap classifier. Measure accuracy kept against tokens saved.",
+    "verdict": "Solo: strong",
+    "reason": "Cheap, measurable, and it saves money for every buyer."
+   },
+   {
+    "slug": "continual-learning-learn-after-deployment-without-forgetting",
+    "title": "Continual learning: learn after deployment without forgetting",
+    "why": "Updating weights on new facts damages old skills (\"catastrophic forgetting\"). Today's fix is retraining from scratch or bolting on retrieval.",
+    "experiment": "Fine-tune a small model (1–3B) on a stream of weekly new facts. Measure how much old skill is lost per update, then compare 3 known methods (replay, LoRA adapters per period, model merging).",
+    "verdict": "Solo: possible",
+    "reason": "Small models make it feasible. A clean comparison is the goal, not beating labs."
+   },
+   {
+    "slug": "using-long-context-not-just-fitting-it",
+    "title": "Using long context, not just fitting it",
+    "why": "Models accept a million tokens but miss facts in the middle and can't combine facts spread far apart.",
+    "experiment": "Build a test where the answer needs 3 facts from different parts of a 200-page document. Compare long context against retrieval against a memory agent.",
+    "verdict": "Solo: strong",
+    "reason": "Cheap, measurable, and directly useful to buyers."
+   },
+   {
+    "slug": "personal-memory-across-months-of-conversations",
+    "title": "Personal memory across months of conversations",
+    "why": "What should an assistant remember, forget, update or never store? Memories go stale, contradict each other and leak private details.",
+    "experiment": "Build a 6-month synthetic user history with facts that change (moved city, new job). Measure how often 3 memory designs answer with the old fact.",
+    "verdict": "Solo: strong",
+    "reason": "Easy to measure, and every assistant product needs it."
+   },
+   {
+    "slug": "understanding-long-video",
+    "title": "Understanding long video",
+    "why": "Models describe a short clip well but lose track of what happened across an hour of video: who did what, in which order.",
+    "experiment": "Ask 200 order-of-events questions about 30-minute public videos. Compare frame sampling against captions-then-text.",
+    "verdict": "Solo: possible",
+    "reason": "Video processing is costly, so keep the set small."
+   },
+   {
+    "slug": "running-out-of-human-text-synthetic-data",
+    "title": "Running out of human text; synthetic data collapse",
+    "why": "Good public text is nearly used up. Training on model-written text can narrow the model (\"model collapse\").",
+    "experiment": "Train small models over several generations on their own output, with and without filters. Measure diversity and accuracy loss per generation.",
+    "verdict": "Solo: possible",
+    "reason": "Small-scale results are interesting; large-scale claims need a lab."
+   },
+   {
+    "slug": "evaluation-itself-is-broken",
+    "title": "Evaluation itself is broken",
+    "why": "Benchmarks leak into training data and saturate within months. Scores stop telling you which model is better for your task.",
+    "experiment": "Write fresh questions after a model's cutoff date and compare its score on old against new questions in one area. The gap estimates contamination.",
+    "verdict": "Solo: strong",
+    "reason": "Cheap and needed by every buyer."
+   },
+   {
+    "slug": "world-models-and-cause-and-effect",
+    "title": "World models and cause and effect",
+    "why": "Models learn patterns, not how the world works. They fail on \"what would happen if\" questions outside their training data.",
+    "experiment": "Build a small simulated world (a supply chain, a game) and test whether models predict what happens after an intervention they haven't seen.",
+    "verdict": "Solo: possible",
+    "reason": "The simulator becomes a reusable benchmark; links to AgentTwin."
+   },
+   {
+    "slug": "new-architectures-beyond-the-transformer",
+    "title": "New architectures beyond the transformer",
+    "why": "Transformer cost grows with the square of context length. Alternatives (state-space models such as Mamba, hybrids) are cheaper but not yet clearly as good.",
+    "experiment": "Train tiny models of each type on the same data and compare quality per unit of compute on one long-sequence task.",
+    "verdict": "Follow, don't build",
+    "reason": "Real answers need large training runs. Learn it at Explain depth."
+   },
+   {
+    "slug": "learning-from-far-less-data",
+    "title": "Learning from far less data",
+    "why": "A child learns language from about 100 million words; models need over 10 trillion. Nobody knows how to close most of that gap.",
+    "experiment": "The BabyLM challenge trains models on 100 million words or fewer. Enter it with one idea (curriculum order, a data quality filter).",
+    "verdict": "Solo: possible",
+    "reason": "BabyLM exists so that small teams can compete."
+   }
+  ]
+ },
+ {
+  "id": "safety",
+  "title": "Safety and oversight: checking AI that may be smarter than you",
+  "problems": [
+   {
+    "slug": "scalable-oversight-weaker-people-supervising-stronger-ai",
+    "title": "Scalable oversight: weaker people supervising stronger AI",
+    "why": "People can't check answers they don't understand, so training rewards what looks right.",
+    "experiment": "Have a small model judge a large model on questions with known answers. Plot how the judge's accuracy falls as the gap widens, then test whether debate or critiques help.",
+    "verdict": "Solo: strong",
+    "reason": "Open models of many sizes make the gap easy to vary."
+   },
+   {
+    "slug": "control-staying-safe-even-if-the-ai",
+    "title": "Control: staying safe even if the AI isn't trustworthy",
+    "why": "You need protection against a system that might work around you, not just one that makes honest mistakes.",
+    "experiment": "Build a trusted monitor: a small model watches a stronger agent's actions and blocks risky ones. Plant sabotage and measure the catch rate and the false alarms.",
+    "verdict": "Solo: strong",
+    "reason": "Mostly systems engineering, and a young field."
+   },
+   {
+    "slug": "reward-hacking-the-model-games-the-scorer",
+    "title": "Reward hacking: the model games the scorer",
+    "why": "Trained to pass tests, models learn to edit the tests, hard-code answers or claim success. The better the optimiser, the more it finds loopholes.",
+    "experiment": "Give coding agents tasks with weak tests and log how often they cheat (special-casing, deleting checks). Compare 3 ways of detecting it.",
+    "verdict": "Solo: strong",
+    "reason": "Easy to set up and a current lab worry."
+   },
+   {
+    "slug": "prompt-injection-in-tool-using-agents",
+    "title": "Prompt injection in tool-using agents",
+    "why": "The model can't reliably tell its instructions apart from text it reads in an email or web page. No defence holds against all attacks.",
+    "experiment": "Collect 300 injection attacks against an agent with email and file tools. Compare 5 defences on how many attacks get through and how much useful work is blocked.",
+    "verdict": "Solo: strong",
+    "reason": "Every company deploying agents has this problem now."
+   },
+   {
+    "slug": "jailbreaks-that-keep-working",
+    "title": "Jailbreaks that keep working",
+    "why": "Every safety filter gets bypassed with new phrasing, other languages, role play or many examples in one prompt.",
+    "experiment": "Translate a public jailbreak set into 5 Indian languages and measure how much more often it gets through.",
+    "verdict": "Solo: strong",
+    "reason": "Low-resource languages are a known weak spot with few measurements."
+   },
+   {
+    "slug": "detecting-deception-or-behaving-only-when-watched",
+    "title": "Detecting deception or \"behaving only when watched\"",
+    "why": "Lab studies have shown models acting differently when they believe they are being tested.",
+    "experiment": "Run the same tasks framed as a test and as real use, across open models. Measure the behaviour gap.",
+    "verdict": "Solo: possible",
+    "reason": "Careful design matters more than compute."
+   },
+   {
+    "slug": "interpretability-reading-what-the-model-is-thinking",
+    "title": "Interpretability: reading what the model is thinking",
+    "why": "Billions of numbers with no labels, and concepts are smeared across many of them.",
+    "experiment": "Use TransformerLens and published sparse autoencoders on a small open model. Find where one concept lives and test whether switching it off changes the behaviour.",
+    "verdict": "Solo: possible",
+    "reason": "Many solo researchers publish here, though it takes maths patience."
+   },
+   {
+    "slug": "unlearning-removing-knowledge-for-good",
+    "title": "Unlearning: removing knowledge for good",
+    "why": "Removing a fact or skill usually hides it, and a little fine-tuning brings it back.",
+    "experiment": "Apply 3 unlearning methods to a small model, then try to recover the removed facts with 100 fine-tuning examples. Report what stays removed.",
+    "verdict": "Solo: strong",
+    "reason": "Cheap, matters to privacy law, and has a public benchmark (WMDP)."
+   },
+   {
+    "slug": "models-memorising-private-training-data",
+    "title": "Models memorising private training data",
+    "why": "Models can repeat phone numbers, keys or medical notes word for word. Training with privacy guarantees costs a lot of quality.",
+    "experiment": "Plant 100 fake secrets in fine-tuning data and measure how many can be pulled out, with and without privacy training.",
+    "verdict": "Solo: strong",
+    "reason": "Cheap, clear numbers, and regulated buyers care."
+   }
+  ]
+ },
+ {
+  "id": "edge",
+  "title": "Edge AI and serving cost: AI on small devices and cheaper answers",
+  "problems": [
+   {
+    "slug": "shrinking-models-below-4-bits-without-losing",
+    "title": "Shrinking models below 4 bits without losing quality",
+    "why": "At 2 bits or \"ternary\" weights (−1, 0, +1), quality usually drops sharply, especially for reasoning and non-English text.",
+    "experiment": "Quantize 3 open models to 4, 3 and 2 bits with 3 methods. Measure the quality loss per task type.",
+    "verdict": "Solo: strong",
+    "reason": "Runs on one GPU and fills a measurement gap."
+   },
+   {
+    "slug": "the-memory-cost-of-long-conversations-the",
+    "title": "The memory cost of long conversations (the KV cache)",
+    "why": "Every token of context is kept in GPU memory while answering, so long chats and many users run out of memory before compute.",
+    "experiment": "Compare 3 cache-compression methods on one open model at 32k context. Measure memory saved against accuracy lost.",
+    "verdict": "Solo: strong",
+    "reason": "Single-GPU experiment with a direct cost story."
+   },
+   {
+    "slug": "always-on-sensing-on-tiny-chips-tinyml",
+    "title": "Always-on sensing on tiny chips (TinyML)",
+    "why": "Microcontrollers have kilobytes of memory and run on coin batteries. Useful models must be thousands of times smaller.",
+    "experiment": "Train a sound or vibration detector (machine fault, cough) that fits under 256 KB and runs on a ₹500 board. Measure accuracy and battery life.",
+    "verdict": "Solo: strong",
+    "reason": "Cheap hardware and a demo anyone understands."
+   },
+   {
+    "slug": "learning-on-the-device-while-keeping-data",
+    "title": "Learning on the device while keeping data private",
+    "why": "Federated learning (training across many phones without collecting their data) struggles with very different users, unreliable devices and attacks.",
+    "experiment": "Simulate 1,000 phones with uneven data and compare 3 methods on accuracy and privacy leakage.",
+    "verdict": "Solo: possible",
+    "reason": "Simulation is cheap; real fleets need a partner."
+   },
+   {
+    "slug": "energy-per-answer",
+    "title": "Energy per answer",
+    "why": "AI's electricity demand is growing faster than grids, and few people measure the cost of a token end to end.",
+    "experiment": "Measure watt-hours per answer for one model across settings (batch size, quantization, cache reuse) on one GPU and one laptop. Publish a cost and energy table.",
+    "verdict": "Solo: strong",
+    "reason": "A clear number that every buyer of AI cares about."
+   },
+   {
+    "slug": "trusting-a-model-running-on-someone-else",
+    "title": "Trusting a model running on someone else's device",
+    "why": "How do you prove a device runs the approved, untampered model and that its answers weren't changed?",
+    "experiment": "Build a demo that signs each answer with the model's fingerprint and test which tampering it catches.",
+    "verdict": "Solo: possible",
+    "reason": "A narrow proof of concept; full solutions need hardware support."
+   }
+  ]
+ },
+ {
+  "id": "physical",
+  "title": "Physical AI, robots and autonomy",
+  "problems": [
+   {
+    "slug": "robot-hands-that-cope-with-new-objects",
+    "title": "Robot hands that cope with new objects",
+    "why": "Folding laundry or handling soft and unfamiliar things fails outside the lab. Touch sensing and fine control are weak.",
+    "experiment": "Not a solo build. Watch the open robot models (such as Physical Intelligence's π0 family).",
+    "verdict": "Follow, don't build",
+    "reason": "It needs hardware and large data."
+   },
+   {
+    "slug": "too-little-robot-training-data",
+    "title": "Too little robot training data",
+    "why": "The web has trillions of words but very few recorded robot actions, and every lab uses its own format.",
+    "experiment": "Build a checker that scores public robot datasets on quality (missing frames, mislabelled actions, sensor drift) and publish the results.",
+    "verdict": "Solo: strong",
+    "reason": "A data quality problem, which one careful person can measure."
+   },
+   {
+    "slug": "the-gap-between-simulation-and-reality",
+    "title": "The gap between simulation and reality",
+    "why": "Robots trained in simulation fail on real friction, light and wear.",
+    "experiment": "In a free simulator (MuJoCo, Isaac Sim), measure how a trained policy degrades as you randomise physics.",
+    "verdict": "Solo: possible",
+    "reason": "Simulation-only results are a partial answer."
+   },
+   {
+    "slug": "proving-an-autonomous-system-is-safe",
+    "title": "Proving an autonomous system is safe",
+    "why": "Driving enough miles to prove safety is impossible, so you need scenario testing, and nobody agrees which scenarios are enough.",
+    "experiment": "Generate scenarios for one narrow case (a warehouse robot crossing), run them in simulation, and measure how many rare failures random tests find against targeted tests.",
+    "verdict": "Solo: possible",
+    "reason": "The same \"faced world\" idea as AgentTwin, applied to machines."
+   },
+   {
+    "slug": "flying-and-moving-without-gps",
+    "title": "Flying and moving without GPS",
+    "why": "Drones and robots lose position indoors, underground or when GPS is jammed, and drift builds up within minutes.",
+    "experiment": "On a public drone flight dataset, compare 3 open visual positioning methods on drift per minute.",
+    "verdict": "Solo: possible",
+    "reason": "Public datasets exist; real flights need hardware."
+   },
+   {
+    "slug": "batteries-limit-every-robot",
+    "title": "Batteries limit every robot",
+    "why": "Humanoids and drones run 1–2 hours. Energy density improves only a few percent a year.",
+    "experiment": "No solo build. Track how battery energy per kilogram improves each year.",
+    "verdict": "Follow, don't build",
+    "reason": "It is a chemistry and manufacturing problem."
+   }
+  ]
+ },
+ {
+  "id": "systems",
+  "title": "Data and computer systems",
+  "problems": [
+   {
+    "slug": "estimating-query-sizes-the-40-year-database",
+    "title": "Estimating query sizes (the 40-year database problem)",
+    "why": "Query planners guess how many rows each step returns. Guesses can be off by 1,000 times and pick slow plans; learned estimators haven't replaced the old ones.",
+    "experiment": "On the public JOB benchmark, compare the default planner's guesses with a small learned model. Measure the time lost to bad guesses.",
+    "verdict": "Solo: possible",
+    "reason": "Well studied, so a gain must be clean and real."
+   },
+   {
+    "slug": "keeping-thousands-of-gpus-busy",
+    "title": "Keeping thousands of GPUs busy",
+    "why": "Large training runs lose a lot of time to failures, slow machines and waiting on the network. A single bad GPU can stall a whole run.",
+    "experiment": "Simulate a 1,000-GPU job with realistic failure rates and compare checkpoint strategies on time lost.",
+    "verdict": "Solo: possible",
+    "reason": "Simulation is solo-friendly; real proof needs a cluster."
+   },
+   {
+    "slug": "proving-ai-written-code-is-correct",
+    "title": "Proving AI-written code is correct",
+    "why": "AI writes code faster than people can review it. Tests catch some bugs; proof tools (Lean, Dafny) are hard to use.",
+    "experiment": "Have an LLM write small functions plus a formal proof in Dafny. Measure how often the proof passes and the code is truly right.",
+    "verdict": "Solo: strong",
+    "reason": "Free tools, and results are pass or fail."
+   },
+   {
+    "slug": "same-input-different-llm-answer",
+    "title": "Same input, different LLM answer",
+    "why": "Even at \"temperature 0\", batching and GPU maths make answers vary between runs, which breaks audits and repeatable tests.",
+    "experiment": "Measure how often answers change across runs and providers for 1,000 prompts. Test which serving settings make them repeatable.",
+    "verdict": "Solo: strong",
+    "reason": "Cheap, and regulated buyers need it."
+   },
+   {
+    "slug": "retrieval-that-finds-the-right-passage",
+    "title": "Retrieval that finds the right passage",
+    "why": "Most wrong RAG answers come from fetching the wrong text. Search quality drops on tables, numbers, acronyms and mixed languages.",
+    "experiment": "Build 300 questions over messy enterprise-style documents and compare 4 retrieval setups on whether the right passage is in the top 5.",
+    "verdict": "Solo: strong",
+    "reason": "Measurable and directly useful."
+   },
+   {
+    "slug": "matching-records-that-refer-to-the-same",
+    "title": "Matching records that refer to the same thing",
+    "why": "The same customer, drug or company is spelled differently across systems (\"entity resolution\"), and it still needs people to check at scale.",
+    "experiment": "On a public benchmark, compare a rules approach, an embedding approach and an LLM judge on accuracy and cost per million pairs.",
+    "verdict": "Solo: strong",
+    "reason": "Your home ground, and the cost numbers are new."
+   },
+   {
+    "slug": "useful-analytics-with-privacy-guarantees",
+    "title": "Useful analytics with privacy guarantees",
+    "why": "Differential privacy (adding maths noise so no person can be identified) makes small groups' numbers useless.",
+    "experiment": "Apply it to a public census-style table and measure which questions stay accurate enough to act on.",
+    "verdict": "Solo: possible",
+    "reason": "Clear numbers; the buyers are governments and health bodies."
+   },
+   {
+    "slug": "data-meaning-not-just-data-movement",
+    "title": "Data meaning, not just data movement",
+    "why": "Pipelines move data correctly, yet \"revenue\" means three different things in three tables, and nothing checks the meaning.",
+    "experiment": "Build a checker that compares metric definitions across dbt models and dashboards, and flags conflicts on an open project.",
+    "verdict": "Solo: possible",
+    "reason": "Useful, but harder to state as one number."
+   }
+  ]
+ },
+ {
+  "id": "hardware",
+  "title": "Chips, compute and energy",
+  "problems": [
+   {
+    "slug": "the-memory-wall",
+    "title": "The memory wall",
+    "why": "Chips compute far faster than memory can feed them. Serving LLMs is mostly waiting for memory, not maths.",
+    "experiment": "Profile one open model on one GPU and show what share of time is memory-bound at different batch sizes.",
+    "verdict": "Solo: possible",
+    "reason": "A good learning project and an explainer, not a breakthrough."
+   },
+   {
+    "slug": "connecting-thousands-of-chips",
+    "title": "Connecting thousands of chips",
+    "why": "Big models span many chips, and moving data between them costs time and power. Optical links and new network designs are still being proven.",
+    "experiment": "No solo build. Learn how NVLink, InfiniBand and optical links compare.",
+    "verdict": "Follow, don't build",
+    "reason": "Needs hardware labs."
+   },
+   {
+    "slug": "power-and-cooling-for-ai-data-centres",
+    "title": "Power and cooling for AI data centres",
+    "why": "Racks now draw over 100 kW, and grids and cooling can't keep up. New sites wait years for power.",
+    "experiment": "Model the power, water and cost of a 10 MW AI data centre in 3 Indian cities from public data.",
+    "verdict": "Solo: possible",
+    "reason": "A strong explainer built from public data."
+   },
+   {
+    "slug": "ai-for-chip-design",
+    "title": "AI for chip design",
+    "why": "Placing and routing billions of transistors takes months of expert work. Published AI results are disputed.",
+    "experiment": "On the open OpenROAD flow, compare a learned placement method with the default on one open chip design.",
+    "verdict": "Solo: possible",
+    "reason": "Free tools exist, but gains are hard to prove."
+   },
+   {
+    "slug": "computing-with-light-or-analog-circuits",
+    "title": "Computing with light or analog circuits",
+    "why": "Photonic and analog chips promise far lower energy, but noise and precision limit them.",
+    "experiment": "No solo build. Track the lab results and the first products.",
+    "verdict": "Follow, don't build",
+    "reason": "Needs fabrication."
+   },
+   {
+    "slug": "quantum-error-correction",
+    "title": "Quantum error correction",
+    "why": "Qubits make errors constantly. A useful quantum computer needs thousands of error-corrected qubits; today's machines have a handful of logical ones.",
+    "experiment": "No solo build. Read one review a quarter.",
+    "verdict": "Follow, don't build",
+    "reason": "Needs quantum hardware and a deep physics background."
+   }
+  ]
+ },
+ {
+  "id": "security",
+  "title": "Security",
+  "problems": [
+   {
+    "slug": "memory-unsafe-code-everywhere",
+    "title": "Memory-unsafe code everywhere",
+    "why": "Most serious security bugs in C and C++ come from memory errors. Rewriting billions of lines in Rust by hand is unaffordable.",
+    "experiment": "Have an LLM translate 50 small C programs to safe Rust and measure how many compile, pass tests and avoid \"unsafe\" blocks.",
+    "verdict": "Solo: strong",
+    "reason": "Pass-or-fail results and a public push for memory safety."
+   },
+   {
+    "slug": "malicious-packages-in-software-supply-chains",
+    "title": "Malicious packages in software supply chains",
+    "why": "Attackers publish look-alike packages and hijack maintainers. Thousands of packages ship daily, and review can't keep up.",
+    "experiment": "Train a detector on known malicious npm or PyPI packages and test it on a month of new uploads.",
+    "verdict": "Solo: strong",
+    "reason": "Public data and a clear catch rate."
+   },
+   {
+    "slug": "ai-that-finds-vulnerabilities-before-attackers-do",
+    "title": "AI that finds vulnerabilities before attackers do",
+    "why": "Fuzzing finds crashes but not logic bugs. AI helps, but false alarms waste defenders' time.",
+    "experiment": "Run an LLM bug-finder against 20 projects with known past vulnerabilities and measure what it finds against false alarms.",
+    "verdict": "Solo: strong",
+    "reason": "Measurable, and in demand from defenders."
+   },
+   {
+    "slug": "post-quantum-migration",
+    "title": "Post-quantum migration",
+    "why": "Future quantum computers will break today's encryption, and organisations don't know where they use vulnerable crypto.",
+    "experiment": "Build a scanner that finds vulnerable crypto use in code and configs, and test it on 50 open-source projects.",
+    "verdict": "Solo: strong",
+    "reason": "Governments have set migration deadlines."
+   },
+   {
+    "slug": "identity-when-voices-and-faces-can-be",
+    "title": "Identity when voices and faces can be faked",
+    "why": "Video-call and voice-clone fraud beats \"I recognise them\" checks, and passwords still get phished.",
+    "experiment": "Design a call-back and passkey check for one payment approval flow and measure how many staged deepfake attempts it stops.",
+    "verdict": "Solo: possible",
+    "reason": "Useful, but staged tests are small."
+   }
+  ]
+ },
+ {
+  "id": "science",
+  "title": "Science and maths",
+  "problems": [
+   {
+    "slug": "turning-maths-into-machine-checked-proofs",
+    "title": "Turning maths into machine-checked proofs",
+    "why": "Translating written maths into a proof language (Lean) is slow, so few results are checked by machine.",
+    "experiment": "Have an LLM translate 100 textbook proofs (Class 11 and 12 level) into Lean. Measure how many check, and publish the set.",
+    "verdict": "Solo: strong",
+    "reason": "Free tools, pass-or-fail results and an active community."
+   },
+   {
+    "slug": "weather-beyond-two-weeks",
+    "title": "Weather beyond two weeks",
+    "why": "AI weather models now beat physics models for days ahead, but skill fades after about 2 weeks, and seasonal forecasts stay weak.",
+    "experiment": "Compare open AI forecasts with simple climatology at 1, 2 and 4 weeks ahead for one region.",
+    "verdict": "Solo: possible",
+    "reason": "Open data; making a real gain is hard."
+   },
+   {
+    "slug": "predicting-what-a-protein-does-or-binds",
+    "title": "Predicting what a protein does or binds to",
+    "why": "Structure prediction (AlphaFold) is largely solved; function, binding and design that works in a lab are not.",
+    "experiment": "Use open protein models (ESM) to rank variants on the public ProteinGym benchmark and test one new idea.",
+    "verdict": "Solo: possible",
+    "reason": "Fine on public benchmarks; lab proof needs partners."
+   },
+   {
+    "slug": "predicting-drug-toxicity-early",
+    "title": "Predicting drug toxicity early",
+    "why": "Most drug candidates fail late because of side effects that early tests miss.",
+    "experiment": "On public toxicity datasets (Tox21), test whether adding LLM-read literature features improves prediction.",
+    "verdict": "Solo: possible",
+    "reason": "Public benchmarks exist, and the bar is high."
+   },
+   {
+    "slug": "finding-new-battery-and-material-candidates",
+    "title": "Finding new battery and material candidates",
+    "why": "Millions of possible materials, slow lab tests, and models that predict properties but not whether something can be made.",
+    "experiment": "Use the Materials Project database to screen candidates for one property.",
+    "verdict": "Follow, don't build",
+    "reason": "Real progress needs a lab. Explain depth."
+   },
+   {
+    "slug": "deep-theory-p-vs-np-the-riemann",
+    "title": "Deep theory: P vs NP, the Riemann hypothesis, unifying physics",
+    "why": "Open for decades. Progress needs new mathematics, not more computing.",
+    "experiment": "None solo for now. Enjoy them at Explain depth.",
+    "verdict": "Follow, don't build",
+    "reason": "Follow for curiosity."
+   },
+   {
+    "slug": "ageing-and-fusion",
+    "title": "Ageing and fusion",
+    "why": "Each needs labs or reactors and decades of work.",
+    "experiment": "None solo. Read one good review a quarter to keep up.",
+    "verdict": "Follow, don't build",
+    "reason": "Follow."
+   }
+  ]
+ },
+ {
+  "id": "society",
+  "title": "Society and trust",
+  "problems": [
+   {
+    "slug": "spotting-deepfakes",
+    "title": "Spotting deepfakes",
+    "why": "Detectors break with every new generator.",
+    "experiment": "Train a detector on images from older generators and measure how it fails on the newest ones. The size of that drop is the finding.",
+    "verdict": "Solo: strong",
+    "reason": "A public benchmark and a clear number."
+   },
+   {
+    "slug": "proving-where-content-came-from",
+    "title": "Proving where content came from",
+    "why": "Watermarks are stripped by editing, and signed content (C2PA) is rarely used end to end.",
+    "experiment": "Test how many common edits (crop, re-encode, screenshot) remove each watermark method.",
+    "verdict": "Solo: possible",
+    "reason": "Easy to measure, though the real fix is adoption."
+   },
+   {
+    "slug": "an-ai-tutor-that-measurably-raises-learning",
+    "title": "An AI tutor that measurably raises learning",
+    "why": "Many tutors feel helpful, but few show test-score gains in controlled trials, and some make students lean on them.",
+    "experiment": "Run a 6-week trial with 2 groups of students on one topic, comparing a hints-only tutor with one that gives answers. Measure scores before and after.",
+    "verdict": "Solo: possible",
+    "reason": "Needs willing students and careful design."
+   },
+   {
+    "slug": "fact-checking-at-the-speed-of-rumour",
+    "title": "Fact-checking at the speed of rumour",
+    "why": "False claims spread in minutes; checks take hours or days.",
+    "experiment": "Build a pipeline that matches new claims to existing fact-checks, and measure how many are caught within an hour.",
+    "verdict": "Solo: possible",
+    "reason": "Measurable, and the hard part is distribution."
+   }
+  ]
+ },
+ {
+  "id": "india",
+  "title": "India: hard problems at India's scale",
+  "problems": [
+   {
+    "slug": "ai-in-indian-languages-costs-more-and",
+    "title": "AI in Indian languages costs more and works worse",
+    "why": "Tokenizers split Indian scripts into many more pieces than English, so the same sentence costs about 3 to 8 times more and quality drops. Clean training data is scarce, especially Hinglish.",
+    "experiment": "Measure the \"token tax\" and accuracy gap across 10 Indian languages for 8 models. Build a small, clean Hinglish dataset and show what it does to a small model.",
+    "verdict": "Solo: strong",
+    "reason": "Few measure it carefully, and the IndiaAI Mission and funders care."
+   },
+   {
+    "slug": "speech-recognition-for-dialects-and-code-mixed",
+    "title": "Speech recognition for dialects and code-mixed talk",
+    "why": "Models trained on standard Hindi fail on Bhojpuri, Marwari, Hinglish switching mid-sentence, and noisy streets and phone lines.",
+    "experiment": "Record or collect 500 clips across 5 dialects. Measure the word error rate of open models (Whisper, AI4Bharat's models) and test a small fine-tune.",
+    "verdict": "Solo: strong",
+    "reason": "Open models exist and the error rate is a clear number."
+   },
+   {
+    "slug": "reading-indian-documents-land-records-forms-handwriting",
+    "title": "Reading Indian documents: land records, forms, handwriting",
+    "why": "Scanned land records and government forms mix scripts, stamps and handwriting. Text recognition for Indian scripts is far behind English.",
+    "experiment": "Measure text recognition accuracy on 300 public scanned records in 3 scripts across 4 tools, then extract key fields (owner, area, survey number).",
+    "verdict": "Solo: strong",
+    "reason": "Public scans exist, and the field-level accuracy number matters to banks and courts."
+   },
+   {
+    "slug": "useful-ai-on-a-10-000-phone",
+    "title": "Useful AI on a ₹10,000 phone, offline",
+    "why": "Memory, battery and heat limits. Most \"on-device\" demos run on flagship phones, while most Indian phones are budget models.",
+    "experiment": "Run a 1–3B model offline on a budget Android phone for one task (form filling in Hindi). Measure speed, battery used per answer and accuracy.",
+    "verdict": "Solo: strong",
+    "reason": "Easy to demo, and the audience is hundreds of millions of phones."
+   },
+   {
+    "slug": "addresses-that-machines-can-t-read",
+    "title": "Addresses that machines can't read",
+    "why": "Indian addresses are free text (\"behind the temple, near the old well\"). Deliveries, ambulances and KYC fail on them. DIGIPIN, a national digital address code, is new.",
+    "experiment": "Parse and geocode 5,000 public-style addresses with 3 methods and measure how many land within 100 metres.",
+    "verdict": "Solo: strong",
+    "reason": "Clear numbers, and logistics and fintech care."
+   },
+   {
+    "slug": "voice-clone-and-upi-scams-in-indian",
+    "title": "Voice-clone and UPI scams in Indian languages",
+    "why": "Scam calls and messages now use cloned voices in Indian languages. Detectors and scam filters are mostly trained on English.",
+    "experiment": "Build a test set of real and cloned voices, plus scam and genuine SMS, in Hindi and 2 other languages. Measure how open detectors hold up.",
+    "verdict": "Solo: strong",
+    "reason": "A clear gap and a clear number."
+   },
+   {
+    "slug": "hyperlocal-monsoon-and-flood-forecasts",
+    "title": "Hyperlocal monsoon and flood forecasts",
+    "why": "Global AI weather models are good at large scale, but rain for one district a few hours ahead is still poor, and floods in Assam and Kerala hit with little warning.",
+    "experiment": "Take open forecasts (GraphCast, or ERA5 data) and IMD station data. Measure the error for 10 districts, then fine-tune a small local rain correction.",
+    "verdict": "Solo: strong",
+    "reason": "Open data and a clear error number, and farmers, insurers and cities care."
+   },
+   {
+    "slug": "crop-yield-and-stress-for-small-farms",
+    "title": "Crop yield and stress for small farms",
+    "why": "Satellite pixels (10 metres) are bigger than many Indian plots, and ground truth is scarce.",
+    "experiment": "Use free Sentinel-2 images for one district with published yield data. Compare yield prediction from pixels against plot boundaries.",
+    "verdict": "Solo: possible",
+    "reason": "Ground truth is the hard part, so pick a district with good records."
+   },
+   {
+    "slug": "groundwater-running-out",
+    "title": "Groundwater running out",
+    "why": "Much of north-west India pumps more than rain refills. Wells are measured only a few times a year.",
+    "experiment": "Combine public well readings with satellite gravity data (GRACE) and forecast levels for one district a year ahead.",
+    "verdict": "Solo: possible",
+    "reason": "Public data; validation is slow."
+   },
+   {
+    "slug": "where-delhi-s-air-pollution-comes-from",
+    "title": "Where Delhi's air pollution comes from",
+    "why": "Stubble burning, traffic, industry, dust and weather mix differently every day, and sources are argued over every winter.",
+    "experiment": "Join public pollution sensor data with satellite fire counts and wind. Estimate the daily share from crop fires for one season.",
+    "verdict": "Solo: strong",
+    "reason": "Open data, high public interest and a clear number."
+   },
+   {
+    "slug": "grid-forecasting-with-lots-of-solar",
+    "title": "Grid forecasting with lots of solar",
+    "why": "Solar and wind swing with the weather, and electricity distributors lose money balancing it.",
+    "experiment": "Forecast next-day solar output for one state from open weather and generation data and compare it with a simple baseline.",
+    "verdict": "Solo: possible",
+    "reason": "Public data in places; the buyers are utilities (a sales cycle)."
+   },
+   {
+    "slug": "too-few-doctors-in-rural-clinics",
+    "title": "Too few doctors in rural clinics",
+    "why": "Primary health centres often have one doctor or none. Triage tools must work with little data, in local languages, and be safe.",
+    "experiment": "Build a symptom triage test from public clinical vignettes in Hindi and measure how often open models choose the safe referral.",
+    "verdict": "Solo: possible",
+    "reason": "Measurable in simulation; real use needs medical partners."
+   },
+   {
+    "slug": "court-case-backlog",
+    "title": "Court case backlog",
+    "why": "India has about 50 million pending cases. Delays come from scheduling, missing papers and adjournments.",
+    "experiment": "From public eCourts data for one district, predict which cases are likely to be adjourned and measure how well that works.",
+    "verdict": "Solo: possible",
+    "reason": "Public but messy data, and the buyer is government."
+   },
+   {
+    "slug": "credit-for-people-with-no-credit-history",
+    "title": "Credit for people with no credit history",
+    "why": "Millions have no credit record. Models using other data can be unfair and hard to explain to a regulator.",
+    "experiment": "On a public lending dataset, compare accuracy against fairness gaps for 3 models, plus the explanation each gives a rejected applicant.",
+    "verdict": "Solo: possible",
+    "reason": "Measurable, and lenders and regulators care."
+   },
+   {
+    "slug": "matching-informal-workers-to-jobs",
+    "title": "Matching informal workers to jobs",
+    "why": "Most Indian workers are informal, have no CV and find work by word of mouth.",
+    "experiment": "Build a voice-first profile in Hindi (skills, location, availability) and measure matching accuracy against 200 real-style job posts.",
+    "verdict": "Solo: possible",
+    "reason": "The tech is testable; reaching workers is the hard part."
+   },
+   {
+    "slug": "driving-in-indian-traffic",
+    "title": "Driving in Indian traffic",
+    "why": "No lanes, mixed vehicles (cows, autos, carts), and rules followed loosely. Self-driving models trained in the US or China fail here.",
+    "experiment": "On the public India Driving Dataset (IDD), measure how much a detector trained on Western data drops in accuracy, and how much fine-tuning recovers.",
+    "verdict": "Solo: possible",
+    "reason": "Public data; full autonomy is a lab-scale problem."
+   }
+  ]
+ }
+]
