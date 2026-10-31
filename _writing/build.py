@@ -24,20 +24,15 @@ SRC = ROOT / "_writing" / "posts"
 SITE = "https://cleandataengineering.ai"
 E = html.escape
 
-SUBJECTS = {"ai": "AI Engineering", "llm": "LLM Engineering", "data": "Data Engineering", "cost": "Cost"}
+SUBJECTS = {"data": "Data Engineering", "analytics": "Data + AI", "ai": "AI Engineering",
+            "llm": "LLM Engineering", "cost": "Cost", "career": "Career"}
 AUDIENCES = {"builders": "Builders", "leaders": "Leaders"}
 KINDS = {"field-note": "Field note", "explainer": "Explainer", "decision": "Decision",
          "build-log": "Build log", "leader-brief": "Leader brief", "release": "Release note"}
+MAX_MINUTES = 10  # every post stays a 10-minute read or less
 
-PLANNED = [  # shown as "coming next" until each is written
-    ("Answer without the model first: 104 ms vs 7 seconds", "ai", "builders", "build-log"),
-    ("Most of an agent is ordinary software", "ai", "builders", "explainer"),
-    ("The horse and the harness", "ai", "leaders", "leader-brief"),
-    ("What one conversation costs: under a tenth of a cent", "cost", "leaders", "leader-brief"),
-    ("Why we wrote our own agent loop", "ai", "builders", "decision"),
-    ("Your Databricks cluster scales up and never comes back down", "data", "builders", "field-note"),
-    ("What repeats is broken", "data", "builders", "explainer"),
-]
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from planned import PLANNED  # noqa: E402  (title, stream, audience, kind, what it covers)
 
 
 # ------------------------------------------------------------------ Markdown, the small subset posts use
@@ -198,6 +193,7 @@ POST_CSS = """<style>
   .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
   .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
   ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
 </style>"""
 
 
@@ -261,13 +257,14 @@ def list_page(posts):
         f'<li data-subject="{p["subject"]}" data-audience="{p["audience"]}" data-kind="{p["kind"]}">'
         f'<a class="t" href="/writing/{p["slug"]}/">{E(p["title"])}</a><span class="d">{E(label(p))} · {E(p["date"])}</span></li>' for p in posts)
     soon = "".join(f'<li class="soon" data-subject="{s}" data-audience="{a}" data-kind="{k}"><span class="t soon">{E(t)}</span>'
-                   f'<span class="d">Coming soon · {KINDS[k]} · {SUBJECTS[s]} · {AUDIENCES[a]}</span></li>'
-                   for t, s, a, k in PLANNED if t not in {p["title"] for p in posts})
+                   + (f'<span class="what">{E(w)}</span>' if w else "")
+                   + f'<span class="d">Coming soon · {KINDS[k]} · {SUBJECTS[s]} · {AUDIENCES[a]}</span></li>'
+                   for t, s, a, k, w in PLANNED if t not in {p["title"] for p in posts})
 
     def chips(name, opts):
         return f'<div class="chips" data-f="{name}"><button class="on" data-v="">All</button>' + "".join(
             f'<button data-v="{k}">{E(v)}</button>' for k, v in opts.items()) + "</div>"
-    body = f"""<div class="hero hub-hero"><div><h1>Writing</h1><p class="thesis">Five- and ten-minute pieces: what broke and how it was fixed, one idea explained plainly, a decision with its trade-offs, and short briefs for the people who fund and run these systems.</p>
+    body = f"""<div class="hero hub-hero"><div><h1>Writing</h1><p class="thesis">Every piece is a ten-minute read or less, with drawings: what broke and how it was fixed, one idea explained plainly, a decision with its trade-offs, and short briefs for the people who fund and run these systems.</p>
 <p style="font-family:var(--sans);font-size:14px"><a href="/writing/feed.xml">RSS feed</a></p></div><img src="/assets/illustrations/writing.svg" alt="" width="420" height="300"></div>
 {chips("subject", SUBJECTS)}{chips("audience", AUDIENCES)}{chips("kind", KINDS)}
 <ul class="posts">{items}{soon}</ul>
@@ -304,9 +301,11 @@ def cross_post(p):
 
 def home_block(posts):
     items = "".join(f'      <li><a class="t" href="/writing/{p["slug"]}/">{E(p["title"])}</a><span class="d">{E(label(p))}</span></li>\n' for p in posts[:3])
-    for t, s, a, k in PLANNED:
-        if len(posts) >= 3 or t in {p["title"] for p in posts}:
+    shown = set()  # one coming-soon post per stream, so the home page shows the spread
+    for t, s, a, k, _ in PLANNED:
+        if len(posts) >= 3 or t in {p["title"] for p in posts} or s in shown:
             continue
+        shown.add(s)
         items += f'      <li><span class="t">{E(t)}</span><span class="d">Coming soon &middot; {KINDS[k]}</span></li>\n'
         if items.count("<li>") >= 3:
             break
@@ -317,6 +316,9 @@ def main():
     drafts = "--drafts" in sys.argv
     posts = sorted((read(f) for f in SRC.glob("*.md")), key=lambda p: p["date"], reverse=True)
     live = [p for p in posts if not p["draft"]]
+    for p in posts:
+        if p["minutes"] > MAX_MINUTES:
+            print(f"warning: {p['slug']} is a {p['minutes']}-minute read; keep posts to {MAX_MINUTES} minutes or less")
     if drafts:   # preview only: every post, into _writing/preview/ (never served)
         pv = ROOT / "_writing" / "preview"
         for p in posts:
