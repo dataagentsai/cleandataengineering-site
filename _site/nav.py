@@ -9,7 +9,7 @@ small script sit inside the header block on purpose: anything that copies the he
 
 Layout (31 Oct 2026), agreed with the owner: a left panel on every page, grouped by purpose
 (Learn · Build with us · For leaders · About), fixed and scrolling on its own on wide
-screens, opened from a Menu button below 1180px. The page's own link is marked and its group
+screens, opened from a Menu button below 900px. The page's own link is marked and its group
 opened. The top bar keeps the name, Certifications, Blog, Find my path and For leaders.
 """
 import re
@@ -100,11 +100,11 @@ CSS = """<style>
   .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
   .sidepanel .close { display:none; }
   .scrim { display:none; }
-  @media (min-width:1180px) {
+  @media (min-width:900px) {
     body { padding-left:248px; }
     .menubtn { display:none; } .topbar .brand { visibility:hidden; }
   }
-  @media (max-width:1179px) {
+  @media (max-width:899px) {
     .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
     .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
     .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
