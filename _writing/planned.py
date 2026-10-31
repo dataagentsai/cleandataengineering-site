@@ -42,6 +42,8 @@ PLANNED = [
      "A comparison of orchestration and loop frameworks, with a 'pick this when' table."),
     ("Just use Postgres: the one database your agent needs", "ai", "builders", "decision",
      "Why PostgreSQL is here to stay for agents: one database for state, memory with pgvector, checkpoints, durable workflows, queues and the audit log, on every cloud (Lakebase, Azure, AlloyDB, Aurora, Neon)."),
+    ("Rust or Python for agents? Probably both", "ai", "builders", "decision",
+     "Where Rust wins (sandboxes, gateways, tool runtimes, speed, memory safety, one small binary), where Python wins (libraries, evals, fast iteration), and the common split: Python for the thinking, Rust for the heavy lifting."),
     ("DBOS vs Temporal: durable agents without the drama", "ai", "builders", "decision",
      "Durable execution for long-running agents: the two models, their trade-offs, and when you need neither."),
     ("Seatbelts for agents: guardrails that actually hold", "ai", "builders", "explainer",
