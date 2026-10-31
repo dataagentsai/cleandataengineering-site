@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Most of an agent is ordinary software · Clean Data Engineering</title>
+<meta name="description" content="We counted every line of code in our reference agent and sorted it by job. The code that calls the model is 817 of 24,631 lines, about 3%, and the rest is tests, checks, durable workflows, state, tracing and plumbing. So most of building an agent is ordinary engineering, and the skills you already have apply."><link rel="canonical" href="https://cleandataengineering.ai/writing/agent-is-ordinary-software/">
+<meta property="og:title" content="Most of an agent is ordinary software"><meta property="og:description" content="We counted every line of code in our reference agent and sorted it by job. The code that calls the model is 817 of 24,631 lines, about 3%, and the rest is tests, checks, durable workflows, state, tracing and plumbing. So most of building an agent is ordinary engineering, and the skills you already have apply."><meta property="og:url" content="https://cleandataengineering.ai/writing/agent-is-ordinary-software/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Build log · AI Engineering · Builders · 7 min read · 2026-10-31</p>
+    <h1>Most of an agent is ordinary software</h1>
+  </div>
+  <div class="summary">We counted every line of code in our reference agent and sorted it by job. The code that calls the model is 817 of 24,631 lines, about 3%, and the rest is tests, checks, durable workflows, state, tracing and plumbing. So most of building an agent is ordinary engineering, and the skills you already have apply.</div>
+<p>We once drew a picture that said <a href="/writing/model-is-ten-percent/">the model is 10% of an agent</a> and the harness is the rest. We said at the time that the number was a picture, not a measurement. People kept asking what the real number was.</p>
+<p>So we counted. We took our open <a href="https://github.com/dataagentsai/reference-agent">reference agent</a>, a customer-support agent for a clothing web shop, and sorted every line of its Python by the job that line does.</p>
+<p>The answer is not 10%. It is about 3%. The slogan was generous to the model.</p>
+<h2>The iceberg, with real numbers</h2>
+<p>In a demo you see the model. It reads a message, picks a tool, writes a reply. That part is the tip. Everything that keeps it honest, safe and running sits under the water.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 390" role="img" aria-label="An iceberg. Above the water, a small tip labelled the model call, 817 lines, 3 percent. Below the water, a large body labelled 23,814 lines, 97 percent, containing the loop, checks and sign-in, durable workflows, state, tools, traces and cost, config, evals, and the edge, pages and reports. A note says plus 18,415 lines of tests."><text class="sm" x="500" y="22" text-anchor="middle">what you see in a demo is the tip; the code you maintain is under the water</text><path class="solid" d="M440,128 L468,72 L492,58 L512,66 L534,52 L560,128 Z"/><text class="bd" x="600" y="72" text-anchor="start">the model call</text><text class="bd" x="600" y="92" text-anchor="start">817 lines, 3%</text><line class="ln" x1="596" y1="80" x2="540" y2="88"/><path class="ln" d="M20,130 Q60,120 100,130 T180,130 T260,130 T340,130 T420,130 T580,130 T660,130 T740,130 T820,130 T900,130 T980,130"/><path class="pf pf-bx" d="M440,132 L560,132 L700,170 L840,250 L780,350 L520,372 L250,345 L150,250 L300,165 Z"/><path class="ln" d="M440,132 L300,165 L150,250 L250,345 L520,372 L780,350 L840,250 L700,170 L560,132"/><text class="bd" x="500" y="172" text-anchor="middle">23,814 lines, 97%</text><text class="tx" x="300" y="215" text-anchor="middle">the loop</text><text class="tx" x="500" y="215" text-anchor="middle">checks and sign-in</text><text class="tx" x="700" y="215" text-anchor="middle">durable workflows</text><text class="tx" x="270" y="262" text-anchor="middle">state</text><text class="tx" x="420" y="262" text-anchor="middle">tools</text><text class="tx" x="580" y="262" text-anchor="middle">traces and cost</text><text class="tx" x="740" y="262" text-anchor="middle">config</text><text class="tx" x="390" y="309" text-anchor="middle">evals</text><text class="tx" x="620" y="309" text-anchor="middle">the edge, pages, reports</text><path class="hz" d="M120,112 L190,112 L178,126 L132,126 Z"/><line class="ln" x1="155" y1="112" x2="155" y2="82"/><path class="hz" d="M157,84 L180,106 L157,106 Z"/><text class="sm" x="910" y="330" text-anchor="middle">plus 18,415 lines</text><text class="sm" x="910" y="350" text-anchor="middle">of tests</text></svg><figcaption>The reference agent, measured. Leaving tests out, the model call is 3% of the code.</figcaption></figure>
+<p>The reference agent has 24,631 lines of code, not counting tests. The code that calls a model is 817 of them. The other 23,814 lines are the loop, the checks, the waiting-for-a-person workflows, the database, the traces, the evals and the plumbing that joins them. Then there are 18,415 more lines of tests on top.</p>
+<h2>How we counted</h2>
+<p>The method is deliberately boring, so anyone can repeat it.</p>
+<ol><li><strong>Which files.</strong> Every <code>.py</code> file committed at one point in the repository's history, commit <code>d0a8b84</code>. That covers the agent itself, its harness package (<code>packages/agent-harness</code>), its evals, scripts and tests. Because we read from the commit, <code>.venv</code>, <code>node_modules</code>, scratch copies and uncommitted work can't sneak in. The repository holds no vendored code, meaning no copied-in third-party libraries.</li><li><strong>Which lines.</strong> A line counts if it holds code. Blank lines, comment lines and docstrings (the explanation strings at the top of a Python function or file) are dropped. We used Python's own <code>tokenize</code> and <code>ast</code> modules to find them, rather than guessing with a pattern.</li><li><strong>Which job.</strong> Each file goes to exactly one job, by a list of folder and file rules. The first rule that fits wins. For example, the <code>llm</code> folder and the model adapter go to "the code that calls a model". The approval and escalation workflows go to "durable workflows". Tests are counted on their own.</li></ol>
+<p>The counting script takes the repository and the commit as its two inputs, and prints the table below.</p>
+<h2>The numbers</h2>
+<div class="tw"><table><tr><th>Job</th><th>Files</th><th>Code lines</th><th>Share of agent code</th><th>Share of everything</th></tr><tr><td>The code that calls a model</td><td>8</td><td>817</td><td>3.3%</td><td>1.9%</td></tr><tr><td>The loop</td><td>20</td><td>1,572</td><td>6.4%</td><td>3.7%</td></tr><tr><td>Context building</td><td>2</td><td>144</td><td>0.6%</td><td>0.3%</td></tr><tr><td>Checks, policies and sign-in</td><td>31</td><td>2,509</td><td>10.2%</td><td>5.8%</td></tr><tr><td>Tools and tool adapters</td><td>8</td><td>815</td><td>3.3%</td><td>1.9%</td></tr><tr><td>State and persistence</td><td>24</td><td>1,471</td><td>6.0%</td><td>3.4%</td></tr><tr><td>Durable workflows and retries</td><td>35</td><td>2,667</td><td>10.8%</td><td>6.2%</td></tr><tr><td>Tracing, telemetry and cost</td><td>24</td><td>1,677</td><td>6.8%</td><td>3.9%</td></tr><tr><td>Evals</td><td>53</td><td>5,379</td><td>21.8%</td><td>12.5%</td></tr><tr><td>Config and wiring</td><td>10</td><td>944</td><td>3.8%</td><td>2.2%</td></tr><tr><td>Everything else</td><td>52</td><td>6,636</td><td>26.9%</td><td>15.4%</td></tr><tr><td>Tests</td><td>110</td><td>18,415</td><td>not counted</td><td>42.8%</td></tr></table></div>
+<p>"Share of agent code" leaves tests out, so it adds up to 24,631 lines. "Share of everything" puts them back, for a total of 43,046.</p>
+<p>Here are the same numbers as bars.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 510" role="img" aria-label="Horizontal bars of code lines by job. The code that calls a model 817. The loop 1,572. Context building 144. Checks, policies and sign-in 2,509. Tools and tool adapters 815. State and persistence 1,471. Durable workflows and retries 2,667. Tracing, telemetry and cost 1,677. Evals 5,379. Config and wiring 944. Everything else 6,636. Below a dashed line, tests 18,415."><text class="sm" x="500" y="22" text-anchor="middle">code lines by job, reference agent at commit d0a8b84</text><text class="bd" x="320" y="68" text-anchor="end">The code that calls a model</text><rect class="solid" x="335" y="52" width="25" height="24" rx="4"/><text class="tx" x="370" y="69" text-anchor="start">817</text><text class="tx" x="320" y="104" text-anchor="end">The loop</text><rect class="bx" x="335" y="88" width="48" height="24" rx="4"/><text class="tx" x="393" y="105" text-anchor="start">1,572</text><text class="tx" x="320" y="140" text-anchor="end">Context building</text><rect class="bx" x="335" y="124" width="4" height="24" rx="4"/><text class="tx" x="349" y="141" text-anchor="start">144</text><text class="tx" x="320" y="176" text-anchor="end">Checks, policies, sign-in</text><rect class="bx" x="335" y="160" width="76" height="24" rx="4"/><text class="tx" x="421" y="177" text-anchor="start">2,509</text><text class="tx" x="320" y="212" text-anchor="end">Tools and tool adapters</text><rect class="bx" x="335" y="196" width="25" height="24" rx="4"/><text class="tx" x="370" y="213" text-anchor="start">815</text><text class="tx" x="320" y="248" text-anchor="end">State and persistence</text><rect class="bx" x="335" y="232" width="45" height="24" rx="4"/><text class="tx" x="390" y="249" text-anchor="start">1,471</text><text class="tx" x="320" y="284" text-anchor="end">Durable workflows, retries</text><rect class="bx" x="335" y="268" width="81" height="24" rx="4"/><text class="tx" x="426" y="285" text-anchor="start">2,667</text><text class="tx" x="320" y="320" text-anchor="end">Tracing, telemetry, cost</text><rect class="bx" x="335" y="304" width="51" height="24" rx="4"/><text class="tx" x="396" y="321" text-anchor="start">1,677</text><text class="tx" x="320" y="356" text-anchor="end">Evals</text><rect class="bx" x="335" y="340" width="164" height="24" rx="4"/><text class="tx" x="509" y="357" text-anchor="start">5,379</text><text class="tx" x="320" y="392" text-anchor="end">Config and wiring</text><rect class="bx" x="335" y="376" width="29" height="24" rx="4"/><text class="tx" x="374" y="393" text-anchor="start">944</text><text class="tx" x="320" y="428" text-anchor="end">Everything else</text><rect class="bx" x="335" y="412" width="202" height="24" rx="4"/><text class="tx" x="547" y="429" text-anchor="start">6,636</text><line class="lnd" x1="40" y1="451" x2="960" y2="451"/><text class="tx" x="320" y="478" text-anchor="end">Tests</text><rect class="bxm" x="335" y="462" width="560" height="24" rx="4"/><text class="tx" x="905" y="479" text-anchor="start">18,415</text></svg><figcaption>The model call is the first bar, and one of the shortest. Tests, below the line, are bigger than any job above it.</figcaption></figure>
+<p>Four things stand out.</p>
+<ul><li><strong>The model call is small, and it isn't even simple.</strong> Those 817 lines already speak to more than one provider, and read what a gateway in front of the model says about each call. The part that sends a request is a small piece of it. The rest is making every call, to any provider, go through one place.</li><li><strong>Tests are the biggest single job.</strong> 18,415 lines, more than any job in the agent itself. Add the 5,379 lines of evals, and checking the agent is more than half of all the code.</li><li><strong>"Everything else" is big, and it's honest.</strong> Inside it: 3,360 lines of report pages and scripts, 1,662 lines of the edge (the web server, the chat webhook, the customer's login and the reviewer's page), 925 lines of a stand-in shop that the tools talk to, and 689 lines of shared types. None of it is clever. All of it has to work.</li><li><strong>Context building is tiny.</strong> 144 lines. Deciding what the model sees is a hard <em>design</em> problem, but the code that does it is short. Lines measure what you maintain, not what you have to think hard about.</li></ul>
+<h2>What those lines ask of you</h2>
+<p>Look at the biggest rows again and ask what you need to know to write them. Mostly it isn't prompting.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 365" role="img" aria-label="Six boxes for the skills most of the code needs: tests with fakes, fixtures and recorded replies; retries and idempotency so the same refund never runs twice; auth with the token checked at the tool on every call; schemas with typed inputs and outputs; SQL and Postgres for state, ledgers and queues; tracing with every step and its cost. Below, one smaller lavender box: talking to the model, 3 percent of the lines."><text class="sm" x="500" y="22" text-anchor="middle">what the other 97% asks of you: skills you may already have</text><rect class="pf pf-bxs" x="44" y="49" width="278" height="90" rx="12"/><rect class="bxs ol" x="40" y="45" width="280" height="92" rx="12"/><text class="tt" x="180.0" y="78.0" text-anchor="middle">Tests</text><text class="sm" x="180.0" y="102.0" text-anchor="middle">fakes, fixtures,</text><text class="sm" x="180.0" y="121.0" text-anchor="middle">recorded replies</text><rect class="pf pf-bx" x="364" y="49" width="278" height="90" rx="12"/><rect class="bx ol" x="360" y="45" width="280" height="92" rx="12"/><text class="tt" x="500.0" y="78.0" text-anchor="middle">Retries, idempotency</text><text class="sm" x="500.0" y="102.0" text-anchor="middle">the same refund</text><text class="sm" x="500.0" y="121.0" text-anchor="middle">never runs twice</text><rect class="pf pf-bx" x="684" y="49" width="278" height="90" rx="12"/><rect class="bx ol" x="680" y="45" width="280" height="92" rx="12"/><text class="tt" x="820.0" y="78.0" text-anchor="middle">Auth</text><text class="sm" x="820.0" y="102.0" text-anchor="middle">the token is checked</text><text class="sm" x="820.0" y="121.0" text-anchor="middle">at the tool, every call</text><rect class="pf pf-bx" x="44" y="159" width="278" height="90" rx="12"/><rect class="bx ol" x="40" y="155" width="280" height="92" rx="12"/><text class="tt" x="180.0" y="188.0" text-anchor="middle">Schemas</text><text class="sm" x="180.0" y="212.0" text-anchor="middle">typed inputs and</text><text class="sm" x="180.0" y="231.0" text-anchor="middle">outputs at every seam</text><rect class="pf pf-bx" x="364" y="159" width="278" height="90" rx="12"/><rect class="bx ol" x="360" y="155" width="280" height="92" rx="12"/><text class="tt" x="500.0" y="188.0" text-anchor="middle">SQL and Postgres</text><text class="sm" x="500.0" y="212.0" text-anchor="middle">state, ledgers,</text><text class="sm" x="500.0" y="231.0" text-anchor="middle">queues that survive</text><rect class="pf pf-bxs" x="684" y="159" width="278" height="90" rx="12"/><rect class="bxs ol" x="680" y="155" width="280" height="92" rx="12"/><text class="tt" x="820.0" y="188.0" text-anchor="middle">Tracing</text><text class="sm" x="820.0" y="212.0" text-anchor="middle">every step written</text><text class="sm" x="820.0" y="231.0" text-anchor="middle">down, with its cost</text><rect class="pf pf-solid" x="364" y="284" width="278" height="68" rx="12"/><rect class="solid ol" x="360" y="280" width="280" height="70" rx="12"/><text class="tt inv" x="500.0" y="311.5" text-anchor="middle">Talking to the model</text><text class="inv sm2" x="500.0" y="335.5" text-anchor="middle">3% of the lines</text></svg><figcaption>Most of an agent asks for skills a good backend or data engineer already has.</figcaption></figure>
+<ul><li><strong>Tests.</strong> Fake tool servers, fixtures, and recorded model replies played back so a test gives the same answer every time.</li><li><strong>Retries and idempotency.</strong> Idempotency means doing something twice has the same effect as doing it once. A refund request that times out gets retried, and the shop must not pay the customer twice.</li><li><strong>Auth.</strong> The agent acts only with the customer's own session. The tool server checks that token on every call, and never trusts a customer id the model wrote.</li><li><strong>Schemas.</strong> Typed inputs and outputs at every seam, so a bad value fails loudly at the boundary instead of quietly three steps later.</li><li><strong>SQL and Postgres.</strong> Conversations, an idempotency ledger and queues of approvals waiting for a person all live in the database, and survive a restart.</li><li><strong>Tracing.</strong> Every step written down with its cost, so you can replay a bad conversation and see where it turned.</li></ul>
+<p>A good backend or data engineer has most of these skills already. Take a data engineer who has built a pipeline that retries without loading a file twice. That person already knows the core idea behind an agent's durable workflows. The new part, talking to the model well, is real, but it's the small part.</p>
+<h2>What goes wrong when you measure</h2>
+<p>A line count is easy to get wrong, and easy to over-read.</p>
+<ul><li><strong>Counting other people's code.</strong> Leave out <code>.venv</code>, <code>node_modules</code>, vendored libraries and generated files, or a framework's thousands of lines will drown your own.</li><li><strong>Mixing tests in.</strong> With tests in, our model share falls from 3.3% to 1.9%. Both are true. Say which one you mean.</li><li><strong>Treating the grouping as fact.</strong> Sorting files into jobs is judgement. Move a few files between rows and the numbers shift by a few hundred lines. The shape doesn't change. We also tried keeping docstrings in, and the model's share stayed about the same, at 3.4%.</li><li><strong>Reading lines as importance.</strong> One wrong line in the model call can break every reply. Lines tell you where the maintenance goes, not where the risk is.</li><li><strong>Generalising from one agent.</strong> This one was built to teach, so it is heavy on tests and evals. A weekend demo would show a much bigger model share, because it has almost nothing under the water. That is the point, not a counter-example.</li></ul>
+<h2>How to check your own agent's split</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 270" role="img" aria-label="Four steps left to right: list the files, your own code only; tag each file with one job; count code lines, skipping blanks, comments and docstrings; divide each job by the total, with tests on their own. Below, a small person holds a tally sheet and asks whether the model call is near 10 percent or smaller."><text class="sm" x="500" y="22" text-anchor="middle">an hour with a spreadsheet, or twenty lines of Python</text><rect class="pf pf-bx" x="14" y="54" width="218" height="90" rx="12"/><rect class="bx ol" x="10" y="50" width="220" height="92" rx="12"/><text class="tt" x="120.0" y="83.0" text-anchor="middle">List the files</text><text class="sm" x="120.0" y="107.0" text-anchor="middle">your own code only,</text><text class="sm" x="120.0" y="126.0" text-anchor="middle">no .venv or vendored</text><circle class="nm" cx="32" cy="72" r="14"/><text class="nmt" x="32" y="78" text-anchor="middle">1</text><line class="ln" x1="232" y1="96" x2="256" y2="96" marker-end="url(#ar)"/><rect class="pf pf-bx" x="262" y="54" width="218" height="90" rx="12"/><rect class="bx ol" x="258" y="50" width="220" height="92" rx="12"/><text class="tt" x="368.0" y="83.0" text-anchor="middle">Tag each file</text><text class="sm" x="368.0" y="107.0" text-anchor="middle">one job per file,</text><text class="sm" x="368.0" y="126.0" text-anchor="middle">first rule that fits</text><circle class="nm" cx="280" cy="72" r="14"/><text class="nmt" x="280" y="78" text-anchor="middle">2</text><line class="ln" x1="480" y1="96" x2="504" y2="96" marker-end="url(#ar)"/><rect class="pf pf-bx" x="510" y="54" width="218" height="90" rx="12"/><rect class="bx ol" x="506" y="50" width="220" height="92" rx="12"/><text class="tt" x="616.0" y="83.0" text-anchor="middle">Count code lines</text><text class="sm" x="616.0" y="107.0" text-anchor="middle">skip blanks, comments,</text><text class="sm" x="616.0" y="126.0" text-anchor="middle">docstrings</text><circle class="nm" cx="528" cy="72" r="14"/><text class="nmt" x="528" y="78" text-anchor="middle">3</text><line class="ln" x1="728" y1="96" x2="752" y2="96" marker-end="url(#ar)"/><rect class="pf pf-solid" x="758" y="54" width="218" height="90" rx="12"/><rect class="solid ol" x="754" y="50" width="220" height="92" rx="12"/><text class="tt inv" x="864.0" y="83.0" text-anchor="middle">Divide</text><text class="inv sm2" x="864.0" y="107.0" text-anchor="middle">each job by the total,</text><text class="inv sm2" x="864.0" y="126.0" text-anchor="middle">tests on their own</text><circle class="nm" cx="776" cy="72" r="14"/><text class="nmt" x="776" y="78" text-anchor="middle">4</text><circle class="bxs" cx="90" cy="180" r="13"/><line class="lnc" x1="90" y1="193" x2="90" y2="228"/><line class="lnc" x1="90" y1="228" x2="79" y2="250"/><line class="lnc" x1="90" y1="228" x2="101" y2="250"/><line class="lnc" x1="90" y1="204" x2="73" y2="218"/><line class="lnc" x1="90" y1="204" x2="110" y2="214"/><rect class="hz" x="112" y="196" width="46" height="58" rx="4"/><line class="ln" x1="120" y1="210" x2="150" y2="210"/><line class="ln" x1="120" y1="224" x2="150" y2="224"/><line class="ln" x1="120" y1="238" x2="150" y2="238"/><text class="tx" x="190" y="226" text-anchor="start">the model call: is it near 10%, or smaller?</text></svg><figcaption>How to measure your own agent's split. The rules you tag with matter more than the tool you count with.</figcaption></figure>
+<p>You don't need our script. A rough first pass is one line in the repository's folder. It keeps docstrings in, which barely moved our answer:</p>
+<pre><code>git ls-files '*.py' | xargs grep -cvE '^\s*(#|$)'</code></pre>
+<p>That prints a count per file. Paste it into a spreadsheet, add a column for the job, and write down the rule you used for each folder. Tag a file by what it mostly does. If a file does three jobs, that is a finding too.</p>
+<h2>Five questions to check your own split</h2>
+<ol><li>Can you point to the one place where every model call goes through, and say how many lines it is?</li><li>Is your test code bigger or smaller than your agent code? If much smaller, what isn't tested?</li><li>Which job is your biggest row, and did you plan for it to be?</li><li>How many lines make sure the same action never runs twice?</li><li>If you swapped models tomorrow, how many files would change?</li></ol>
+<p>Measure your own agent before you believe anyone's slogan, ours included.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/">the Agent Harness tutorial, which walks the same agent layer by layer</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
