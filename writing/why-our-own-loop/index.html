@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why we wrote our own agent loop · Clean Data Engineering</title>
+<meta name="description" content="Our reference agent, a support agent that can move real money, runs on a loop we wrote ourselves in one file of 416 lines. We did it so every budget and check sits at a place a test can reach. We kept the door open by putting the loop behind a port: a Pydantic AI version is written, LangGraph and Claude Agent SDK versions are planned, and all of them must pass the same frozen tests."><link rel="canonical" href="https://cleandataengineering.ai/writing/why-our-own-loop/">
+<meta property="og:title" content="Why we wrote our own agent loop"><meta property="og:description" content="Our reference agent, a support agent that can move real money, runs on a loop we wrote ourselves in one file of 416 lines. We did it so every budget and check sits at a place a test can reach. We kept the door open by putting the loop behind a port: a Pydantic AI version is written, LangGraph and Claude Agent SDK versions are planned, and all of them must pass the same frozen tests."><meta property="og:url" content="https://cleandataengineering.ai/writing/why-our-own-loop/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · AI Engineering · Builders · 7 min read · 2026-10-31</p>
+    <h1>Why we wrote our own agent loop</h1>
+  </div>
+  <div class="summary">Our reference agent, a support agent that can move real money, runs on a loop we wrote ourselves in one file of 416 lines. We did it so every budget and check sits at a place a test can reach. We kept the door open by putting the loop behind a port: a Pydantic AI version is written, LangGraph and Claude Agent SDK versions are planned, and all of them must pass the same frozen tests.</div>
+<p>When we started the <a href="https://github.com/dataagentsai/reference-agent">reference agent</a>, a customer-support agent for a clothing shop that can cancel orders and pay refunds, the first question people asked was which framework we would use. LangGraph? The Claude Agent SDK? Pydantic AI?</p>
+<p>We used none of them for the loop. The agent's loop is plain Python that we wrote and own, in one file.</p>
+<p>The general comparison of the options is in <a href="/writing/choosing-agent-loop/">choosing your agent loop</a>. This post is our own story: why plain code, how small it is, what we gave up, and what would change our minds.</p>
+<h2>A bicycle in the shed</h2>
+<p>Picking a framework is like walking into a car showroom. Everything is included: the engine, the seats, the satnav, a warranty. Writing your own loop is building a bicycle in the shed. It has fewer parts, and you know every one of them, because you fitted them.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 320" role="img" aria-label="Two panels. Left, a shed with a hand-built bicycle and a stick person holding a spanner, labelled our own loop: few parts, and we fitted every one. Right, a car showroom with two cars, a price tag and a sign saying everything included, labelled a framework."><rect class="bxm" x="10" y="10" width="470" height="300" rx="14"/><rect class="bxm" x="520" y="10" width="470" height="300" rx="14"/><path class="ln" d="M40,60 L245,28 L450,60"/><text class="lbl" x="245" y="84" text-anchor="middle">THE SHED</text><circle class="hz" cx="170" cy="200" r="32"/><circle class="hk" cx="170" cy="200" r="3"/><circle class="hz" cx="300" cy="200" r="32"/><circle class="hk" cx="300" cy="200" r="3"/><path class="ln" d="M170,200 L215,150 L275,150 L300,200 M215,150 L235,200 L275,150 M235,200 L170,200"/><line class="lnc" x1="205" y1="138" x2="227" y2="138"/><line class="lnc" x1="275" y1="150" x2="283" y2="130"/><circle class="bx" cx="395" cy="132" r="13"/><line class="lnc" x1="395" y1="145" x2="395" y2="190"/><line class="lnc" x1="395" y1="190" x2="383" y2="228"/><line class="lnc" x1="395" y1="190" x2="407" y2="228"/><line class="lnc" x1="395" y1="160" x2="365" y2="172"/><line class="lnc" x1="395" y1="160" x2="413" y2="178"/><path class="hz" d="M341,178 L367,164 L371,171 L345,185 Z"/><circle class="hz" cx="339" cy="183" r="7"/><text class="bd" x="245" y="268" text-anchor="middle">Our own loop</text><text class="sm" x="245" y="292" text-anchor="middle">few parts, and we fitted every one</text><text class="lbl" x="755" y="50" text-anchor="middle">THE SHOWROOM</text><rect class="hz" x="655" y="64" width="200" height="34" rx="6"/><text class="sm" x="755" y="87" text-anchor="middle">everything included</text><path class="hz" d="M560,190 L560,168 L590,166 L608,140 L668,140 L688,166 L720,168 L720,190 Z"/><path class="bxs" d="M614,147 L662,147 L676,164 L602,164 Z"/><circle class="hz" cx="596" cy="192" r="13"/><circle class="hk" cx="596" cy="192" r="3"/><circle class="hz" cx="684" cy="192" r="13"/><circle class="hk" cx="684" cy="192" r="3"/><path class="hz" d="M780,190 L780,168 L810,166 L828,140 L888,140 L908,166 L940,168 L940,190 Z"/><path class="bxs" d="M834,147 L882,147 L896,164 L822,164 Z"/><circle class="hz" cx="816" cy="192" r="13"/><circle class="hk" cx="816" cy="192" r="3"/><circle class="hz" cx="904" cy="192" r="13"/><circle class="hk" cx="904" cy="192" r="3"/><line class="ln" x1="540" y1="208" x2="970" y2="208"/><path class="hz" d="M716,150 L752,150 L760,160 L752,170 L716,170 Z"/><circle class="hk" cx="724" cy="160" r="3"/><text class="bd" x="755" y="268" text-anchor="middle">A framework</text><text class="sm" x="755" y="292" text-anchor="middle">engine, seats and satnav fitted for you</text></svg><figcaption>Both get you there. For an agent that moves money, we wanted to know every part.</figcaption></figure>
+<p>A car is the right choice for many trips. But our agent moves money. Say Priya asks for a refund of ₹4,000 on a jacket. Before it runs, we want to point at the exact line that checked she owns the order, the line that checked the amount, and the line that would stop a run going round too often, each with an ordinary unit test.</p>
+<p>The README puts it in one line: no agent framework, so that each layer of the harness is visible.</p>
+<h2>The one place that sees the whole trip</h2>
+<p>A single model call can't tell whether it is the first call of a task or the fourteenth. Only the loop sees the whole trip. Only the loop knows that fourteen calls are one runaway task, not fourteen separate tasks. Our notes call this seeing the <em>trajectory</em>: the full path a run has taken so far.</p>
+<p>Everything that needs that view lives in the loop:</p>
+<ul><li><strong>A step budget.</strong> The run stops after 12 trips round the loop, and always records why.</li><li><strong>A clock.</strong> A turn may take at most 60 seconds.</li><li><strong>A cost ceiling.</strong> The run stops once it has spent $0.50, checked between calls, because you can't un-spend a call.</li><li><strong>A tool-call bound.</strong> At most 8 tool calls in one step, and 24 in a turn.</li><li><strong>A loop detector.</strong> If the model asks for the same tool with the same arguments three times, it is going in circles, and the run stops. This is called <em>oscillation</em>.</li></ul>
+<p>When we wrote the decision down in September, the note said: handing the loop to a framework means handing over the only place that can see the trajectory, to save writing about 350 lines once. A bad trade for this agent.</p>
+<h2>How small is it, really?</h2>
+<p>We counted, because "small" is easy to claim.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 425" role="img" aria-label="At the top, a box: the part that goes round, 4 lines, for each step up to 12 take a step. An arrow goes down to five numbered steps in a row: check the clock and whether the customer is still here; ask the model after a check; count tokens and money; answer, where words pass a check; plan and act, checking each tool call. A dashed arrow loops back: tools ran, take another step. Below, a sheet of paper: 416 lines in one file, 290 of them code."><rect class="pf pf-solid" x="254" y="14" width="498" height="74" rx="12"/><rect class="solid ol" x="250" y="10" width="500" height="76" rx="12"/><text class="tt inv" x="500.0" y="44.5" text-anchor="middle">The part that goes round: 4 lines</text><text class="inv sm2" x="500.0" y="68.5" text-anchor="middle">for each step, up to 12: take a step</text><rect class="pf pf-bx" x="14" y="154" width="180" height="84" rx="12"/><rect class="bx ol" x="10" y="150" width="182" height="86" rx="12"/><text class="tt" x="101.0" y="189.5" text-anchor="middle">Check the clock</text><text class="sm" x="101.0" y="213.5" text-anchor="middle">and is the customer here?</text><circle class="nm" cx="24" cy="150" r="14"/><text class="nmt" x="24" y="156" text-anchor="middle">1</text><line class="ln" x1="194" y1="193" x2="206" y2="193" marker-end="url(#ar)"/><rect class="pf pf-bx" x="212" y="154" width="180" height="84" rx="12"/><rect class="bx ol" x="208" y="150" width="182" height="86" rx="12"/><text class="tt" x="299.0" y="189.5" text-anchor="middle">Ask the model</text><text class="sm" x="299.0" y="213.5" text-anchor="middle">after a check</text><circle class="nm" cx="222" cy="150" r="14"/><text class="nmt" x="222" y="156" text-anchor="middle">2</text><line class="ln" x1="392" y1="193" x2="404" y2="193" marker-end="url(#ar)"/><rect class="pf pf-bx" x="410" y="154" width="180" height="84" rx="12"/><rect class="bx ol" x="406" y="150" width="182" height="86" rx="12"/><text class="tt" x="497.0" y="189.5" text-anchor="middle">Count</text><text class="sm" x="497.0" y="213.5" text-anchor="middle">tokens and money</text><circle class="nm" cx="420" cy="150" r="14"/><text class="nmt" x="420" y="156" text-anchor="middle">3</text><line class="ln" x1="590" y1="193" x2="602" y2="193" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="608" y="154" width="180" height="84" rx="12"/><rect class="bxs ol" x="604" y="150" width="182" height="86" rx="12"/><text class="tt" x="695.0" y="189.5" text-anchor="middle">Answer</text><text class="sm" x="695.0" y="213.5" text-anchor="middle">words pass a check</text><circle class="nm" cx="618" cy="150" r="14"/><text class="nmt" x="618" y="156" text-anchor="middle">4</text><line class="ln" x1="788" y1="193" x2="800" y2="193" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="806" y="154" width="180" height="84" rx="12"/><rect class="bxs ol" x="802" y="150" width="182" height="86" rx="12"/><text class="tt" x="893.0" y="189.5" text-anchor="middle">Plan and act</text><text class="sm" x="893.0" y="213.5" text-anchor="middle">check each tool call</text><circle class="nm" cx="816" cy="150" r="14"/><text class="nmt" x="816" y="156" text-anchor="middle">5</text><line class="ln" x1="500" y1="88" x2="500" y2="146" marker-end="url(#ar)"/><text class="sm" x="512" y="124" text-anchor="start">one step</text><path class="lnd" d="M900,238 Q500,330 100,238" marker-end="url(#ar)"/><text class="sm" x="500" y="300" text-anchor="middle">tools ran: take another step</text><path class="hz" d="M70,330 L190,330 L210,350 L210,410 L70,410 Z"/><line class="ln" x1="88" y1="350" x2="190" y2="350"/><line class="ln" x1="88" y1="364" x2="190" y2="364"/><line class="ln" x1="88" y1="378" x2="190" y2="378"/><line class="ln" x1="88" y1="392" x2="190" y2="392"/><text class="bd" x="230" y="360" text-anchor="start">416 lines in one file</text><text class="sm" x="230" y="388" text-anchor="start">290 of them code, once blank lines, comments and explanations are taken out</text></svg><figcaption>Our whole loop, drawn. Every rule has a line you can point at and a test can reach.</figcaption></figure>
+<p>The loop is one file of <strong>416 lines</strong>. Take out the blank lines, comments and explanations, and <strong>290 lines of code</strong> remain. The part that actually goes round is four lines: for each step up to the budget, take a step; if that step ended the run, return how it ended; if no step did, stop because the budget ran out.</p>
+<p>Each step does five things in the order drawn above. In the last one, the loop counts the tool calls, looks for circling and checks each call before running the ones allowed.</p>
+<p>Six small helper files sit beside it: planning calls, screening them, running them, recording how a run ends, counting spend, and making sure the agent doesn't act on data that has gone stale. With those, the whole folder is 1,356 lines, 785 of them code.</p>
+<p>It has grown since that September note. Each new rule, such as the clock and the tool-call bound, added a few lines in a place we chose.</p>
+<h2>What a framework would have given us, and cost us</h2>
+<p>We are not pretending the trade is one-sided.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 315" role="img" aria-label="A balance scale with two pans. Left pan, what a framework would have given us: state saved after each step, a pause for a person to approve, streaming replies, built-in tools, docs and a community, fewer lines that are ours. Right pan, what it would have cost us: checks only where its hooks are, some steps hidden from our tests, prompt text we didn&#x27;t write, hooks that move on upgrade, and the one view of the whole trip."><line class="lnc" x1="500" y1="70" x2="500" y2="270"/><path class="hz" d="M450,270 L550,270 L530,250 L470,250 Z"/><line class="lnc" x1="290" y1="62" x2="710" y2="78"/><circle class="hk" cx="500" cy="70" r="6"/><line class="ln" x1="290" y1="62" x2="250" y2="104"/><line class="ln" x1="290" y1="62" x2="330" y2="104"/><line class="ln" x1="710" y1="78" x2="670" y2="120"/><line class="ln" x1="710" y1="78" x2="750" y2="120"/><rect class="pf pf-bx" x="34" y="112" width="418" height="158" rx="12"/><rect class="bx ol" x="30" y="108" width="420" height="160" rx="12"/><text class="tt" x="240.0" y="137.0" text-anchor="middle">It would have given us</text><text class="sm" x="240.0" y="161.0" text-anchor="middle">state saved after each step</text><text class="sm" x="240.0" y="180.0" text-anchor="middle">a pause for a person to approve</text><text class="sm" x="240.0" y="199.0" text-anchor="middle">streaming replies</text><text class="sm" x="240.0" y="218.0" text-anchor="middle">built-in tools</text><text class="sm" x="240.0" y="237.0" text-anchor="middle">docs and a community</text><text class="sm" x="240.0" y="256.0" text-anchor="middle">fewer lines that are ours</text><rect class="pf pf-bxs" x="554" y="128" width="418" height="142" rx="12"/><rect class="bxs ol" x="550" y="124" width="420" height="144" rx="12"/><text class="tt" x="760.0" y="154.5" text-anchor="middle">It would have cost us</text><text class="sm" x="760.0" y="178.5" text-anchor="middle">checks only where its hooks are</text><text class="sm" x="760.0" y="197.5" text-anchor="middle">some steps hidden from our tests</text><text class="sm" x="760.0" y="216.5" text-anchor="middle">prompt text we didn&#x27;t write</text><text class="sm" x="760.0" y="235.5" text-anchor="middle">hooks that move on upgrade</text><text class="sm" x="760.0" y="254.5" text-anchor="middle">the one view of the whole trip</text><text class="sm" x="500" y="300" text-anchor="middle">for this agent, the right side weighed more</text></svg><figcaption>A fair trade to weigh. For a support agent that moves money, the cost side won.</figcaption></figure>
+<p>A framework hands you a lot on day one, and the left pan is real: resumable state, approval pauses, streaming, documentation and a community. The right pan is quieter. Our budgets and checks would sit wherever the framework's hooks happen to be, not where the rule belongs, and each upgrade could move those hooks.</p>
+<p>Owning the loop doesn't mean owning everything. Waiting days for an approval and surviving a restart we got by adopting Temporal and DBOS, two tools built for that job. We own the one place that sees the trajectory, and adopt the rest. That pattern, a port for each part with an adapter plugged in, is the subject of <a href="/writing/harness-design-patterns/">swap anything, break nothing</a>.</p>
+<p>We do use Pydantic AI today, just not as the loop. It calls the model for us, behind our own model interface, and one module is the only place allowed to import it.</p>
+<h2>The loop is a plug, not a foundation</h2>
+<p>Choosing plain code would be a trap if it meant we could never change our minds. So the loop sits behind a <em>port</em>: a fixed shape the rest of the agent calls, without knowing what is plugged in behind it.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 420" role="img" aria-label="Four plugs on the left: our own loop, built and running today; Pydantic AI, written and being measured; LangGraph, planned; the Claude Agent SDK, planned. Each arrow passes through one gate, the same bar for all: 16 frozen test cases unchanged, at most 150 lines of adapter per port, no interface changed for the framework, no fighting its loop. The gate leads to the loop port, one call to run a turn, which the router, state, checks and traces use without knowing which plug ran."><text class="lbl" x="140" y="22" text-anchor="middle">WHO RUNS THE STEPS</text><rect class="pf pf-solid" x="14" y="44" width="258" height="70" rx="12"/><rect class="solid ol" x="10" y="40" width="260" height="72" rx="12"/><text class="tt inv" x="140.0" y="72.5" text-anchor="middle">Our own loop</text><text class="inv sm2" x="140.0" y="96.5" text-anchor="middle">built: runs today</text><line class="ln" x1="272" y1="76" x2="356" y2="200" marker-end="url(#ar)"/><rect class="pf pf-bx" x="14" y="136" width="258" height="70" rx="12"/><rect class="bx ol" x="10" y="132" width="260" height="72" rx="12"/><text class="tt" x="140.0" y="164.5" text-anchor="middle">Pydantic AI</text><text class="sm" x="140.0" y="188.5" text-anchor="middle">written: being measured</text><line class="ln" x1="272" y1="168" x2="356" y2="200" marker-end="url(#ar)"/><rect class="bxm ol" x="10" y="224" width="260" height="72" rx="12"/><text class="tt" x="140.0" y="256.5" text-anchor="middle">LangGraph</text><text class="sm" x="140.0" y="280.5" text-anchor="middle">planned</text><line class="ln" x1="272" y1="260" x2="356" y2="200" marker-end="url(#ar)"/><rect class="bxm ol" x="10" y="316" width="260" height="72" rx="12"/><text class="tt" x="140.0" y="348.5" text-anchor="middle">Claude Agent SDK</text><text class="sm" x="140.0" y="372.5" text-anchor="middle">planned</text><line class="ln" x1="272" y1="352" x2="356" y2="200" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="364" y="74" width="288" height="258" rx="12"/><rect class="bxs ol" x="360" y="70" width="290" height="260" rx="12"/><text class="tt" x="505.0" y="139.5" text-anchor="middle">The same bar for all</text><text class="sm" x="505.0" y="163.5" text-anchor="middle">16 frozen test cases,</text><text class="sm" x="505.0" y="182.5" text-anchor="middle">unchanged</text><text class="sm" x="505.0" y="201.5" text-anchor="middle">at most 150 lines</text><text class="sm" x="505.0" y="220.5" text-anchor="middle">of adapter per port</text><text class="sm" x="505.0" y="239.5" text-anchor="middle">no interface changed</text><text class="sm" x="505.0" y="258.5" text-anchor="middle">for the framework</text><text class="sm" x="505.0" y="277.5" text-anchor="middle">no fighting its loop</text><line class="ln" x1="652" y1="200" x2="716" y2="200" marker-end="url(#ar)"/><rect class="pf pf-solid" x="724" y="154" width="268" height="98" rx="12"/><rect class="solid ol" x="720" y="150" width="270" height="100" rx="12"/><text class="tt inv" x="855.0" y="196.5" text-anchor="middle">The loop port</text><text class="inv sm2" x="855.0" y="220.5" text-anchor="middle">one call: run a turn</text><text class="sm" x="855" y="290" text-anchor="middle">router, state, checks</text><text class="sm" x="855" y="310" text-anchor="middle">and traces never know</text><text class="sm" x="855" y="330" text-anchor="middle">which plug ran</text></svg><figcaption>Plain code today, but not for ever. Any loop that clears the same bar can take its place.</figcaption></figure>
+<p>Here is where each plug stands today:</p>
+<ul><li><strong>Our own loop:</strong> built, and the one the agent runs on.</li><li><strong>Pydantic AI owning the loop:</strong> written. Its agent runs the steps, and our checks run at its own hooks before each model request and around each tool. One line of configuration picks it. It is being measured now, and the results are not in.</li><li><strong>LangGraph owning the loop:</strong> planned, not built.</li><li><strong>The Claude Agent SDK owning the loop:</strong> planned, not built. So is a fourth run, with our loop calling Claude's own SDK for the model.</li></ul>
+<p>Every plug is judged by a bar we wrote down on 1 October, before any of them was built, so the bar couldn't bend to fit the result:</p>
+<ol><li><strong>The same test cases, unchanged.</strong> Sixteen cases for three ports, the approval, cost and policy checks, frozen on 20 October. If someone edits a case file, the build fails.</li><li><strong>At most 150 lines of adapter per port</strong>, not counting blank lines or comments.</li><li><strong>No change to our interfaces</strong> made just so the framework can call them.</li><li><strong>No fighting the framework.</strong> No private interfaces, no wrapping its loop, no second copy of state it already holds.</li></ol>
+<p>On a rough count, the Pydantic AI adapter's policy piece is 122 lines and its cost piece 38, even counting every line of each file. The official count and the test run are still to come.</p>
+<h2>When we would switch</h2>
+<p>We would hand the loop to someone else if any of these became true:</p>
+<ul><li><strong>The job changes shape.</strong> Our September note says a research assistant with a complicated graph gets a different answer. Our tutorial picks LangGraph for workflow-shaped agents, full Pydantic AI for simple ones, and Microsoft Agent Framework for a .NET team.</li><li><strong>The agent works on files and code.</strong> Our plans already put a different agent, a Spark cost analyst with subagents, on the Claude Agent SDK.</li><li><strong>An adapter clears all four bars.</strong> Then switching is a line of configuration, not a rewrite, and the decision gets cheap.</li></ul>
+<h2>What went wrong when we owned the loop</h2>
+<p>Owning the loop means owning its bugs. Two real ones from our review log:</p>
+<ol><li><strong>Checks declared but never called.</strong> Our checks could run in five places. Three of them were declared and accepted rules in configuration, but nothing ever called them. No test failed, because no test asked whether each place was reached. We found it by asking a plain question in review: are the checks really a list we can configure? Now all five are reached, and a test proves it.</li><li><strong>A failure that escaped.</strong> A broken conversation history that no provider would accept slipped past the loop, and the customer got a plain server error with no reply. Now it ends the run like every other failure, with a reason and a message for the customer.</li></ol>
+<p>Owning the loop meant these were ours to find and ours to fix. It also meant each fix landed in a file we already understood, not in someone else's callback.</p>
+<h2>Six questions to ask before you write your own</h2>
+<ol><li>Can a wrong step move money or change someone's records?</li><li>Can you name the line where your step budget, cost ceiling and loop detection live?</li><li>Would your tests reach every step if a framework ran them?</li><li>Which parts can you adopt instead, such as durable waits, tracing and the model call itself?</li><li>Is the loop behind a port, so the choice can be undone?</li><li>Have you written down, before you start, what would make you switch?</li></ol>
+<p>The loop is a small part of the harness, as we argued in <a href="/writing/model-is-ten-percent/">the model is 10%</a>. It is also the part that holds the budgets, so if you can't answer the second question, start there.</p>
+<p>Write the four lines that go round yourself, and adopt everything else.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/tech-l4.html">the control loop in the Agent Harness tutorial</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
