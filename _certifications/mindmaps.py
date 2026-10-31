@@ -72,9 +72,12 @@ def load():
     missing, extra, dupes = raw - set(seen), set(seen) - raw, len(seen) - len(set(seen))
     if missing or extra or dupes:
         raise SystemExit(f"merge does not cover the source maps: missing {sorted(missing)}, extra {sorted(extra)}, twice {dupes}")
+    n = 0
     for d in domains:
         for o in d["objectives"]:
             for m in o["maps"]:
+                n += 1
+                m["n"] = n
                 m["id"] = f"m{o['obj'].replace('.', '-')}-{slug(m['for'])}"
                 assert len(m["head"]) == 3 and all(len(r) == 3 for r in m["rows"]), m["for"]
     return domains, len(raw)
@@ -93,6 +96,8 @@ CSS = """<style>
   table.idx td, table.idx th, table.mm td, table.mm th { text-align:left; vertical-align:top; padding:7px 10px; border-bottom:1px solid var(--rule); }
   table.idx th, table.mm th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
   table.idx .grp td { background:var(--surface-2, #F6F4EF); font-weight:700; font-size:13px; letter-spacing:.04em; }
+  table.idx td.n { font-weight:700; color:var(--ink); white-space:nowrap; width:2.5em; }
+  .mm-card h4 .num { display:inline-block; min-width:1.7em; margin-right:8px; padding:0 7px; border:1.5px solid var(--ink); border-radius:999px; background:var(--butter-wash); text-align:center; font-family:var(--sans); font-size:16px; font-weight:700; vertical-align:3px; }
   table.idx td.o { color:var(--faint); white-space:nowrap; font-size:13px; }
   table.idx a { color:var(--ink); }
   h2.dom { margin-top:46px; } h3.obj { margin:30px 0 4px; font-family:var(--hand); font-weight:400; font-size:24px; }
@@ -132,12 +137,12 @@ def page():
     domains, total = load()
     nmaps = sum(len(o["maps"]) for d in domains for o in d["objectives"])
 
-    idx = ['<div class="tw"><table class="idx"><tr><th>Mind map for</th><th>Ask yourself</th><th>Objective</th></tr>']
+    idx = ['<div class="tw"><table class="idx"><tr><th>No.</th><th>Mind map for</th><th>Ask yourself</th><th>Objective</th></tr>']
     for d in domains:
-        idx.append(f'<tr class="grp"><td colspan="3">Domain {d["domain"]}: {E(DOMAINS[d["domain"]])}</td></tr>')
+        idx.append(f'<tr class="grp"><td colspan="4">Domain {d["domain"]}: {E(DOMAINS[d["domain"]])}</td></tr>')
         for o in d["objectives"]:
             for m in o["maps"]:
-                idx.append(f'<tr data-for="{m["id"]}"><td><a href="#{m["id"]}">{E(m["for"])}</a></td><td>{cell(m["ask"])}</td>'
+                idx.append(f'<tr data-for="{m["id"]}"><td class="n">{m["n"]}</td><td><a href="#{m["id"]}">{E(m["for"])}</a></td><td>{cell(m["ask"])}</td>'
                            f'<td class="o">{o["obj"]} {E(OBJECTIVES[o["obj"]])}</td></tr>')
     idx.append("</table></div>")
 
@@ -150,7 +155,7 @@ def page():
                 head = "".join(f"<th>{E(h)}</th>" for h in m["head"])
                 rows = "".join("<tr>" + "".join(f"<td>{cell(c)}</td>" for c in r) + "</tr>" for r in m["rows"])
                 src = "; ".join(ref_link(r) for r in sorted(m["from"], key=lambda r: (-int(r.split(':')[0][1:]), r)))
-                cards.append(f'''<article class="mm-card" id="{m["id"]}"><p class="for">Mind map for</p><h4>{E(m["for"])}</h4>
+                cards.append(f'''<article class="mm-card" id="{m["id"]}"><p class="for">Mind map {m["n"]} of {nmaps} · for</p><h4><span class="num">{m["n"]}</span>{E(m["for"])}</h4>
 <p class="ask"><b>Ask yourself:</b> {cell(m["ask"])}</p><p class="when"><b>Reach for it when:</b> {cell(m["when"])}</p>
 <div class="tw"><table class="mm"><tr>{head}</tr>{rows}</table></div>
 <p class="rule"><b>Rule to remember:</b> {cell(m["rule"])}</p>
