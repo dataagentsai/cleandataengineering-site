@@ -43,6 +43,8 @@ For data and AI engineering, the long-lasting ones include:
 
 The site's [key concepts](/concepts/) are exactly this list, each explained once, the same on every cloud.
 
+Learning what happens under the hood is slower than learning the buttons, and it is still the right way. The companion post, [under the hood: why fundamentals are the slow road that wins](/writing/under-the-hood/), shows why, with a real example of a job that changed nothing and still rewrote a file.
+
 ## Draw the map before the trek
 
 The fastest learners don't learn more tools. They have a map, and they place each new tool on it.
