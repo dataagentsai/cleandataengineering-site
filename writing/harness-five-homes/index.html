@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One harness, five homes: the agent harness on Azure, GCP, AWS, Databricks and open source · Clean Data Engineering</title>
+<meta name="description" content="An agent harness has the same jobs on every platform: a model door, a loop, tools, state, durable waits, identity, guardrails, tracing, evals and hosting. Azure, Google Cloud, AWS, Databricks and open source fill those jobs with different products. Design the harness once, then pick the home by where your data and identity already live and which managed pieces your team trusts."><link rel="canonical" href="https://cleandataengineering.ai/writing/harness-five-homes/">
+<meta property="og:title" content="One harness, five homes: the agent harness on Azure, GCP, AWS, Databricks and open source"><meta property="og:description" content="An agent harness has the same jobs on every platform: a model door, a loop, tools, state, durable waits, identity, guardrails, tracing, evals and hosting. Azure, Google Cloud, AWS, Databricks and open source fill those jobs with different products. Design the harness once, then pick the home by where your data and identity already live and which managed pieces your team trusts."><meta property="og:url" content="https://cleandataengineering.ai/writing/harness-five-homes/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>One harness, five homes: the agent harness on Azure, GCP, AWS, Databricks and open source</h1>
+  </div>
+  <div class="summary">An agent harness has the same jobs on every platform: a model door, a loop, tools, state, durable waits, identity, guardrails, tracing, evals and hosting. Azure, Google Cloud, AWS, Databricks and open source fill those jobs with different products. Design the harness once, then pick the home by where your data and identity already live and which managed pieces your team trusts.</div>
+<p>"Which cloud should our agent run on?" It is often the first question in the first meeting, before anyone has written down what the agent must do. The team picks a platform, learns its agent product, and builds the agent in that product's shape.</p>
+<p>There is a better order. An agent harness is the ordinary software around the model that decides what it sees, what it may touch, and what happens when it gets something wrong. It has the same jobs wherever it runs. Design those jobs first. The platform then decides only which product fills each one.</p>
+<p>This post puts ten of those jobs side by side on Azure, Google Cloud, AWS, Databricks and open source. The product names are as of October 2026, and they change often. The jobs don't.</p>
+<h2>One floor plan, five houses</h2>
+<p>Think of the harness as a floor plan. It says there is a front door, a kitchen and a lock, and how the rooms connect. It does not say brick or timber.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 325" role="img" aria-label="A lavender floor plan labelled the harness, with six rooms: model door, loop, tools, state, checks and traces. An arrow leads to five small houses built from it: Azure in brick, Google Cloud in timber planks, AWS with glass windows, Databricks in stone, and open source with a dashed outline and a hammer leaning on the wall, because you build it yourself."><text class="lbl" x="175" y="30" text-anchor="middle">THE HARNESS: ONE FLOOR PLAN</text><rect class="pf pf-solid" x="20" y="45" width="310" height="235" rx="10"/><rect class="pf pf-solid" x="39" y="64" width="128" height="54" rx="12"/><rect class="solid ol" x="35" y="60" width="130" height="56" rx="12"/><text class="tt inv" x="100.0" y="94.0" text-anchor="middle">Model door</text><rect class="pf pf-solid" x="184" y="64" width="128" height="54" rx="12"/><rect class="solid ol" x="180" y="60" width="130" height="56" rx="12"/><text class="tt inv" x="245.0" y="94.0" text-anchor="middle">Loop</text><rect class="pf pf-solid" x="39" y="136" width="128" height="54" rx="12"/><rect class="solid ol" x="35" y="132" width="130" height="56" rx="12"/><text class="tt inv" x="100.0" y="166.0" text-anchor="middle">Tools</text><rect class="pf pf-solid" x="184" y="136" width="128" height="54" rx="12"/><rect class="solid ol" x="180" y="132" width="130" height="56" rx="12"/><text class="tt inv" x="245.0" y="166.0" text-anchor="middle">State</text><rect class="pf pf-solid" x="39" y="208" width="128" height="54" rx="12"/><rect class="solid ol" x="35" y="204" width="130" height="56" rx="12"/><text class="tt inv" x="100.0" y="238.0" text-anchor="middle">Checks</text><rect class="pf pf-solid" x="184" y="208" width="128" height="54" rx="12"/><rect class="solid ol" x="180" y="204" width="130" height="56" rx="12"/><text class="tt inv" x="245.0" y="238.0" text-anchor="middle">Traces</text><path class="ln" d="M340,165 Q360,165 378,165" marker-end="url(#ar)"/><text class="lbl" x="680" y="30" text-anchor="middle">FIVE HOMES BUILT FROM IT</text><path class="hz" d="M387,150 L445,100 L503,150 Z"/><rect class="hz" x="395" y="150" width="100" height="110"/><line class="ln" x1="395" y1="168" x2="495" y2="168"/><line class="ln" x1="419" y1="152" x2="419" y2="168"/><line class="ln" x1="444" y1="152" x2="444" y2="168"/><line class="ln" x1="469" y1="152" x2="469" y2="168"/><line class="ln" x1="494" y1="152" x2="494" y2="168"/><line class="ln" x1="395" y1="184" x2="495" y2="184"/><line class="ln" x1="407" y1="168" x2="407" y2="184"/><line class="ln" x1="432" y1="168" x2="432" y2="184"/><line class="ln" x1="457" y1="168" x2="457" y2="184"/><line class="ln" x1="482" y1="168" x2="482" y2="184"/><line class="ln" x1="395" y1="200" x2="495" y2="200"/><line class="ln" x1="419" y1="184" x2="419" y2="200"/><line class="ln" x1="444" y1="184" x2="444" y2="200"/><line class="ln" x1="469" y1="184" x2="469" y2="200"/><line class="ln" x1="494" y1="184" x2="494" y2="200"/><line class="ln" x1="395" y1="216" x2="495" y2="216"/><line class="ln" x1="407" y1="200" x2="407" y2="216"/><line class="ln" x1="482" y1="200" x2="482" y2="216"/><line class="ln" x1="395" y1="232" x2="495" y2="232"/><line class="ln" x1="419" y1="216" x2="419" y2="232"/><line class="ln" x1="469" y1="216" x2="469" y2="232"/><line class="ln" x1="494" y1="216" x2="494" y2="232"/><line class="ln" x1="395" y1="248" x2="495" y2="248"/><line class="ln" x1="407" y1="232" x2="407" y2="248"/><line class="ln" x1="482" y1="232" x2="482" y2="248"/><rect class="hz" x="434" y="225" width="22" height="35" rx="2"/><text class="tx" x="445" y="284" text-anchor="middle">Azure</text><path class="hz" d="M507,150 L565,100 L623,150 Z"/><rect class="hz" x="515" y="150" width="100" height="110"/><line class="ln" x1="529" y1="150" x2="529" y2="260"/><line class="ln" x1="543" y1="150" x2="543" y2="260"/><line class="ln" x1="585" y1="150" x2="585" y2="260"/><line class="ln" x1="599" y1="150" x2="599" y2="260"/><line class="ln" x1="613" y1="150" x2="613" y2="260"/><rect class="hz" x="554" y="225" width="22" height="35" rx="2"/><text class="tx" x="565" y="284" text-anchor="middle">Google Cloud</text><path class="hz" d="M627,150 L685,100 L743,150 Z"/><rect class="hz" x="635" y="150" width="100" height="110"/><rect class="hz" x="645" y="164" width="28" height="30"/><line class="ln" x1="659" y1="164" x2="659" y2="194"/><line class="ln" x1="645" y1="179" x2="673" y2="179"/><rect class="hz" x="697" y="164" width="28" height="30"/><line class="ln" x1="711" y1="164" x2="711" y2="194"/><line class="ln" x1="697" y1="179" x2="725" y2="179"/><rect class="hz" x="674" y="225" width="22" height="35" rx="2"/><text class="tx" x="685" y="284" text-anchor="middle">AWS</text><path class="hz" d="M747,150 L805,100 L863,150 Z"/><rect class="hz" x="755" y="150" width="100" height="110"/><ellipse class="hz" cx="769" cy="168" rx="9" ry="6"/><ellipse class="hz" cx="795" cy="172" rx="9" ry="6"/><ellipse class="hz" cx="825" cy="166" rx="9" ry="6"/><ellipse class="hz" cx="843" cy="190" rx="9" ry="6"/><ellipse class="hz" cx="771" cy="196" rx="9" ry="6"/><ellipse class="hz" cx="777" cy="230" rx="9" ry="6"/><ellipse class="hz" cx="835" cy="226" rx="9" ry="6"/><ellipse class="hz" cx="841" cy="248" rx="9" ry="6"/><ellipse class="hz" cx="769" cy="252" rx="9" ry="6"/><rect class="hz" x="794" y="225" width="22" height="35" rx="2"/><text class="tx" x="805" y="284" text-anchor="middle">Databricks</text><path class="hz" d="M867,150 L925,100 L983,150 Z"/><rect class="lnd" x="875" y="150" width="100" height="110"/><line class="lnc" x1="889" y1="255" x2="905" y2="200"/><rect class="hk" x="895" y="192" width="22" height="9" rx="2" transform="rotate(16 906 196)"/><rect class="hz" x="914" y="225" width="22" height="35" rx="2"/><text class="tx" x="925" y="284" text-anchor="middle">Open source</text><text class="sm" x="680" y="310" text-anchor="middle">same rooms and doors; only the material changes</text></svg><figcaption>One floor plan, five houses. The harness design is the plan; each platform is a different material.</figcaption></figure>
+<p>Each platform is a different building material. Azure gives you one set of products, AWS another, Databricks a third. You can also build it yourself from open-source parts, which is cheap in money and expensive in your own time.</p>
+<p>As in <a href="/writing/agent-tech-stack/">the agent tech stack</a>, we call each job a <strong>concept</strong> and the thing doing it a <strong>product</strong>. Write the design in concepts. Products should appear in exactly one place: a short list of which product fills each job. We call that list the <strong>bindings</strong>.</p>
+<h2>The ten jobs, side by side</h2>
+<p>Most of the jobs are familiar. Three need a word first:</p>
+<ul><li><strong>Durable workflows</strong> let a step wait hours or days for a person, survive a restart, and never pay the same claim twice.</li><li><strong>Guardrails</strong> check what may go in, come out and run, before and after each step.</li><li><strong>Hosting</strong> is where the harness code itself runs and answers requests.</li></ul>
+<div class="tw"><table><tr><th>Concern</th><th>Azure</th><th>Google Cloud</th><th>AWS</th><th>Databricks</th><th>Open source</th></tr><tr><td>Model access and gateway</td><td>APIM AI gateway</td><td>Gemini, Apigee</td><td>Bedrock, API Gateway</td><td>Mosaic AI Gateway</td><td>LiteLLM</td></tr><tr><td>Loop or agent service</td><td>Foundry Agent Service</td><td>Vertex AI Agent Engine</td><td>AgentCore Runtime</td><td>Mosaic AI Agent Framework</td><td>your own loop</td></tr><tr><td>Tools</td><td>Foundry tools, APIM MCP</td><td>ADK tools</td><td>AgentCore Gateway</td><td>Unity Catalog functions</td><td>MCP SDKs, FastMCP</td></tr><tr><td>State</td><td>Azure PostgreSQL, Cosmos DB</td><td>Cloud SQL, Firestore</td><td>RDS Postgres, DynamoDB</td><td>Lakebase (Postgres)</td><td>PostgreSQL</td></tr><tr><td>Durable workflows</td><td>Durable Task Scheduler</td><td>Workflows</td><td>Step Functions</td><td>bring your own</td><td>DBOS, Temporal</td></tr><tr><td>Identity</td><td>Entra ID</td><td>IAM, Identity Platform</td><td>IAM, Cognito</td><td>Unity Catalog grants</td><td>Keycloak</td></tr><tr><td>Guardrails</td><td>AI Content Safety</td><td>Model Armor</td><td>Bedrock Guardrails</td><td>AI Gateway guardrails</td><td>your own rules</td></tr><tr><td>Tracing</td><td>Application Insights</td><td>Cloud Trace</td><td>CloudWatch, X-Ray</td><td>MLflow tracing</td><td>OpenTelemetry, Langfuse</td></tr><tr><td>Evals</td><td>Foundry evaluation</td><td>Vertex Gen AI evaluation</td><td>Bedrock evaluations</td><td>MLflow evaluation</td><td>promptfoo, DeepEval</td></tr><tr><td>Hosting</td><td>Container Apps</td><td>Cloud Run</td><td>ECS Fargate</td><td>Databricks Apps</td><td>Docker</td></tr></table></div>
+<p>The cells are examples from our own concept maps, not a ranking or a full list. "Bring your own" means our sources name no Databricks product for that job, so you add one, such as DBOS or Temporal.</p>
+<h2>Concept versus product</h2>
+<p>Take one row and look at it closely.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 325" role="img" aria-label="A lavender job card: durable waits, meaning wait days for a person, survive a restart and never pay twice. Dashed lines join it to five product badges: Durable Task Scheduler on Azure, Workflows on Google Cloud, Step Functions on AWS, bring your own on Databricks, and DBOS or Temporal in open source."><text class="lbl" x="195" y="40" text-anchor="middle">THE JOB (CONCEPT)</text><rect class="pf pf-solid" x="34" y="74" width="328" height="158" rx="12"/><rect class="solid ol" x="30" y="70" width="330" height="160" rx="12"/><text class="tt inv" x="195.0" y="127.5" text-anchor="middle">Durable waits</text><text class="inv sm2" x="195.0" y="151.5" text-anchor="middle">wait days for a person,</text><text class="inv sm2" x="195.0" y="170.5" text-anchor="middle">survive a restart,</text><text class="inv sm2" x="195.0" y="189.5" text-anchor="middle">never pay twice</text><text class="lbl" x="645" y="22" text-anchor="middle">THE PRODUCT ON EACH PLATFORM</text><rect class="pf pf-bx" x="524" y="40" width="238" height="44" rx="12"/><rect class="bx ol" x="520" y="36" width="240" height="46" rx="12"/><text class="tt" x="640.0" y="65.0" text-anchor="middle">Durable Task Scheduler</text><text class="sm" x="775" y="64" text-anchor="start">Azure</text><line class="lnd" x1="362" y1="150" x2="518" y2="59"/><rect class="pf pf-bx" x="524" y="96" width="238" height="44" rx="12"/><rect class="bx ol" x="520" y="92" width="240" height="46" rx="12"/><text class="tt" x="640.0" y="121.0" text-anchor="middle">Workflows</text><text class="sm" x="775" y="120" text-anchor="start">Google Cloud</text><line class="lnd" x1="362" y1="150" x2="518" y2="115"/><rect class="pf pf-bx" x="524" y="152" width="238" height="44" rx="12"/><rect class="bx ol" x="520" y="148" width="240" height="46" rx="12"/><text class="tt" x="640.0" y="177.0" text-anchor="middle">Step Functions</text><text class="sm" x="775" y="176" text-anchor="start">AWS</text><line class="lnd" x1="362" y1="150" x2="518" y2="171"/><rect class="bxm ol" x="520" y="204" width="240" height="46" rx="12"/><text class="tt" x="640.0" y="233.0" text-anchor="middle">bring your own</text><text class="sm" x="775" y="232" text-anchor="start">Databricks</text><line class="lnd" x1="362" y1="150" x2="518" y2="227"/><rect class="pf pf-bxs" x="524" y="264" width="238" height="44" rx="12"/><rect class="bxs ol" x="520" y="260" width="240" height="46" rx="12"/><text class="tt" x="640.0" y="289.0" text-anchor="middle">DBOS or Temporal</text><text class="sm" x="775" y="288" text-anchor="start">open source</text><line class="lnd" x1="362" y1="150" x2="518" y2="283"/><text class="sm" x="195" y="262" text-anchor="middle">the card never changes; the badge does</text></svg><figcaption>Concept versus product. One job card, five badges. On Databricks our sources name no product for this job, so you bring one.</figcaption></figure>
+<p>The job card says: wait days for a person, survive a restart, never pay twice. Five platforms put five different badges on it. The card doesn't change.</p>
+<p>Here is a real case. Our motor-claims agent is built for Azure. For durable waits its bindings do not pick Durable Task Scheduler. They pick DBOS, a library that keeps its workflow state in the PostgreSQL database the agent already has, so there is no new server to run. When we later wrote the same agent's bindings for AWS, we chose DBOS again over Step Functions, because Step Functions would move the waits out of our code and into an AWS-only service. That AWS file is still on paper; nothing is deployed there yet.</p>
+<p>DBOS may not be right for you. The point is that the choice is one line in a binding file, and the agent's code doesn't know which line was picked. The patterns that make this possible, ports and adapters, are in <a href="/writing/harness-design-patterns/">swap anything, break nothing</a>.</p>
+<p>Notice also that the Azure binding is not "all Azure". It uses Azure for the gateway, identity, secrets and tracing, and keeps open-source parts like DBOS and pgvector where they keep a later move cheap. Mixing is normal.</p>
+<h2>Where each home is strong, and where it is thin</h2>
+<ul><li><strong>Azure.</strong> Strong if your staff already sign in with Entra ID. API Management gives one governed door to every model, with token limits and token metrics at the gateway. Thin spot: features differ by tier. In our development setup the cheapest API Management tier had no token-limit policy, so we checked the tier before the design depended on it.</li><li><strong>Google Cloud.</strong> Gemini on Vertex AI, the Agent Development Kit (ADK) as a loop library, Vertex AI Agent Engine to host it, Model Armor for screening and Cloud Run for hosting. We have not built an agent here ourselves, so we describe it only from our maps. Apigee is a general API gateway; check what it does for model traffic before you rely on it.</li><li><strong>AWS.</strong> Bedrock for models and guardrails. AgentCore is a bundle of harness parts: a runtime, memory, identity, a gateway and observability. Thin spot: when we read the AgentCore Gateway documentation for our AWS bindings, its token limits had only a one-minute window and failed open by default. So a limit there is a cost guard, not a security boundary, and our own per-task cost meter stays the hard ceiling.</li><li><strong>Databricks.</strong> Strong when the data the agent reads already sits in Unity Catalog. Grants, functions used as tools, MLflow tracing and evaluation, the AI Gateway and Lakebase for state all live next to that data. Thin spot: no durable-wait product in our sources, so plan to bring one.</li><li><strong>Open source.</strong> Every row has a product, and all of it runs on a laptop. Our reference agent runs on LiteLLM, PostgreSQL, Temporal, Keycloak, and OpenTelemetry with Langfuse. Thin spot: you run all of it, including upgrades, backups and being woken at night.</li></ul>
+<p>Some of these rows have settled across the industry and some are still moving. <a href="/writing/moving-ship/">Building agents on a moving ship</a> sorts which is which.</p>
+<h2>How to pick</h2>
+<p>Answer three questions before anyone names a product.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 260" role="img" aria-label="A stick person on the left faces three numbered yellow question cards in a row: one, where is your data, since the agent reads it every turn; two, where is your identity, where staff and customers already sign in; three, what will your team run, which managed pieces you trust and which you patch. An arrow leads to a small house labelled your home."><circle class="bx" cx="45" cy="95" r="13"/><line class="lnc" x1="45" y1="108" x2="45" y2="145"/><line class="lnc" x1="45" y1="145" x2="33" y2="167"/><line class="lnc" x1="45" y1="145" x2="57" y2="167"/><line class="lnc" x1="45" y1="119" x2="67" y2="105"/><line class="lnc" x1="45" y1="119" x2="29" y2="133"/><text class="sm" x="45" y="192" text-anchor="middle">you, before</text><text class="sm" x="45" y="212" text-anchor="middle">shopping</text><rect class="pf pf-bxs" x="99" y="74" width="233" height="118" rx="12"/><rect class="bxs ol" x="95" y="70" width="235" height="120" rx="12"/><text class="tt" x="212.5" y="117.0" text-anchor="middle">Where is your data?</text><text class="sm" x="212.5" y="141.0" text-anchor="middle">the agent reads it every</text><text class="sm" x="212.5" y="160.0" text-anchor="middle">turn; live next to it</text><circle class="nm" cx="113" cy="70" r="14"/><text class="nmt" x="113" y="76" text-anchor="middle">1</text><line class="ln" x1="332" y1="130" x2="343" y2="130" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="349" y="74" width="233" height="118" rx="12"/><rect class="bxs ol" x="345" y="70" width="235" height="120" rx="12"/><text class="tt" x="462.5" y="117.0" text-anchor="middle">Where is your identity?</text><text class="sm" x="462.5" y="141.0" text-anchor="middle">where staff and customers</text><text class="sm" x="462.5" y="160.0" text-anchor="middle">already sign in</text><circle class="nm" cx="363" cy="70" r="14"/><text class="nmt" x="363" y="76" text-anchor="middle">2</text><line class="ln" x1="582" y1="130" x2="593" y2="130" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="599" y="74" width="233" height="118" rx="12"/><rect class="bxs ol" x="595" y="70" width="235" height="120" rx="12"/><text class="tt" x="712.5" y="117.0" text-anchor="middle">What will your team run?</text><text class="sm" x="712.5" y="141.0" text-anchor="middle">which managed pieces you</text><text class="sm" x="712.5" y="160.0" text-anchor="middle">trust, and which you patch</text><circle class="nm" cx="613" cy="70" r="14"/><text class="nmt" x="613" y="76" text-anchor="middle">3</text><line class="ln" x1="832" y1="130" x2="868" y2="130" marker-end="url(#ar)"/><path class="hz" d="M872,120 L925,78 L978,120 Z"/><rect class="hz" x="880" y="120" width="90" height="80"/><rect class="hz" x="914" y="160" width="22" height="40" rx="2"/><text class="tx" x="925" y="225" text-anchor="middle">your home</text><text class="sm" x="465" y="236" text-anchor="middle">answer all three before you name a product</text></svg><figcaption>How to pick a home: three questions, answered before anyone names a product.</figcaption></figure>
+<ol><li><strong>Where is your data?</strong> The agent reads it on almost every turn. Moving the agent to the data is easier than moving the data to the agent, and the data's permissions come with it.</li><li><strong>Where is your identity?</strong> The agent acts on someone's behalf, so it must know who is asking and what they may do. If your staff and customers already sign in on one platform, building there saves a whole project.</li><li><strong>What will your team run?</strong> Decide which managed pieces you trust and which you would rather run yourself. Managed means someone else patches it. It also means their limits, their tiers and their roadmap.</li></ol>
+<p>The answers don't have to point to one home. Databricks runs on any of the three clouds, so a common answer is data in Databricks, identity in Entra ID and hosting on Azure. Say, a lending team in Pune whose loan files live in Unity Catalog and whose staff sign in with Entra ID would fill most rows from those two, and bring the rest.</p>
+<h2>Is a managed agent service enough?</h2>
+<p>Every platform now has one: Foundry Agent Service, Vertex AI Agent Engine, AgentCore and the Mosaic AI Agent Framework. They are useful, and each fills several rows at once.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 275" role="img" aria-label="An umbrella labelled a managed agent service covers four blue boxes: loop, tools, memory and tracing. Underneath it are the names Foundry Agent Service, Agent Engine, AgentCore and Mosaic AI Agent Framework. To the right, out in the rain, three yellow boxes are still yours: checks that protect money, evals on your own cases, and cost per business task."><path class="hz" d="M40,120 Q300,-20 560,120 Q527,100 495,120 Q462,100 430,120 Q397,100 365,120 Q332,100 300,120 Q267,100 235,120 Q202,100 170,120 Q137,100 105,120 Q72,100 40,120 Z"/><line class="ln" x1="300" y1="50" x2="300" y2="36"/><text class="bd" x="300" y="84" text-anchor="middle">a managed agent service</text><path class="lnc" d="M300,112 L300,215 Q300,232 286,232 Q274,232 274,220" fill="none"/><rect class="pf pf-bx" x="49" y="149" width="103" height="58" rx="12"/><rect class="bx ol" x="45" y="145" width="105" height="60" rx="12"/><text class="tt" x="97.5" y="181.0" text-anchor="middle">Loop</text><rect class="pf pf-bx" x="169" y="149" width="103" height="58" rx="12"/><rect class="bx ol" x="165" y="145" width="105" height="60" rx="12"/><text class="tt" x="217.5" y="181.0" text-anchor="middle">Tools</text><rect class="pf pf-bx" x="339" y="149" width="103" height="58" rx="12"/><rect class="bx ol" x="335" y="145" width="105" height="60" rx="12"/><text class="tt" x="387.5" y="181.0" text-anchor="middle">Memory</text><rect class="pf pf-bx" x="459" y="149" width="103" height="58" rx="12"/><rect class="bx ol" x="455" y="145" width="105" height="60" rx="12"/><text class="tt" x="507.5" y="181.0" text-anchor="middle">Tracing</text><text class="sm" x="300" y="258" text-anchor="middle">Foundry Agent Service, Agent Engine, AgentCore, Mosaic AI Agent Framework</text><text class="lbl" x="800" y="30" text-anchor="middle">STILL YOURS, OUT IN THE RAIN</text><rect class="pf pf-bxs" x="654" y="54" width="298" height="50" rx="12"/><rect class="bxs ol" x="650" y="50" width="300" height="52" rx="12"/><text class="tt" x="800.0" y="82.0" text-anchor="middle">Checks that protect money</text><line class="ln" x1="616" y1="56" x2="612" y2="70"/><line class="ln" x1="626" y1="68" x2="622" y2="82"/><line class="ln" x1="636" y1="80" x2="632" y2="94"/><rect class="pf pf-bxs" x="654" y="124" width="298" height="50" rx="12"/><rect class="bxs ol" x="650" y="120" width="300" height="52" rx="12"/><text class="tt" x="800.0" y="152.0" text-anchor="middle">Evals on your own cases</text><line class="ln" x1="616" y1="126" x2="612" y2="140"/><line class="ln" x1="626" y1="138" x2="622" y2="152"/><line class="ln" x1="636" y1="150" x2="632" y2="164"/><rect class="pf pf-bxs" x="654" y="194" width="298" height="50" rx="12"/><rect class="bxs ol" x="650" y="190" width="300" height="52" rx="12"/><text class="tt" x="800.0" y="222.0" text-anchor="middle">Cost per business task</text><line class="ln" x1="616" y1="196" x2="612" y2="210"/><line class="ln" x1="626" y1="208" x2="622" y2="222"/><line class="ln" x1="636" y1="220" x2="632" y2="234"/></svg><figcaption>A managed agent service covers several rows at once. Some rows stay out in the rain, and they are yours.</figcaption></figure>
+<p>Hold the one you like against the ten rows and mark what it covers. Some rows usually stay out in the rain: the checks that sit right before a tool moves money, evals on your own cases, and cost per finished piece of business work. Also ask who owns the loop. If the service owns it, you may not be able to place a check exactly before a tool runs. In both our Azure and AWS bindings we kept the loop in our own code, so the step budget and the cost ceiling stay visible.</p>
+<h2>Mistakes we see often</h2>
+<ol><li><strong>Choosing the platform first and the design second.</strong> The agent ends up shaped like one product, and the empty rows show up in production. Write the ten jobs first, then shop.</li><li><strong>Assuming a managed agent service covers every concern.</strong> One product name is not ten jobs. Mark the rows it fills and give the rest an owner.</li><li><strong>Rewriting the agent for each cloud.</strong> If product names sit inside your business logic, every move is a rewrite. Put each product behind a small interface, so a move means new adapters, a new binding file and the same tests passing.</li><li><strong>Assuming a feature exists in every tier and region.</strong> Product pages describe the best tier in the biggest region. Check the tier and region you will actually pay for.</li></ol>
+<h2>Six questions to check your own plan</h2>
+<ol><li>Can you describe your harness in ten jobs without naming a single product?</li><li>Is there one file that says which product fills each job?</li><li>Where does the data your agent reads live, and where do its users sign in?</li><li>For your managed agent service, which rows does it fill, and who owns the rest?</li><li>If you had to move to another home next year, how many files would change?</li><li>Which row is "bring your own" on your platform, and who is building it?</li></ol>
+<p>Draw the floor plan once; brick, timber or glass is a choice you can make later, and change.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/tech-compare.html">every harness concern with the Azure and open-source choices compared</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shipping agents: versioning prompts, models and tools together · Clean Data Engineering</title>
+<meta name="description" content="An agent&#x27;s behaviour comes from its prompt, its model, its tools, its checks and its settings, so release them together as one sealed, fingerprinted unit. Pin the model, gate every release on quality, cost and every model it can reach, send a small share of traffic first, rehearse the rollback, keep a kill switch, serve exactly what was tested, and stamp the release id on every trace."><link rel="canonical" href="https://cleandataengineering.ai/writing/shipping-agents/">
+<meta property="og:title" content="Shipping agents: versioning prompts, models and tools together"><meta property="og:description" content="An agent&#x27;s behaviour comes from its prompt, its model, its tools, its checks and its settings, so release them together as one sealed, fingerprinted unit. Pin the model, gate every release on quality, cost and every model it can reach, send a small share of traffic first, rehearse the rollback, keep a kill switch, serve exactly what was tested, and stamp the release id on every trace."><meta property="og:url" content="https://cleandataengineering.ai/writing/shipping-agents/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>Shipping agents: versioning prompts, models and tools together</h1>
+  </div>
+  <div class="summary">An agent's behaviour comes from its prompt, its model, its tools, its checks and its settings, so release them together as one sealed, fingerprinted unit. Pin the model, gate every release on quality, cost and every model it can reach, send a small share of traffic first, rehearse the rollback, keep a kill switch, serve exactly what was tested, and stamp the release id on every trace.</div>
+<p>On Friday evening someone opens the prompt in the admin screen and tidies a sentence. No pull request, no test run. It's only words.</p>
+<p>On Monday the refund numbers look odd. Was it the prompt edit? The model provider's update over the weekend? The new tool someone added on Thursday? Nobody can say, because nothing recorded which prompt, which model and which tools answered each customer.</p>
+<p>What an agent does comes from five things that change on different days, through different doors. This post is about shipping them as one.</p>
+<h2>One release is one sealed box</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 330" role="img" aria-label="A taped cardboard box labelled release r42, sealed. A luggage tag tied to it lists prompt v7 (a hash of the text), model gpt-oss-120b pinned, tools v3 with names and schemas, checks v12 with rules and limits, config with temperature and budgets, and a fingerprint 9f3a…c21. Beside it: change any one and you get a new fingerprint and a new release; API keys and tool URLs are not in the box because they don&#x27;t change behaviour."><text class="sm" x="500" y="24" text-anchor="middle">everything that changes what the agent does goes in one box, with one name</text><path class="hz" d="M50,130 L90,90 L330,90 L290,130 Z"/><path class="hz" d="M290,130 L330,90 L330,270 L290,310 Z"/><rect class="hz" x="50" y="130" width="240" height="180" rx="4"/><rect class="pf pf-bxs" x="150" y="130" width="40" height="70"/><path class="pf pf-bxs" d="M150,130 L190,90 L230,90 L190,130 Z"/><line class="ln" x1="150" y1="130" x2="150" y2="200"/><line class="ln" x1="190" y1="130" x2="190" y2="200"/><text class="bd" x="170" y="250" text-anchor="middle">release r42</text><text class="sm" x="170" y="276" text-anchor="middle">sealed</text><path class="ln" d="M290,150 Q340,150 372,128"/><path class="hz" d="M380,60 L700,60 L700,310 L380,310 L380,140 L362,124 L380,108 Z"/><circle class="hz" cx="396" cy="124" r="7"/><text class="lbl" x="420" y="96" text-anchor="start">PROMPT</text><text class="tx" x="520" y="96" text-anchor="start">v7 (hash of the text)</text><text class="lbl" x="420" y="130" text-anchor="start">MODEL</text><text class="tx" x="520" y="130" text-anchor="start">gpt-oss-120b, pinned</text><text class="lbl" x="420" y="164" text-anchor="start">TOOLS</text><text class="tx" x="520" y="164" text-anchor="start">v3: names and schemas</text><text class="lbl" x="420" y="198" text-anchor="start">CHECKS</text><text class="tx" x="520" y="198" text-anchor="start">v12: rules and limits</text><text class="lbl" x="420" y="232" text-anchor="start">CONFIG</text><text class="tx" x="520" y="232" text-anchor="start">temperature, budgets</text><line class="lnd" x1="412" y1="270" x2="688" y2="270"/><text class="lbl" x="420" y="296" text-anchor="start">FINGERPRINT</text><text class="bd" x="560" y="296" text-anchor="start">9f3a…c21</text><rect class="pf pf-bxs" x="744" y="74" width="248" height="98" rx="12"/><rect class="bxs ol" x="740" y="70" width="250" height="100" rx="12"/><text class="tt" x="865.0" y="107.0" text-anchor="middle">Change any one</text><text class="sm" x="865.0" y="131.0" text-anchor="middle">new fingerprint,</text><text class="sm" x="865.0" y="150.0" text-anchor="middle">new release</text><rect class="bxm ol" x="740" y="200" width="250" height="100" rx="12"/><text class="tt" x="865.0" y="237.0" text-anchor="middle">Not in the box</text><text class="sm" x="865.0" y="261.0" text-anchor="middle">API keys, tool URLs:</text><text class="sm" x="865.0" y="280.0" text-anchor="middle">they don&#x27;t change behaviour</text></svg><figcaption>One release is one sealed box. The fingerprint is a short code made from everything inside.</figcaption></figure>
+<p>A <strong>release</strong> of an agent is everything that changes what it does, versioned together:</p>
+<ol><li><strong>the prompt</strong>, the instructions the model reads</li><li><strong>the model</strong>, down to its exact version</li><li><strong>the tool definitions</strong>, their names and argument schemas</li><li><strong>the checks</strong>, the rules and limits the code enforces around the model</li><li><strong>the config</strong>, such as temperature, step budgets and routing rules</li></ol>
+<p>Seal them together and give the box a <strong>fingerprint</strong>: a short code computed from everything inside. Change any one thing and the fingerprint changes, so you know you have a new release that hasn't been tested yet.</p>
+<p>In our reference agent, a table-driven test spells out what is in and what is out. A new model, prompt version, routing rule, temperature or step budget must change the fingerprint. Rotating an API key or pointing at a different tool server address must not, because neither changes what the agent decides.</p>
+<p>One honest lesson: that fingerprint hashes the prompt's <em>label</em> ("v2"), not its text, so an edit that forgot to bump the label would run under the old fingerprint. It's logged as an open finding. A label is a promise someone has to keep; a hash of the text keeps itself.</p>
+<h2>Pin the model version</h2>
+<p>"Latest" is not a version. Many providers offer a moving name that points at whatever model is current. Use it, and your agent changes on a day you didn't choose, and last week's tests describe a different system.</p>
+<p>So name the exact version, and keep a short list of models the agent is allowed to use. The reference agent pins one model per run, from an approved list of three, and refuses to start if asked for anything else.</p>
+<p>Pinned models still disappear. That agent's earlier list named two models the provider had retired, and every call came back "not found". Only a live check against the provider's model list catches that.</p>
+<p>The <a href="https://github.com/dataagentsai/ai-assurance-catalog">AI Assurance Catalog</a> asks for this in <a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0012.yaml">AAC-0012</a>: record the exact model and prompt behind each request, and test that you can go back to the previous pair.</p>
+<h2>Prompts are code, so gate them like code</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 300" role="img" aria-label="Two prompt cards. Version 7 says &#x27;Always check the return date before you issue a refund.&#x27; Version 8 is the same with the word &#x27;Always&#x27; struck out. Version 8 goes into the gate, which holds a golden case: an order returned 31 days ago for 3,499 rupees, which must be refused. A stick-person examiner stands by. Result: blocked, because version 8 refunded it, so version 7 stays live."><text class="sm" x="500" y="24" text-anchor="middle">an illustrative change: someone tidies one word out of the prompt</text><rect class="hz" x="20" y="50" width="330" height="96" rx="8"/><text class="lbl" x="36" y="76" text-anchor="start">PROMPT V7</text><text class="tx" x="36" y="104" text-anchor="start">Always check the return date</text><text class="tx" x="36" y="128" text-anchor="start">before you issue a refund.</text><rect class="pf pf-bxs" x="25" y="175" width="330" height="96" rx="8"/><rect class="hz" x="20" y="170" width="330" height="96" rx="8" fill-opacity="0"/><text class="lbl" x="36" y="196" text-anchor="start">PROMPT V8</text><text class="tx" x="36" y="224" text-anchor="start">Always check the return date</text><text class="tx" x="36" y="248" text-anchor="start">before you issue a refund.</text><line class="lnc" x1="32" y1="218" x2="92" y2="218"/><text class="sm" x="340" y="196" text-anchor="end">one word gone</text><line class="ln" x1="352" y1="218" x2="410" y2="218" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="416" y="154" width="248" height="134" rx="12"/><rect class="bxs ol" x="412" y="150" width="250" height="136" rx="12"/><text class="tt" x="537.0" y="195.5" text-anchor="middle">The gate</text><text class="sm" x="537.0" y="219.5" text-anchor="middle">golden case: returned</text><text class="sm" x="537.0" y="238.5" text-anchor="middle">31 days ago, ₹3,499,</text><text class="sm" x="537.0" y="257.5" text-anchor="middle">must refuse</text><circle class="hz" cx="720" cy="156" r="14"/><line class="lnc" x1="720" y1="170" x2="720" y2="208"/><line class="lnc" x1="720" y1="208" x2="708" y2="232"/><line class="lnc" x1="720" y1="208" x2="732" y2="232"/><line class="ln" x1="762" y1="218" x2="800" y2="218" marker-end="url(#ar)"/><rect class="pf pf-solid" x="806" y="154" width="186" height="134" rx="12"/><rect class="solid ol" x="802" y="150" width="188" height="136" rx="12"/><text class="tt inv" x="896.0" y="205.0" text-anchor="middle">Blocked</text><text class="inv sm2" x="896.0" y="229.0" text-anchor="middle">v8 refunded it;</text><text class="inv sm2" x="896.0" y="248.0" text-anchor="middle">v7 stays live</text><text class="sm" x="705" y="76" text-anchor="middle">nobody would spot this</text><text class="sm" x="705" y="96" text-anchor="middle">reading the diff</text></svg><figcaption>A prompt is code. A one-word edit is a behaviour change, and the gate is what notices.</figcaption></figure>
+<p>The picture is an illustrative example, but the shape is common. One word leaves the prompt and the agent becomes a little more willing. A person reading the change would approve it. A golden case at the edge of the 30-day rule would not.</p>
+<p>A <strong>release gate</strong> is the list of things that must be true before a release goes out. It runs in your build pipeline on every change, and if any line fails, the release stops. Our post on <a href="/writing/offline-evals/">offline evals</a> covers how to build the tests behind it. For shipping, four lines matter most.</p>
+<ol><li><strong>The golden set and the scenarios pass.</strong> A <strong>golden set</strong> is a frozen list of cases with known right answers; a <strong>scenario</strong> is a whole conversation run against a simulated world. The new release is compared case by case with the one customers have today, not with perfection (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0013.yaml">AAC-0013</a>).</li><li><strong>Cost does not regress.</strong> Measure cost per successful task on the same frozen set, and block a big increase the way you block a quality drop (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0102.yaml">AAC-0102</a>). Otherwise a small quality gain bought with double the spend ships quietly and turns up on the invoice. The reference agent keeps its cost per task in a committed baseline file that may only stay the same or get better.</li><li><strong>Every model it can reach is evaluated.</strong> Not just the main one. If the agent can fall back to a cheaper model when the main one is busy, that fallback serves customers too, usually in the middle of an incident (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0098.yaml">AAC-0098</a>).</li><li><strong>Routing changes count.</strong> A change to which model handles which request is a behaviour change, even when it ships as a config edit (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0101.yaml">AAC-0101</a>).</li></ol>
+<p>To be honest about our own state: the reference agent has three approved models but only measures the pinned one. The other two are checked for being configured and priced, not for being right. It's an open finding. Where these tests sit among the others is in the <a href="/writing/agent-testing-pyramid/">agent testing pyramid</a>.</p>
+<h2>Canary, watch, then roll out</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 345" role="img" aria-label="Five numbered steps on a road: build (seal the box, get a fingerprint), gate (golden set, scenarios, cost, every model), canary at 5% of real traffic, watch (compare with the old release), full rollout at 100%. A thick arrow runs from watch back to a dashed box, the previous release, still sealed and ready: rollback is one command, rehearsed. A dashed arrow from the gate shows that if the gate fails, the old release stays live."><text class="sm" x="500" y="24" text-anchor="middle">a release travels this road in order; it can turn back at any point</text><rect class="pf pf-bx" x="16" y="54" width="176" height="103" rx="12"/><rect class="bx ol" x="12" y="50" width="178" height="105" rx="12"/><text class="tt" x="101.0" y="89.5" text-anchor="middle">Build</text><text class="sm" x="101.0" y="113.5" text-anchor="middle">seal the box,</text><text class="sm" x="101.0" y="132.5" text-anchor="middle">get a fingerprint</text><circle class="nm" cx="24" cy="50" r="14"/><text class="nmt" x="24" y="56" text-anchor="middle">1</text><line class="ln" x1="192" y1="102" x2="206" y2="102" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="212" y="54" width="176" height="103" rx="12"/><rect class="bxs ol" x="208" y="50" width="178" height="105" rx="12"/><text class="tt" x="297.0" y="89.5" text-anchor="middle">Gate</text><text class="sm" x="297.0" y="113.5" text-anchor="middle">golden set, scenarios,</text><text class="sm" x="297.0" y="132.5" text-anchor="middle">cost, every model</text><circle class="nm" cx="220" cy="50" r="14"/><text class="nmt" x="220" y="56" text-anchor="middle">2</text><line class="ln" x1="388" y1="102" x2="402" y2="102" marker-end="url(#ar)"/><rect class="pf pf-solid" x="408" y="54" width="176" height="103" rx="12"/><rect class="solid ol" x="404" y="50" width="178" height="105" rx="12"/><text class="tt inv" x="493.0" y="89.5" text-anchor="middle">Canary 5%</text><text class="inv sm2" x="493.0" y="113.5" text-anchor="middle">a small share</text><text class="inv sm2" x="493.0" y="132.5" text-anchor="middle">of real traffic</text><circle class="nm" cx="416" cy="50" r="14"/><text class="nmt" x="416" y="56" text-anchor="middle">3</text><line class="ln" x1="584" y1="102" x2="598" y2="102" marker-end="url(#ar)"/><rect class="pf pf-bx" x="604" y="54" width="176" height="103" rx="12"/><rect class="bx ol" x="600" y="50" width="178" height="105" rx="12"/><text class="tt" x="689.0" y="89.5" text-anchor="middle">Watch</text><text class="sm" x="689.0" y="113.5" text-anchor="middle">compare it with</text><text class="sm" x="689.0" y="132.5" text-anchor="middle">the old release</text><circle class="nm" cx="612" cy="50" r="14"/><text class="nmt" x="612" y="56" text-anchor="middle">4</text><line class="ln" x1="780" y1="102" x2="794" y2="102" marker-end="url(#ar)"/><rect class="pf pf-bx" x="800" y="54" width="176" height="103" rx="12"/><rect class="bx ol" x="796" y="50" width="178" height="105" rx="12"/><text class="tt" x="885.0" y="89.5" text-anchor="middle">Full rollout</text><text class="sm" x="885.0" y="113.5" text-anchor="middle">100% on</text><text class="sm" x="885.0" y="132.5" text-anchor="middle">the new release</text><circle class="nm" cx="808" cy="50" r="14"/><text class="nmt" x="808" y="56" text-anchor="middle">5</text><line class="lnd" x1="12" y1="180" x2="974" y2="180"/><rect class="bxm ol" x="330" y="245" width="300" height="85" rx="12"/><text class="tt" x="480.0" y="284.0" text-anchor="middle">Previous release</text><text class="sm" x="480.0" y="308.0" text-anchor="middle">still sealed, still ready</text><path class="lnc" d="M689,157 Q689,287 634,287" marker-end="url(#ar)"/><text class="bd" x="700" y="262" text-anchor="start">rollback: one command,</text><text class="sm" x="700" y="284" text-anchor="start">rehearsed, not assumed</text><path class="lnd" d="M297,157 Q297,230 326,268" marker-end="url(#ar)"/><text class="sm" x="130" y="238" text-anchor="start">gate fails:</text><text class="sm" x="130" y="258" text-anchor="start">the old one stays live</text></svg><figcaption>The release road. The way back matters as much as the way forward.</figcaption></figure>
+<p>The gate covers the cases you thought of. Real customers will think of others, so don't send everyone at once.</p>
+<p>A <strong>canary</strong> release sends a small share of real traffic, say 5%, to the new release while everyone else stays on the old one. You watch the two side by side: the same <a href="/writing/online-evals/">online checks</a>, the same error and hand-off rates, the same cost per turn, split by release. If the canary looks no worse after an agreed window, move it to 100%. If it looks worse, send that 5% back.</p>
+<p>Our claims assistant on Azure is set up for this: two revisions side by side, and one command sets the split to 95 and 5. That exercise hasn't been run yet, so it's a step still to do, not a claim.</p>
+<h2>Rollback is a drill, not a hope</h2>
+<p>A <strong>rollback</strong> means putting the previous release back. It only works if the previous box is still sealed and still runnable: the same prompt text, the same pinned model, the same tool versions, the same checks.</p>
+<p>The catch is that the parts drift apart. The reference agent once kept its routing label and its routing rules in two places, both reading "v2". On the day they disagreed, a rollback would have restored the label and not the rules. Now the agent refuses to start if they differ.</p>
+<p>So rehearse it: roll back on purpose, on a schedule, and check that what comes back is the box that was tested. AAC-0012 says reverting is tested rather than assumed.</p>
+<h2>Feature flags and a kill switch</h2>
+<p>A <strong>feature flag</strong> is a setting you can change without a new deploy, such as turning a new tool on for some users. Flags are useful, but a flag that changes behaviour is part of the box. If flipping it changes what the agent does, it should change the fingerprint, and it should pass the gate first.</p>
+<p>There is one flag that skips the queue: the <strong>kill switch</strong>. In our harness it's a single setting, <code>agent.enabled</code>, read at the start of every turn. Set it to false and the next turn gets a polite "paused" reply with no model call and no tool call, while work already waiting for a person goes on. When something is wrong and you don't yet know why, you need a stop that needs no deploy.</p>
+<h2>Serve exactly what was tested</h2>
+<p>A gate proves something about one specific box. Swap anything in it afterwards and the proof no longer covers what customers use (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0107.yaml">AAC-0107</a>). The swap is usually invisible: a container rebuilt from the same tag, a model alias that moved, a prompt edited in an admin screen.</p>
+<p>So pin everything by an exact identifier: the container by its digest (a hash of its contents, not a name like "latest"), the model by its version, the prompt by its hash. Then, as the release starts, check that the fingerprint serving traffic is the fingerprint that passed.</p>
+<h2>Stamp the release on every trace</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 315" role="img" aria-label="Four trace cards, each with an oval stamp naming its release: turn 1041 refund ok on r41, turn 1042 order status ok on r42, turns 1043 and 1044 refund wrong on r42. A cartoon rubber stamp sits beside them. Filtering by release shows both wrong refunds ran on r42, the 5% canary since Tuesday, so you know what to roll back and which box to open to find the change."><text class="sm" x="500" y="24" text-anchor="middle">every turn&#x27;s trace carries the release it ran under</text><rect class="hz" x="20" y="52" width="420" height="48" rx="6"/><text class="bd" x="36" y="82" text-anchor="start">turn 1041</text><text class="tx" x="150" y="82" text-anchor="start">refund, ok</text><ellipse class="pf pf-bx" cx="388" cy="76" rx="40" ry="17"/><ellipse class="hz" cx="388" cy="76" rx="40" ry="17" fill-opacity="0"/><text class="bd" x="388" y="82" text-anchor="middle">r41</text><rect class="hz" x="20" y="114" width="420" height="48" rx="6"/><text class="bd" x="36" y="144" text-anchor="start">turn 1042</text><text class="tx" x="150" y="144" text-anchor="start">order status, ok</text><ellipse class="pf pf-solid" cx="388" cy="138" rx="40" ry="17"/><ellipse class="hz" cx="388" cy="138" rx="40" ry="17" fill-opacity="0"/><text class="bd" x="388" y="144" text-anchor="middle">r42</text><rect class="hz" x="20" y="176" width="420" height="48" rx="6"/><text class="bd" x="36" y="206" text-anchor="start">turn 1043</text><text class="tx" x="150" y="206" text-anchor="start">refund, wrong</text><ellipse class="pf pf-solid" cx="388" cy="200" rx="40" ry="17"/><ellipse class="hz" cx="388" cy="200" rx="40" ry="17" fill-opacity="0"/><text class="bd" x="388" y="206" text-anchor="middle">r42</text><rect class="hz" x="20" y="238" width="420" height="48" rx="6"/><text class="bd" x="36" y="268" text-anchor="start">turn 1044</text><text class="tx" x="150" y="268" text-anchor="start">refund, wrong</text><ellipse class="pf pf-solid" cx="388" cy="262" rx="40" ry="17"/><ellipse class="hz" cx="388" cy="262" rx="40" ry="17" fill-opacity="0"/><text class="bd" x="388" y="268" text-anchor="middle">r42</text><rect class="hz" x="490" y="128" width="70" height="22" rx="3"/><rect class="hz" x="512" y="96" width="26" height="32" rx="4"/><circle class="hz" cx="525" cy="84" r="16"/><text class="sm" x="525" y="180" text-anchor="middle">stamped on</text><text class="sm" x="525" y="200" text-anchor="middle">at the start</text><rect class="pf pf-bxs" x="614" y="64" width="378" height="108" rx="12"/><rect class="bxs ol" x="610" y="60" width="380" height="110" rx="12"/><text class="tt" x="800.0" y="102.0" text-anchor="middle">Filter by release</text><text class="sm" x="800.0" y="126.0" text-anchor="middle">both wrong refunds ran on r42,</text><text class="sm" x="800.0" y="145.0" text-anchor="middle">the 5% canary since Tuesday</text><rect class="pf pf-bx" x="614" y="204" width="378" height="98" rx="12"/><rect class="bx ol" x="610" y="200" width="380" height="100" rx="12"/><text class="tt" x="800.0" y="237.0" text-anchor="middle">So you know what to roll back</text><text class="sm" x="800.0" y="261.0" text-anchor="middle">and which box to open</text><text class="sm" x="800.0" y="280.0" text-anchor="middle">to find the change</text></svg><figcaption>Stamp the release id on every trace. Without it, a bad Monday has no suspect.</figcaption></figure>
+<p>Every turn's trace in the reference agent carries the config fingerprint as <code>agent.config.fingerprint</code>, and a test checks it's there.</p>
+<p>That turns Monday's mystery into a filter. Group the bad turns by release: either they all carry one release, such as the canary that started on Tuesday, or that release is cleared. Our post on <a href="/writing/tracing-agents/">tracing agents</a> covers the rest of what a good trace holds.</p>
+<h2>Mistakes we see often</h2>
+<ol><li><strong>Editing prompts live in production.</strong> A deploy with no test, no record and no way back.</li><li><strong>An unpinned "latest" model.</strong> Your agent changes when the provider decides, and your evals describe a system that no longer exists.</li><li><strong>No rollback rehearsal.</strong> The first try should not be during an incident, at night.</li><li><strong>Evaluating only the main model.</strong> The fallback goes untested until the main model is overloaded, exactly when you can least afford surprises.</li></ol>
+<h2>Six questions to check your own release process</h2>
+<ol><li>If I point at one customer's conversation from last week, can you tell me the exact prompt, model, tools and checks that answered it?</li><li>Does any change to the prompt text, even one word, produce a new fingerprint and run the gate?</li><li>Is every model your agent can reach, fallbacks included, scored on your golden set?</li><li>Does a cost increase block a release, or only show up on a chart?</li><li>When did you last roll back on purpose, and did the old release come back whole?</li><li>If the agent started misbehaving right now, how many minutes until it stops, and does stopping it need a deploy?</li></ol>
+<p>Ship the box you tested, the whole box, and nothing but the box.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/tech-l15.html">release and config in the Agent Harness tutorial</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
