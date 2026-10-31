@@ -28,6 +28,7 @@ SECTIONS = [
             ("Eval Harness", "/learn/eval-harness/"),
             ("Data platform architecture", "/learn/data-platform-architecture/"),
             ("Medallion architecture", "/learn/medallion-architecture/"),
+            ("The technical anchor", "/learn/technical-anchor/"),
             ("Agent guardrails", "/learn/agent-guardrails/"),
         ]),
         ("Simulators", "/simulators/", [
