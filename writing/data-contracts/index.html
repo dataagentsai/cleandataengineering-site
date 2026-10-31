@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data contracts: stop breaking the team downstream · Clean Data Engineering</title>
+<meta name="description" content="Most data breakages start with an upstream change nobody announced. A data contract is a written agreement between the team that produces a dataset and the teams that use it, checked by a machine in three places. This post draws what a contract holds, where it is checked, and which changes break it."><link rel="canonical" href="https://cleandataengineering.ai/writing/data-contracts/">
+<meta property="og:title" content="Data contracts: stop breaking the team downstream"><meta property="og:description" content="Most data breakages start with an upstream change nobody announced. A data contract is a written agreement between the team that produces a dataset and the teams that use it, checked by a machine in three places. This post draws what a contract holds, where it is checked, and which changes break it."><meta property="og:url" content="https://cleandataengineering.ai/writing/data-contracts/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · Data Engineering · Builders · 7 min read · 2026-10-31</p>
+    <h1>Data contracts: stop breaking the team downstream</h1>
+  </div>
+  <div class="summary">Most data breakages start with an upstream change nobody announced. A data contract is a written agreement between the team that produces a dataset and the teams that use it, checked by a machine in three places. This post draws what a contract holds, where it is checked, and which changes break it.</div>
+<p>On a Tuesday, the app team ships a new version. In their order file, the column <code>amount</code> is now called <code>order_amount</code>. It's a tidy rename, and nobody thinks to tell the data team.</p>
+<p>On Wednesday morning, Ananya opens the sales dashboard. Tuesday's revenue says ₹0. The nightly load ran, and it reported success. So did the one after it.</p>
+<p>Nothing was broken in the pipeline. What broke was a promise that was never written down.</p>
+<h2>A promise, written down</h2>
+<p>A <strong>data contract</strong> is a written agreement between the team that produces a dataset and the teams that use it. The producer promises what the data will look like and how it will behave. The consumers can then build on that promise without guessing.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 355" role="img" aria-label="A producer stick figure hands a parcel to a consumer stick figure. A signed note on the parcel reads orders v1.3: what&#x27;s inside, when it arrives. Below, a yellow box says: change coming? tell the consumer first."><text class="sm" x="500" y="24" text-anchor="middle">the parcel is the data; the signed note is the contract</text><circle class="bx" cx="120" cy="133" r="13"/><line class="lnc" x1="120" y1="146" x2="120" y2="190"/><line class="lnc" x1="120" y1="190" x2="108" y2="218"/><line class="lnc" x1="120" y1="190" x2="132" y2="218"/><line class="lnc" x1="120" y1="160" x2="150" y2="168"/><line class="lnc" x1="120" y1="160" x2="104" y2="180"/><text class="bd" x="120" y="250" text-anchor="middle">Producer</text><text class="sm" x="120" y="270" text-anchor="middle">the app team</text><circle class="bx" cx="880" cy="133" r="13"/><line class="lnc" x1="880" y1="146" x2="880" y2="190"/><line class="lnc" x1="880" y1="190" x2="868" y2="218"/><line class="lnc" x1="880" y1="190" x2="892" y2="218"/><line class="lnc" x1="880" y1="160" x2="850" y2="168"/><line class="lnc" x1="880" y1="160" x2="896" y2="180"/><text class="bd" x="880" y="250" text-anchor="middle">Consumer</text><text class="sm" x="880" y="270" text-anchor="middle">the data team</text><rect class="hz" x="420" y="150" width="160" height="100" rx="4"/><line class="ln" x1="500" y1="150" x2="500" y2="250"/><line class="ln" x1="420" y1="200" x2="580" y2="200"/><path class="hz" d="M440,55 L560,55 L560,140 L440,140 Z"/><text class="bd" x="500" y="76" text-anchor="middle">orders v1.3</text><text class="sm" x="500" y="96" text-anchor="middle">what&#x27;s inside</text><text class="sm" x="500" y="116" text-anchor="middle">when it arrives</text><path class="ln" d="M465,132 Q475,122 485,132 Q495,142 505,130 Q515,120 530,132"/><line class="lnd" x1="500" y1="140" x2="500" y2="150"/><line class="ln" x1="160" y1="175" x2="405" y2="195" marker-end="url(#ar)"/><text class="sm" x="280" y="170" text-anchor="middle">hands over</text><line class="ln" x1="595" y1="195" x2="840" y2="175" marker-end="url(#ar)"/><text class="sm" x="720" y="170" text-anchor="middle">builds on it</text><rect class="pf pf-bxs" x="324" y="284" width="358" height="58" rx="12"/><rect class="bxs ol" x="320" y="280" width="360" height="60" rx="12"/><text class="tt" x="500.0" y="306.5" text-anchor="middle">Change coming?</text><text class="sm" x="500.0" y="330.5" text-anchor="middle">tell the consumer first</text></svg><figcaption>A data contract is the signed note on the parcel. The consumer builds on the note, not on guesses.</figcaption></figure>
+<p>Think of a courier delivery. The parcel is the data. The signed note on top says what's inside, how it's packed, when it will arrive, and who to call if something is wrong. If the sender wants to change any of that, they tell you first, before the parcel turns up different.</p>
+<p>A contract written once in a wiki is not enough. The useful kind is a file in version control that a machine checks on every change.</p>
+<h2>What a contract holds</h2>
+<p>A contract answers the questions a consumer would otherwise have to ask on chat.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 355" role="img" aria-label="A drawn card titled orders.contract.yaml with six lines: schema, meaning, rules, freshness, owner, changes. Labels around it say what it looks like, what it means, what must be true, when it arrives, who answers, and how it changes."><text class="sm" x="500" y="22" text-anchor="middle">one contract per dataset, kept next to the code</text><line class="lnd" x1="250" y1="135" x2="330" y2="150"/><line class="lnd" x1="250" y1="220" x2="330" y2="205"/><line class="lnd" x1="750" y1="135" x2="670" y2="180"/><line class="lnd" x1="750" y1="220" x2="670" y2="240"/><line class="lnd" x1="750" y1="305" x2="670" y2="270"/><line class="lnd" x1="250" y1="305" x2="330" y2="235"/><rect class="hz" x="330" y="40" width="340" height="270" rx="8"/><line class="ln" x1="330" y1="88" x2="670" y2="88"/><text class="bd" x="500" y="72" text-anchor="middle">orders.contract.yaml</text><text class="sm" x="355" y="120" text-anchor="start">schema</text><text class="tx" x="450" y="120" text-anchor="start">order_id, amount, ...</text><text class="sm" x="355" y="152" text-anchor="start">meaning</text><text class="tx" x="450" y="152" text-anchor="start">amount: ₹, incl. tax</text><text class="sm" x="355" y="184" text-anchor="start">rules</text><text class="tx" x="450" y="184" text-anchor="start">amount &gt;= 0</text><text class="sm" x="355" y="216" text-anchor="start">freshness</text><text class="tx" x="450" y="216" text-anchor="start">in by 6 a.m.</text><text class="sm" x="355" y="248" text-anchor="start">owner</text><text class="tx" x="450" y="248" text-anchor="start">app-orders team</text><text class="sm" x="355" y="280" text-anchor="start">changes</text><text class="tx" x="450" y="280" text-anchor="start">30 days&#x27; notice</text><rect class="bxm ol" x="20" y="100" width="230" height="70" rx="12"/><text class="tt" x="135.0" y="131.5" text-anchor="middle">What it looks like</text><text class="sm" x="135.0" y="155.5" text-anchor="middle">columns and types</text><rect class="bxm ol" x="20" y="185" width="230" height="70" rx="12"/><text class="tt" x="135.0" y="216.5" text-anchor="middle">What it means</text><text class="sm" x="135.0" y="240.5" text-anchor="middle">each column in words</text><rect class="bxm ol" x="20" y="270" width="230" height="70" rx="12"/><text class="tt" x="135.0" y="301.5" text-anchor="middle">What must be true</text><text class="sm" x="135.0" y="325.5" text-anchor="middle">quality rules</text><rect class="bxm ol" x="750" y="100" width="230" height="70" rx="12"/><text class="tt" x="865.0" y="131.5" text-anchor="middle">When it arrives</text><text class="sm" x="865.0" y="155.5" text-anchor="middle">freshness</text><rect class="bxm ol" x="750" y="185" width="230" height="70" rx="12"/><text class="tt" x="865.0" y="216.5" text-anchor="middle">Who answers</text><text class="sm" x="865.0" y="240.5" text-anchor="middle">a team, not a person</text><rect class="bxm ol" x="750" y="270" width="230" height="70" rx="12"/><text class="tt" x="865.0" y="301.5" text-anchor="middle">How it changes</text><text class="sm" x="865.0" y="325.5" text-anchor="middle">notice and versions</text></svg><figcaption>What a contract holds. Every line answers a question a consumer would otherwise ask on chat.</figcaption></figure>
+<ol><li><strong>Schema.</strong> The columns, their types, and which ones are required.</li><li><strong>Meaning.</strong> What each column means in words. <code>amount</code> is the order value in rupees, including tax, before refunds.</li><li><strong>Quality rules.</strong> <code>order_id</code> is unique. <code>amount</code> is never negative. <code>country</code> is a two-letter code.</li><li><strong>Freshness.</strong> How late the data may be. "Yesterday's orders are in by 6 a.m."</li><li><strong>Owner.</strong> A team, not a person, and how to reach them.</li><li><strong>Change policy.</strong> How changes are announced, and how much notice consumers get.</li></ol>
+<p>You don't have to invent a format for this. The <strong>Open Data Contract Standard</strong> (ODCS) is an open standard for writing data contracts in YAML, maintained under the Linux Foundation's Bitol project. Whether you use it or a simpler file of your own, the point is the same: one file per dataset, kept next to the code, read by people and by machines.</p>
+<h2>Three places it is checked</h2>
+<p>A contract nobody checks is a wish. It earns its keep when it is checked in three places, each catching a different kind of problem.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 320" role="img" aria-label="A row: producer, a CI check (1), bronze, an ingestion check (2), silver. Failing rows go from the ingestion check to quarantine with an alert to the owner. Monitoring (3) watches silver for freshness and row count. One contract file feeds the CI check and the ingestion check."><text class="sm" x="500" y="22" text-anchor="middle">the same contract file, checked in three places</text><rect class="bxm ol" x="10" y="60" width="160" height="80" rx="12"/><text class="tt" x="90.0" y="96.5" text-anchor="middle">Producer</text><text class="sm" x="90.0" y="120.5" text-anchor="middle">changes the app</text><line class="ln" x1="172" y1="100" x2="208" y2="100" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="214" y="54" width="168" height="98" rx="12"/><rect class="bxs ol" x="210" y="50" width="170" height="100" rx="12"/><text class="tt" x="295.0" y="87.0" text-anchor="middle">CI check</text><text class="sm" x="295.0" y="111.0" text-anchor="middle">before the change</text><text class="sm" x="295.0" y="130.0" text-anchor="middle">ships</text><circle class="nm" cx="225" cy="50" r="14"/><text class="nmt" x="225" y="56" text-anchor="middle">1</text><line class="ln" x1="382" y1="100" x2="418" y2="100" marker-end="url(#ar)"/><rect class="pf pf-bx" x="424" y="64" width="138" height="78" rx="12"/><rect class="bx ol" x="420" y="60" width="140" height="80" rx="12"/><text class="tt" x="490.0" y="96.5" text-anchor="middle">Bronze</text><text class="sm" x="490.0" y="120.5" text-anchor="middle">as it arrived</text><line class="ln" x1="562" y1="100" x2="598" y2="100" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="604" y="54" width="168" height="98" rx="12"/><rect class="bxs ol" x="600" y="50" width="170" height="100" rx="12"/><text class="tt" x="685.0" y="87.0" text-anchor="middle">Ingestion check</text><text class="sm" x="685.0" y="111.0" text-anchor="middle">before rows</text><text class="sm" x="685.0" y="130.0" text-anchor="middle">reach silver</text><circle class="nm" cx="615" cy="50" r="14"/><text class="nmt" x="615" y="56" text-anchor="middle">2</text><line class="ln" x1="772" y1="100" x2="808" y2="100" marker-end="url(#ar)"/><rect class="pf pf-bx" x="814" y="64" width="178" height="78" rx="12"/><rect class="bx ol" x="810" y="60" width="180" height="80" rx="12"/><text class="tt" x="900.0" y="96.5" text-anchor="middle">Silver</text><text class="sm" x="900.0" y="120.5" text-anchor="middle">only good rows</text><line class="ln" x1="685" y1="152" x2="685" y2="208" marker-end="url(#ar)"/><text class="sm" x="695" y="185" text-anchor="start">fails</text><rect class="bxm ol" x="600" y="210" width="170" height="70" rx="12"/><text class="tt" x="685.0" y="241.5" text-anchor="middle">Quarantine</text><text class="sm" x="685.0" y="265.5" text-anchor="middle">+ alert the owner</text><rect class="pf pf-bxs" x="814" y="214" width="178" height="88" rx="12"/><rect class="bxs ol" x="810" y="210" width="180" height="90" rx="12"/><text class="tt" x="900.0" y="242.0" text-anchor="middle">Monitoring</text><text class="sm" x="900.0" y="266.0" text-anchor="middle">on time?</text><text class="sm" x="900.0" y="285.0" text-anchor="middle">usual row count?</text><circle class="nm" cx="825" cy="210" r="14"/><text class="nmt" x="825" y="216" text-anchor="middle">3</text><line class="lnd" x1="900" y1="208" x2="900" y2="142"/><rect class="pf pf-solid" x="214" y="214" width="168" height="68" rx="12"/><rect class="solid ol" x="210" y="210" width="170" height="70" rx="12"/><text class="tt inv" x="295.0" y="241.5" text-anchor="middle">Contract file</text><text class="inv sm2" x="295.0" y="265.5" text-anchor="middle">one source of truth</text><line class="lnd" x1="295" y1="208" x2="295" y2="152"/><path class="lnd" d="M382,240 Q560,235 625,152"/><text class="sm" x="500" y="268" text-anchor="middle">same file</text></svg><figcaption>Three checkpoints. The earlier the check, the cheaper the break.</figcaption></figure>
+<ol><li><strong>In the producer's CI</strong>, before the change ships. CI is the automatic test run on every pull request. The app team's pull request that renames <code>amount</code> runs a check against the contract, and fails. The producer finds out at their desk, not the consumer at 9 a.m. This is the cheapest place to catch a break, and the one teams skip most.</li><li><strong>At ingestion</strong>, on the bronze-to-silver hop. Bronze keeps what arrived, in the source's own shape. Before rows move into silver, the job compares what arrived with the contract. A missing required column stops the load. A row that breaks a quality rule goes to quarantine with the reason. This is the safety net for producers who don't run the CI check, such as an outside vendor's file.</li><li><strong>In monitoring</strong>, after the data lands. Freshness and volume are promises about time and size, and you can only check them by watching. Did today's file arrive by 6 a.m.? Is the row count close to the usual?</li></ol>
+<p>The ingestion check is the same idea as the <a href="/writing/data-quality-as-config/">quality rules in config</a>. The contract is where those rules come from, and who agreed to them.</p>
+<h2>The rename, replayed</h2>
+<p>The DataTwin Studio <a href="/learn/data-platform-sim/problems/">Problem Lab</a> recorded this exact story on a real Spark and Delta Lake run. The numbers below are from that recorded run.</p>
+<p>The source file for 27 October arrived with <code>order_amount</code> instead of <code>amount</code>, plus a new <code>coupon</code> column. The job read it with the old schema, found no <code>amount</code>, and filled it with nulls. Three rows had no amount, and 27 October revenue showed ₹0 instead of ₹1,990.</p>
+<p>The naive fix was to let the schema evolve automatically. The load succeeded, silver grew two extra columns, and revenue still showed ₹0, because every report reads <code>amount</code>, not <code>order_amount</code>.</p>
+<p>The right fix was a contract check before the write. The check saw that a required column was missing, stopped the load, wrote nothing, and alerted the source owner. A one-line mapping from <code>order_amount</code> to <code>amount</code> was added to the ingestion settings by a reviewed pull request. On the re-run, the check passed, the new <code>coupon</code> column was accepted, and 27 October showed ₹1,990.</p>
+<h2>Breaking or safe?</h2>
+<p>The rename and the new coupon column arrived in the same file. One was a break, and the other was fine. Learning to tell them apart is most of the skill.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 335" role="img" aria-label="Two bins. The red bin, breaking, holds rename a column, drop a column, change a type, and change the meaning. The green bin, safe, holds add an optional column, and loosen an unused rule with a quick review."><text class="bd" x="500" y="24" text-anchor="middle">would a consumer who did nothing wrong get a wrong answer?</text><rect class="zr" x="20" y="50" width="470" height="270" rx="10"/><rect class="zg" x="510" y="50" width="470" height="270" rx="10"/><text class="lbl" x="255" y="80" text-anchor="middle">BREAKING: major version, announce first</text><text class="lbl" x="745" y="80" text-anchor="middle">SAFE: minor version, ship it</text><rect class="pf pf-bx" x="44" y="104" width="208" height="88" rx="12"/><rect class="bx ol" x="40" y="100" width="210" height="90" rx="12"/><text class="tt" x="145.0" y="141.5" text-anchor="middle">Rename a column</text><text class="sm" x="145.0" y="165.5" text-anchor="middle">amount to order_amount</text><rect class="pf pf-bx" x="264" y="104" width="208" height="88" rx="12"/><rect class="bx ol" x="260" y="100" width="210" height="90" rx="12"/><text class="tt" x="365.0" y="141.5" text-anchor="middle">Drop a column</text><text class="sm" x="365.0" y="165.5" text-anchor="middle"></text><rect class="pf pf-bx" x="44" y="209" width="208" height="88" rx="12"/><rect class="bx ol" x="40" y="205" width="210" height="90" rx="12"/><text class="tt" x="145.0" y="246.5" text-anchor="middle">Change a type</text><text class="sm" x="145.0" y="270.5" text-anchor="middle">number to text</text><rect class="pf pf-bx" x="264" y="209" width="208" height="88" rx="12"/><rect class="bx ol" x="260" y="205" width="210" height="90" rx="12"/><text class="tt" x="365.0" y="246.5" text-anchor="middle">Change the meaning</text><text class="sm" x="365.0" y="270.5" text-anchor="middle">amount now excludes tax</text><rect class="pf pf-bx" x="534" y="104" width="428" height="88" rx="12"/><rect class="bx ol" x="530" y="100" width="430" height="90" rx="12"/><text class="tt" x="745.0" y="141.5" text-anchor="middle">Add an optional column</text><text class="sm" x="745.0" y="165.5" text-anchor="middle">coupon, null for old rows</text><rect class="bxm ol" x="530" y="205" width="430" height="90" rx="12"/><text class="tt" x="745.0" y="246.5" text-anchor="middle">Loosen an unused rule</text><text class="sm" x="745.0" y="270.5" text-anchor="middle">safe, but get a quick review</text></svg><figcaption>Sort every change into one of two bins before it ships. The bin decides the version number.</figcaption></figure>
+<p>A change is <strong>breaking</strong> if a consumer who did nothing wrong would get a wrong answer or an error. Renaming a column, dropping one, changing its type, making an optional column required, or changing what a column means are all breaking. The last one is the sneakiest: <code>amount</code> that quietly starts excluding tax still passes every schema check.</p>
+<p>A change is <strong>safe</strong> if every existing consumer keeps working without touching their code. Adding an optional column is safe. So is loosening a rule in a way no consumer relies on, though that one deserves a quick review.</p>
+<p>That sorting gives you versioning:</p>
+<ul><li>A safe change is a minor version, from 1.2 to 1.3. Ship it.</li><li>A breaking change is a major version, from 1.3 to 2.0. Announce it, and run old and new side by side for an agreed notice period, so consumers can move when they are ready.</li></ul>
+<h2>How it fits with the rest</h2>
+<p>A contract is not a separate system. It plugs into two things you may already have.</p>
+<ul><li><strong>Metadata-driven ingestion.</strong> If you bring tables in with <a href="/writing/metadata-driven-ingestion/">one generic pipeline and a row of settings per table</a>, the contract sits alongside that row. The settings say how to load. The contract says what the loaded data must look like. The rename mapping in the story above was a settings change, triggered by a contract failure.</li><li><strong>Data quality.</strong> The quality rules in the contract are run by the same engine as every other rule, with the same quarantine and the same alert.</li></ul>
+<p>And in the medallion layers, the contract is checked where bronze becomes silver. That's why <a href="/writing/medallion-done-right/">bronze keeps everything as it came</a>: when the check stops a load, you have the original file to replay once the fix is in.</p>
+<h2>What goes wrong</h2>
+<ul><li><strong>The contract lives in a wiki.</strong> It was right on the day it was written. No machine reads it, so nobody notices when it drifts.</li><li><strong>Only the consumer checks it.</strong> The break is caught, but at ingestion, after the producer has shipped. Put the check in the producer's CI too.</li><li><strong>Turning on automatic schema evolution and calling it done.</strong> It is right for a new column. For a rename, it hides the break, as the recorded run shows.</li><li><strong>Loosening a rule to make the job pass.</strong> A rule that keeps failing at night gets quietly relaxed. The data is just as bad; only the alarm is off. Changes to a contract need the same review as any breaking change.</li><li><strong>No named owner.</strong> A contract signed by nobody is not a contract. Every dataset needs a team that answers the alert.</li><li><strong>Contracts for everything on day one.</strong> Start with the five datasets that break most often, and add more as they earn it.</li></ul>
+<h2>Five questions to check your own setup</h2>
+<ol><li>For your most important dataset, could you show someone the contract file in under a minute?</li><li>If the source team renamed a column today, where would it be caught first: their CI, your ingestion, or a user?</li><li>Does a missing required column stop the load, or fill it with nulls?</li><li>Who gets the alert when freshness slips, and is that a team or one person on leave?</li><li>When did a contract last change, and who reviewed it?</li></ol>
+<p>The rename will happen again. A contract decides whether it fails one pull request or one morning of your users' trust.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/concepts/data-contracts/">data contracts, the key idea on one page</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
