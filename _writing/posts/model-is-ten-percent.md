@@ -4,7 +4,7 @@ date: 2026-10-31
 subject: ai
 audience: builders
 kind: explainer
-draft: true
+draft: false
 summary: Most of a working agent is not the model. It is the ordinary software around it, called the harness: what the model sees, what it may touch, what pulls it back, and what writes every step down. This post draws the whole harness on one page.
 linkedin: Your agent demo worked. Then real people used it. The fix is almost never a better prompt or a bigger model. It's the 90% of the agent that isn't the model at all. One page, five drawings.
 deeper: /learn/agent-harness/
