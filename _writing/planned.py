@@ -66,6 +66,8 @@ PLANNED = [
      "Durable execution for long-running agents: the two models, their trade-offs, and when you need neither."),
     ("Seatbelts for agents: guardrails that actually hold", "ai", "builders", "explainer",
      "Guardrails on input, tool calls, output and actions: one rule enforced in four places."),
+    ("Every guardrail your agent needs, sorted: must-have, should-have, rule or judge", "ai", "builders", "explainer",
+     "A full catalog of common guardrails, each marked must-have or should-have; rule, classifier or LLM judge; where it sits (input, tool call, output, action); block or just flag; and its cost in time and money."),
     ("Your agent has the keys: security architecture for autonomous agents", "ai", "builders", "explainer",
      "Least-privilege tools, prompt injection, secrets, sandboxing, and who the agent acts as."),
     ("Human in the loop without humans in the way", "ai", "builders", "explainer",
