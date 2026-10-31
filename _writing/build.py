@@ -242,7 +242,90 @@ def drawing_build_order():
                   "Build the harness in this order. You can stop on any stair and still have something that works.")
 
 
-DRAWINGS = {"planted-note": drawing_planted_note, "horse-road": drawing_horse_road, "ten-ninety": drawing_ten_ninety,
+def drawing_kitchen():
+    b, a, t = kit.box, kit.arrow, kit.text
+    rooms = [("Landing", ["the delivery bag", "files as they came"], "bxm"), ("Bronze", ["the store room", "keeps everything"], "bx"),
+             ("Silver", ["the prep counter", "cleaned, one of each"], "bx"), ("Gold", ["the dish", "cooked for one use"], "bxs"),
+             ("Semantic", ["the menu", "one name per dish"], "solid")]
+    d = t(500, 30, "you never cook straight from the delivery bag, and you can always go back to the store room", "sm", "middle")
+    for i, (n, s, k) in enumerate(rooms):
+        x = 5 + i * 202
+        cx = x + 90
+        d += b(x, 55, 180, 110, n, s, k)
+        if i < 4:
+            d += a(x + 182, 110, x + 204, 110)
+        if i == 0:
+            d += (f'<path class="hz" d="M{cx - 25},205 L{cx + 25},205 L{cx + 20},252 L{cx - 20},252 Z"/>'
+                  f'<path class="ln" d="M{cx - 10},205 Q{cx},188 {cx + 10},205"/>')
+        if i == 1:
+            d += (f'<rect class="hz" x="{cx - 32}" y="192" width="64" height="60" rx="4"/>'
+                  f'<line class="ln" x1="{cx - 32}" y1="212" x2="{cx + 32}" y2="212"/><line class="ln" x1="{cx - 32}" y1="232" x2="{cx + 32}" y2="232"/>'
+                  + "".join(f'<rect class="bxs" x="{cx - 26 + j * 15}" y="{199 + (j % 2) * 20}" width="10" height="12" rx="2"/>' for j in range(4)))
+        if i == 2:
+            d += (f'<rect class="hz" x="{cx - 38}" y="232" width="76" height="20" rx="6"/>'
+                  f'<ellipse class="bxs" cx="{cx - 8}" cy="224" rx="16" ry="8"/><line class="lnc" x1="{cx + 14}" y1="226" x2="{cx + 34}" y2="210"/>')
+        if i == 3:
+            d += f'<ellipse class="hz" cx="{cx}" cy="238" rx="42" ry="13"/><ellipse class="bxs" cx="{cx}" cy="230" rx="20" ry="11"/>'
+        if i == 4:
+            d += (f'<rect class="hz" x="{cx - 24}" y="190" width="48" height="62" rx="4"/>'
+                  + "".join(f'<line class="ln" x1="{cx - 14}" y1="{204 + j * 14}" x2="{cx + 14}" y2="{204 + j * 14}"/>' for j in range(3)))
+    return figure(1000, 265, d, "Five rooms of a kitchen in a row: the delivery bag (landing), the store room (bronze), the prep counter (silver), the dish (gold) and the menu (semantic), each with a small drawing.",
+                  "The medallion as a kitchen. Each room has one job, and food only moves to the right.")
+
+
+def drawing_spine_readers():
+    b, a, t = kit.box, kit.arrow, kit.text
+    names = [("Sources", "bxm"), ("Landing", "bxm"), ("Bronze", "bx"), ("Silver", "bx"), ("Gold", "bxs"), ("Semantic", "solid")]
+    d = ""
+    for i, (n, k) in enumerate(names):
+        x = 5 + i * 166
+        d += b(x, 40, 140, 80, n, "", k)
+        if i < 5:
+            d += a(x + 142, 80, x + 164, 80)
+    d += t(500, 22, "data moves one way: each layer is built only from the one before it", "sm", "middle")
+    d += b(640, 220, 160, 70, "Dashboards", "", "bxm") + a(720, 218, 738, 124)
+    d += b(825, 220, 170, 70, "Conversation UI", "", "bxm") + a(905, 218, 905, 124)
+    d += b(300, 220, 160, 70, "An analyst", "in a hurry", "bxm")
+    d += '<line class="lnd" x1="380" y1="218" x2="407" y2="124"/>'
+    d += '<line class="lnc" x1="380" y1="160" x2="408" y2="186"/><line class="lnc" x1="408" y1="160" x2="380" y2="186"/>'
+    d += t(140, 250, ["readers start at gold", "or semantic; nobody", "reads bronze"], "sm", "middle")
+    return figure(1000, 305, d, "A row of layers: sources, landing, bronze, silver, gold, semantic. Dashboards and a conversation UI read from gold and semantic. A dashed line from an analyst to bronze is crossed out.",
+                  "The one-way spine, and who is allowed to read where.")
+
+
+def drawing_quarantine():
+    b, a, t, p = kit.box, kit.arrow, kit.text, kit.path
+    d = b(10, 70, 170, 90, "Bronze", "every row received", "bx")
+    d += a(182, 115, 268, 115)
+    d += b(270, 60, 200, 110, "The check", ["the data contract:", "types, keys, rules"], "bxs")
+    d += a(472, 95, 640, 50, "passes")
+    d += b(642, 10, 190, 80, "Silver", "clean rows", "bx")
+    d += a(472, 140, 640, 185, "fails", ly=178)
+    d += b(642, 145, 190, 90, "Quarantine", ["the row + the reason", "never dropped"], "bxm")
+    d += p("M690,237 Q480,280 380,172", "lnd") + t(520, 278, "fix the rule or the source, then replay", "sm", "middle")
+    return figure(1000, 290, d, "Rows from bronze pass through a check. Rows that pass go to silver. Rows that fail go to quarantine with their reason, and are replayed after a fix.",
+                  "Bad rows are parked with a reason, never silently dropped.")
+
+
+def drawing_layer_test():
+    b, a, t = kit.box, kit.arrow, kit.text
+    qs = [(["Kept exactly", "as it came?"], "Bronze", "bx"), (["Cleans one real", "thing, for any use?"], "Silver", "bx"),
+          (["Shapes data", "for one use?"], "Gold", "bxs"), (["Defines a number", "people quote?"], "Semantic", "solid")]
+    d = t(500, 22, "where does this step belong? ask in order", "sm", "middle")
+    for i, (q, layer, k) in enumerate(qs):
+        x = 10 + i * 248
+        d += b(x, 40, 220, 96, q, "", "bxm")
+        d += a(x + 110, 138, x + 110, 186, "yes", lx=x + 128, ly=166, anchor="start")
+        d += b(x + 30, 188, 160, 62, layer, "", k)
+        if i < 3:
+            d += a(x + 222, 88, x + 246, 88, "no", ly=78)
+    return figure(1000, 262, d, "Four questions in a row, asked in order. Kept exactly as it came? Bronze. Cleans one real thing, for any use? Silver. Shapes data for one use? Gold. Defines a number people quote? Semantic.",
+                  "The layer test. Most medallion mistakes are a step sitting one box too far left or right.")
+
+
+DRAWINGS = {"kitchen": drawing_kitchen, "spine-readers": drawing_spine_readers, "quarantine": drawing_quarantine,
+            "layer-test": drawing_layer_test,
+            "planted-note": drawing_planted_note, "horse-road": drawing_horse_road, "ten-ninety": drawing_ten_ninety,
             "agent-loop": drawing_agent_loop, "four-checks": drawing_four_checks, "build-order": drawing_build_order}
 
 
