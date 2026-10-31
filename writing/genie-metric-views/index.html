@@ -1,0 +1,264 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Talk to your data the right way: Genie and metric views on Databricks · Clean Data Engineering</title>
+<meta name="description" content="A chat window over your data is easy to build and easy to get wrong. The model should not write SQL against your tables; it should pick from numbers you have already defined. On Databricks that means metric views in Unity Catalog as the one definition, with AI/BI Genie and your dashboards both reading from them."><link rel="canonical" href="https://cleandataengineering.ai/writing/genie-metric-views/">
+<meta property="og:title" content="Talk to your data the right way: Genie and metric views on Databricks"><meta property="og:description" content="A chat window over your data is easy to build and easy to get wrong. The model should not write SQL against your tables; it should pick from numbers you have already defined. On Databricks that means metric views in Unity Catalog as the one definition, with AI/BI Genie and your dashboards both reading from them."><meta property="og:url" content="https://cleandataengineering.ai/writing/genie-metric-views/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · Data + AI · Builders · 7 min read · 2026-10-31</p>
+    <h1>Talk to your data the right way: Genie and metric views on Databricks</h1>
+  </div>
+  <div class="summary">A chat window over your data is easy to build and easy to get wrong. The model should not write SQL against your tables; it should pick from numbers you have already defined. On Databricks that means metric views in Unity Catalog as the one definition, with AI/BI Genie and your dashboards both reading from them.</div>
+<p>Someone in finance types "what was net revenue last quarter?" into the new chat window. A number comes back in four seconds. It looks right. It is not the number on the finance dashboard.</p>
+<p>Nobody can say which one is wrong, so both stop being trusted. And it will not be the dashboard people stop using.</p>
+<p>The chat interface was never the hard part. The hard part is that a language model writing SQL against real tables is wrong in ways the person asking cannot see. This post shows the architecture that fixes it on Databricks, and what to set up before anyone types a question.</p>
+<h2>Why the numbers disagree</h2>
+<p>Picture a retailer with stores across India. Three tools answer "revenue last quarter".</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 365" role="img" aria-label="Two dashboards and a chatbot each write their own SQL against the same tables and report three different revenue numbers: 4.2, 4.6 and 5.1 crore rupees. A confused person asks which one is right."><text class="sm" x="500" y="22" text-anchor="middle">same question, &quot;revenue last quarter?&quot;, three answers</text><rect class="pf pf-bx" x="24" y="49" width="268" height="88" rx="12"/><rect class="bx ol" x="20" y="45" width="270" height="90" rx="12"/><text class="tt" x="155.0" y="86.5" text-anchor="middle">Finance dashboard</text><text class="sm" x="155.0" y="110.5" text-anchor="middle">₹4.2 crore</text><text class="sm" x="155" y="165" text-anchor="middle">its own SQL: after refunds</text><line class="ln" x1="155" y1="178" x2="380" y2="268" marker-end="url(#ar)"/><rect class="pf pf-bx" x="369" y="49" width="268" height="88" rx="12"/><rect class="bx ol" x="365" y="45" width="270" height="90" rx="12"/><text class="tt" x="500.0" y="86.5" text-anchor="middle">Sales dashboard</text><text class="sm" x="500.0" y="110.5" text-anchor="middle">₹4.6 crore</text><text class="sm" x="500" y="165" text-anchor="middle">its own SQL: before refunds</text><line class="ln" x1="500" y1="178" x2="500" y2="268" marker-end="url(#ar)"/><rect class="bxm ol" x="710" y="45" width="270" height="90" rx="12"/><text class="tt" x="845.0" y="86.5" text-anchor="middle">The chatbot</text><text class="sm" x="845.0" y="110.5" text-anchor="middle">₹5.1 crore</text><text class="sm" x="845" y="165" text-anchor="middle">SQL it guessed just now</text><line class="ln" x1="845" y1="178" x2="620" y2="268" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="304" y="274" width="398" height="78" rx="12"/><rect class="bxs ol" x="300" y="270" width="400" height="80" rx="12"/><text class="tt" x="500.0" y="306.5" text-anchor="middle">The same tables</text><text class="sm" x="500.0" y="330.5" text-anchor="middle">orders, refunds, stores</text><circle class="bx" cx="115" cy="255" r="13"/><line class="lnc" x1="115" y1="268" x2="115" y2="297"/><line class="lnc" x1="115" y1="297" x2="104" y2="317"/><line class="lnc" x1="115" y1="297" x2="126" y2="317"/><line class="lnc" x1="115" y1="277" x2="97" y2="265"/><line class="lnc" x1="115" y1="277" x2="133" y2="265"/><text class="bd" x="158" y="262" text-anchor="start">?</text><text class="bd" x="172" y="248" text-anchor="start">?</text><text class="sm" x="115" y="342" text-anchor="middle">which one is right?</text><text class="sm" x="850" y="300" text-anchor="middle">nobody is wrong;</text><text class="sm" x="850" y="320" text-anchor="middle">each wrote its own</text><text class="sm" x="850" y="340" text-anchor="middle">meaning of &quot;revenue&quot;</text></svg><figcaption>The "two revenues" problem, now with a third voice. Every tool carries its own copy of the meaning.</figcaption></figure>
+<p>The finance dashboard subtracts refunds. The sales dashboard doesn't. The chatbot looked at the tables, saw a column called <code>amount</code>, and summed it, perhaps with a join that counted some orders twice.</p>
+<p>Each tool wrote its own SQL, so each carries its own idea of what "revenue" means. Two dashboards that disagree is an old problem. A chatbot makes it worse, because it writes fresh SQL for every question, and it never says "I'm not sure".</p>
+<p>This is not about model size. Public text-to-SQL tests built on real enterprise databases, with hundreds of columns, near-duplicate names and joins nobody wrote down, are exactly where models invent relationships. dbt reports roughly 40% accuracy for raw SQL against plain tables, against 83% when the model goes through a semantic layer. The scaffolding matters more than the model.</p>
+<h2>The one idea: the model chooses, it does not construct</h2>
+<p>Here is the rule the rest of the post follows.</p>
+<blockquote><p>The model does not write SQL against your tables. It picks a defined metric, a few dimensions and a filter from a menu you published. The formula and the joins are already fixed.</p></blockquote>
+<p>A <strong>metric</strong> is a number people quote, such as net revenue. A <strong>dimension</strong> is something you slice it by, such as state or month. A <strong>semantic layer</strong> is the place where each metric is defined once, with its formula, its joins and its filters, so every tool that asks gets the same answer.</p>
+<p>If the model picks the right metric, the join and the arithmetic are right by construction. That is the difference between making wrong answers less likely and making a whole class of them impossible.</p>
+<h2>The layers on Databricks</h2>
+<p>On Databricks, the semantic layer is a <strong>metric view</strong>: an object in Unity Catalog, Databricks' catalog for tables and permissions, that declares measures, dimensions and joins over your tables.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 500" role="img" aria-label="Layers from the bottom up: silver and bronze, then gold tables, then metric views in Unity Catalog holding one definition per number. Three readers sit on top of the metric views: a Genie space, AI/BI dashboards, and SQL, notebooks and apps."><rect class="pf pf-bxs" x="24" y="24" width="288" height="78" rx="12"/><rect class="bxs ol" x="20" y="20" width="290" height="80" rx="12"/><text class="tt" x="165.0" y="56.5" text-anchor="middle">Genie space</text><text class="sm" x="165.0" y="80.5" text-anchor="middle">people ask in English</text><line class="ln" x1="165" y1="102" x2="349.25" y2="158" marker-end="url(#ar)"/><rect class="pf pf-bx" x="359" y="24" width="288" height="78" rx="12"/><rect class="bx ol" x="355" y="20" width="290" height="80" rx="12"/><text class="tt" x="500.0" y="56.5" text-anchor="middle">AI/BI dashboards</text><text class="sm" x="500.0" y="80.5" text-anchor="middle">charts people check</text><line class="ln" x1="500" y1="102" x2="500.0" y2="158" marker-end="url(#ar)"/><rect class="bxm ol" x="690" y="20" width="290" height="80" rx="12"/><text class="tt" x="835.0" y="56.5" text-anchor="middle">SQL, notebooks, apps</text><text class="sm" x="835.0" y="80.5" text-anchor="middle">anyone who queries</text><line class="ln" x1="835" y1="102" x2="650.75" y2="158" marker-end="url(#ar)"/><rect class="pf pf-solid" x="154" y="164" width="698" height="98" rx="12"/><rect class="solid ol" x="150" y="160" width="700" height="100" rx="12"/><text class="tt inv" x="500.0" y="197.0" text-anchor="middle">Metric views in Unity Catalog</text><text class="inv sm2" x="500.0" y="221.0" text-anchor="middle">one definition per number: net revenue, active customers,</text><text class="inv sm2" x="500.0" y="240.0" text-anchor="middle">how tables join, which filters apply</text><line class="ln" x1="500" y1="262" x2="500" y2="298" marker-end="url(#ar)"/><rect class="pf pf-bx" x="254" y="304" width="498" height="78" rx="12"/><rect class="bx ol" x="250" y="300" width="500" height="80" rx="12"/><text class="tt" x="500.0" y="336.5" text-anchor="middle">Gold tables</text><text class="sm" x="500.0" y="360.5" text-anchor="middle">facts and dimensions, at the finest grain</text><line class="ln" x1="500" y1="382" x2="500" y2="413" marker-end="url(#ar)"/><rect class="bxm ol" x="320" y="415" width="360" height="70" rx="12"/><text class="tt" x="500.0" y="446.5" text-anchor="middle">Silver and bronze</text><text class="sm" x="500.0" y="470.5" text-anchor="middle">readers never come down here</text><text class="sm" x="60" y="210" text-anchor="middle">the meaning</text><text class="sm" x="60" y="230" text-anchor="middle">lives here,</text><text class="sm" x="60" y="250" text-anchor="middle">once</text></svg><figcaption>One definition in the middle. Chat, dashboards and code all read the same metric view, so they all give the same number.</figcaption></figure>
+<p>Read it from the bottom up.</p>
+<ol><li><strong>Gold tables</strong> hold trusted data in a dimensional shape: fact tables such as orders, dimension tables such as store and date. Keep facts at the finest grain anyone will slice by, one row per order line, not monthly totals. A pre-summed table can only answer the questions someone thought of.</li><li><strong>Metric views</strong> sit on gold. Each one names its measures, like <em>net revenue is the sum of amount minus the sum of refunds</em>, its dimensions, and how the tables join.</li><li><strong>Readers</strong> sit on top. A Genie space, AI/BI dashboards, SQL editors and notebooks all query the same metric view.</li></ol>
+<p>A trimmed sketch of a metric view definition looks like this:</p>
+<pre><code>source: main.gold.fact_order_lines
+dimensions:
+  - name: state
+    expr: store_state
+measures:
+  - name: net_revenue
+    expr: SUM(amount) - SUM(refund_amount)</code></pre>
+<p>And anyone, person or model, asks for it like this:</p>
+<pre><code>SELECT state, MEASURE(net_revenue)
+FROM main.semantic.sales_metrics
+GROUP BY state</code></pre>
+<p>This matches our <a href="/writing/medallion-done-right/">medallion post</a>: readers start at gold or semantic. Genie is just another reader, and it should start at the semantic layer.</p>
+<p>On Databricks, don't bring a second semantic tool alongside metric views. Genie and the dashboards read metric views directly. A metric defined somewhere else is a second definition that Genie cannot see.</p>
+<h2>What happens to one question</h2>
+<p>Here is a single question on its way through.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 310" role="img" aria-label="Four numbered steps: a person asks for net revenue by state last quarter; Genie picks the measure, the dimension and the time filter; a small query runs over the metric view using MEASURE(net_revenue) with no joins or formula; the answer shows the table, the SQL and the definition. A dashed line loops back from the answer: a wrong answer becomes a test question."><rect class="bxm ol" x="10" y="70" width="215" height="130" rx="12"/><text class="tt" x="117.5" y="122.0" text-anchor="middle">The question</text><text class="sm" x="117.5" y="146.0" text-anchor="middle">&quot;net revenue by state,</text><text class="sm" x="117.5" y="165.0" text-anchor="middle">last quarter?&quot;</text><circle class="nm" cx="24" cy="70" r="14"/><text class="nmt" x="24" y="76" text-anchor="middle">1</text><line class="ln" x1="227" y1="135" x2="273" y2="135" marker-end="url(#ar)"/><rect class="pf pf-solid" x="269" y="74" width="213" height="128" rx="12"/><rect class="solid ol" x="265" y="70" width="215" height="130" rx="12"/><text class="tt inv" x="372.5" y="112.5" text-anchor="middle">Genie picks</text><text class="inv sm2" x="372.5" y="136.5" text-anchor="middle">measure: net revenue</text><text class="inv sm2" x="372.5" y="155.5" text-anchor="middle">by: state</text><text class="inv sm2" x="372.5" y="174.5" text-anchor="middle">when: last quarter</text><circle class="nm" cx="279" cy="70" r="14"/><text class="nmt" x="279" y="76" text-anchor="middle">2</text><line class="ln" x1="482" y1="135" x2="528" y2="135" marker-end="url(#ar)"/><rect class="pf pf-bx" x="524" y="74" width="213" height="128" rx="12"/><rect class="bx ol" x="520" y="70" width="215" height="130" rx="12"/><text class="tt" x="627.5" y="112.5" text-anchor="middle">A small query</text><text class="sm" x="627.5" y="136.5" text-anchor="middle">over the metric view,</text><text class="sm" x="627.5" y="155.5" text-anchor="middle">MEASURE(net_revenue)</text><text class="sm" x="627.5" y="174.5" text-anchor="middle">no joins, no formula</text><circle class="nm" cx="534" cy="70" r="14"/><text class="nmt" x="534" y="76" text-anchor="middle">3</text><line class="ln" x1="737" y1="135" x2="783" y2="135" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="779" y="74" width="213" height="128" rx="12"/><rect class="bxs ol" x="775" y="70" width="215" height="130" rx="12"/><text class="tt" x="882.5" y="112.5" text-anchor="middle">The answer</text><text class="sm" x="882.5" y="136.5" text-anchor="middle">the table, the SQL,</text><text class="sm" x="882.5" y="155.5" text-anchor="middle">and what net revenue</text><text class="sm" x="882.5" y="174.5" text-anchor="middle">means, shown</text><circle class="nm" cx="789" cy="70" r="14"/><text class="nmt" x="789" y="76" text-anchor="middle">4</text><text class="sm" x="500" y="30" text-anchor="middle">the model chooses from a menu; the metric view does the maths</text><path class="lnd" d="M882,202 Q640,300 372,202" marker-end="url(#ar)"/><text class="sm" x="627" y="292" text-anchor="middle">a wrong answer? the person marks it, and it joins your test questions</text></svg><figcaption>One question, start to finish. The hard parts, the formula and the joins, were decided long before anyone asked.</figcaption></figure>
+<ol><li><strong>The question.</strong> Priya in finance asks for net revenue by state, last quarter.</li><li><strong>Genie picks.</strong> It matches "net revenue" to the measure, "by state" to the dimension, and "last quarter" to a date filter. This is a choice from a short list, not free writing.</li><li><strong>A small query.</strong> Genie still writes a query, but a tiny one over the metric view. It names the measure; it does not write the formula or the joins.</li><li><strong>The answer.</strong> Priya sees the table and can open the SQL behind it. The measure's definition is there to check.</li></ol>
+<p>If the answer is wrong, that question becomes a test case. More on that below.</p>
+<h2>Setting up a Genie space properly</h2>
+<p>A <strong>Genie space</strong> is where you choose which data Genie can use and how it should talk about it. The space is the product. Four things go into it.</p>
+<ul><li><strong>The data.</strong> Add your metric views, and only the gold tables you truly need. Fewer, cleaner assets give better answers than a whole schema.</li><li><strong>Instructions.</strong> Plain text that teaches your words and rules: "a quarter means the Indian financial year quarter, starting in April", "sales means net revenue unless someone says gross", "status 3 means cancelled".</li><li><strong>Example SQL queries.</strong> Questions you have answered correctly before, with the SQL that answers them. Genie learns from these, and some can be saved as trusted assets, so an answer built from one is marked as trusted.</li><li><strong>Benchmarks.</strong> A set of test questions, each with an answer you have checked by hand. Run them after every change to the space or the metric views and watch the score.</li></ul>
+<p>Ten questions you have actually checked beat a hundred you assume are fine.</p>
+<h2>Mistakes we see</h2>
+<h3>1. Pointing Genie at silver tables</h3>
+<p>It feels faster. But silver isn't shaped for questions, and business rules end up in the chat instead of in tested tables. <strong>Genie reads metric views, plus gold when it must.</strong></p>
+<h3>2. Dumping the whole schema into one space</h3>
+<p>Two hundred tables "so it can answer anything". Every extra table is something the model might pick by mistake. <strong>One space per team or topic, with a handful of assets.</strong></p>
+<h3>3. No example questions</h3>
+<p>Without examples, Genie has to guess what your people mean by "sales" or "this quarter". <strong>Write the twenty questions people really ask, with the SQL that answers them.</strong></p>
+<h3>4. No benchmarks before launch</h3>
+<p>Then quality is opinion, and the first wrong number is found by a director. <strong>Agree the accuracy you need, write the test questions, then launch.</strong></p>
+<h3>5. Chat and dashboards on different definitions</h3>
+<p>If the dashboard reads a gold table and Genie reads a metric view, they will drift. <strong>Both read the same metric view.</strong> Build the dashboard first; it proves the definitions with a more forgiving audience.</p>
+<h3>6. Permissions in the instructions</h3>
+<p>"Don't show salary data" in the instructions is a request, not a control. <strong>Access is enforced in Unity Catalog by who is asking</strong>, never by the prompt.</p>
+<h3>7. Metrics nobody owns</h3>
+<p>Definitions drift. <strong>Every measure has a named owner</strong>, and stale ones are removed rather than left lying around.</p>
+<h2>Before you open the doors</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 410" role="img" aria-label="A clipboard with six ticked boxes: metric views over gold, each with an owner; one space per team with a few views; instructions in your words; example SQL for trusted questions; benchmark questions with checked answers; a dashboard on the same metric views. A stick person stands beside it."><rect class="hz" x="250" y="40" width="500" height="350" rx="14"/><rect class="pf pf-bxs" x="420" y="26" width="160" height="34" rx="8"/><rect class="hz" x="420" y="26" width="160" height="34" rx="8" style="fill:none"/><rect class="hz" x="290" y="82" width="24" height="24" rx="4"/><path class="lnc" d="M294,94 L301,102 L312,84"/><text class="tx" x="332" y="100" text-anchor="start">metric views over gold, each with an owner</text><rect class="hz" x="290" y="137" width="24" height="24" rx="4"/><path class="lnc" d="M294,149 L301,157 L312,139"/><text class="tx" x="332" y="155" text-anchor="start">one space per team, a few views only</text><rect class="hz" x="290" y="192" width="24" height="24" rx="4"/><path class="lnc" d="M294,204 L301,212 L312,194"/><text class="tx" x="332" y="210" text-anchor="start">instructions: your words, your rules</text><rect class="hz" x="290" y="247" width="24" height="24" rx="4"/><path class="lnc" d="M294,259 L301,267 L312,249"/><text class="tx" x="332" y="265" text-anchor="start">example SQL for the questions you trust</text><rect class="hz" x="290" y="302" width="24" height="24" rx="4"/><path class="lnc" d="M294,314 L301,322 L312,304"/><text class="tx" x="332" y="320" text-anchor="start">benchmark questions with checked answers</text><rect class="hz" x="290" y="357" width="24" height="24" rx="4"/><path class="lnc" d="M294,369 L301,377 L312,359"/><text class="tx" x="332" y="375" text-anchor="start">a dashboard on the same metric views</text><circle class="bx" cx="860" cy="170" r="13"/><line class="lnc" x1="860" y1="183" x2="860" y2="212"/><line class="lnc" x1="860" y1="212" x2="849" y2="232"/><line class="lnc" x1="860" y1="212" x2="871" y2="232"/><line class="lnc" x1="860" y1="192" x2="842" y2="180"/><line class="lnc" x1="860" y1="192" x2="878" y2="180"/><text class="sm" x="860" y="270" text-anchor="middle">tick all six,</text><text class="sm" x="860" y="290" text-anchor="middle">then invite users</text><text class="sm" x="120" y="200" text-anchor="middle">before day one,</text><text class="sm" x="120" y="220" text-anchor="middle">not after the</text><text class="sm" x="120" y="240" text-anchor="middle">first wrong number</text></svg><figcaption>What to set up before you open a Genie space to real users.</figcaption></figure>
+<p>Write the metrics first: the twenty questions people will ask, as metric, slices and grain. Build gold to serve them. That order sounds backwards, but the finest slice any metric needs decides the grain of your fact tables, and finding that out later means rebuilding gold.</p>
+<p>When the space can't answer something, a clear "I don't have a definition for churn" is better than a guess. Each of those becomes a backlog item: a metric to define, not a prompt to tweak.</p>
+<h2>Five questions to check your own setup</h2>
+<ol><li>If you ask Genie and your main dashboard for the same number, do they match to the rupee?</li><li>Does your Genie space read metric views, or raw tables?</li><li>How many questions with hand-checked answers do you test against, and when did they last run?</li><li>Who owns the definition of your most-quoted metric?</li><li>When Genie gets something wrong, where does that question go?</li></ol>
+<p>Get one definition right, and chat and dashboards agree for free.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/concepts/semantic-layer/">the semantic layer, explained simply</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
