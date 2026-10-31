@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Choosing your agent loop: LangGraph vs OpenAI Agents SDK vs Claude Agent SDK vs plain code · Clean Data Engineering</title>
+<meta name="description" content="Every agent runs the same small loop: build the context, ask the model, run the tools it asked for, and go round again. LangGraph, the OpenAI Agents SDK, the Claude Agent SDK and a plain while-loop are four ways to own that loop, each with real gifts and real costs. Pick by the job, then put the loop behind a port so you can change your mind."><link rel="canonical" href="https://cleandataengineering.ai/writing/choosing-agent-loop/">
+<meta property="og:title" content="Choosing your agent loop: LangGraph vs OpenAI Agents SDK vs Claude Agent SDK vs plain code"><meta property="og:description" content="Every agent runs the same small loop: build the context, ask the model, run the tools it asked for, and go round again. LangGraph, the OpenAI Agents SDK, the Claude Agent SDK and a plain while-loop are four ways to own that loop, each with real gifts and real costs. Pick by the job, then put the loop behind a port so you can change your mind."><meta property="og:url" content="https://cleandataengineering.ai/writing/choosing-agent-loop/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>Choosing your agent loop: LangGraph vs OpenAI Agents SDK vs Claude Agent SDK vs plain code</h1>
+  </div>
+  <div class="summary">Every agent runs the same small loop: build the context, ask the model, run the tools it asked for, and go round again. LangGraph, the OpenAI Agents SDK, the Claude Agent SDK and a plain while-loop are four ways to own that loop, each with real gifts and real costs. Pick by the job, then put the loop behind a port so you can change your mind.</div>
+<p>A new agent project often starts with a long argument about frameworks. LangGraph or the OpenAI Agents SDK? The Claude Agent SDK, or just write it ourselves? People pick a side early and defend it for months.</p>
+<p>The argument matters less than it feels. Under all of them sits the same small loop, and in a working agent that loop is a small part of the code. The checks, the state, the traces and the cost meter are the rest, as we argued in <a href="/writing/model-is-ten-percent/">the model is 10%</a>.</p>
+<p>Still, the loop is a real choice, and each option has real gifts and real costs. This post compares them fairly, as of October 2026. These products change fast, so check the details below against their current documentation before you rely on them.</p>
+<h2>Four ways to make the trip</h2>
+<p>Think of the loop as getting from a question to an answer. There are four ways to make the trip.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 310" role="img" aria-label="Four vehicles. A bus on a fixed route with stops, for LangGraph&#x27;s graph. Two relay runners passing a baton, for the OpenAI Agents SDK&#x27;s handoffs. A car with a driver and a toolbox in the boot, for the Claude Agent SDK. A bicycle with a spanner beside it, for a plain-code loop."><rect class="bxm" x="10" y="10" width="232" height="290" rx="14"/><text class="bd" x="126" y="202" text-anchor="middle">A bus on a fixed route</text><text class="lbl" x="126" y="228" text-anchor="middle">LangGraph: a graph</text><text class="sm" x="126" y="254" text-anchor="middle">you draw the stops</text><text class="sm" x="126" y="274" text-anchor="middle">and the roads between</text><rect class="bxm" x="258" y="10" width="232" height="290" rx="14"/><text class="bd" x="374" y="202" text-anchor="middle">A relay race</text><text class="lbl" x="374" y="228" text-anchor="middle">OpenAI Agents SDK: handoffs</text><text class="sm" x="374" y="254" text-anchor="middle">one agent passes</text><text class="sm" x="374" y="274" text-anchor="middle">the baton to the next</text><rect class="bxm" x="506" y="10" width="232" height="290" rx="14"/><text class="bd" x="622" y="202" text-anchor="middle">A car with a driver</text><text class="lbl" x="622" y="228" text-anchor="middle">Claude Agent SDK</text><text class="sm" x="622" y="254" text-anchor="middle">the driver and the</text><text class="sm" x="622" y="274" text-anchor="middle">tools come included</text><rect class="bxm" x="754" y="10" width="232" height="290" rx="14"/><text class="bd" x="870" y="202" text-anchor="middle">A bicycle you build</text><text class="lbl" x="870" y="228" text-anchor="middle">Plain code: your while-loop</text><text class="sm" x="870" y="254" text-anchor="middle">every part is yours,</text><text class="sm" x="870" y="274" text-anchor="middle">and so is every repair</text><path class="lnd" d="M30,160 L240,160"/><circle class="pf pf-bxs" cx="40" cy="160" r="7"/><circle class="hz" cx="40" cy="160" r="5"/><circle class="pf pf-bxs" cx="125" cy="160" r="7"/><circle class="hz" cx="125" cy="160" r="5"/><circle class="pf pf-bxs" cx="230" cy="160" r="7"/><circle class="hz" cx="230" cy="160" r="5"/><rect class="hz" x="50" y="70" width="150" height="66" rx="10"/><rect class="bxs" x="62" y="82" width="24" height="22" rx="3"/><rect class="bxs" x="96" y="82" width="24" height="22" rx="3"/><rect class="bxs" x="130" y="82" width="24" height="22" rx="3"/><rect class="bxs" x="164" y="82" width="24" height="22" rx="3"/><circle class="hz" cx="82" cy="140" r="12"/><circle class="hk" cx="82" cy="140" r="3"/><circle class="hz" cx="170" cy="140" r="12"/><circle class="hk" cx="170" cy="140" r="3"/><text class="sm" x="125" y="125" text-anchor="middle">route 4</text><line class="ln" x1="270" y1="166" x2="480" y2="166"/><circle class="bx" cx="320" cy="103" r="11"/><line class="lnc" x1="320" y1="114" x2="316" y2="142"/><line class="lnc" x1="316" y1="142" x2="302" y2="162"/><line class="lnc" x1="316" y1="142" x2="332" y2="160"/><line class="lnc" x1="318" y1="124" x2="302" y2="134"/><line class="lnc" x1="318" y1="124" x2="336" y2="130"/><rect class="bxs" x="334" y="123" width="16" height="7" rx="2"/><circle class="bx" cx="410" cy="103" r="11"/><line class="lnc" x1="410" y1="114" x2="406" y2="142"/><line class="lnc" x1="406" y1="142" x2="392" y2="162"/><line class="lnc" x1="406" y1="142" x2="422" y2="160"/><line class="lnc" x1="408" y1="124" x2="392" y2="134"/><line class="lnc" x1="408" y1="124" x2="426" y2="130"/><path class="lnd" d="M352,84 Q372,62 396,84" marker-end="url(#ar)"/><path class="hz" d="M526,140 L526,110 L566,110 L588,80 L656,80 L678,110 L718,112 L718,140 Z"/><path class="bxs" d="M596,88 L646,88 L662,108 L584,108 Z"/><circle class="bx" cx="622" cy="96" r="8"/><circle class="hz" cx="566" cy="142" r="14"/><circle class="hk" cx="566" cy="142" r="3"/><circle class="hz" cx="678" cy="142" r="14"/><circle class="hk" cx="678" cy="142" r="3"/><rect class="hz" x="536" y="116" width="26" height="12" rx="3"/><text class="sm" x="622" y="172" text-anchor="middle">toolbox in the boot</text><circle class="hz" cx="814" cy="135" r="28"/><circle class="hk" cx="814" cy="135" r="3"/><circle class="hz" cx="924" cy="135" r="28"/><circle class="hk" cx="924" cy="135" r="3"/><path class="ln" d="M814,135 L854,95 L904,95 L924,135 M854,95 L869,135 L904,95 M869,135 L814,135"/><line class="lnc" x1="846" y1="85" x2="864" y2="85"/><line class="lnc" x1="904" y1="95" x2="912" y2="78"/><path class="hz" d="M920,66 L950,48 L955,56 L925,74 Z"/><circle class="hz" cx="955" cy="48" r="8"/></svg><figcaption>Four shapes of loop. They all get you there; they differ in who drives and who fixes it.</figcaption></figure>
+<ul><li><strong>LangGraph is a bus on a fixed route.</strong> You draw the agent as a graph: boxes (called nodes) for steps, and lines (called edges) for which step can follow which. The framework runs your graph and carries one shared state object between the nodes.</li><li><strong>The OpenAI Agents SDK is a relay race.</strong> You define agents, each with instructions and tools. One agent can hand the conversation to another, which is called a <em>handoff</em>. The model sees a handoff as just another tool it can call.</li><li><strong>The Claude Agent SDK is a car with a driver.</strong> It packages the same loop that runs Claude Code as a library. The loop, a set of built-in tools for files, the shell and the web, and the handling of long conversations all come included.</li><li><strong>Plain code is a bicycle you build yourself.</strong> It is a <code>while</code> loop: call the model, run any tools it asked for, repeat. The tutorial's claims agent does this in about 400 lines of Python.</li></ul>
+<p>Our tutorial compares a few more. <strong>Pydantic AI</strong> is a typed Python framework whose agent you can step through one step at a time. The <strong>Anthropic tool runner</strong> is a thin helper: the loop with hooks, still yours. <strong>Microsoft Agent Framework</strong> suits .NET or Azure-first teams.</p>
+<h2>The same five steps, whoever drives</h2>
+<p>Whichever you choose, the loop does the same job.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 350" role="img" aria-label="Five boxes in a row: build the context, ask the model, read the answer, check then run the tools, stop or go round. An arrow loops back from the last to the first. Below, a box for stop rules checked every trip."><rect class="pf pf-bx" x="14" y="74" width="180" height="94" rx="12"/><rect class="bx ol" x="10" y="70" width="182" height="96" rx="12"/><text class="tt" x="101.0" y="114.5" text-anchor="middle">Build the context</text><text class="sm" x="101.0" y="138.5" text-anchor="middle">what the model reads</text><circle class="nm" cx="22" cy="70" r="14"/><text class="nmt" x="22" y="76" text-anchor="middle">1</text><line class="ln" x1="194" y1="118" x2="206" y2="118" marker-end="url(#ar)"/><rect class="pf pf-solid" x="212" y="74" width="180" height="94" rx="12"/><rect class="solid ol" x="208" y="70" width="182" height="96" rx="12"/><text class="tt inv" x="299.0" y="114.5" text-anchor="middle">Ask the model</text><text class="inv sm2" x="299.0" y="138.5" text-anchor="middle">one call</text><circle class="nm" cx="220" cy="70" r="14"/><text class="nmt" x="220" y="76" text-anchor="middle">2</text><line class="ln" x1="392" y1="118" x2="404" y2="118" marker-end="url(#ar)"/><rect class="pf pf-bx" x="410" y="74" width="180" height="94" rx="12"/><rect class="bx ol" x="406" y="70" width="182" height="96" rx="12"/><text class="tt" x="497.0" y="114.5" text-anchor="middle">Read the answer</text><text class="sm" x="497.0" y="138.5" text-anchor="middle">words or tool requests?</text><circle class="nm" cx="418" cy="70" r="14"/><text class="nmt" x="418" y="76" text-anchor="middle">3</text><line class="ln" x1="590" y1="118" x2="602" y2="118" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="608" y="74" width="180" height="94" rx="12"/><rect class="bxs ol" x="604" y="70" width="182" height="96" rx="12"/><text class="tt" x="695.0" y="114.5" text-anchor="middle">Check, then run</text><text class="sm" x="695.0" y="138.5" text-anchor="middle">the tools it asked for</text><circle class="nm" cx="616" cy="70" r="14"/><text class="nmt" x="616" y="76" text-anchor="middle">4</text><line class="ln" x1="788" y1="118" x2="800" y2="118" marker-end="url(#ar)"/><rect class="pf pf-bx" x="806" y="74" width="180" height="94" rx="12"/><rect class="bx ol" x="802" y="70" width="182" height="96" rx="12"/><text class="tt" x="893.0" y="114.5" text-anchor="middle">Stop or go round</text><text class="sm" x="893.0" y="138.5" text-anchor="middle">done, or out of budget?</text><circle class="nm" cx="814" cy="70" r="14"/><text class="nmt" x="814" y="76" text-anchor="middle">5</text><path class="ln" d="M900,168 Q500,290 100,168" marker-end="url(#ar)"/><text class="sm" x="500" y="258" text-anchor="middle">go round: the tool results go into the next context</text><text class="sm" x="500" y="36" text-anchor="middle">the same five steps in LangGraph, either SDK, or your own while-loop</text><rect class="pf pf-bxs" x="254" y="284" width="498" height="58" rx="12"/><rect class="bxs ol" x="250" y="280" width="500" height="60" rx="12"/><text class="tt" x="500.0" y="306.5" text-anchor="middle">Stop rules, checked every trip</text><text class="sm" x="500.0" y="330.5" text-anchor="middle">say, 12 trips, 60 seconds, $0.50</text></svg><figcaption>What every agent loop does. The frameworks differ only in who writes these five boxes, and where you can reach in.</figcaption></figure>
+<ol><li><strong>Build the context:</strong> the instructions, the conversation so far, and the tools this person may use.</li><li><strong>Ask the model</strong> for its next step.</li><li><strong>Read the answer.</strong> Is it words, or a request to call tools?</li><li><strong>Check, then run</strong> the tools it asked for, and add the results to the context.</li><li><strong>Stop or go round.</strong> Stop if the model answered in words, or if a budget ran out.</li></ol>
+<p>The budgets are the part teams forget. The tutorial's agent stops after 12 trips, 60 seconds, $0.50 or 24 tool calls, whichever comes first. The question to ask of any framework is simple: where would my checks and budgets sit, and can my tests reach them?</p>
+<h2>What each one gives you</h2>
+<p><strong>LangGraph</strong> gives you the most structure for long, stateful work. A <em>checkpointer</em> saves the state after each step, so a run can stop, wait and resume, and Postgres is one of the stores it can use (see <a href="/writing/just-use-postgres/">just use Postgres</a>). An <em>interrupt</em> pauses the graph for a person to approve. It streams results as they happen and works with any model. Our tutorial's verdict is that tests can check it node by node, but full tracing comes mainly with LangSmith, the tracing service from the same company.</p>
+<p><strong>The OpenAI Agents SDK</strong> gives you a small set of ideas: agents, handoffs, guardrails that check input and output, and sessions that remember the conversation. Tracing is switched on by default and goes to OpenAI's dashboard, and you can add your own exporters. It streams, and it can call other providers' models. Our own builds don't use it, so we have not measured it the way we measured the others.</p>
+<p><strong>The Claude Agent SDK</strong> gives you the most out of the box: built-in tools, subagents, hooks that run before and after each tool, permission checks, and support for MCP servers. MCP, the Model Context Protocol, is a standard way to plug tools into an agent. It is the quickest way to an agent that works on files and code. Our tutorial rates it best for coding, operations and research agents.</p>
+<p><strong>A plain loop</strong> gives you nothing for free, and complete control. Every check sits at an exact line that a unit test can reach, and it works with any model. You write state, checkpoints and streaming yourself.</p>
+<h2>What each one costs you</h2>
+<p>There are three costs, and they are easy to miss in a demo.</p>
+<p><strong>Lock-in.</strong> Our tutorial rates the Claude Agent SDK's lock-in as high, because it is Claude-only. LangGraph's is medium, because your agent is shaped like its graph and its best tracing is LangSmith. A plain loop has none.</p>
+<p><strong>Learning.</strong> A graph framework is a new way of thinking about code. An SDK is a new set of rules about what runs when. Everyone on your team already knows how a <code>while</code> loop works.</p>
+<p><strong>Hidden prompts.</strong> Every framework sends the model text you didn't write: descriptions of built-in tools, handoff tools, output-format reminders. That text uses tokens, and it changes when you upgrade. Log the exact request your agent sends and read it at least once.</p>
+<p>There is a fourth cost for agents that touch money. In the tutorial's comparison, tests can reach every step of a plain loop, but only partly reach the Claude Agent SDK's, because the loop is hidden inside it.</p>
+<h2>Pick this when</h2>
+<div class="tw"><table><tr><th>Pick</th><th>When</th><th>Watch for</th></tr><tr><td>Plain code loop</td><td>a wrong step moves money or changes records, and every step must be tested</td><td>you build state, streaming and checkpoints</td></tr><tr><td>LangGraph</td><td>the work is a known flow with branches and pauses for approval</td><td>the graph model to learn; best tracing is LangSmith</td></tr><tr><td>OpenAI Agents SDK</td><td>a few specialist agents pass one conversation between them</td><td>handoff prompts you didn't write; tracing goes to OpenAI unless you change it</td></tr><tr><td>Claude Agent SDK</td><td>internal agents that work on files, code, a shell or the web</td><td>Claude only; tests can't reach every step</td></tr><tr><td>Pydantic AI</td><td>small typed agents, or as the model layer under your own loop</td><td>for bigger agents, step the loop yourself</td></tr></table></div>
+<p>If you'd rather not read a table, ask three questions in order.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 465" role="img" aria-label="Three questions down the left. One: can a wrong step move money or change records? Yes leads to a plain code loop. Two: is the work a known flow with pauses for a person? Yes leads to LangGraph. Three: does it work on files, code or the web for your own team? Yes leads to the Claude Agent SDK. If all three are no, start with a plain loop and add handoffs only if you really have specialists."><rect class="pf pf-bxs" x="24" y="24" width="378" height="78" rx="12"/><rect class="bxs ol" x="20" y="20" width="380" height="80" rx="12"/><text class="tt" x="210.0" y="56.5" text-anchor="middle">1. Can a wrong step move money</text><text class="sm" x="210.0" y="80.5" text-anchor="middle">or change someone&#x27;s records?</text><line class="ln" x1="402" y1="60" x2="600" y2="60" marker-end="url(#ar)"/><text class="sm" x="500" y="50" text-anchor="middle">yes</text><rect class="pf pf-solid" x="609" y="24" width="373" height="78" rx="12"/><rect class="solid ol" x="605" y="20" width="375" height="80" rx="12"/><text class="tt inv" x="792.5" y="56.5" text-anchor="middle">Plain code loop</text><text class="inv sm2" x="792.5" y="80.5" text-anchor="middle">checks at exact places</text><line class="ln" x1="210" y1="102" x2="210" y2="138" marker-end="url(#ar)"/><text class="sm" x="232" y="126" text-anchor="start">no</text><rect class="pf pf-bxs" x="24" y="144" width="378" height="78" rx="12"/><rect class="bxs ol" x="20" y="140" width="380" height="80" rx="12"/><text class="tt" x="210.0" y="176.5" text-anchor="middle">2. Is the work a known flow</text><text class="sm" x="210.0" y="200.5" text-anchor="middle">with pauses for a person?</text><line class="ln" x1="402" y1="180" x2="600" y2="180" marker-end="url(#ar)"/><text class="sm" x="500" y="170" text-anchor="middle">yes</text><rect class="pf pf-bx" x="609" y="144" width="373" height="78" rx="12"/><rect class="bx ol" x="605" y="140" width="375" height="80" rx="12"/><text class="tt" x="792.5" y="176.5" text-anchor="middle">LangGraph</text><text class="sm" x="792.5" y="200.5" text-anchor="middle">a graph with checkpoints</text><line class="ln" x1="210" y1="222" x2="210" y2="258" marker-end="url(#ar)"/><text class="sm" x="232" y="246" text-anchor="start">no</text><rect class="pf pf-bxs" x="24" y="264" width="378" height="78" rx="12"/><rect class="bxs ol" x="20" y="260" width="380" height="80" rx="12"/><text class="tt" x="210.0" y="296.5" text-anchor="middle">3. Does it work on files, code</text><text class="sm" x="210.0" y="320.5" text-anchor="middle">or the web, for your own team?</text><line class="ln" x1="402" y1="300" x2="600" y2="300" marker-end="url(#ar)"/><text class="sm" x="500" y="290" text-anchor="middle">yes</text><rect class="pf pf-bx" x="609" y="264" width="373" height="78" rx="12"/><rect class="bx ol" x="605" y="260" width="375" height="80" rx="12"/><text class="tt" x="792.5" y="296.5" text-anchor="middle">Claude Agent SDK</text><text class="sm" x="792.5" y="320.5" text-anchor="middle">tools and context included</text><line class="ln" x1="210" y1="322" x2="210" y2="378" marker-end="url(#ar)"/><text class="sm" x="232" y="360" text-anchor="start">no</text><rect class="bxm ol" x="20" y="380" width="960" height="72" rx="12"/><text class="tt" x="500.0" y="412.5" text-anchor="middle">Start with a plain loop</text><text class="sm" x="500.0" y="436.5" text-anchor="middle">add handoffs (the OpenAI Agents SDK&#x27;s idea) only if you really have specialists passing work</text></svg><figcaption>Three questions, asked in order. Whatever you pick, put it behind the port.</figcaption></figure>
+<p>The tutorial's own decision follows the first question. It writes the loop itself and uses Pydantic AI only to call the model, so the budgets and checks sit at exact places a test can reach. It says it would pick LangGraph for workflow-shaped agents and Agent Framework for a .NET team.</p>
+<h2>The loop is the small part. Put it behind a port.</h2>
+<p>A <em>port</em> is a fixed shape that a part must fit, like a socket on the wall. The rest of the agent calls the port and never knows which part is plugged in.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 400" role="img" aria-label="Five harness parts across the top: router, state, checks, traces, cost meter. They all connect to one socket, the loop port. Below, four plugs point up to the socket: plain code and Pydantic AI, both built; LangGraph and the Claude Agent SDK, both planned."><text class="lbl" x="500" y="24" text-anchor="middle">THE HARNESS: STAYS THE SAME</text><rect class="pf pf-bx" x="34" y="44" width="168" height="54" rx="12"/><rect class="bx ol" x="30" y="40" width="170" height="56" rx="12"/><text class="tt" x="115.0" y="74.0" text-anchor="middle">Router</text><rect class="pf pf-bx" x="226" y="44" width="168" height="54" rx="12"/><rect class="bx ol" x="222" y="40" width="170" height="56" rx="12"/><text class="tt" x="307.0" y="74.0" text-anchor="middle">State</text><rect class="pf pf-bxs" x="418" y="44" width="168" height="54" rx="12"/><rect class="bxs ol" x="414" y="40" width="170" height="56" rx="12"/><text class="tt" x="499.0" y="74.0" text-anchor="middle">Checks</text><rect class="pf pf-bx" x="610" y="44" width="168" height="54" rx="12"/><rect class="bx ol" x="606" y="40" width="170" height="56" rx="12"/><text class="tt" x="691.0" y="74.0" text-anchor="middle">Traces</text><rect class="pf pf-bxs" x="802" y="44" width="168" height="54" rx="12"/><rect class="bxs ol" x="798" y="40" width="170" height="56" rx="12"/><text class="tt" x="883.0" y="74.0" text-anchor="middle">Cost meter</text><rect class="pf pf-solid" x="314" y="134" width="378" height="68" rx="12"/><rect class="solid ol" x="310" y="130" width="380" height="70" rx="12"/><text class="tt inv" x="500.0" y="161.5" text-anchor="middle">The loop port</text><text class="inv sm2" x="500.0" y="185.5" text-anchor="middle">run(turn) gives back a result</text><line class="lnd" x1="115" y1="98" x2="400" y2="128"/><line class="lnd" x1="307" y1="98" x2="450" y2="128"/><line class="lnd" x1="499" y1="98" x2="500" y2="128"/><line class="lnd" x1="691" y1="98" x2="550" y2="128"/><line class="lnd" x1="883" y1="98" x2="600" y2="128"/><rect class="hk" x="470" y="200" width="10" height="20" rx="2"/><rect class="hk" x="506" y="200" width="10" height="20" rx="2"/><rect class="hk" x="542" y="200" width="10" height="20" rx="2"/><rect class="pf pf-solid" x="34" y="284" width="218" height="68" rx="12"/><rect class="solid ol" x="30" y="280" width="220" height="70" rx="12"/><text class="tt inv" x="140.0" y="311.5" text-anchor="middle">Plain code</text><text class="inv sm2" x="140.0" y="335.5" text-anchor="middle">about 400 lines: built</text><line class="ln" x1="140" y1="278" x2="480" y2="224" marker-end="url(#ar)"/><rect class="pf pf-bx" x="274" y="284" width="218" height="68" rx="12"/><rect class="bx ol" x="270" y="280" width="220" height="70" rx="12"/><text class="tt" x="380.0" y="311.5" text-anchor="middle">Pydantic AI</text><text class="sm" x="380.0" y="335.5" text-anchor="middle">adapter: built</text><line class="ln" x1="380" y1="278" x2="492" y2="224" marker-end="url(#ar)"/><rect class="bxm ol" x="510" y="280" width="220" height="70" rx="12"/><text class="tt" x="620.0" y="311.5" text-anchor="middle">LangGraph</text><text class="sm" x="620.0" y="335.5" text-anchor="middle">adapter: planned</text><line class="ln" x1="620" y1="278" x2="504" y2="224" marker-end="url(#ar)"/><rect class="bxm ol" x="750" y="280" width="220" height="70" rx="12"/><text class="tt" x="860.0" y="311.5" text-anchor="middle">Claude Agent SDK</text><text class="sm" x="860.0" y="335.5" text-anchor="middle">adapter: planned</text><line class="ln" x1="860" y1="278" x2="516" y2="224" marker-end="url(#ar)"/><text class="sm" x="500" y="384" text-anchor="middle">same tests for every plug; swapping is a line of configuration</text></svg><figcaption>The loop as a plug-in part. The reference agent runs its own loop, and can run Pydantic AI's instead without the rest noticing.</figcaption></figure>
+<p>The <a href="https://github.com/dataagentsai/reference-agent">reference agent</a> writes its own loop, with no framework, so that each layer of the harness is visible. Its harness has one call for a turn. A second module answers the same call with Pydantic AI owning the steps, chosen by one line of configuration. The router, the waits and the state don't know which loop ran.</p>
+<p>Adapters for LangGraph and the Claude Agent SDK are planned, not built. Each must pass the same test cases unchanged, in at most 150 lines of adapter per port, without changing the harness to suit the framework.</p>
+<p>The reference agent's notes put it plainly: if you can't say where your step budget, loop detection and cost ceiling live after adopting a framework, the framework has adopted you.</p>
+<h2>What goes wrong</h2>
+<ol><li><strong>Choosing by demo.</strong> The framework that builds the quickest demo is not always the one you can test and run for a year.</li><li><strong>Checks inside the framework's callbacks only.</strong> When the framework changes how its callbacks work, your rules move with it. Keep the rules in your own code and call them from the hooks.</li><li><strong>No budgets.</strong> Some frameworks have a step limit, but none knows your money limit. A loop with no stop rule will find a way to loop.</li><li><strong>Never reading the real request.</strong> The hidden prompt grows with each upgrade, and nobody notices until the bill does.</li><li><strong>The whole agent written in the framework's shapes.</strong> Then swapping the loop means rewriting the agent.</li></ol>
+<h2>Seven questions to ask before you choose</h2>
+<ol><li>If a wrong step happens, does it cost money or change someone's data?</li><li>Where exactly would my step, time and money budgets sit?</li><li>Can a unit test reach the check that runs before each tool call?</li><li>Does it work with the models I may need next year, not just this one?</li><li>Where do my traces go by default, and can I send them to my own store?</li><li>Can a run pause for hours waiting for a person, and survive a restart?</li><li>What text does it send to the model that I didn't write?</li></ol>
+<p>Choose the loop that fits the job, keep it behind a port, and spend the time you saved on the other 90%.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/tech-l4.html">the control loop in the Agent Harness tutorial, with the full comparison table</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
