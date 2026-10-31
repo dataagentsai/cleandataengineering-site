@@ -774,6 +774,7 @@ def page():
 <section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
 <p><b>See where it sits in testing:</b> <a href="/learn/agent-harness/test-scenarios.html">AgentTwin scenarios</a> and <a href="/learn/agent-harness/test-coverage.html">spec coverage</a> in the Agent Harness tutorial.</p>
 <p><b>See an agent work:</b> <a href="/learn/agent-harness-sim/">the Agent Harness Simulator</a>.</p>
+<p><b>The data-engineering sibling:</b> <a href="/learn/datatwin/">DataTwin, explained</a>, the same idea pointed at a data platform.</p>
 <p><b>The research:</b> <a href="/lab/">the AgentTwin Lab</a>, a world that keeps running for 30 simulated days. <b>Join:</b> <a href="/projects/agenttwin/">the AgentTwin project</a>. <b>Code:</b> <a href="https://github.com/dataagentsai/agenttwin">github.com/dataagentsai/agenttwin</a> (Apache 2.0).</p></section>"""
 
     ld = [
