@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Data quality as config, not code · Clean Data Engineering</title>
+<meta name="description" content="Most teams have data quality checks, but they are scattered across notebooks, each written a little differently. A metadata-driven framework moves every rule into a YAML file or a rules table, and one engine runs them at each hop. Bad rows go to quarantine with a reason, results land in a table, and a new dataset is a new file, not new code."><link rel="canonical" href="https://cleandataengineering.ai/writing/data-quality-as-config/">
+<meta property="og:title" content="Data quality as config, not code"><meta property="og:description" content="Most teams have data quality checks, but they are scattered across notebooks, each written a little differently. A metadata-driven framework moves every rule into a YAML file or a rules table, and one engine runs them at each hop. Bad rows go to quarantine with a reason, results land in a table, and a new dataset is a new file, not new code."><meta property="og:url" content="https://cleandataengineering.ai/writing/data-quality-as-config/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · Data Engineering · Builders · 7 min read · 2026-10-31</p>
+    <h1>Data quality as config, not code</h1>
+  </div>
+  <div class="summary">Most teams have data quality checks, but they are scattered across notebooks, each written a little differently. A metadata-driven framework moves every rule into a YAML file or a rules table, and one engine runs them at each hop. Bad rows go to quarantine with a reason, results land in a table, and a new dataset is a new file, not new code.</div>
+<p>Ask a data team whether they check data quality and they will say yes. Ask where the checks are, and someone opens a notebook. Then another. The null check on <code>customer_id</code> is in the orders notebook, copied into the returns notebook, and changed slightly in the payments one.</p>
+<p>Nobody can say which rules were in force last Tuesday. Nobody can list every check on one table. When a check fails, it either stops the whole job or quietly removes the rows.</p>
+<p>The fix is not more checks. It is moving the checks out of code and into configuration.</p>
+<h2>From forty notebooks to one file</h2>
+<p>Here is the change in one picture.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 305" role="img" aria-label="Left: six notebooks, each with its own copy of a check, some copied, one that nobody understands. Right: one rules file read by one engine that runs the rules at every hop."><text class="bd" x="225" y="26" text-anchor="middle">before: a check in every notebook</text><rect class="hz" x="40" y="60" width="104" height="78" rx="4"/><circle class="hz" cx="56" cy="60" r="4"/><circle class="hz" cx="74" cy="60" r="4"/><circle class="hz" cx="92" cy="60" r="4"/><circle class="hz" cx="110" cy="60" r="4"/><circle class="hz" cx="128" cy="60" r="4"/><text class="sm" x="92" y="94" text-anchor="middle">is it null?</text><text class="sm" x="92" y="114" text-anchor="middle"></text><rect class="hz" x="170" y="60" width="104" height="78" rx="4"/><circle class="hz" cx="186" cy="60" r="4"/><circle class="hz" cx="204" cy="60" r="4"/><circle class="hz" cx="222" cy="60" r="4"/><circle class="hz" cx="240" cy="60" r="4"/><circle class="hz" cx="258" cy="60" r="4"/><text class="sm" x="222" y="94" text-anchor="middle">dupes, v2</text><text class="sm" x="222" y="114" text-anchor="middle">(copied)</text><rect class="hz" x="300" y="60" width="104" height="78" rx="4"/><circle class="hz" cx="316" cy="60" r="4"/><circle class="hz" cx="334" cy="60" r="4"/><circle class="hz" cx="352" cy="60" r="4"/><circle class="hz" cx="370" cy="60" r="4"/><circle class="hz" cx="388" cy="60" r="4"/><text class="sm" x="352" y="94" text-anchor="middle">amount &gt; 0</text><text class="sm" x="352" y="114" text-anchor="middle"></text><rect class="hz" x="40" y="172" width="104" height="78" rx="4"/><circle class="hz" cx="56" cy="172" r="4"/><circle class="hz" cx="74" cy="172" r="4"/><circle class="hz" cx="92" cy="172" r="4"/><circle class="hz" cx="110" cy="172" r="4"/><circle class="hz" cx="128" cy="172" r="4"/><text class="sm" x="92" y="206" text-anchor="middle">is it null?</text><text class="sm" x="92" y="226" text-anchor="middle">(again)</text><rect class="hz" x="170" y="172" width="104" height="78" rx="4"/><circle class="hz" cx="186" cy="172" r="4"/><circle class="hz" cx="204" cy="172" r="4"/><circle class="hz" cx="222" cy="172" r="4"/><circle class="hz" cx="240" cy="172" r="4"/><circle class="hz" cx="258" cy="172" r="4"/><text class="sm" x="222" y="206" text-anchor="middle">country in</text><text class="sm" x="222" y="226" text-anchor="middle">a list</text><rect class="hz" x="300" y="172" width="104" height="78" rx="4"/><circle class="hz" cx="316" cy="172" r="4"/><circle class="hz" cx="334" cy="172" r="4"/><circle class="hz" cx="352" cy="172" r="4"/><circle class="hz" cx="370" cy="172" r="4"/><circle class="hz" cx="388" cy="172" r="4"/><text class="sm" x="352" y="206" text-anchor="middle">???</text><text class="sm" x="352" y="226" text-anchor="middle">nobody knows</text><text class="sm" x="225" y="290" text-anchor="middle">40 notebooks, 40 slightly different rules</text><line class="lnd" x1="465" y1="20" x2="465" y2="295"/><text class="bd" x="735" y="26" text-anchor="middle">after: one rules file, one engine</text><rect class="pf pf-bxs" x="499" y="84" width="188" height="108" rx="12"/><rect class="bxs ol" x="495" y="80" width="190" height="110" rx="12"/><text class="tt" x="590.0" y="122.0" text-anchor="middle">orders.dq.yaml</text><text class="sm" x="590.0" y="146.0" text-anchor="middle">every rule for</text><text class="sm" x="590.0" y="165.0" text-anchor="middle">the dataset</text><line class="ln" x1="687" y1="135" x2="763" y2="135" marker-end="url(#ar)"/><text class="sm" x="725.0" y="127.0" text-anchor="middle">read by</text><rect class="pf pf-solid" x="769" y="84" width="208" height="108" rx="12"/><rect class="solid ol" x="765" y="80" width="210" height="110" rx="12"/><text class="tt inv" x="870.0" y="122.0" text-anchor="middle">One engine</text><text class="inv sm2" x="870.0" y="146.0" text-anchor="middle">runs the rules</text><text class="inv sm2" x="870.0" y="165.0" text-anchor="middle">at every hop</text><text class="sm" x="735" y="250" text-anchor="middle">a new dataset is a new file;</text><text class="sm" x="735" y="270" text-anchor="middle">a new rule is a new line</text></svg><figcaption>The same checks, written forty times or written once. Only one of these can be reviewed in a single pull request.</figcaption></figure>
+<p>In a <strong>metadata-driven</strong> framework, the rules are data about your data. They live in one YAML file per dataset, or in a rules table, and nowhere else. A pipeline never writes a check itself. It calls one engine, and the engine reads the rules for that dataset and runs them.</p>
+<p>That gives you three things at once:</p>
+<ul><li><strong>One place to look.</strong> Every rule for <code>orders</code> is in <code>orders.dq.yaml</code>.</li><li><strong>One review.</strong> A new rule is a line in a pull request, read by a person, like any other change.</li><li><strong>One way of running.</strong> Every check behaves the same, logs the same and fails the same, because the same engine runs all of them.</li></ul>
+<h2>One rule, written as config</h2>
+<p>A rule is a few lines. It says what to check, how serious a failure is, what to do with the rows that fail, and who owns it.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 315" role="img" aria-label="A drawn index card for rule DQ-01: dataset orders, rule is_complete, column customer_id, severity block, action quarantine, owner sales-data. Labels around it say what to check, how serious, what happens to failing rows, and who owns it."><text class="sm" x="500" y="22" text-anchor="middle">one rule is a few lines of config: no Python, no SQL</text><line class="lnd" x1="250" y1="135" x2="330" y2="155"/><line class="lnd" x1="250" y1="220" x2="330" y2="200"/><line class="lnd" x1="750" y1="185" x2="670" y2="230"/><line class="lnd" x1="750" y1="270" x2="670" y2="260"/><rect class="hz" x="330" y="40" width="340" height="250" rx="8"/><line class="ln" x1="330" y1="88" x2="670" y2="88"/><text class="bd" x="500" y="72" text-anchor="middle">DQ-01</text><text class="sm" x="355" y="118" text-anchor="start">dataset</text><text class="tx" x="470" y="118" text-anchor="start">orders</text><text class="sm" x="355" y="148" text-anchor="start">rule</text><text class="tx" x="470" y="148" text-anchor="start">is_complete</text><text class="sm" x="355" y="178" text-anchor="start">column</text><text class="tx" x="470" y="178" text-anchor="start">customer_id</text><text class="sm" x="355" y="208" text-anchor="start">severity</text><text class="tx" x="470" y="208" text-anchor="start">block</text><text class="sm" x="355" y="238" text-anchor="start">action</text><text class="tx" x="470" y="238" text-anchor="start">quarantine</text><text class="sm" x="355" y="268" text-anchor="start">owner</text><text class="tx" x="470" y="268" text-anchor="start">sales-data</text><rect class="bxm ol" x="20" y="100" width="230" height="70" rx="12"/><text class="tt" x="135.0" y="131.5" text-anchor="middle">What to check</text><text class="sm" x="135.0" y="155.5" text-anchor="middle">a rule type and a column</text><rect class="bxm ol" x="20" y="185" width="230" height="70" rx="12"/><text class="tt" x="135.0" y="216.5" text-anchor="middle">How serious</text><text class="sm" x="135.0" y="240.5" text-anchor="middle">warn or block</text><rect class="bxm ol" x="750" y="150" width="230" height="70" rx="12"/><text class="tt" x="865.0" y="181.5" text-anchor="middle">What happens</text><text class="sm" x="865.0" y="205.5" text-anchor="middle">to the rows that fail</text><rect class="bxm ol" x="750" y="235" width="230" height="70" rx="12"/><text class="tt" x="865.0" y="266.5" text-anchor="middle">Who owns it</text><text class="sm" x="865.0" y="290.5" text-anchor="middle">and gets the alert</text></svg><figcaption>One rule as a card. Every rule in the file answers the same four questions.</figcaption></figure>
+<p>A real file has a handful of them. This is a cut-down version of the file used in the DataTwin Studio data quality run:</p>
+<pre><code># datasets/orders.dq.yaml  (owned by the data team; reviewed by pull request)
+dataset: orders
+owner: sales-data
+dq_engine: spark_sql
+checks:
+  - id: DQ-01
+    rule: is_complete
+    column: customer_id
+    severity: block
+    action: quarantine
+  - id: DQ-04
+    rule: is_contained_in
+    column: country
+    params: {values: [IN, US, GB, AE, SG]}
+    severity: warn
+    action: alert
+  - id: DQ-06
+    rule: row_count_between
+    params: {min: 40000, max: 60000}
+    severity: block
+    action: stop</code></pre>
+<p>(The recorded run spells <em>block</em> as <code>error</code>; the idea is the same.)</p>
+<p>A loader checks the file and writes it into a small metadata database: one row per rule, plus a <strong>fingerprint</strong> of the whole rule set. A fingerprint is a short hash, so if any rule changes, the fingerprint changes. Every run records the fingerprint it used, so "which rules were in force on 27 October?" has an exact answer.</p>
+<h2>The engine at each hop</h2>
+<p>A <strong>hop</strong> is one step where data moves from one layer to the next, such as bronze to silver. The engine runs at every hop, and it does the same five things each time.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 355" role="img" aria-label="Bronze rows go into the data quality engine, which reads the rules table and runs them through an adapter, Spark SQL or Deequ. Passing rows go to silver, failing rows go to quarantine with the rule they broke, and results go to a results table that feeds a dashboard and an alert to the owner."><rect class="pf pf-bx" x="14" y="119" width="148" height="88" rx="12"/><rect class="bx ol" x="10" y="115" width="150" height="90" rx="12"/><text class="tt" x="85.0" y="156.5" text-anchor="middle">Bronze</text><text class="sm" x="85.0" y="180.5" text-anchor="middle">50,012 rows in</text><line class="ln" x1="162" y1="160" x2="198" y2="160" marker-end="url(#ar)"/><rect class="bxm ol" x="225" y="10" width="180" height="54" rx="12"/><text class="tt" x="315.0" y="33.5" text-anchor="middle">Rules table</text><text class="sm" x="315.0" y="57.5" text-anchor="middle"></text><line class="ln" x1="315" y1="66" x2="315" y2="92" marker-end="url(#ar)"/><rect class="pf pf-solid" x="204" y="99" width="228" height="128" rx="12"/><rect class="solid ol" x="200" y="95" width="230" height="130" rx="12"/><text class="tt inv" x="315.0" y="147.0" text-anchor="middle">The DQ engine</text><text class="inv sm2" x="315.0" y="171.0" text-anchor="middle">one interface,</text><text class="inv sm2" x="315.0" y="190.0" text-anchor="middle">runs every rule</text><rect class="pf pf-bx" x="204" y="266" width="106" height="48" rx="12"/><rect class="bx ol" x="200" y="262" width="108" height="50" rx="12"/><text class="tt" x="254.0" y="283.5" text-anchor="middle">Spark SQL</text><text class="sm" x="254.0" y="307.5" text-anchor="middle"></text><rect class="pf pf-bx" x="326" y="266" width="106" height="48" rx="12"/><rect class="bx ol" x="322" y="262" width="108" height="50" rx="12"/><text class="tt" x="376.0" y="283.5" text-anchor="middle">Deequ</text><text class="sm" x="376.0" y="307.5" text-anchor="middle"></text><line class="lnd" x1="254" y1="260" x2="285" y2="227"/><line class="lnd" x1="376" y1="260" x2="345" y2="227"/><text class="sm" x="315" y="340" text-anchor="middle">adapters: swap one for the other with one line</text><line class="ln" x1="432" y1="115" x2="528" y2="55" marker-end="url(#ar)"/><text class="sm" x="470" y="70" text-anchor="end">passes</text><rect class="pf pf-bx" x="534" y="19" width="208" height="78" rx="12"/><rect class="bx ol" x="530" y="15" width="210" height="80" rx="12"/><text class="tt" x="635.0" y="51.5" text-anchor="middle">Silver</text><text class="sm" x="635.0" y="75.5" text-anchor="middle">49,780 good rows</text><line class="ln" x1="432" y1="160" x2="528" y2="162" marker-end="url(#ar)"/><text class="sm" x="480" y="150" text-anchor="middle">fails</text><rect class="bxm ol" x="530" y="118" width="210" height="90" rx="12"/><text class="tt" x="635.0" y="150.0" text-anchor="middle">Quarantine</text><text class="sm" x="635.0" y="174.0" text-anchor="middle">232 rows, each with</text><text class="sm" x="635.0" y="193.0" text-anchor="middle">the rule it broke</text><line class="ln" x1="432" y1="205" x2="528" y2="268" marker-end="url(#ar)"/><text class="sm" x="470" y="258" text-anchor="end">results</text><rect class="pf pf-bxs" x="534" y="234" width="208" height="88" rx="12"/><rect class="bxs ol" x="530" y="230" width="210" height="90" rx="12"/><text class="tt" x="635.0" y="262.0" text-anchor="middle">Results table</text><text class="sm" x="635.0" y="286.0" text-anchor="middle">one row per rule</text><text class="sm" x="635.0" y="305.0" text-anchor="middle">per run</text><line class="ln" x1="742" y1="255" x2="788" y2="220" marker-end="url(#ar)"/><line class="ln" x1="742" y1="295" x2="788" y2="312" marker-end="url(#ar)"/><rect class="pf pf-bx" x="794" y="184" width="198" height="68" rx="12"/><rect class="bx ol" x="790" y="180" width="200" height="70" rx="12"/><text class="tt" x="890.0" y="211.5" text-anchor="middle">Dashboard</text><text class="sm" x="890.0" y="235.5" text-anchor="middle">trends per dataset</text><rect class="pf pf-bxs" x="794" y="284" width="148" height="64" rx="12"/><rect class="bxs ol" x="790" y="280" width="150" height="66" rx="12"/><text class="tt" x="865.0" y="309.5" text-anchor="middle">Alert</text><text class="sm" x="865.0" y="333.5" text-anchor="middle">to the owner</text><path class="hz" d="M956,330 Q956,300 970,298 Q984,300 984,330 L988,336 L952,336 Z"/><circle class="hk" cx="970" cy="341" r="3"/></svg><figcaption>One hop, one engine. The numbers are from a recorded run on 50,012 orders in DataTwin Studio.</figcaption></figure>
+<ol><li><strong>Read the rules</strong> for this dataset from the rules table.</li><li><strong>Run them</strong> through the bound adapter.</li><li><strong>Pass</strong> the good rows on to the next layer.</li><li><strong>Quarantine</strong> the rows that break a blocking rule, with the IDs of the rules they broke.</li><li><strong>Write the results</strong>: one row per rule per run, with the measured value, pass or fail, and the fingerprint. The dashboard reads that table, and failures send an alert to the owner.</li></ol>
+<p>In the recorded run, 50,012 orders arrived in bronze. Five of seven rules failed. 232 rows went to quarantine: 200 with no customer, 12 duplicate orders delivered twice, and 20 negative amounts. Two warnings, a country written as <code>Ind</code> and some customers missing from the customer table, raised alerts but kept their rows. 49,780 rows went to silver.</p>
+<p>The <a href="/writing/medallion-done-right/">medallion post</a> covers why quarantine beats a quiet <code>WHERE</code> clause. The short version: nothing disappears, and every parked row says why it was parked.</p>
+<h3>One interface, many engines</h3>
+<p>The engine is one <strong>interface</strong>: a fixed set of calls the pipeline makes, such as "run these rules on this table". Behind it sit <strong>adapters</strong>, one per tool that does the real work. The recorded run has two: plain Spark SQL, and Deequ, an open-source library for data checks on Spark. Great Expectations could be a third.</p>
+<p>The YAML line <code>dq_engine</code> picks the adapter. Change <code>spark_sql</code> to <code>deequ</code> and the same rules run on Deequ, with no pipeline code changed. In the recording every verdict agreed.</p>
+<p>Two lessons came out of building it:</p>
+<ul><li><strong>An adapter says what it can't do.</strong> Deequ has no check for "this customer exists in the customer table", so the engine sends that one rule to Spark SQL instead of failing.</li><li><strong>Every adapter must mean the same thing.</strong> Deequ counts <em>uniqueness</em> as the share of rows whose value appears exactly once. The Spark SQL adapter had to compute exactly that. Running both side by side is now a test.</li></ul>
+<h2>Seven kinds of rule</h2>
+<p>Almost every check you will write is one of seven types.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 320" role="img" aria-label="Seven rule types in two rows. Row rules: completeness, uniqueness, validity, referential. Table rules: freshness, volume, reconciliation."><text class="bd" x="500" y="26" text-anchor="middle">row rules: judge one row, so a bad row can go to quarantine</text><rect class="pf pf-bx" x="14" y="49" width="228" height="88" rx="12"/><rect class="bx ol" x="10" y="45" width="230" height="90" rx="12"/><text class="tt" x="125.0" y="86.5" text-anchor="middle">Completeness</text><text class="sm" x="125.0" y="110.5" text-anchor="middle">is it there?</text><rect class="pf pf-bx" x="262" y="49" width="228" height="88" rx="12"/><rect class="bx ol" x="258" y="45" width="230" height="90" rx="12"/><text class="tt" x="373.0" y="86.5" text-anchor="middle">Uniqueness</text><text class="sm" x="373.0" y="110.5" text-anchor="middle">only once?</text><rect class="pf pf-bx" x="510" y="49" width="228" height="88" rx="12"/><rect class="bx ol" x="506" y="45" width="230" height="90" rx="12"/><text class="tt" x="621.0" y="86.5" text-anchor="middle">Validity</text><text class="sm" x="621.0" y="110.5" text-anchor="middle">an allowed value?</text><rect class="pf pf-bx" x="758" y="49" width="228" height="88" rx="12"/><rect class="bx ol" x="754" y="45" width="230" height="90" rx="12"/><text class="tt" x="869.0" y="86.5" text-anchor="middle">Referential</text><text class="sm" x="869.0" y="110.5" text-anchor="middle">does its parent exist?</text><text class="bd" x="500" y="186" text-anchor="middle">table rules: judge the whole batch, so they warn or stop the load</text><rect class="pf pf-bxs" x="14" y="209" width="298" height="98" rx="12"/><rect class="bxs ol" x="10" y="205" width="300" height="100" rx="12"/><text class="tt" x="160.0" y="251.5" text-anchor="middle">Freshness</text><text class="sm" x="160.0" y="275.5" text-anchor="middle">did it arrive on time?</text><rect class="pf pf-bxs" x="349" y="209" width="298" height="98" rx="12"/><rect class="bxs ol" x="345" y="205" width="300" height="100" rx="12"/><text class="tt" x="495.0" y="251.5" text-anchor="middle">Volume</text><text class="sm" x="495.0" y="275.5" text-anchor="middle">about the usual count?</text><rect class="pf pf-solid" x="684" y="209" width="298" height="98" rx="12"/><rect class="solid ol" x="680" y="205" width="300" height="100" rx="12"/><text class="tt inv" x="830.0" y="242.0" text-anchor="middle">Reconciliation</text><text class="inv sm2" x="830.0" y="266.0" text-anchor="middle">do the counts add up?</text><text class="inv sm2" x="830.0" y="285.0" text-anchor="middle">bronze = silver + quarantine</text></svg><figcaption>Seven rule types, one question each. Which row a type sits in decides what blocking can mean for it.</figcaption></figure>
+<ul><li><strong>Completeness</strong>: is the value there? <code>customer_id</code> is never empty.</li><li><strong>Uniqueness</strong>: does it appear only once? One row per <code>order_id</code>.</li><li><strong>Validity</strong>: is it an allowed value or in range? <code>amount</code> is not negative; <code>country</code> is a real country code.</li><li><strong>Referential</strong>: does the parent exist? Every order's customer is in the customer table.</li><li><strong>Freshness</strong>: did the data arrive on time? Say, the newest order is less than two hours old.</li><li><strong>Volume</strong>: is the row count about usual? Between 40,000 and 60,000 orders a day.</li><li><strong>Reconciliation</strong>: do the numbers add up across a hop? Rows in bronze equal rows in silver plus rows in quarantine. In the run above, 50,012 equals 49,780 plus 232.</li></ul>
+<h2>Warn or block</h2>
+<p>Every rule has a severity, and the two rows of the picture decide what it means.</p>
+<div class="tw"><table><tr><th>Severity</th><th>On a row rule</th><th>On a table rule</th></tr><tr><td>warn</td><td>keep the row, raise an alert</td><td>publish, raise an alert</td></tr><tr><td>block</td><td>send the row to quarantine</td><td>stop the load; the next layer keeps yesterday's data</td></tr></table></div>
+<p>On 27 October in the recording, only 19,812 orders arrived instead of about 50,000. The volume rule blocked, so silver kept yesterday's data instead of publishing a third of today's. An anomaly check, which compares today's count with past runs, failed too. A fixed range catches the obvious drop; the history catches a drop that is still inside the range.</p>
+<h2>What goes wrong</h2>
+<ol><li><strong>Rules stay in notebooks "for now".</strong> The framework exists, but half the checks never move. Now there are two places to look, which is worse than one.</li><li><strong>Everything blocks.</strong> Every rule is set to block, the load stops twice a week, and someone switches the checks off. Block what would mislead a reader; warn on the rest.</li><li><strong>Everything warns.</strong> The opposite failure. Alerts arrive daily and nobody reads them. A warning that never leads to action should be deleted or promoted.</li><li><strong>Suggested rules accepted blindly.</strong> Deequ can profile a table and suggest rules. In the recording it suggested that <code>country</code> may be <code>Ind</code>. Suggestions describe today's data, bugs included, so they go to a draft pull request and a person decides.</li><li><strong>A rule loosened to make the job pass.</strong> The rule was right; the data was wrong. Fix the source, then replay the quarantined rows.</li><li><strong>Zero rows checked counted as a pass.</strong> An empty table can pass a uniqueness or validity rule, because no row is there to fail it. A check that looked at nothing is an error, not a pass.</li><li><strong>No owner per dataset.</strong> An alert with no named owner goes to a shared channel and dies there.</li></ol>
+<h2>Six questions to check your own setup</h2>
+<ol><li>Can you list every rule on your most important table without opening a notebook?</li><li>Could you say which rules were in force on a date last month?</li><li>Where does a row that fails a check go, and does it carry the reason?</li><li>Do rows in equal rows out plus rows quarantined, at every hop?</li><li>Which of your rules would stop a load today, and who is told when one does?</li><li>How much code does it take to add checks to a new dataset?</li></ol>
+<p>If the last answer is more than one new file, start there.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/data-platform-sim/data-quality/">watch it run: YAML rules, one interface, Spark SQL or Deequ</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
