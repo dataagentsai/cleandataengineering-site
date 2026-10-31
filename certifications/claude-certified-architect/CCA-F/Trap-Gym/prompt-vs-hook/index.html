@@ -25,7 +25,7 @@
 <meta property="og:site_name" content="Clean Data Engineering">
 <meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
 <meta name="twitter:card" content="summary_large_image">
-<script type="application/ld+json" data-seo="auto">[{"@context": "https://schema.org", "@type": "LearningResource", "name": "Prompt or Hook?", "url": "https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/prompt-vs-hook/", "description": "CCA-F trap gym: when to guide Claude with a prompt and when to enforce a rule with a hook. A simulator runs 1,000 chats for each choice, then three exam-style practice questions.", "inLanguage": "en", "isAccessibleForFree": true, "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/about/"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai/", "logo": {"@type": "ImageObject", "url": "https://cleandataengineering.ai/assets/og-card.png"}}, "dateModified": "2026-10-28"}, {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://cleandataengineering.ai/"}, {"@type": "ListItem", "position": 2, "name": "Free Claude Certified Architect and Azure AI-103 exam prep", "item": "https://cleandataengineering.ai/certifications/"}, {"@type": "ListItem", "position": 3, "name": "Claude certified architect", "item": "https://cleandataengineering.ai/certifications/claude-certified-architect/"}, {"@type": "ListItem", "position": 4, "name": "CCA-F Start Here", "item": "https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/"}, {"@type": "ListItem", "position": 5, "name": "CCA-F Trap Gym", "item": "https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/"}, {"@type": "ListItem", "position": 6, "name": "Prompt or Hook?", "item": "https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/prompt-vs-hook/"}]}]</script>
+<script type="application/ld+json" data-seo="auto">[{"@context": "https://schema.org", "@type": "LearningResource", "name": "Prompt or Hook?", "url": "https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/prompt-vs-hook/", "description": "CCA-F trap gym: when to guide Claude with a prompt and when to enforce a rule with a hook. A simulator runs 1,000 chats for each choice, then three exam-style practice questions.", "inLanguage": "en", "isAccessibleForFree": true, "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/about/"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai/", "logo": {"@type": "ImageObject", "url": "https://cleandataengineering.ai/assets/og-card.png"}}, "dateModified": "2026-10-31"}, {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Home", "item": "https://cleandataengineering.ai/"}, {"@type": "ListItem", "position": 2, "name": "Free Claude Certified Architect and Azure AI-103 exam prep", "item": "https://cleandataengineering.ai/certifications/"}, {"@type": "ListItem", "position": 3, "name": "Claude certified architect", "item": "https://cleandataengineering.ai/certifications/claude-certified-architect/"}, {"@type": "ListItem", "position": 4, "name": "CCA-F Start Here", "item": "https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/"}, {"@type": "ListItem", "position": 5, "name": "CCA-F Trap Gym", "item": "https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/"}, {"@type": "ListItem", "position": 6, "name": "Prompt or Hook?", "item": "https://cleandataengineering.ai/certifications/claude-certified-architect/CCA-F/Trap-Gym/prompt-vs-hook/"}]}]</script>
 </head>
 <body>
 <main>
@@ -120,6 +120,45 @@
   </table></div>
   <div class="box mint"><b>Policy-driven doesn't mean subagent.</b> If “who gets the offer” must follow a policy, put the policy where it can't be guessed: in code, behind a tool. Code decides <i>who</i>; the model decides <i>how to say it</i>. A subagent adds a second model, not certainty.</div>
   <p>On the exam, the most appropriate answer is the smallest mechanism that fully meets the stated requirement. An option that meets a requirement the question never gave is the “overbuilt” trap, however good the design.</p>
+
+  <h2 id="a-before-b">Tool A must run before tool B: every way, and which one wins</h2>
+  <p>Many questions come down to one shape: the agent must call A (verify the customer, preview a removal, search for a connector) before B (refund, remove, call the connector), and it sometimes skips A. There are eight ways to enforce it. Questions with the same shape can have different answers because they give different options and stress different words.</p>
+  <div class="tablewrap"><table>
+    <tr><th>#</th><th>Way</th><th>How it works</th><th>What it guarantees</th></tr>
+    <tr><td>1</td><td>System prompt instruction</td><td>“Always call A before B”</td><td>Nothing. Followed most of the time, not every time.</td></tr>
+    <tr><td>2</td><td>Tool description and few-shot examples</td><td>The same request, written into each tool's description</td><td>Nothing. It raises the rate but never makes it certain.</td></tr>
+    <tr><td>3</td><td>Merge A and B into one tool</td><td>A single tool does A and then B</td><td>The order, but the model can no longer check between the steps (the <code>find_and_execute</code> trap).</td></tr>
+    <tr><td>4</td><td>Hide B until A has run</td><td>A dynamic tool list: B appears only after A</td><td>The order. The answer when there are too many tools and the agent calls tools it never searched for.</td></tr>
+    <tr><td>5</td><td><b>PreToolUse hook</b> in the host or Agent SDK</td><td>Code checks that A has run in this session before allowing B, and blocks B otherwise</td><td>The order, but only inside that host.</td></tr>
+    <tr><td>6</td><td>Server remembers recent calls</td><td>For example, “allow B only if a matching A ran in the last 60 seconds”</td><td>The order, but fragile: a slow user misses the window, and one A can be reused within it.</td></tr>
+    <tr><td>7</td><td><b>A returns a token that B requires</b></td><td>B's own input needs something only A can produce, valid once and only for that action</td><td>The order and the exact data, whoever calls the tool.</td></tr>
+    <tr><td>8</td><td>Fixed workflow code</td><td>Your code calls A and then B, and the model doesn't choose</td><td>Everything, but the model has no flexibility. Right when the steps never change.</td></tr>
+    <tr><td>+</td><td>Human approval gate</td><td>The host asks the user before B runs</td><td>A person's sign-off. Combine it with 5 or 7, because on its own the user may approve without ever seeing A's result.</td></tr>
+  </table></div>
+
+  <h3>How to pick: read the question for these clues</h3>
+  <div class="tablewrap"><table>
+    <tr><th>If the question…</th><th>Best answer</th></tr>
+    <tr><td>Says the agent sometimes skips A, and the options are prompts, examples and one hook or programmatic check</td><td>The <b>hook</b> (5). It's the only option enforced in code.</td></tr>
+    <tr><td>Is about the Claude Agent SDK or Claude Code, or about a policy such as “verify identity before any refund”</td><td>The <b>hook</b> (5).</td></tr>
+    <tr><td>Is about designing the tool itself (your MCP server, its parameters), or says B must be tied to <i>that specific</i> A</td><td>The <b>token</b> (7).</td></tr>
+    <tr><td>Says the user must explicitly confirm</td><td>A <b>host approval gate</b> on top of 5 or 7.</td></tr>
+    <tr><td>Has too many tools, and the agent calls tools it never searched for</td><td><b>Hide B until A has run</b> (4).</td></tr>
+    <tr><td>Describes steps that are always the same and need no judgment</td><td><b>Fixed workflow code</b> (8).</td></tr>
+  </table></div>
+
+  <h3>Worked example: why it's the token here and not the hook</h3>
+  <p><i>“Your <code>remove_team_member</code> tool has a <code>dry_run</code> parameter. The agent skips the preview in 15% of calls. You need every removal to be preceded by a preview the user explicitly confirms.”</i> The options were: (A) allow <code>dry_run=false</code> only if a matching preview ran in the last 60 seconds; (B) two tools, where the preview returns a single-use token that execute requires; (C) mark the tool as needing confirmation and have the host ask the user; (D) better instructions and examples.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Option</th><th>Enforced in code?</th><th>Tied to the exact preview?</th><th>Robust?</th><th>Verdict</th></tr>
+    <tr><td><b>B. Single-use token</b></td><td>Yes</td><td>Yes</td><td>Yes</td><td><b>Pick.</b> The only way to get a token is to run the preview.</td></tr>
+    <tr><td>A. 60-second window</td><td>Yes</td><td>Partly</td><td>No</td><td>Works, but fragile: it depends on timing, and one preview can be reused.</td></tr>
+    <tr><td>C. Host asks for approval</td><td>Yes</td><td>No</td><td>Partly</td><td>Works, but the user approves a call without ever seeing a preview. MCP tool annotations are only hints.</td></tr>
+    <tr><td>D. Better instructions</td><td>No</td><td>No</td><td>No</td><td>Only usually works. The agent already skips the preview 15% of the time.</td></tr>
+  </table></div>
+  <p><b>Why not a PreToolUse hook?</b> It wasn't one of the options, and it would be weaker here for three reasons. A hook sees one call at a time, so to know a preview happened it would have to rebuild option A or B inside itself. It only runs in one host, while the tool may be called from any client. And “never remove without a preview” is a business rule that belongs inside the tool. The hook is still useful <i>alongside</i> the token, as the place where the user approves: the token proves a preview happened, and the approval proves a person said yes.</p>
+  <div class="box mint"><b>Same principle, different winner.</b> Both questions test one idea: a rule that must always hold goes in code, never only in the prompt. When the options offer one code-enforced mechanism, pick it. When they offer several, pick the one whose scope matches the question's wording: the hook for the agent's host or a policy, the token for the tool's own design or one exact action.</div>
+  <p>To choose, work through three steps. First, drop anything that is only a prompt when the question says “every” or “always”. Second, drop fragile fixes such as timers, time windows and hints that the host may ignore. Third, choose among what's left using the clue table above.</p>
 
   <h2>Practice: three exam-style questions</h2>
   <p>Answer first, then open “Think it through”.</p>
