@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The autonomous agent tech stack, one concern at a time · Clean Data Engineering</title>
+<meta name="description" content="An autonomous agent has about fifteen jobs to do besides calling a model: the loop, the gateway, tools, context, memory, guardrails, identity, approvals, durability, tracing, evals, cost, release and more. Each job stays the same while the products doing it keep changing. This post gives one picture and one table, with two to four example tools per job across open source and the clouds."><link rel="canonical" href="https://cleandataengineering.ai/writing/agent-tech-stack/">
+<meta property="og:title" content="The autonomous agent tech stack, one concern at a time"><meta property="og:description" content="An autonomous agent has about fifteen jobs to do besides calling a model: the loop, the gateway, tools, context, memory, guardrails, identity, approvals, durability, tracing, evals, cost, release and more. Each job stays the same while the products doing it keep changing. This post gives one picture and one table, with two to four example tools per job across open source and the clouds."><meta property="og:url" content="https://cleandataengineering.ai/writing/agent-tech-stack/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>The autonomous agent tech stack, one concern at a time</h1>
+  </div>
+  <div class="summary">An autonomous agent has about fifteen jobs to do besides calling a model: the loop, the gateway, tools, context, memory, guardrails, identity, approvals, durability, tracing, evals, cost, release and more. Each job stays the same while the products doing it keep changing. This post gives one picture and one table, with two to four example tools per job across open source and the clouds.</div>
+<p>A new agent product launches almost every week. Someone in your team shares the link and asks whether you need it. Is it a framework? A gateway? A memory store? An eval tool? Often the product page doesn't say, because it would like to be all of them.</p>
+<p>There is an easier way to think about it. An autonomous agent, meaning a model that picks its own next step and calls tools until a job is done, has a fixed list of jobs to do around the model. We call each job a <strong>concern</strong>. The list hardly changes. The products that fill it change all the time.</p>
+<p>So learn the jobs once. Then every new name becomes a short question: which job does it do, and do we already have something doing it?</p>
+<h2>The whole stack, as a building</h2>
+<p>Start with the big picture. People meet the agent on the top floor. The models sit one floor down. Underneath everything is data and compute.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 535" role="img" aria-label="A cartoon building. The top floor is experience: a chat window, a copilot, a coding agent, a background job. The middle floor is the harness with three rooms: one turn (the loop, the context, tools, the model door), around every turn (guardrails, identity, state, memory, knowledge, a person, durable steps) and watch and change (tracing, cost, evals, release). Below it is a floor of models, and the foundation is data and compute. A small person outside points at the top floor."><rect class="hz" x="690" y="28" width="32" height="50" rx="3"/><path class="hz" d="M40,88 L450,22 L860,88 Z"/><text class="sm" x="450" y="74" text-anchor="middle">an autonomous agent</text><rect class="hz" x="60" y="88" width="780" height="352" rx="6"/><rect class="pf pf-bx" x="84" y="104" width="738" height="64" rx="12"/><rect class="bx ol" x="80" y="100" width="740" height="66" rx="12"/><text class="tt" x="450.0" y="129.5" text-anchor="middle">Experience: where people meet it</text><text class="sm" x="450.0" y="153.5" text-anchor="middle">a chat window, a copilot in an app, a coding agent, a background job</text><rect class="pf pf-solid" x="76" y="180" width="748" height="176" rx="12"/><text class="lbl" x="92" y="203" text-anchor="start">THE HARNESS: FIFTEEN CONCERNS, MOSTLY ORDINARY SOFTWARE</text><rect class="pf pf-solid" x="96" y="222" width="228" height="120" rx="12"/><rect class="solid ol" x="92" y="218" width="230" height="122" rx="12"/><text class="tt inv" x="207.0" y="266.0" text-anchor="middle">One turn</text><text class="inv sm2" x="207.0" y="290.0" text-anchor="middle">the loop, the context,</text><text class="inv sm2" x="207.0" y="309.0" text-anchor="middle">tools, the model door</text><rect class="pf pf-solid" x="341" y="222" width="228" height="120" rx="12"/><rect class="solid ol" x="337" y="218" width="230" height="122" rx="12"/><text class="tt inv" x="452.0" y="256.5" text-anchor="middle">Around every turn</text><text class="inv sm2" x="452.0" y="280.5" text-anchor="middle">guardrails, identity,</text><text class="inv sm2" x="452.0" y="299.5" text-anchor="middle">state, memory, knowledge,</text><text class="inv sm2" x="452.0" y="318.5" text-anchor="middle">a person, durable steps</text><rect class="pf pf-solid" x="586" y="222" width="228" height="120" rx="12"/><rect class="solid ol" x="582" y="218" width="230" height="122" rx="12"/><text class="tt inv" x="697.0" y="266.0" text-anchor="middle">Watch and change</text><text class="inv sm2" x="697.0" y="290.0" text-anchor="middle">tracing and cost,</text><text class="inv sm2" x="697.0" y="309.0" text-anchor="middle">evals and release</text><rect class="pf pf-bxs" x="84" y="374" width="738" height="56" rx="12"/><rect class="bxs ol" x="80" y="370" width="740" height="58" rx="12"/><text class="tt" x="450.0" y="395.5" text-anchor="middle">Models</text><text class="sm" x="450.0" y="419.5" text-anchor="middle">Claude, GPT, Gemini, Llama, Qwen, gpt-oss</text><rect class="pf pf-bx" x="34" y="456" width="818" height="58" rx="12"/><rect class="bx ol" x="30" y="452" width="820" height="60" rx="12"/><text class="tt" x="440.0" y="478.5" text-anchor="middle">Foundation: data and compute</text><text class="sm" x="440.0" y="502.5" text-anchor="middle">your data and retrieval stores, chips, clusters, serving engines</text><circle class="bx" cx="930" cy="400" r="13"/><line class="lnc" x1="930" y1="413" x2="930" y2="450"/><line class="lnc" x1="930" y1="450" x2="918" y2="472"/><line class="lnc" x1="930" y1="450" x2="942" y2="472"/><line class="lnc" x1="930" y1="424" x2="900" y2="404"/><line class="lnc" x1="930" y1="424" x2="948" y2="438"/><path class="ln" d="M900,385 Q890,250 850,150" marker-end="url(#ar)"/><text class="sm" x="935" y="495" text-anchor="middle">people only</text><text class="sm" x="935" y="515" text-anchor="middle">see the</text><text class="sm" x="935" y="535" text-anchor="middle">top floor</text></svg><figcaption>The whole stack as a building. The harness floor is the biggest, and it is where this post lives.</figcaption></figure>
+<p>The biggest floor is the <strong>harness</strong>: the plain software around the model that decides what it sees, what it may touch, and what happens when it gets something wrong. That floor holds the fifteen concerns in this post, in three rooms:</p>
+<ol><li><strong>One turn.</strong> The loop, the context, the tools and the door to the model. These run every time someone sends a message.</li><li><strong>Around every turn.</strong> Guardrails, identity, state and memory, knowledge, a person stepping in, and steps that survive a crash.</li><li><strong>Watch and change.</strong> Tracing and cost tell you what happened. Evals and release config decide what is allowed to change next.</li></ol>
+<h2>Concept versus product</h2>
+<p>This is the one idea to take away. A <strong>concept</strong> is the job and its logic. A <strong>product</strong> is one thing doing that job somewhere: a library, a cloud service or a vendor's tool.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 280" role="img" aria-label="A lavender card for the job, a model gateway: one governed door for every model call. Four product badges sit to its right: LiteLLM (open source), Azure API Management (Azure), Bedrock with API Gateway (AWS) and Portkey (a vendor). A thick line joins the card to the one plugged in today; dashed lines join the others. A curved arrow says swap."><text class="lbl" x="210" y="40" text-anchor="middle">THE JOB (CONCEPT)</text><rect class="pf pf-solid" x="34" y="74" width="358" height="148" rx="12"/><rect class="solid ol" x="30" y="70" width="360" height="150" rx="12"/><text class="tt inv" x="210.0" y="122.5" text-anchor="middle">Model gateway</text><text class="inv sm2" x="210.0" y="146.5" text-anchor="middle">one governed door for every</text><text class="inv sm2" x="210.0" y="165.5" text-anchor="middle">model call: keys, limits,</text><text class="inv sm2" x="210.0" y="184.5" text-anchor="middle">logs and screening</text><text class="lbl" x="635" y="24" text-anchor="middle">PRODUCTS THAT DO IT</text><rect class="pf pf-bx" x="524" y="44" width="228" height="44" rx="12"/><rect class="bx ol" x="520" y="40" width="230" height="46" rx="12"/><text class="tt" x="635.0" y="59.5" text-anchor="middle">LiteLLM</text><text class="sm" x="635.0" y="83.5" text-anchor="middle"></text><text class="sm" x="765" y="69" text-anchor="start">open source</text><line class="lnd" x1="392" y1="145" x2="518" y2="63"/><rect class="pf pf-bxs" x="524" y="104" width="228" height="44" rx="12"/><rect class="bxs ol" x="520" y="100" width="230" height="46" rx="12"/><text class="tt" x="635.0" y="119.5" text-anchor="middle">Azure API Management</text><text class="sm" x="635.0" y="143.5" text-anchor="middle"></text><text class="sm" x="765" y="129" text-anchor="start">Azure</text><line class="lnc" x1="392" y1="145" x2="518" y2="123"/><rect class="pf pf-bx" x="524" y="164" width="228" height="44" rx="12"/><rect class="bx ol" x="520" y="160" width="230" height="46" rx="12"/><text class="tt" x="635.0" y="179.5" text-anchor="middle">Bedrock + API Gateway</text><text class="sm" x="635.0" y="203.5" text-anchor="middle"></text><text class="sm" x="765" y="189" text-anchor="start">AWS</text><line class="lnd" x1="392" y1="145" x2="518" y2="183"/><rect class="pf pf-bx" x="524" y="224" width="228" height="44" rx="12"/><rect class="bx ol" x="520" y="220" width="230" height="46" rx="12"/><text class="tt" x="635.0" y="239.5" text-anchor="middle">Portkey</text><text class="sm" x="635.0" y="263.5" text-anchor="middle"></text><text class="sm" x="765" y="249" text-anchor="start">a vendor</text><line class="lnd" x1="392" y1="145" x2="518" y2="243"/><path class="ln" d="M880,60 Q950,150 880,240" marker-end="url(#ar)"/><path class="lnd" d="M880,240 Q810,150 880,60" marker-end="url(#ar)"/><text class="sm" x="935" y="155" text-anchor="middle">swap</text><text class="sm" x="210" y="258" text-anchor="middle">the thick line is the one plugged in today</text></svg><figcaption>Concept versus product. The card stays the same; the badge in the slot can change.</figcaption></figure>
+<p>Take the model gateway. The job is "one governed door for every model call, which holds the keys, applies limits, logs the calls and screens what goes through". LiteLLM does that job in open source. Azure API Management does it on Azure. On AWS you can put API Gateway in front of Bedrock. Portkey sells it as a product. The card stays the same; the badge in the slot changes.</p>
+<p>It also helps to know what <em>kind</em> of product a new name is. Our <a href="/learn/ai-universe/">AI Universe page</a> sorts them into four kinds:</p>
+<ul><li><strong>An implementation</strong> does one concept's job. Langfuse does tracing; pgvector stores embeddings.</li><li><strong>A bundle</strong> packages many concepts under one name. Microsoft Foundry and AWS Bedrock AgentCore are bundles.</li><li><strong>A protocol</strong> is an agreed way for two parts to talk. MCP (Model Context Protocol) joins an agent to its tools; A2A joins an agent to another agent; OpenTelemetry joins any code to a tracing store.</li><li><strong>A wrapper</strong> is a convenience layer over something else. LiteLLM wraps many providers' APIs in one shape.</li></ul>
+<h2>The map: fifteen concerns, one row each</h2>
+<p>Here is the whole map. Each row gives the job in one sentence and a few example tools. Open-source tools come first, then cloud services with the cloud in brackets. These are examples, not a ranking, and the deeper page compares the options for each row.</p>
+<div class="tw"><table><tr><th>Concern</th><th>The job, in one sentence</th><th>Example tools</th></tr><tr><td>Control loop</td><td>Ask the model, run the tools it asks for, go round again, and stop within step, time and money limits.</td><td>plain Python, LangGraph, Microsoft Agent Framework (Azure), Agent Development Kit (Google Cloud)</td></tr><tr><td>Models</td><td>The trained weights that read the context and choose the next step.</td><td>Llama, gpt-oss, Gemini (Google), Claude (Anthropic)</td></tr><tr><td>Model access and gateway</td><td>One governed door for every model call: keys, limits, logs and screening.</td><td>LiteLLM, API Management AI gateway (Azure), Bedrock with API Gateway (AWS), Portkey</td></tr><tr><td>Tools and MCP</td><td>Let the model act only through typed tools that are checked before they run.</td><td>MCP Python SDK, FastMCP, AgentCore Gateway (AWS), A2A SDK for agent to agent</td></tr><tr><td>Context assembly</td><td>Build exactly what the model reads on each call, within a budget, with untrusted text fenced off.</td><td>your own code, Jinja templates for fixed replies, LlamaIndex, Bedrock prompt management (AWS)</td></tr><tr><td><a href="/writing/just-use-postgres/">State and memory</a></td><td>Keep what each conversation and person needs, for as long as it should, and no longer.</td><td>PostgreSQL, Redis for short caches, Mem0, Cosmos DB (Azure)</td></tr><tr><td>Knowledge and retrieval</td><td>Find passages with their sources, filtered by what this person may see.</td><td>pgvector, Qdrant, Azure AI Search, Bedrock Knowledge Bases (AWS)</td></tr><tr><td><a href="/writing/guardrails-sorted/">Guardrails and policy</a></td><td>Check what may go in, come out and run, before and after every step.</td><td>your own rules, Llama Prompt Guard 2, AI Content Safety (Azure), Bedrock Guardrails (AWS)</td></tr><tr><td>Identity and security</td><td>Know who is asking and whose authority the agent acts with, and attack it before someone else does.</td><td>PyJWT, Keycloak, Entra ID (Azure), PyRIT for red-teaming</td></tr><tr><td><a href="/writing/human-in-the-loop/">Human in the loop</a></td><td>Approvals and hand-offs that the agent cannot grant itself.</td><td>Chatwoot as the staff desk, Teams cards through Logic Apps (Azure), Dynamics 365 Contact Center</td></tr><tr><td>Durability and workflows</td><td>Survive a restart, wait days for a person, and never run a payment twice.</td><td>DBOS, Temporal, Durable Task Scheduler (Azure), Step Functions (AWS)</td></tr><tr><td><a href="/writing/tracing-agents/">Tracing</a></td><td>Record every step of every turn so you can see later what happened and why.</td><td><a href="/writing/opentelemetry-for-agents/">OpenTelemetry</a>, Langfuse, Application Insights (Azure), Cloud Trace (Google)</td></tr><tr><td><a href="/writing/offline-evals/">Evals</a></td><td>Prove the agent does the right thing on your own cases before each release.</td><td>pydantic-evals, DeepEval, promptfoo, Foundry evaluation (Azure)</td></tr><tr><td><a href="/writing/agent-cost-mistakes/">Cost</a></td><td>Measure spend per unit of business work, and stop a turn that runs over budget.</td><td>your own meter, Langfuse cost tracking, API Management token metrics (Azure), Helicone</td></tr><tr><td>Release and config</td><td>Version the prompt, model and policy together, with a canary (a small share of traffic first) and a way back.</td><td>OpenFeature with flagd, Unleash, App Configuration (Azure), AWS AppConfig</td></tr></table></div>
+<p>Two rows say "your own code" or "your own meter", and that is on purpose. When we compared products for the <a href="/learn/agent-harness/tech.html">Agent Harness tutorial</a>, we found none that builds the context the way an agent that handles money needs, and none that can tie spend to one finished piece of business work, such as one registered claim. Some jobs are still yours to write.</p>
+<h2>Bundles fill several rows at once</h2>
+<p>A bundle is not bad. It just answers a different question. Instead of filling one row, it fills five or six.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 255" role="img" aria-label="A dashed bundle labelled one name holds five concern boxes: loop, memory, identity, gateway, tracing. To the right, three yellow boxes are still yours: checks that protect money, evals on your own cases, cost per business task."><rect class="bxm ol" x="20" y="40" width="620" height="200" rx="12"/><text class="lbl" x="40" y="72" text-anchor="start">ONE PRODUCT NAME, MANY CONCERNS INSIDE</text><rect class="pf pf-bx" x="41" y="114" width="103" height="68" rx="12"/><rect class="bx ol" x="37" y="110" width="105" height="70" rx="12"/><text class="tt" x="89.5" y="141.5" text-anchor="middle">Loop</text><text class="sm" x="89.5" y="165.5" text-anchor="middle"></text><rect class="pf pf-bx" x="161" y="114" width="103" height="68" rx="12"/><rect class="bx ol" x="157" y="110" width="105" height="70" rx="12"/><text class="tt" x="209.5" y="141.5" text-anchor="middle">Memory</text><text class="sm" x="209.5" y="165.5" text-anchor="middle"></text><rect class="pf pf-bx" x="281" y="114" width="103" height="68" rx="12"/><rect class="bx ol" x="277" y="110" width="105" height="70" rx="12"/><text class="tt" x="329.5" y="141.5" text-anchor="middle">Identity</text><text class="sm" x="329.5" y="165.5" text-anchor="middle"></text><rect class="pf pf-bx" x="401" y="114" width="103" height="68" rx="12"/><rect class="bx ol" x="397" y="110" width="105" height="70" rx="12"/><text class="tt" x="449.5" y="141.5" text-anchor="middle">Gateway</text><text class="sm" x="449.5" y="165.5" text-anchor="middle"></text><rect class="pf pf-bx" x="521" y="114" width="103" height="68" rx="12"/><rect class="bx ol" x="517" y="110" width="105" height="70" rx="12"/><text class="tt" x="569.5" y="141.5" text-anchor="middle">Tracing</text><text class="sm" x="569.5" y="165.5" text-anchor="middle"></text><text class="sm" x="330" y="216" text-anchor="middle">an agent platform, for example</text><path class="hz" d="M560,6 L620,6 L632,20 L620,34 L560,34 Z"/><circle class="hk" cx="620" cy="20" r="3"/><line class="ln" x1="590" y1="34" x2="590" y2="40"/><text class="sm" x="588" y="25" text-anchor="middle">one name</text><text class="lbl" x="830" y="24" text-anchor="middle">STILL YOURS</text><rect class="pf pf-bxs" x="684" y="42" width="298" height="53" rx="12"/><rect class="bxs ol" x="680" y="38" width="300" height="55" rx="12"/><text class="tt" x="830.0" y="62.0" text-anchor="middle">Checks that protect money</text><text class="sm" x="830.0" y="86.0" text-anchor="middle"></text><rect class="pf pf-bxs" x="684" y="112" width="298" height="53" rx="12"/><rect class="bxs ol" x="680" y="108" width="300" height="55" rx="12"/><text class="tt" x="830.0" y="132.0" text-anchor="middle">Evals on your own cases</text><text class="sm" x="830.0" y="156.0" text-anchor="middle"></text><rect class="pf pf-bxs" x="684" y="182" width="298" height="53" rx="12"/><rect class="bxs ol" x="680" y="178" width="300" height="55" rx="12"/><text class="tt" x="830.0" y="202.0" text-anchor="middle">Cost per business task</text><text class="sm" x="830.0" y="226.0" text-anchor="middle"></text></svg><figcaption>A bundle fills several rows of the map at once. Ask which rows, and which ones are still yours.</figcaption></figure>
+<p>Bedrock AgentCore, for example, is AWS's set of harness parts: a runtime, memory, identity, a gateway and observability. Foundry Agent Service on Azure gives a hosted loop with tools, memory and tracing. Both are useful. But hold each one up against the table and mark which rows it fills. The rows that protect money, the evals that use your own cases and the cost of each business task usually stay with you.</p>
+<h2>Which concerns to fill first</h2>
+<p>You do not need fifteen products on day one. You need the concerns that make one turn work, then the ones that make it safe, then the ones that let it change.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 300" role="img" aria-label="Three stairs going up. First, one turn works: the loop, two or three tools, the model door, a trace. Next, safe to use: guardrails, identity, state and memory, a cost budget. Then it can change and wait: evals before every release, a person approves, steps that survive a crash, versioned release config. A small person stands on the first stair and a flag sits on the top one."><rect class="pf pf-bx" x="44" y="214" width="288" height="78" rx="12"/><rect class="bx ol" x="40" y="210" width="290" height="80" rx="12"/><text class="tt" x="185.0" y="237.0" text-anchor="middle">First: one turn works</text><text class="sm" x="185.0" y="261.0" text-anchor="middle">the loop, two or three tools,</text><text class="sm" x="185.0" y="280.0" text-anchor="middle">the model door, a trace</text><rect class="pf pf-bxs" x="349" y="144" width="288" height="148" rx="12"/><rect class="bxs ol" x="345" y="140" width="290" height="150" rx="12"/><text class="tt" x="490.0" y="192.5" text-anchor="middle">Next: safe to use</text><text class="sm" x="490.0" y="216.5" text-anchor="middle">guardrails, identity,</text><text class="sm" x="490.0" y="235.5" text-anchor="middle">state and memory,</text><text class="sm" x="490.0" y="254.5" text-anchor="middle">a cost budget</text><rect class="pf pf-bx" x="654" y="64" width="318" height="228" rx="12"/><rect class="bx ol" x="650" y="60" width="320" height="230" rx="12"/><text class="tt" x="810.0" y="143.0" text-anchor="middle">Then: it can change and wait</text><text class="sm" x="810.0" y="167.0" text-anchor="middle">evals before every release,</text><text class="sm" x="810.0" y="186.0" text-anchor="middle">a person approves,</text><text class="sm" x="810.0" y="205.0" text-anchor="middle">steps that survive a crash,</text><text class="sm" x="810.0" y="224.0" text-anchor="middle">versioned release config</text><circle class="bx" cx="130" cy="160" r="13"/><line class="lnc" x1="130" y1="173" x2="130" y2="192"/><line class="lnc" x1="130" y1="192" x2="120" y2="208"/><line class="lnc" x1="130" y1="192" x2="142" y2="208"/><line class="lnc" x1="130" y1="180" x2="150" y2="168"/><line class="lnc" x1="130" y1="180" x2="114" y2="186"/><line class="ln" x1="940" y1="58" x2="940" y2="10"/><path class="hz" d="M940,10 L978,20 L940,30 Z"/><text class="sm" x="40" y="40" text-anchor="start">fill the concerns in this order;</text><text class="sm" x="40" y="60" text-anchor="start">each stair works on its own</text></svg><figcaption>Which concerns to fill first. Knowledge and retrieval join whenever the job needs documents.</figcaption></figure>
+<ol><li><strong>First, one turn works.</strong> A loop, two or three tools, one door to the model, and a trace of every step from the very first run.</li><li><strong>Next, it is safe to use.</strong> Guardrails, checking who is asking, state and memory, and a cost budget per turn.</li><li><strong>Then it can change and wait.</strong> Evals before every release, a person approving risky actions, steps that survive a crash, and versioned release config.</li></ol>
+<p>Knowledge and retrieval join whenever the job needs documents. For many agents that is step two; for some it never comes.</p>
+<h2>Six mistakes we see often</h2>
+<ol><li><strong>Shopping before listing the jobs.</strong> A team picks a platform, then finds out later which rows it left empty. Write the fifteen rows first, then shop.</li><li><strong>Treating a bundle as the whole stack.</strong> One product name is not fifteen concerns. Mark the rows it fills, and own the rest.</li><li><strong>Letting a product own the loop when you need exact checks.</strong> If a check must sit just before a payment tool runs, you need to see that step. Some frameworks and hosted agents keep the loop out of sight.</li><li><strong>Putting business rules in the gateway.</strong> The gateway should hold keys, limits and screening. Rules such as "refunds over ₹40,000 need approval" belong in your code, or moving to another gateway becomes a rewrite.</li><li><strong>Hidden retries.</strong> A retry buried inside a provider's SDK is invisible to your own retry budget and your trace. Keep retries and fallbacks in one place you control.</li><li><strong>Product names all over the code.</strong> If "Langfuse" or "Entra" appears in your business logic, swapping it is a project. Put each product behind one small interface, so a swap is one adapter and one line of config.</li></ol>
+<h2>Five questions to check your own stack</h2>
+<ol><li>Can you name the product, or your own code, that fills each of the fifteen rows today?</li><li>Which rows are empty, and is each one empty on purpose?</li><li>For each bundle you use, which rows does it fill, and which are still yours?</li><li>If one product disappeared tomorrow, how many files would you change to replace it?</li><li>Can you show the cost and the trace of one business task, from the first message to the final reply?</li></ol>
+<p>Learn the fifteen jobs once, and every new product name becomes a five-minute question instead of a week of worry.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/tech.html">the tech stack page: every concern with its options compared</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
