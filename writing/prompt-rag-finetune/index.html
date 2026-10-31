@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt, RAG or fine-tune? Pick in that order · Clean Data Engineering</title>
+<meta name="description" content="There are three ways to make a language model better at your job. Prompting changes the instructions, RAG hands it the right facts at question time, and fine-tuning trains the model itself. They fix different problems and cost very different amounts, so try them in that order and only climb when your eval set shows the step below can&#x27;t do it."><link rel="canonical" href="https://cleandataengineering.ai/writing/prompt-rag-finetune/">
+<meta property="og:title" content="Prompt, RAG or fine-tune? Pick in that order"><meta property="og:description" content="There are three ways to make a language model better at your job. Prompting changes the instructions, RAG hands it the right facts at question time, and fine-tuning trains the model itself. They fix different problems and cost very different amounts, so try them in that order and only climb when your eval set shows the step below can&#x27;t do it."><meta property="og:url" content="https://cleandataengineering.ai/writing/prompt-rag-finetune/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · LLM Engineering · Builders · 7 min read · 2026-10-31</p>
+    <h1>Prompt, RAG or fine-tune? Pick in that order</h1>
+  </div>
+  <div class="summary">There are three ways to make a language model better at your job. Prompting changes the instructions, RAG hands it the right facts at question time, and fine-tuning trains the model itself. They fix different problems and cost very different amounts, so try them in that order and only climb when your eval set shows the step below can't do it.</div>
+<p>A team builds an assistant for their HR policies. It gets the leave rules wrong, so someone says, "Let's fine-tune it on our documents." Six weeks later the model sounds more like the company, still gets the leave rules wrong, and the policy has changed twice since the training run.</p>
+<p>Fine-tuning was the wrong tool. The model wasn't missing a habit, it was missing facts, and there is a cheaper tool built for exactly that.</p>
+<p>There are three ways to make a model better at your job: prompting, retrieval and fine-tuning. Each fixes a different problem and costs a different amount. This post shows what each one is for, and why you should try them in that order.</p>
+<h2>Three tools, rising cost</h2>
+<p>Think of a sticky note, an open book and a gym.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 410" role="img" aria-label="Three rising steps. The lowest is Prompt, minutes and almost free, with a sticky note. The middle is RAG, days and a search index, with an open book. The highest is Fine-tune, weeks of data and tests, with a dumbbell on a gym bench."><text class="sm" x="30" y="24" text-anchor="start">each tool costs more than the one before: climb only when the step below can&#x27;t do the job</text><rect class="pf pf-bx" x="30" y="250" width="280" height="120" rx="6"/><rect class="hz" x="30" y="250" width="280" height="120" rx="6" fill="none"/><text class="bd" x="170" y="280" text-anchor="middle">Prompt</text><text class="sm" x="170" y="304" text-anchor="middle">minutes, almost free</text><rect class="pf pf-bx" x="360" y="190" width="280" height="180" rx="6"/><rect class="hz" x="360" y="190" width="280" height="180" rx="6" fill="none"/><text class="bd" x="500" y="220" text-anchor="middle">RAG</text><text class="sm" x="500" y="244" text-anchor="middle">days, a search index</text><rect class="pf pf-bx" x="690" y="130" width="280" height="240" rx="6"/><rect class="hz" x="690" y="130" width="280" height="240" rx="6" fill="none"/><text class="bd" x="830" y="160" text-anchor="middle">Fine-tune</text><text class="sm" x="830" y="184" text-anchor="middle">weeks, data and tests</text><path class="pf pf-bxs" d="M125,140 L215,140 L215,210 L195,230 L125,230 Z"/><path class="hz" d="M125,140 L215,140 L215,210 L195,230 L125,230 Z" fill="none"/><path class="ln" d="M215,210 L195,210 L195,230"/><line class="ln" x1="139" y1="160" x2="197" y2="160"/><line class="ln" x1="139" y1="176" x2="181" y2="176"/><line class="ln" x1="139" y1="192" x2="197" y2="192"/><line class="ln" x1="139" y1="208" x2="181" y2="208"/><path class="hz" d="M500,100 Q460,84 420,96 L420,164 Q460,152 500,168 Z"/><path class="hz" d="M500,100 Q540,84 580,96 L580,164 Q540,152 500,168 Z"/><line class="ln" x1="434" y1="108" x2="486" y2="112"/><line class="ln" x1="434" y1="122" x2="486" y2="126"/><line class="ln" x1="434" y1="136" x2="486" y2="140"/><line class="ln" x1="434" y1="150" x2="486" y2="154"/><line class="ln" x1="514" y1="112" x2="566" y2="108"/><line class="ln" x1="514" y1="126" x2="566" y2="122"/><line class="ln" x1="514" y1="140" x2="566" y2="136"/><line class="ln" x1="514" y1="154" x2="566" y2="150"/><rect class="pf pf-bxs" x="520" y="124" width="40" height="10" rx="2"/><rect class="hz" x="750" y="80" width="160" height="16" rx="5"/><line class="lnc" x1="770" y1="96" x2="770" y2="116"/><line class="lnc" x1="890" y1="96" x2="890" y2="116"/><line class="lnc" x1="780" y1="50" x2="880" y2="50"/><rect class="hk" x="764" y="26" width="18" height="48" rx="4"/><rect class="hk" x="746" y="34" width="16" height="32" rx="4"/><rect class="hk" x="878" y="26" width="18" height="48" rx="4"/><rect class="hk" x="898" y="34" width="16" height="32" rx="4"/><text class="sm" x="170" y="395" text-anchor="middle">a sticky note of instructions</text><text class="sm" x="500" y="395" text-anchor="middle">an open book of facts</text><text class="sm" x="830" y="395" text-anchor="middle">a gym that changes the model</text></svg><figcaption>A sticky note, an open book and a gym. The first two change what the model sees; only the gym changes the model.</figcaption></figure>
+<ul><li><strong>Prompting is the sticky note.</strong> You write instructions and a few worked examples, and send them with every request. A first version takes minutes and costs almost nothing.</li><li><strong>RAG is the open book.</strong> RAG stands for <em>retrieval-augmented generation</em>. Before the model answers, your code searches your documents for the passages that fit the question and puts them in front of the model. It takes days to set up well: you need a search index and a way to check it finds the right passages.</li><li><strong>Fine-tuning is the gym.</strong> You train the model further on hundreds or thousands of examples of the answers you want, which changes its <em>weights</em> (the numbers inside the model that decide what it says). It takes weeks, and as the fine-tuning lessons in our LearnLLMStack repo found, most of that time goes on gathering good examples and building a fair test, not on the training run itself.</li></ul>
+<p>The key difference: the first two change what the model <em>sees</em>. Only the third changes the model.</p>
+<h2>What each one fixes</h2>
+<p>They aren't three strengths of the same medicine. They treat different illnesses.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 425" role="img" aria-label="Three columns: Prompt, RAG and Fine-tune. Prompt changes instructions and examples, fixes behaviour and format, and costs a few lines to maintain. RAG changes the facts the model reads for this question, fixes missing or changing facts, and costs an index, chunks and a retrieval test. Fine-tune changes the model&#x27;s own weights, fixes style, a narrow skill or format at volume, and costs examples, GPUs and a retrain per update."><text class="lbl" x="10" y="128" text-anchor="start">IT CHANGES</text><text class="lbl" x="10" y="228" text-anchor="start">IT FIXES</text><text class="lbl" x="10" y="328" text-anchor="start">IT COSTS</text><rect class="pf pf-solid" x="144" y="24" width="263" height="58" rx="12"/><rect class="solid ol" x="140" y="20" width="265" height="60" rx="12"/><text class="tt inv" x="272.5" y="46.5" text-anchor="middle">Prompt</text><text class="inv sm2" x="272.5" y="70.5" text-anchor="middle"></text><rect class="bxm ol" x="140" y="95" width="265" height="80" rx="12"/><text class="tt" x="272.5" y="131.5" text-anchor="middle">instructions</text><text class="sm" x="272.5" y="155.5" text-anchor="middle">and examples</text><rect class="bxm ol" x="140" y="195" width="265" height="80" rx="12"/><text class="tt" x="272.5" y="231.5" text-anchor="middle">behaviour</text><text class="sm" x="272.5" y="255.5" text-anchor="middle">and format</text><rect class="bxm ol" x="140" y="295" width="265" height="80" rx="12"/><text class="tt" x="272.5" y="331.5" text-anchor="middle">a few lines</text><text class="sm" x="272.5" y="355.5" text-anchor="middle">to maintain</text><rect class="pf pf-bx" x="429" y="24" width="263" height="58" rx="12"/><rect class="bx ol" x="425" y="20" width="265" height="60" rx="12"/><text class="tt" x="557.5" y="46.5" text-anchor="middle">RAG</text><text class="sm" x="557.5" y="70.5" text-anchor="middle"></text><rect class="bxm ol" x="425" y="95" width="265" height="80" rx="12"/><text class="tt" x="557.5" y="131.5" text-anchor="middle">the facts it reads</text><text class="sm" x="557.5" y="155.5" text-anchor="middle">for this question</text><rect class="bxm ol" x="425" y="195" width="265" height="80" rx="12"/><text class="tt" x="557.5" y="231.5" text-anchor="middle">missing or</text><text class="sm" x="557.5" y="255.5" text-anchor="middle">changing facts</text><rect class="bxm ol" x="425" y="295" width="265" height="80" rx="12"/><text class="tt" x="557.5" y="331.5" text-anchor="middle">an index, chunks</text><text class="sm" x="557.5" y="355.5" text-anchor="middle">and a retrieval test</text><rect class="pf pf-bxs" x="714" y="24" width="263" height="58" rx="12"/><rect class="bxs ol" x="710" y="20" width="265" height="60" rx="12"/><text class="tt" x="842.5" y="46.5" text-anchor="middle">Fine-tune</text><text class="sm" x="842.5" y="70.5" text-anchor="middle"></text><rect class="bxm ol" x="710" y="95" width="265" height="80" rx="12"/><text class="tt" x="842.5" y="131.5" text-anchor="middle">its own weights</text><text class="sm" x="842.5" y="155.5" text-anchor="middle">by training</text><rect class="bxm ol" x="710" y="195" width="265" height="80" rx="12"/><text class="tt" x="842.5" y="231.5" text-anchor="middle">style, a narrow skill,</text><text class="sm" x="842.5" y="255.5" text-anchor="middle">format at volume</text><rect class="bxm ol" x="710" y="295" width="265" height="80" rx="12"/><text class="tt" x="842.5" y="331.5" text-anchor="middle">examples, GPUs,</text><text class="sm" x="842.5" y="355.5" text-anchor="middle">a retrain per update</text><text class="sm" x="570" y="410" text-anchor="middle">fine-tuning is not in the facts column: it does not reliably teach the model new facts</text></svg><figcaption>What each tool changes, what it fixes, and what it costs to keep.</figcaption></figure>
+<p><strong>Prompting fixes behaviour and format.</strong> "Answer in two sentences." "Always return these six fields as JSON." "If the question is about salary, hand it to a person." Most problems that look like "the model is dumb" are really "nobody told it clearly." A few good examples in the prompt often close most of the gap.</p>
+<p><strong>RAG fixes missing or changing knowledge.</strong> The model has never seen your leave policy, your product catalogue or yesterday's price list. No instruction can make it know them. Fetch the right passage at question time and it can answer, and quote where the answer came from. When the policy changes, you update the index, not the model.</p>
+<p><strong>Fine-tuning fixes habits, and cost at volume.</strong> It is the right tool for three jobs:</p>
+<ol><li>A style or language the model handles badly even with examples, such as natural Hinglish replies.</li><li>A narrow skill or exact format repeated at huge volume, such as sorting a million support tickets a month into twenty types.</li><li>Letting a small, cheap model do a big model's job on one task, so each request costs far less and runs faster, or fits on a laptop inside a hospital's own network.</li></ol>
+<p><strong>Fine-tuning does not reliably teach facts.</strong> Training squeezes patterns from the examples into the weights. It doesn't file facts away where the model can look them up. In LearnLLMStack we trained a toy model of 22,080 weights on a single sentence. It learned that sentence perfectly, and given a new start like "the dog" it produced nonsense. Big models are far better than a toy, but the lesson carries over: training stores <em>patterns of what it saw</em>, not a reference book you can query. Facts learned that way can't be cited, go stale on the day the policy changes, and get mixed up with similar facts.</p>
+<p>There is a famous public warning here. BloombergGPT was a 50-billion-weight model trained from scratch on finance text. Later tests found that GPT-4, with no finance training at all, matched or beat it on many finance tasks. Adding knowledge by training is the most expensive way to do it, and a general model with good retrieval often catches up anyway.</p>
+<h2>Three questions, in order</h2>
+<p>Before anything else, write a clear prompt with a few examples, and build a small eval set: a few dozen real questions with known good answers. Then ask three questions.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 530" role="img" aria-label="Start with a clear prompt, a few examples and an eval set. Then three numbered questions in order. One: is it missing facts? Yes leads to add RAG. No leads to two: is the behaviour still wrong despite clear instructions? Yes leads to fine-tune the habit: format, tone, one skill. No leads to three: too slow or expensive at your real volume? Yes leads to fine-tune a small model to do the big one&#x27;s job. No leads to ship the prompt."><rect class="pf pf-solid" x="64" y="24" width="338" height="78" rx="12"/><rect class="solid ol" x="60" y="20" width="340" height="80" rx="12"/><text class="tt inv" x="230.0" y="56.5" text-anchor="middle">Start: a clear prompt</text><text class="inv sm2" x="230.0" y="80.5" text-anchor="middle">a few examples, and an eval set</text><text class="sm" x="640" y="52" text-anchor="middle">measure on the eval set</text><text class="sm" x="640" y="72" text-anchor="middle">after every change</text><line class="ln" x1="230" y1="102" x2="230" y2="128" marker-end="url(#ar)"/><circle class="nm" cx="30" cy="175" r="14"/><text class="nmt" x="30" y="181" text-anchor="middle">1</text><rect class="bxm ol" x="60" y="130" width="340" height="90" rx="12"/><text class="tt" x="230.0" y="171.5" text-anchor="middle">Is it missing facts?</text><text class="sm" x="230.0" y="195.5" text-anchor="middle">or facts that change</text><line class="ln" x1="402" y1="175" x2="600" y2="175" marker-end="url(#ar)"/><text class="sm" x="501.0" y="167.0" text-anchor="middle">yes</text><rect class="pf pf-bx" x="606" y="134" width="298" height="88" rx="12"/><rect class="bx ol" x="602" y="130" width="300" height="90" rx="12"/><text class="tt" x="752.0" y="171.5" text-anchor="middle">Add RAG</text><text class="sm" x="752.0" y="195.5" text-anchor="middle">fetch them at question time</text><line class="ln" x1="230" y1="222" x2="230" y2="248" marker-end="url(#ar)"/><text class="sm" x="246" y="240" text-anchor="start">no</text><circle class="nm" cx="30" cy="295" r="14"/><text class="nmt" x="30" y="301" text-anchor="middle">2</text><rect class="bxm ol" x="60" y="250" width="340" height="90" rx="12"/><text class="tt" x="230.0" y="291.5" text-anchor="middle">Still wrong behaviour?</text><text class="sm" x="230.0" y="315.5" text-anchor="middle">despite clear instructions</text><line class="ln" x1="402" y1="295" x2="600" y2="295" marker-end="url(#ar)"/><text class="sm" x="501.0" y="287.0" text-anchor="middle">yes</text><rect class="pf pf-bxs" x="606" y="254" width="298" height="88" rx="12"/><rect class="bxs ol" x="602" y="250" width="300" height="90" rx="12"/><text class="tt" x="752.0" y="291.5" text-anchor="middle">Fine-tune the habit</text><text class="sm" x="752.0" y="315.5" text-anchor="middle">format, tone, one skill</text><line class="ln" x1="230" y1="342" x2="230" y2="368" marker-end="url(#ar)"/><text class="sm" x="246" y="360" text-anchor="start">no</text><circle class="nm" cx="30" cy="415" r="14"/><text class="nmt" x="30" y="421" text-anchor="middle">3</text><rect class="bxm ol" x="60" y="370" width="340" height="90" rx="12"/><text class="tt" x="230.0" y="411.5" text-anchor="middle">Too slow or dear?</text><text class="sm" x="230.0" y="435.5" text-anchor="middle">at your real volume</text><line class="ln" x1="402" y1="415" x2="600" y2="415" marker-end="url(#ar)"/><text class="sm" x="501.0" y="407.0" text-anchor="middle">yes</text><rect class="pf pf-bxs" x="606" y="374" width="298" height="88" rx="12"/><rect class="bxs ol" x="602" y="370" width="300" height="90" rx="12"/><text class="tt" x="752.0" y="411.5" text-anchor="middle">Fine-tune a small one</text><text class="sm" x="752.0" y="435.5" text-anchor="middle">to do the big one&#x27;s job</text><line class="ln" x1="230" y1="462" x2="230" y2="488" marker-end="url(#ar)"/><text class="sm" x="246" y="480" text-anchor="start">no</text><text class="bd" x="230" y="512" text-anchor="middle">ship the prompt</text></svg><figcaption>Start with the prompt, then ask three questions top to bottom. Most teams stop at the first.</figcaption></figure>
+<ol><li><strong>Is the model missing facts, or facts that change?</strong> Then add RAG. Don't fine-tune.</li><li><strong>Is the behaviour still wrong despite clear instructions and good examples?</strong> Check that the instructions really are clear first: give the prompt to a colleague and see if they would do the job right. If they would and the model still won't, fine-tuning the habit may be worth it.</li><li><strong>Is the cost or speed too high at your real volume?</strong> Say your ticket sorter handles 10 lakh tickets a month on a large model. A small fine-tuned model that matches it on that one task could cost a fraction per ticket. At 50 requests a day, the bill is small and the weeks of setup will never pay back.</li></ol>
+<p>If every answer is no, ship the prompt. Our fine-tuning lessons put it simply: before any fine-tune, score the best prompt-only version on the same test set. That score is the baseline. A fine-tune that doesn't beat it, or doesn't beat it cheaply enough, is a "don't fine-tune" result, and that is a useful finding too.</p>
+<p>Every one of these steps depends on the eval set. Without it, "the new prompt is better" is an opinion. Our post on <a href="/writing/offline-evals/">offline evals</a> shows how to build one.</p>
+<h2>Most systems combine them</h2>
+<p>These aren't three rival choices. They stack.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 380" role="img" aria-label="Two stacks. On the left, what most systems run: the prompt on top, retrieved facts in the middle, a general model at the bottom. On the right, a few high-volume systems: a shorter prompt, retrieved facts still fetched fresh, and a tuned small model with format and tone baked in. An arrow between the bottom boxes says only if the numbers say so."><text class="lbl" x="250" y="24" text-anchor="middle">WHAT MOST SYSTEMS RUN</text><text class="lbl" x="750" y="24" text-anchor="middle">A FEW, AT HIGH VOLUME</text><rect class="pf pf-solid" x="64" y="54" width="378" height="78" rx="12"/><rect class="solid ol" x="60" y="50" width="380" height="80" rx="12"/><text class="tt inv" x="250.0" y="86.5" text-anchor="middle">The prompt</text><text class="inv sm2" x="250.0" y="110.5" text-anchor="middle">rules, format, 3 examples</text><rect class="pf pf-bx" x="64" y="154" width="378" height="78" rx="12"/><rect class="bx ol" x="60" y="150" width="380" height="80" rx="12"/><text class="tt" x="250.0" y="186.5" text-anchor="middle">Retrieved facts</text><text class="sm" x="250.0" y="210.5" text-anchor="middle">top 5 passages, fenced</text><rect class="bxm ol" x="60" y="250" width="380" height="80" rx="12"/><text class="tt" x="250.0" y="286.5" text-anchor="middle">A general model</text><text class="sm" x="250.0" y="310.5" text-anchor="middle">as it comes</text><rect class="pf pf-solid" x="564" y="54" width="378" height="78" rx="12"/><rect class="solid ol" x="560" y="50" width="380" height="80" rx="12"/><text class="tt inv" x="750.0" y="86.5" text-anchor="middle">The prompt</text><text class="inv sm2" x="750.0" y="110.5" text-anchor="middle">shorter: habits moved</text><rect class="pf pf-bx" x="564" y="154" width="378" height="78" rx="12"/><rect class="bx ol" x="560" y="150" width="380" height="80" rx="12"/><text class="tt" x="750.0" y="186.5" text-anchor="middle">Retrieved facts</text><text class="sm" x="750.0" y="210.5" text-anchor="middle">still fetched fresh</text><rect class="pf pf-bxs" x="564" y="254" width="378" height="78" rx="12"/><rect class="bxs ol" x="560" y="250" width="380" height="80" rx="12"/><text class="tt" x="750.0" y="286.5" text-anchor="middle">A tuned small model</text><text class="sm" x="750.0" y="310.5" text-anchor="middle">format and tone baked in</text><text class="sm" x="250" y="362" text-anchor="middle">change a fact: update the index</text><text class="sm" x="750" y="362" text-anchor="middle">facts still come from RAG, never the weights</text><line class="ln" x1="442" y1="280" x2="556" y2="280" marker-end="url(#ar)"/><text class="sm" x="499" y="308" text-anchor="middle">only if the</text><text class="sm" x="499" y="328" text-anchor="middle">numbers say so</text></svg><figcaption>Most real systems are a prompt plus RAG. Fine-tuning sits underneath, rarely, and the facts still come from retrieval.</figcaption></figure>
+<p>Most real systems are a prompt plus RAG on a general model. The prompt carries the rules and the format, and retrieval carries the facts. Deciding what goes into that bundle, and what stays out, is its own skill, covered in <a href="/writing/context-engineering/">context engineering</a>.</p>
+<p>A few systems, usually at high volume, add a fine-tuned model underneath. The habits move into the weights, so the prompt gets shorter, but the facts still come from retrieval. Fine-tuning and RAG work together; it is rarely one or the other.</p>
+<h2>Mistakes we see often</h2>
+<ol><li><strong>Fine-tuning to teach facts.</strong> The HR example above. The model gets more confident, not more correct, and the facts go stale with the next policy update. Use RAG.</li><li><strong>RAG over a messy corpus, with no evaluation.</strong> Three versions of the same policy, scanned PDFs, and nobody checking whether the search returns the right passage. The model answers from the wrong page, fluently. Clean the documents, and test retrieval on its own: for each eval question, did the right passage come back?</li><li><strong>Giant prompts nobody maintains.</strong> Every bug adds a new paragraph, until the prompt is three thousand words, contradicts itself, and nobody dares delete a line. Keep prompts in version control, give each rule a reason, and remove rules your eval set shows aren't needed.</li><li><strong>No eval set, so you can't tell if a change helped.</strong> Teams change the prompt, try three questions by hand, and call it better. Then a different slice breaks. Fewer than about a hundred good examples and no test set means you are not ready to fine-tune, and not really ready to change the prompt either.</li><li><strong>Fine-tuning to make the model "smarter".</strong> Fine-tuning narrows a model to a task; it rarely makes it broadly better at reasoning. If you need a smarter model, pick a bigger or newer one.</li></ol>
+<h2>Five questions to check before you choose</h2>
+<ol><li>Have you written the prompt as clearly as you would brief a new colleague, with two or three examples?</li><li>Do you have an eval set, and a baseline score from the best prompt-only version?</li><li>Is the failure about missing facts, or about how the model behaves?</li><li>If it's facts: do they change, and can you show where each answer came from?</li><li>If you're thinking of fine-tuning: what volume makes the weeks of setup pay back, and how will you retrain when the task changes?</li></ol>
+<p>Start with the sticky note, open the book when facts are missing, and only go to the gym when your numbers send you there.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/concepts/prompt-rag-tune/">the key concept page, with the product names on every cloud</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

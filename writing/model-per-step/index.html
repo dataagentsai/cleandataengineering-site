@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>There is no best model, only the best model for this step · Clean Data Engineering</title>
+<meta name="description" content="Picking one &quot;best&quot; model for a whole agent is the wrong question. Test candidates on a small golden set of your own tasks, weigh accuracy, cost, speed and reliability for each step, decide where your data is allowed to go, and give each step the cheapest worker that passes, which is often plain code. Then pin the versions and test again whenever a model changes."><link rel="canonical" href="https://cleandataengineering.ai/writing/model-per-step/">
+<meta property="og:title" content="There is no best model, only the best model for this step"><meta property="og:description" content="Picking one &quot;best&quot; model for a whole agent is the wrong question. Test candidates on a small golden set of your own tasks, weigh accuracy, cost, speed and reliability for each step, decide where your data is allowed to go, and give each step the cheapest worker that passes, which is often plain code. Then pin the versions and test again whenever a model changes."><meta property="og:url" content="https://cleandataengineering.ai/writing/model-per-step/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · LLM Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>There is no best model, only the best model for this step</h1>
+  </div>
+  <div class="summary">Picking one "best" model for a whole agent is the wrong question. Test candidates on a small golden set of your own tasks, weigh accuracy, cost, speed and reliability for each step, decide where your data is allowed to go, and give each step the cheapest worker that passes, which is often plain code. Then pin the versions and test again whenever a model changes.</div>
+<p>Every agent project has the meeting. Someone opens a leaderboard, someone else has read that a new model came out last week, and the room spends an hour on one question: which model should we use?</p>
+<p>It is the wrong question. An agent doesn't make one kind of decision. In a single turn it sorts the message, pulls out a few facts, thinks hard about one thing, and writes a reply. Those are different jobs, and each one has its own best worker.</p>
+<p>This post is how we pick models for a vertical agent, meaning an agent built for one domain, such as insurance claims. Our example is the claims agent in the <a href="/learn/agent-harness/">Agent Harness tutorial</a>, which runs an open-weight model on Groq behind an Azure gateway.</p>
+<h2>A toolbox, not a trophy</h2>
+<p>Nobody asks which tool in a toolbox is the best. A hammer is best for nails and hopeless for a watch strap. The question is always which tool fits this job.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 320" role="img" aria-label="Three tools drawn side by side: a hammer labelled the strong model for the one hard step, a screwdriver labelled a small fast model for routing and extraction, and tweezers labelled plain code for exact lookups and checks."><text class="sm" x="500" y="26" text-anchor="middle">nobody asks which tool is best; they ask which tool fits this job</text><rect class="hz" x="145" y="70" width="16" height="120" rx="4"/><path class="hz" d="M108,52 L198,52 L198,82 L108,82 Q96,67 108,52 Z"/><rect class="hz" x="484" y="58" width="32" height="70" rx="12"/><line class="ln" x1="494" y1="68" x2="494" y2="118"/><line class="ln" x1="506" y1="68" x2="506" y2="118"/><rect class="hz" x="495" y="128" width="10" height="50" rx="2"/><path class="hz" d="M495,178 L505,178 L502,192 L498,192 Z"/><path class="hz" d="M832,56 L846,56 L852,190 L846,190 Z"/><path class="hz" d="M868,56 L854,56 L848,190 L854,190 Z"/><rect class="hz" x="830" y="52" width="40" height="12" rx="4"/><rect class="pf pf-solid" x="34" y="219" width="238" height="88" rx="12"/><rect class="solid ol" x="30" y="215" width="240" height="90" rx="12"/><text class="tt inv" x="150.0" y="247.0" text-anchor="middle">The hammer</text><text class="inv sm2" x="150.0" y="271.0" text-anchor="middle">the strong model:</text><text class="inv sm2" x="150.0" y="290.0" text-anchor="middle">the one hard step</text><rect class="pf pf-bx" x="384" y="219" width="238" height="88" rx="12"/><rect class="bx ol" x="380" y="215" width="240" height="90" rx="12"/><text class="tt" x="500.0" y="247.0" text-anchor="middle">The screwdriver</text><text class="sm" x="500.0" y="271.0" text-anchor="middle">a small fast model:</text><text class="sm" x="500.0" y="290.0" text-anchor="middle">routing, extraction</text><rect class="pf pf-bxs" x="734" y="219" width="238" height="88" rx="12"/><rect class="bxs ol" x="730" y="215" width="240" height="90" rx="12"/><text class="tt" x="850.0" y="247.0" text-anchor="middle">The tweezers</text><text class="sm" x="850.0" y="271.0" text-anchor="middle">plain code: exact</text><text class="sm" x="850.0" y="290.0" text-anchor="middle">lookups and checks</text></svg><figcaption>A toolbox, not a trophy. Each tool is the best one for a different job.</figcaption></figure>
+<p>Models are the same. A strong model is the hammer: worth it for the one step that needs real reasoning. A small fast model is the screwdriver: good at sorting messages and pulling out a claim number. And plain code is the tweezers: exact, instant and free, for anything a rule can decide.</p>
+<h2>Test on your own tasks, not the leaderboard</h2>
+<p>A public leaderboard tells you how a model did on someone else's questions. Your agent will face your questions, in your language, with your rules.</p>
+<p>So the first thing to build is a <strong>golden set</strong>: a list of real tasks from your domain, each with a known right answer. Start small. Our reference agent's golden set has 35 cases for one job, deciding whether an action is allowed. Each case tests an edge of a rule, so a 30-day rule gets cases at 29, 30 and 31 days. The set lives in Git and is never edited to make a failing case pass.</p>
+<p>Here is why it matters. When we tested a popular open-source tool for spotting personal data, its defaults missed the name "Priya Sharma", called a claim number a US driver's licence, and read an Indian phone number as a date. It wasn't a bad tool. It was trained for someone else's data. A leaderboard would never have shown us that. A handful of our own cases did.</p>
+<p>How to build the set and run it before every release is in <a href="/writing/offline-evals/">offline evals</a>.</p>
+<h2>Weigh four things, per step</h2>
+<p>Once you can score a model on your own cases, four things decide the choice.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 245" role="img" aria-label="Four dials in a row: accuracy (passes your cases), cost (per task, not per token), speed (time to the answer) and reliability (valid output, calls not refused), each with a needle at a different point."><text class="sm" x="500" y="26" text-anchor="middle">turn one dial up and another usually moves down</text><path class="hz" d="M40,170 A85,85 0 0 1 210,170 Z"/><line class="ln" x1="52" y1="170" x2="40" y2="170"/><line class="ln" x1="73" y1="118" x2="65" y2="110"/><line class="ln" x1="125" y1="97" x2="125" y2="85"/><line class="ln" x1="177" y1="118" x2="185" y2="110"/><line class="ln" x1="198" y1="170" x2="210" y2="170"/><line class="lnc" x1="125" y1="170" x2="176" y2="133"/><circle class="hk" cx="125" cy="170" r="6"/><text class="bd" x="125" y="202" text-anchor="middle">Accuracy</text><text class="sm" x="125" y="224" text-anchor="middle">passes your cases</text><path class="hz" d="M290,170 A85,85 0 0 1 460,170 Z"/><line class="ln" x1="302" y1="170" x2="290" y2="170"/><line class="ln" x1="323" y1="118" x2="315" y2="110"/><line class="ln" x1="375" y1="97" x2="375" y2="85"/><line class="ln" x1="427" y1="118" x2="435" y2="110"/><line class="ln" x1="448" y1="170" x2="460" y2="170"/><line class="lnc" x1="375" y1="170" x2="346" y2="114"/><circle class="hk" cx="375" cy="170" r="6"/><text class="bd" x="375" y="202" text-anchor="middle">Cost</text><text class="sm" x="375" y="224" text-anchor="middle">per task, not per token</text><path class="hz" d="M540,170 A85,85 0 0 1 710,170 Z"/><line class="ln" x1="552" y1="170" x2="540" y2="170"/><line class="ln" x1="573" y1="118" x2="565" y2="110"/><line class="ln" x1="625" y1="97" x2="625" y2="85"/><line class="ln" x1="677" y1="118" x2="685" y2="110"/><line class="ln" x1="698" y1="170" x2="710" y2="170"/><line class="lnc" x1="625" y1="170" x2="635" y2="108"/><circle class="hk" cx="625" cy="170" r="6"/><text class="bd" x="625" y="202" text-anchor="middle">Speed</text><text class="sm" x="625" y="224" text-anchor="middle">time to the answer</text><path class="hz" d="M790,170 A85,85 0 0 1 960,170 Z"/><line class="ln" x1="802" y1="170" x2="790" y2="170"/><line class="ln" x1="823" y1="118" x2="815" y2="110"/><line class="ln" x1="875" y1="97" x2="875" y2="85"/><line class="ln" x1="927" y1="118" x2="935" y2="110"/><line class="ln" x1="948" y1="170" x2="960" y2="170"/><line class="lnc" x1="875" y1="170" x2="912" y2="119"/><circle class="hk" cx="875" cy="170" r="6"/><text class="bd" x="875" y="202" text-anchor="middle">Reliability</text><text class="sm" x="875" y="224" text-anchor="middle">valid output, calls let in</text></svg><figcaption>The four dials. You set them per step, not once for the whole agent.</figcaption></figure>
+<ol><li><strong>Accuracy.</strong> Does it pass your golden cases for this step? Not in general, for this step.</li><li><strong>Cost.</strong> Count cost per task, not price per token. A cheap model that needs three tries costs more than a dearer one that gets it right once. Our model, <code>gpt-oss-120b</code> on Groq, is priced at $0.15 per million tokens in and $0.75 per million out. The smaller <code>gpt-oss-20b</code> is $0.10 and $0.50.</li><li><strong>Speed.</strong> Measure the time the user waits, not the model alone. In one of our real turns, Groq answered in 0.6 and 1.0 seconds, but the turn took 7.1 seconds. Most of the wait was a gateway waking up and a content-safety check.</li><li><strong>Reliability.</strong> Does it return valid output every time, and will the provider let you call it? Groq's free tier allows 8,000 tokens a minute. One loop turn uses 1,500 to 2,500, so in practice that is only 3 to 5 turns a minute. Rate limits are part of the model choice.</li></ol>
+<p>These dials pull against each other. The point is to set them for each step, not once for the whole agent.</p>
+<h2>Open-weight or closed: where may the data go?</h2>
+<p>An <strong>open-weight</strong> model is one whose trained weights are published, so anyone can run it: you, on your own servers, or a hosting provider. A <strong>closed</strong> model can only be reached through its maker's service or a cloud that resells it.</p>
+<p>That gives you three questions to answer before you compare scores:</p>
+<ul><li><strong>Where is the data allowed to go?</strong> Every prompt carries the user's words and whatever the tools returned. For a claims agent that means names, policy numbers and medical details. If a rule says that data must stay in India, or inside your own cloud account, that rule picks the shortlist for you.</li><li><strong>Host it yourself, or use a provider?</strong> Running an open-weight model yourself keeps the data at home, but you now own the GPUs, the scaling and the 2 a.m. outages. A provider is far less work, and the data leaves your walls.</li><li><strong>Which region?</strong> Data residency means the data is stored and processed in a named place. Our Azure design places the gateway in Central India with the region pinned, and the tutorial notes that model availability still has to be checked region by region.</li></ul>
+<p>Our choice shows the trade. We use <code>gpt-oss-120b</code>, an open-weight model, hosted by Groq: it has a free tier and an API in the common OpenAI style, so lock-in is low. Every call goes through Azure API Management, a gateway that lets through only that one model and checks every prompt and answer. The planned move is to Azure's own model catalogue, with GPT, Claude and small models, still behind the same gateway. Because the agent only ever talks to the gateway, that swap is configuration, not a rewrite.</p>
+<h2>A model per step</h2>
+<p>Here is one turn of the claims agent, with the right worker at each step.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 295" role="img" aria-label="Five steps in a row: a message, route it with rules or a small model, pull out facts with a small model, decide with a strong model, check and reply with plain code. Coin stacks under each step are empty except one coin for extraction and four for the decision."><text class="sm" x="500" y="24" text-anchor="middle">one turn of a claims agent, and who does the work at each step</text><rect class="bxm ol" x="10" y="60" width="180" height="100" rx="12"/><text class="tt" x="100.0" y="97.0" text-anchor="middle">A message</text><text class="sm" x="100.0" y="121.0" text-anchor="middle">&quot;Is my claim</text><text class="sm" x="100.0" y="140.0" text-anchor="middle">covered?&quot;</text><line class="ln" x1="192" y1="110" x2="206" y2="110" marker-end="url(#ar)"/><rect class="pf pf-bx" x="212" y="64" width="178" height="98" rx="12"/><rect class="bx ol" x="208" y="60" width="180" height="100" rx="12"/><text class="tt" x="298.0" y="97.0" text-anchor="middle">Route it</text><text class="sm" x="298.0" y="121.0" text-anchor="middle">rules first,</text><text class="sm" x="298.0" y="140.0" text-anchor="middle">small model if unsure</text><line class="ln" x1="390" y1="110" x2="404" y2="110" marker-end="url(#ar)"/><text class="bd" x="298" y="190" text-anchor="middle">no model, or small</text><rect class="pf pf-bx" x="410" y="64" width="178" height="98" rx="12"/><rect class="bx ol" x="406" y="60" width="180" height="100" rx="12"/><text class="tt" x="496.0" y="97.0" text-anchor="middle">Pull out facts</text><text class="sm" x="496.0" y="121.0" text-anchor="middle">claim number,</text><text class="sm" x="496.0" y="140.0" text-anchor="middle">date, amount</text><line class="ln" x1="588" y1="110" x2="602" y2="110" marker-end="url(#ar)"/><text class="bd" x="496" y="190" text-anchor="middle">small model</text><rect class="pf pf-solid" x="608" y="64" width="178" height="98" rx="12"/><rect class="solid ol" x="604" y="60" width="180" height="100" rx="12"/><text class="tt inv" x="694.0" y="97.0" text-anchor="middle">Decide</text><text class="inv sm2" x="694.0" y="121.0" text-anchor="middle">read the policy,</text><text class="inv sm2" x="694.0" y="140.0" text-anchor="middle">weigh the case</text><line class="ln" x1="786" y1="110" x2="800" y2="110" marker-end="url(#ar)"/><text class="bd" x="694" y="190" text-anchor="middle">strong model</text><rect class="pf pf-bxs" x="806" y="64" width="178" height="98" rx="12"/><rect class="bxs ol" x="802" y="60" width="180" height="100" rx="12"/><text class="tt" x="892.0" y="97.0" text-anchor="middle">Check, reply</text><text class="sm" x="892.0" y="121.0" text-anchor="middle">limits, grounding,</text><text class="sm" x="892.0" y="140.0" text-anchor="middle">the template</text><text class="bd" x="892" y="190" text-anchor="middle">plain code</text><text class="sm" x="298" y="230" text-anchor="middle">about free</text><ellipse class="hz" cx="496" cy="238" rx="22" ry="7"/><ellipse class="hz" cx="694" cy="238" rx="22" ry="7"/><ellipse class="hz" cx="694" cy="229" rx="22" ry="7"/><ellipse class="hz" cx="694" cy="220" rx="22" ry="7"/><ellipse class="hz" cx="694" cy="211" rx="22" ry="7"/><text class="sm" x="892" y="230" text-anchor="middle">about free</text><text class="sm" x="500" y="280" text-anchor="middle">a known claim number skips the model entirely: 104 ms, no model call</text></svg><figcaption>One turn, several workers. Only the decide step pays for the strong model.</figcaption></figure>
+<ol><li><strong>Route the message.</strong> Rules first. A message naming a known claim number never reaches a model at all: it is answered from a template in 104 milliseconds for $0, against about 7 seconds for the same question through the model. Where rules are unsure, the plan is a small local classifier, then a small model only if that is unsure too.</li><li><strong>Pull out the facts.</strong> Extraction, meaning turning "my car was hit on Tuesday" into a date and a claim type, is a small-model job.</li><li><strong>Decide.</strong> Reading the policy and weighing the case is the one step that earns a strong model.</li><li><strong>Check and reply.</strong> Limits, grounding and the reply template are plain code.</li></ol>
+<p>The tutorial plans a small job to do this choosing for you: run every candidate on the golden set before each release and pick the cheapest model that passes, per job. It is designed but not yet built, and the scorecard below is the hand-made version. We also rejected a model router that picks a model at run time, for one reason: the same input might not get the same model twice, so a result can't be reproduced.</p>
+<p>The money side of this, and what happens when every step uses the biggest model, is in <a href="/writing/agent-cost-mistakes/">9 cost mistakes</a>.</p>
+<h2>Re-test on every model change</h2>
+<p>A model name is not a version. Providers update models, retire them and change their defaults. Your golden set passed last month on last month's model.</p>
+<p>So <strong>pin the version</strong>: write the exact model name and version in configuration, not "latest". Our gateway goes further and refuses any model not on its list, with an error that says so. Then treat a model change like a code change. It goes through the golden set, and it ships only if no slice gets worse. We call the request at temperature 0 for the same reason, so the same input gives an answer as close to the same as possible, which makes a before-and-after comparison fair.</p>
+<h2>The scorecard</h2>
+<p>Here is the whole method on one card.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 423" role="img" aria-label="A scorecard with four task rows (route the message, pull out the claim number, decide if it is covered, write the reply) and three columns (small model, strong model, plain code). Ticks and crosses mark which pass; the cheapest passing cell in each row is highlighted. Two bottom rows show cost and time per task."><text class="sm" x="500" y="30" text-anchor="middle">a made-up example card: your tasks down the side, candidate models across</text><rect class="hz" x="60" y="70" width="880" height="308" rx="10"/><text class="bd" x="415.0" y="98" text-anchor="middle">Small model</text><text class="bd" x="625.0" y="98" text-anchor="middle">Strong model</text><text class="bd" x="835.0" y="98" text-anchor="middle">Plain code</text><text class="lbl" x="76" y="98" text-anchor="start">TASK</text><line class="ln" x1="60" y1="114" x2="940" y2="114"/><text class="tx" x="76" y="142" text-anchor="start">Route the message</text><text class="bd" x="415.0" y="142" text-anchor="middle">✓</text><text class="bd" x="625.0" y="142" text-anchor="middle">✓</text><rect class="bxs" x="765.0" y="122" width="140" height="28" rx="6"/><text class="bd" x="835.0" y="142" text-anchor="middle">✓</text><line class="ln" x1="60" y1="158" x2="940" y2="158"/><text class="tx" x="76" y="186" text-anchor="start">Pull out the claim number</text><text class="bd" x="415.0" y="186" text-anchor="middle">✓</text><text class="bd" x="625.0" y="186" text-anchor="middle">✓</text><rect class="bxs" x="765.0" y="166" width="140" height="28" rx="6"/><text class="bd" x="835.0" y="186" text-anchor="middle">✓</text><line class="ln" x1="60" y1="202" x2="940" y2="202"/><text class="tx" x="76" y="230" text-anchor="start">Decide if it is covered</text><text class="bd" x="415.0" y="230" text-anchor="middle">✗</text><rect class="bxs" x="555.0" y="210" width="140" height="28" rx="6"/><text class="bd" x="625.0" y="230" text-anchor="middle">✓</text><text class="bd" x="835.0" y="230" text-anchor="middle">—</text><line class="ln" x1="60" y1="246" x2="940" y2="246"/><text class="tx" x="76" y="274" text-anchor="start">Write the reply</text><rect class="bxs" x="345.0" y="254" width="140" height="28" rx="6"/><text class="bd" x="415.0" y="274" text-anchor="middle">✓</text><text class="bd" x="625.0" y="274" text-anchor="middle">✓</text><text class="bd" x="835.0" y="274" text-anchor="middle">—</text><line class="lnc" x1="60" y1="290" x2="940" y2="290"/><text class="sm" x="76" y="318" text-anchor="start">Cost per task</text><text class="sm" x="415.0" y="318" text-anchor="middle">low</text><text class="sm" x="625.0" y="318" text-anchor="middle">high</text><text class="sm" x="835.0" y="318" text-anchor="middle">about $0</text><text class="sm" x="76" y="362" text-anchor="start">Time per task</text><text class="sm" x="415.0" y="362" text-anchor="middle">fast</text><text class="sm" x="625.0" y="362" text-anchor="middle">slower</text><text class="sm" x="835.0" y="362" text-anchor="middle">ms</text><line class="lnd" x1="310" y1="70" x2="310" y2="378"/><line class="lnd" x1="520" y1="70" x2="520" y2="378"/><line class="lnd" x1="730" y1="70" x2="730" y2="378"/><text class="sm" x="500" y="408" text-anchor="middle">pick the cheapest column that passes each row (highlighted)</text></svg><figcaption>The scorecard. Rows are your tasks, columns are candidates, and the winner is chosen row by row.</figcaption></figure>
+<ol><li>Write your agent's steps down the side.</li><li>Put two or three candidate models across the top, plus a column for plain code.</li><li>For each cell, run the golden cases for that step and mark pass or fail.</li><li>Add cost per task and time per task, measured, not taken from a price page.</li><li>In each row, circle the cheapest column that passes.</li></ol>
+<p>The ticks in the drawing are an example. Yours will differ, and that is the point.</p>
+<h2>Mistakes we see often</h2>
+<ol><li><strong>Choosing by leaderboard.</strong> A high public score says nothing about Indian names, your policy wording or your edge cases.</li><li><strong>The biggest model everywhere.</strong> Routing a "where is my claim?" message through the strongest model is paying a surgeon to take your temperature.</li><li><strong>Never re-testing.</strong> The provider updated the model, nobody re-ran the golden set, and a slice that worked quietly broke.</li><li><strong>Forgetting where the data goes.</strong> The model was chosen on scores, and only later did someone ask which country the prompts were processed in.</li><li><strong>No rate-limit plan.</strong> The model passed every test, then the first busy hour hit the provider's limit.</li></ol>
+<h2>Six questions to check your own choice</h2>
+<ol><li>Do you have at least a few dozen golden cases from your own domain, and does every candidate run against them?</li><li>For each step, could plain code do it instead?</li><li>Do you know the cost per task, measured, for each step?</li><li>Do you know which country and which company processes every prompt?</li><li>Is every model version pinned in configuration, and does a change go through the golden set?</li><li>What happens when the provider says no: a rate limit, an outage, a retired model?</li></ol>
+<p>The best model is the cheapest worker that passes your own test, one step at a time.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/tech-l2.html">Model invocation, in the Agent Harness tutorial</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

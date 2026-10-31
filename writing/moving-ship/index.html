@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Building agents on a moving ship: what has settled, what is still open, and how not to get stuck · Clean Data Engineering</title>
+<meta name="description" content="Some parts of the agent stack have settled: OpenTelemetry for traces, Postgres for state, MCP for tools, JSON Schema for typed outputs, OAuth and OpenID Connect for identity, Git and CI for releases, and open table formats for data. Others are still moving, such as frameworks, agent-to-agent protocols, memory, evals, guardrail products, GenAI field names and the models themselves. Pick boring standards for the first group, put the second behind ports with contract tests, and keep the code that protects money in your own hands."><link rel="canonical" href="https://cleandataengineering.ai/writing/moving-ship/">
+<meta property="og:title" content="Building agents on a moving ship: what has settled, what is still open, and how not to get stuck"><meta property="og:description" content="Some parts of the agent stack have settled: OpenTelemetry for traces, Postgres for state, MCP for tools, JSON Schema for typed outputs, OAuth and OpenID Connect for identity, Git and CI for releases, and open table formats for data. Others are still moving, such as frameworks, agent-to-agent protocols, memory, evals, guardrail products, GenAI field names and the models themselves. Pick boring standards for the first group, put the second behind ports with contract tests, and keep the code that protects money in your own hands."><meta property="og:url" content="https://cleandataengineering.ai/writing/moving-ship/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · AI Engineering · Builders · 7 min read · 2026-10-31</p>
+    <h1>Building agents on a moving ship: what has settled, what is still open, and how not to get stuck</h1>
+  </div>
+  <div class="summary">Some parts of the agent stack have settled: OpenTelemetry for traces, Postgres for state, MCP for tools, JSON Schema for typed outputs, OAuth and OpenID Connect for identity, Git and CI for releases, and open table formats for data. Others are still moving, such as frameworks, agent-to-agent protocols, memory, evals, guardrail products, GenAI field names and the models themselves. Pick boring standards for the first group, put the second behind ports with contract tests, and keep the code that protects money in your own hands.</div>
+<p>Building an agent in 2026 feels like building on a ship at sea. New frameworks, new protocols and new models arrive every month. Whatever you pick, someone in the team will share a link next week saying a better one just launched.</p>
+<p>So teams freeze. Some wait for things to settle. Others pick one big framework and hope it wins. Both end up stuck.</p>
+<p>But the whole ship is not moving. Some planks are nailed down and will stay there. Some crates are still sliding about. The trick is to know which is which, and tie the crates down. This post is our judgement as of October 2026, from building the agent in our <a href="/learn/agent-harness/">Agent Harness tutorial</a> and a reference agent beside it. Some of it will age, and we say where we are unsure.</p>
+<h2>Planks and crates</h2>
+<p>Here is the picture to keep in your head.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 380" role="img" aria-label="A cartoon ship on the waves. Its deck is five nailed planks: OpenTelemetry, Postgres, MCP, JSON Schema and OAuth. On top of the deck, four tilted dashed crates slide about: framework, memory, eval tool and model."><text class="sm" x="40" y="34" text-anchor="start">crates still slide about: strap them down</text><g transform="rotate(-7 180 122)"><rect class="bxm ol" x="110" y="87" width="140" height="70" rx="12"/><text class="tt" x="180.0" y="118.5" text-anchor="middle">framework</text><text class="sm" x="180.0" y="142.5" text-anchor="middle"></text></g><line class="ln" x1="82" y1="107" x2="100" y2="107"/><line class="ln" x1="76" y1="127" x2="98" y2="127"/><g transform="rotate(5 400 122)"><rect class="bxm ol" x="330" y="87" width="140" height="70" rx="12"/><text class="tt" x="400.0" y="118.5" text-anchor="middle">memory</text><text class="sm" x="400.0" y="142.5" text-anchor="middle"></text></g><line class="ln" x1="302" y1="107" x2="320" y2="107"/><line class="ln" x1="296" y1="127" x2="318" y2="127"/><g transform="rotate(-4 630 122)"><rect class="bxm ol" x="560" y="87" width="140" height="70" rx="12"/><text class="tt" x="630.0" y="118.5" text-anchor="middle">eval tool</text><text class="sm" x="630.0" y="142.5" text-anchor="middle"></text></g><line class="ln" x1="532" y1="107" x2="550" y2="107"/><line class="ln" x1="526" y1="127" x2="548" y2="127"/><g transform="rotate(8 840 122)"><rect class="bxm ol" x="770" y="87" width="140" height="70" rx="12"/><text class="tt" x="840.0" y="118.5" text-anchor="middle">model</text><text class="sm" x="840.0" y="142.5" text-anchor="middle"></text></g><line class="ln" x1="742" y1="107" x2="760" y2="107"/><line class="ln" x1="736" y1="127" x2="758" y2="127"/><rect class="pf pf-bx" x="88" y="192" width="158" height="42" rx="12"/><rect class="bx ol" x="84" y="188" width="160" height="44" rx="12"/><text class="tt" x="164.0" y="206.5" text-anchor="middle">OpenTelemetry</text><text class="sm" x="164.0" y="230.5" text-anchor="middle"></text><circle class="hk" cx="96" cy="210.0" r="3"/><circle class="hk" cx="232" cy="210.0" r="3"/><rect class="pf pf-bx" x="256" y="192" width="158" height="42" rx="12"/><rect class="bx ol" x="252" y="188" width="160" height="44" rx="12"/><text class="tt" x="332.0" y="206.5" text-anchor="middle">Postgres</text><text class="sm" x="332.0" y="230.5" text-anchor="middle"></text><circle class="hk" cx="264" cy="210.0" r="3"/><circle class="hk" cx="400" cy="210.0" r="3"/><rect class="pf pf-bx" x="424" y="192" width="158" height="42" rx="12"/><rect class="bx ol" x="420" y="188" width="160" height="44" rx="12"/><text class="tt" x="500.0" y="206.5" text-anchor="middle">MCP</text><text class="sm" x="500.0" y="230.5" text-anchor="middle"></text><circle class="hk" cx="432" cy="210.0" r="3"/><circle class="hk" cx="568" cy="210.0" r="3"/><rect class="pf pf-bx" x="592" y="192" width="158" height="42" rx="12"/><rect class="bx ol" x="588" y="188" width="160" height="44" rx="12"/><text class="tt" x="668.0" y="206.5" text-anchor="middle">JSON Schema</text><text class="sm" x="668.0" y="230.5" text-anchor="middle"></text><circle class="hk" cx="600" cy="210.0" r="3"/><circle class="hk" cx="736" cy="210.0" r="3"/><rect class="pf pf-bx" x="760" y="192" width="158" height="42" rx="12"/><rect class="bx ol" x="756" y="188" width="160" height="44" rx="12"/><text class="tt" x="836.0" y="206.5" text-anchor="middle">OAuth</text><text class="sm" x="836.0" y="230.5" text-anchor="middle"></text><circle class="hk" cx="768" cy="210.0" r="3"/><circle class="hk" cx="904" cy="210.0" r="3"/><path class="hz" d="M70,238 L930,238 L860,312 L140,312 Z"/><circle class="hz" cx="250" cy="275" r="12"/><circle class="hz" cx="500" cy="275" r="12"/><circle class="hz" cx="750" cy="275" r="12"/><path class="ln" d="M20,326 Q60,312 100,326 T180,326 T260,326 T340,326 T420,326 T500,326 T580,326 T660,326 T740,326 T820,326 T900,326 T980,326"/><text class="sm" x="500" y="362" text-anchor="middle">the planks are nailed down: stand on them</text></svg><figcaption>The agent stack as a ship. Stand on the planks that are nailed down; strap down the crates that still slide.</figcaption></figure>
+<p>A <strong>plank</strong> is a part of the stack that has settled. It is an open standard or a boring tool that many vendors already support, and you can build on it for years. A <strong>crate</strong> is a part that is still moving. The products change, the leaders change, and sometimes even the idea of what the part should do changes.</p>
+<p>You stand on planks. You strap crates down.</p>
+<h2>What has settled</h2>
+<p>These are the planks. For each one, more than one vendor supports it, the alternatives have faded, and we would bet a new agent on it today.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 545" role="img" aria-label="Two columns. On the left, seven nailed planks that have settled: OpenTelemetry, Postgres, MCP (its security parts still maturing), JSON Schema, OAuth and OpenID Connect, Git and CI, and open table formats (Delta or Iceberg). On the right, seven dashed crates still sliding: frameworks and loops, agent to agent, memory products, eval tooling, guardrail products, GenAI field names, and models and prices."><text class="lbl" x="250" y="30" text-anchor="middle">NAILED DOWN (SETTLED)</text><text class="lbl" x="760" y="30" text-anchor="middle">STILL SLIDING (MOVING)</text><rect class="pf pf-bx" x="34" y="54" width="438" height="54" rx="12"/><rect class="bx ol" x="30" y="50" width="440" height="56" rx="12"/><text class="tt" x="250.0" y="74.5" text-anchor="middle">OpenTelemetry</text><text class="sm" x="250.0" y="98.5" text-anchor="middle">how code reports traces</text><circle class="hk" cx="42" cy="78.0" r="3"/><circle class="hk" cx="458" cy="78.0" r="3"/><rect class="pf pf-bx" x="34" y="120" width="438" height="54" rx="12"/><rect class="bx ol" x="30" y="116" width="440" height="56" rx="12"/><text class="tt" x="250.0" y="140.5" text-anchor="middle">Postgres</text><text class="sm" x="250.0" y="164.5" text-anchor="middle">state, checkpoints, vectors</text><circle class="hk" cx="42" cy="144.0" r="3"/><circle class="hk" cx="458" cy="144.0" r="3"/><rect class="pf pf-bxs" x="34" y="186" width="438" height="54" rx="12"/><rect class="bxs ol" x="30" y="182" width="440" height="56" rx="12"/><text class="tt" x="250.0" y="206.5" text-anchor="middle">MCP</text><text class="sm" x="250.0" y="230.5" text-anchor="middle">tools; security parts still maturing</text><circle class="hk" cx="42" cy="210.0" r="3"/><circle class="hk" cx="458" cy="210.0" r="3"/><rect class="pf pf-bx" x="34" y="252" width="438" height="54" rx="12"/><rect class="bx ol" x="30" y="248" width="440" height="56" rx="12"/><text class="tt" x="250.0" y="272.5" text-anchor="middle">JSON Schema</text><text class="sm" x="250.0" y="296.5" text-anchor="middle">the shape of tool calls and replies</text><circle class="hk" cx="42" cy="276.0" r="3"/><circle class="hk" cx="458" cy="276.0" r="3"/><rect class="pf pf-bx" x="34" y="318" width="438" height="54" rx="12"/><rect class="bx ol" x="30" y="314" width="440" height="56" rx="12"/><text class="tt" x="250.0" y="338.5" text-anchor="middle">OAuth and OpenID Connect</text><text class="sm" x="250.0" y="362.5" text-anchor="middle">who is asking, with whose rights</text><circle class="hk" cx="42" cy="342.0" r="3"/><circle class="hk" cx="458" cy="342.0" r="3"/><rect class="pf pf-bx" x="34" y="384" width="438" height="54" rx="12"/><rect class="bx ol" x="30" y="380" width="440" height="56" rx="12"/><text class="tt" x="250.0" y="404.5" text-anchor="middle">Git and CI</text><text class="sm" x="250.0" y="428.5" text-anchor="middle">prompts and policy released as code</text><circle class="hk" cx="42" cy="408.0" r="3"/><circle class="hk" cx="458" cy="408.0" r="3"/><rect class="pf pf-bxs" x="34" y="450" width="438" height="54" rx="12"/><rect class="bxs ol" x="30" y="446" width="440" height="56" rx="12"/><text class="tt" x="250.0" y="470.5" text-anchor="middle">Open table formats</text><text class="sm" x="250.0" y="494.5" text-anchor="middle">Delta or Iceberg: both open</text><circle class="hk" cx="42" cy="474.0" r="3"/><circle class="hk" cx="458" cy="474.0" r="3"/><rect class="bxm ol" x="540" y="50" width="410" height="56" rx="12"/><text class="tt" x="745.0" y="74.5" text-anchor="middle">Frameworks and loops</text><text class="sm" x="745.0" y="98.5" text-anchor="middle">no clear winner</text><rect class="bxm ol" x="560" y="116" width="410" height="56" rx="12"/><text class="tt" x="765.0" y="140.5" text-anchor="middle">Agent to agent (A2A)</text><text class="sm" x="765.0" y="164.5" text-anchor="middle">a young protocol</text><rect class="bxm ol" x="540" y="182" width="410" height="56" rx="12"/><text class="tt" x="745.0" y="206.5" text-anchor="middle">Memory products</text><text class="sm" x="745.0" y="230.5" text-anchor="middle">what to keep is not agreed</text><rect class="bxm ol" x="560" y="248" width="410" height="56" rx="12"/><text class="tt" x="765.0" y="272.5" text-anchor="middle">Eval tooling</text><text class="sm" x="765.0" y="296.5" text-anchor="middle">runners overlap and change</text><rect class="bxm ol" x="540" y="314" width="410" height="56" rx="12"/><text class="tt" x="745.0" y="338.5" text-anchor="middle">Guardrail products</text><text class="sm" x="745.0" y="362.5" text-anchor="middle">screens improve every few months</text><rect class="bxm ol" x="560" y="380" width="410" height="56" rx="12"/><text class="tt" x="765.0" y="404.5" text-anchor="middle">GenAI field names</text><text class="sm" x="765.0" y="428.5" text-anchor="middle">the trace names still get renamed</text><rect class="bxm ol" x="540" y="446" width="410" height="56" rx="12"/><text class="tt" x="745.0" y="470.5" text-anchor="middle">Models and prices</text><text class="sm" x="745.0" y="494.5" text-anchor="middle">change several times a year</text><text class="sm" x="30" y="528" text-anchor="start">yellow: settled, with one edge still moving</text></svg><figcaption>Our judgement as of October 2026. MCP and table formats are planks with one edge still moving.</figcaption></figure>
+<ol><li><strong>OpenTelemetry for traces.</strong> OpenTelemetry is the open standard for how code reports what it did: spans, metrics and logs. Every major trace store accepts it. Write your spans once and the backend becomes a line of config. We wrote a whole post on it: <a href="/writing/opentelemetry-for-agents/">OpenTelemetry is here to stay</a>.</li><li><strong>Postgres for state.</strong> Conversations, checkpoints, approvals, the ledger of payouts, and even search vectors with pgvector can all live in one database you already know how to run. See <a href="/writing/just-use-postgres/">just use Postgres</a>.</li><li><strong>MCP for tools.</strong> The Model Context Protocol is the agreed way an agent finds and calls tools. The big model vendors and most agent frameworks speak it. This one is honestly in between: the protocol itself has settled, but its sign-in and security pieces are still being worked out, so check the far end of every tool call yourself.</li><li><strong>JSON Schema and structured outputs.</strong> JSON Schema is a standard way to describe the shape of data. Tool arguments and model replies are checked against it, and most model providers can now be told to reply in a given shape. In our harness, typed models generate the schemas and every tool argument is validated before any call.</li><li><strong>OAuth and OpenID Connect for identity.</strong> These are the long-standing standards for signing in and passing permission. An agent acting for a person should carry that person's token, not invent its own login scheme.</li><li><strong>Git and CI for releases.</strong> Prompts, model choices and policy are code. Version them together, test them in CI (continuous integration, the automatic checks on every change), and roll back the same way you roll back code.</li><li><strong>Open table formats for data.</strong> Delta Lake and Apache Iceberg store tables as open files that many engines can read. Which of the two you pick is still a choice, but the move to open formats has settled.</li></ol>
+<h2>What is still moving</h2>
+<p>These are the crates. Each is useful today. None has a clear winner, and some may look very different in a year.</p>
+<ol><li><strong>Agent frameworks and loops.</strong> LangGraph, the OpenAI Agents SDK, the Claude Agent SDK, Pydantic AI, Microsoft Agent Framework and plain code all take a different shape. We compared them in <a href="/writing/choosing-agent-loop/">choosing your agent loop</a>. Our own agent writes the loop by hand.</li><li><strong>Agent-to-agent protocols.</strong> A2A is an open protocol for one agent to hand work to another. Our design uses it, but it is young, and how agents should hand off, limit and trace each other is still being argued.</li><li><strong>Memory products.</strong> Long-term memory for agents is sold as its own product by several vendors. What to remember, and when to forget, is not agreed. Plain tables in Postgres do most of the job for us.</li><li><strong>Eval tooling.</strong> pydantic-evals, DeepEval, promptfoo, Inspect, Ragas and the cloud evaluators overlap and keep changing. Your test cases are the lasting part; the runner is not.</li><li><strong>Guardrail products.</strong> Content screens and prompt-attack detectors improve every few months. The checks that matter most are still rules in your own code, as we showed in <a href="/writing/guardrails-sorted/">every guardrail, sorted</a>.</li><li><strong>The GenAI telemetry field names.</strong> OpenTelemetry has settled, but its standard names for model calls, such as <code>gen_ai.request.model</code>, are still changing. Keep them in one file so a rename is a one-line change.</li><li><strong>Model prices and the models themselves.</strong> The best model for a job, and its price per token, change several times a year. Assume the model you launch with is not the one you will run next year.</li></ol>
+<p>For a map of every concern and the tools that fill it, see <a href="/writing/agent-tech-stack/">the agent tech stack</a>.</p>
+<h2>Strap every crate behind a port</h2>
+<p>You cannot wait for the crates to stop. You can strap them down so that when one slides, nothing else breaks.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 345" role="img" aria-label="Your agent talks only to a lavender model port. Three straps run from the port to three adapters: Anthropic, OpenAI and Groq. Each adapter holds a strapped crate, the product. A thick strap marks the one plugged in today. Below the adapters, a yellow box: contract tests, the same tests for every adapter."><rect class="pf pf-bx" x="34" y="119" width="198" height="98" rx="12"/><rect class="bx ol" x="30" y="115" width="200" height="100" rx="12"/><text class="tt" x="130.0" y="152.0" text-anchor="middle">Your agent</text><text class="sm" x="130.0" y="176.0" text-anchor="middle">talks only</text><text class="sm" x="130.0" y="195.0" text-anchor="middle">to the port</text><line class="ln" x1="232" y1="165" x2="278" y2="165" marker-end="url(#ar)"/><rect class="pf pf-solid" x="284" y="119" width="178" height="98" rx="12"/><rect class="solid ol" x="280" y="115" width="180" height="100" rx="12"/><text class="tt inv" x="370.0" y="152.0" text-anchor="middle">Model port</text><text class="inv sm2" x="370.0" y="176.0" text-anchor="middle">one small</text><text class="inv sm2" x="370.0" y="195.0" text-anchor="middle">interface</text><rect class="pf pf-bx" x="564" y="44" width="198" height="48" rx="12"/><rect class="bx ol" x="560" y="40" width="200" height="50" rx="12"/><text class="tt" x="660.0" y="61.5" text-anchor="middle">Anthropic adapter</text><text class="sm" x="660.0" y="85.5" text-anchor="middle"></text><line class="lnd" x1="462" y1="165" x2="558" y2="65"/><rect class="hz" x="800" y="42" width="70" height="46" rx="3"/><line class="ln" x1="800" y1="57.333333333333336" x2="870" y2="57.333333333333336"/><line class="ln" x1="800" y1="72.66666666666667" x2="870" y2="72.66666666666667"/><line class="lnc" x1="790" y1="65" x2="880" y2="65"/><line class="ln" x1="762" y1="65" x2="788" y2="65"/><rect class="pf pf-bx" x="564" y="124" width="198" height="48" rx="12"/><rect class="bx ol" x="560" y="120" width="200" height="50" rx="12"/><text class="tt" x="660.0" y="141.5" text-anchor="middle">OpenAI adapter</text><text class="sm" x="660.0" y="165.5" text-anchor="middle"></text><line class="lnd" x1="462" y1="165" x2="558" y2="145"/><rect class="hz" x="800" y="122" width="70" height="46" rx="3"/><line class="ln" x1="800" y1="137.33333333333334" x2="870" y2="137.33333333333334"/><line class="ln" x1="800" y1="152.66666666666666" x2="870" y2="152.66666666666666"/><line class="lnc" x1="790" y1="145" x2="880" y2="145"/><line class="ln" x1="762" y1="145" x2="788" y2="145"/><rect class="pf pf-bxs" x="564" y="204" width="198" height="48" rx="12"/><rect class="bxs ol" x="560" y="200" width="200" height="50" rx="12"/><text class="tt" x="660.0" y="221.5" text-anchor="middle">Groq adapter</text><text class="sm" x="660.0" y="245.5" text-anchor="middle"></text><line class="lnc" x1="462" y1="165" x2="558" y2="225"/><rect class="hz" x="800" y="202" width="70" height="46" rx="3"/><line class="ln" x1="800" y1="217.33333333333334" x2="870" y2="217.33333333333334"/><line class="ln" x1="800" y1="232.66666666666666" x2="870" y2="232.66666666666666"/><line class="lnc" x1="790" y1="225" x2="880" y2="225"/><line class="ln" x1="762" y1="225" x2="788" y2="225"/><text class="sm" x="835" y="25" text-anchor="middle">the products</text><rect class="pf pf-bxs" x="564" y="284" width="318" height="48" rx="12"/><rect class="bxs ol" x="560" y="280" width="320" height="50" rx="12"/><text class="tt" x="720.0" y="301.5" text-anchor="middle">Contract tests</text><text class="sm" x="720.0" y="325.5" text-anchor="middle">the same tests for every adapter</text><text class="sm" x="370" y="250" text-anchor="middle">the thick strap is the</text><text class="sm" x="370" y="270" text-anchor="middle">one plugged in today</text></svg><figcaption>Ports and adapters as cargo straps. When a crate slides, you change one adapter and one line of config.</figcaption></figure>
+<p>The strap has three parts.</p>
+<ol><li><strong>A port.</strong> A port is a small interface in your own code that names the job, such as "call a model" or "write a span". Your agent talks only to the port, never to a product.</li><li><strong>Adapters.</strong> An adapter is a short piece of code that makes one product fit the port. Swapping products means writing one adapter and changing one line of config.</li><li><strong>Contract tests.</strong> These are the same tests, run against every adapter. A new adapter is only plugged in when it passes them.</li></ol>
+<p>Our reference agent enforces this mechanically. A rule in the build says that only the model module may import a provider's SDK, only the tools module may speak MCP, and only the state modules may touch the database. A new module gets those bans without anyone remembering to add them. Traces work the same way: the tutorial's agent sends them to Application Insights, the reference agent sends them to Langfuse, and switching between the two is one adapter and one line of YAML. For how to do it in code, see <a href="/writing/harness-design-patterns/">swap anything, break nothing</a>.</p>
+<h2>Three rules for building on a moving ship</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 265" role="img" aria-label="Three cards. One, with a nailed plank: boring standards for the settled parts; use the plank directly, don&#x27;t wrap it. Two, with a strapped crate: ports for the moving parts, with adapters and the same contract tests. Three, with a rupee coin: your own code for anything that protects money: checks, budgets, cost per task."><rect class="hz" x="130" y="30" width="100" height="22" rx="3"/><circle class="hk" cx="142" cy="41" r="3"/><circle class="hk" cx="218" cy="41" r="3"/><rect class="hz" x="465" y="14" width="70" height="46" rx="3"/><line class="ln" x1="465" y1="29.333333333333336" x2="535" y2="29.333333333333336"/><line class="ln" x1="465" y1="44.66666666666667" x2="535" y2="44.66666666666667"/><line class="lnc" x1="455" y1="37" x2="545" y2="37"/><circle class="hz" cx="820" cy="37" r="24"/><text class="bd" x="820" y="45" text-anchor="middle">₹</text><rect class="pf pf-bx" x="34" y="84" width="298" height="168" rx="12"/><rect class="bx ol" x="30" y="80" width="300" height="170" rx="12"/><text class="tt" x="180.0" y="142.5" text-anchor="middle">Boring standards</text><text class="sm" x="180.0" y="166.5" text-anchor="middle">for the settled parts:</text><text class="sm" x="180.0" y="185.5" text-anchor="middle">use the plank directly,</text><text class="sm" x="180.0" y="204.5" text-anchor="middle">don&#x27;t wrap it</text><circle class="nm" cx="52" cy="80" r="14"/><text class="nmt" x="52" y="86" text-anchor="middle">1</text><rect class="pf pf-bx" x="354" y="84" width="298" height="168" rx="12"/><rect class="bx ol" x="350" y="80" width="300" height="170" rx="12"/><text class="tt" x="500.0" y="142.5" text-anchor="middle">Ports</text><text class="sm" x="500.0" y="166.5" text-anchor="middle">for the moving parts:</text><text class="sm" x="500.0" y="185.5" text-anchor="middle">adapters and the same</text><text class="sm" x="500.0" y="204.5" text-anchor="middle">contract tests</text><circle class="nm" cx="372" cy="80" r="14"/><text class="nmt" x="372" y="86" text-anchor="middle">2</text><rect class="pf pf-solid" x="674" y="84" width="298" height="168" rx="12"/><rect class="solid ol" x="670" y="80" width="300" height="170" rx="12"/><text class="tt inv" x="820.0" y="142.5" text-anchor="middle">Your own code</text><text class="inv sm2" x="820.0" y="166.5" text-anchor="middle">for anything that</text><text class="inv sm2" x="820.0" y="185.5" text-anchor="middle">protects money: checks,</text><text class="inv sm2" x="820.0" y="204.5" text-anchor="middle">budgets, cost per task</text><circle class="nm" cx="692" cy="80" r="14"/><text class="nmt" x="692" y="86" text-anchor="middle">3</text></svg><figcaption>Three rules for building on a moving ship.</figcaption></figure>
+<ol><li><strong>Boring standards for the settled parts.</strong> Don't wrap Postgres in a home-made database layer, and don't invent a tool protocol when MCP exists. Use the plank directly.</li><li><strong>Ports for the moving parts.</strong> Every crate in the list above goes behind a port with adapters and contract tests.</li><li><strong>Your own code for anything that protects money.</strong> The check before a ₹40,000 refund, the step budget on each turn, and the cost of each finished task belong in your code, at an exact step your tests can reach. In every comparison we made, these stayed in our own code. And if a product changes its behaviour, your money should not change with it.</li></ol>
+<h2>Mistakes we see often</h2>
+<ol><li><strong>Betting the whole agent on one framework.</strong> The framework owns the loop, the state, the traces and the retries. When it changes, or a better one arrives, the whole agent has to move.</li><li><strong>Building your own where a standard exists.</strong> A home-made trace format, tool protocol or login scheme is a crate you nailed down yourself. It ages fast and nobody else can read it.</li><li><strong>Waiting for things to settle before shipping.</strong> The crates may never stop. Teams that wait lose a year, and still have to choose.</li><li><strong>Putting a port in front of a plank.</strong> Wrapping Postgres or OpenTelemetry in your own abstraction adds code without adding freedom. Ports are for crates.</li><li><strong>Product names in business logic.</strong> If a vendor's name shows up in the code that decides a refund, swapping that vendor is a project, not an afternoon.</li></ol>
+<h2>Six questions to check your own agent</h2>
+<ol><li>For each part of your stack, can you say whether it is a plank or a crate?</li><li>Do you use the standard directly for every settled part, or did you build your own?</li><li>Does every moving part sit behind a port that your agent talks to?</li><li>If your framework or model vendor vanished tomorrow, how many files would change?</li><li>Do your contract tests run against every adapter, including the one you might swap to?</li><li>Are the checks that protect money in your own code, at a step a test can reach?</li></ol>
+<p>Stand on the planks, strap the crates, and ship.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/tech-compare.html">every harness concern with its options and our verdict side by side</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
