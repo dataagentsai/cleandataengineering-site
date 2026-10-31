@@ -158,7 +158,7 @@ def audit(rels):
             warns.append((rel, f"{h1} <h1>"))
         if "<html lang=" not in s:
             warns.append((rel, "no lang"))
-        for m in re.finditer(r'<script type="application/ld\+json">(.*?)</script>', s, re.S):
+        for m in re.finditer(r'<script type="application/ld\+json"[^>]*>(.*?)</script>', s, re.S):
             try:
                 json.loads(m.group(1))
             except Exception as e:  # noqa: BLE001
@@ -210,9 +210,184 @@ def fill_gaps(rels):
     return n
 
 
+# Titles and descriptions for the pages we most want found. They use the words people type into a
+# search box ("AI agent", "free", "simulator"), not only our own names. Applied after every build.
+TITLES = {
+    "learn/index.html": "Free data and AI engineering courses · Clean Data Engineering",
+    "learn/agent-harness-sim/index.html": "AI Agent Harness Simulator: watch an AI agent work, step by step",
+    "learn/agent-harness/index.html": "Agent Harness Tutorial: how an AI agent works, drawn simply",
+    "learn/eval-harness/index.html": "Eval Harness Tutorial: check what an AI agent did from its traces",
+    "learn/data-platform-sim/index.html": "Data Platform Simulator: one batch through Spark and Delta Lake",
+    "simulators/index.html": "Free AI agent and data platform simulators · Clean Data Engineering",
+    "research/index.html": "Open specifications for AI agents and data platforms",
+    "writing/index.html": "Blog: data, AI and LLM engineering, explained simply",
+    "projects/index.html": "Open-source data and AI community projects · Clean Data Engineering",
+    "certifications/index.html": "Free Claude Certified Architect and Azure AI-103 exam prep",
+    "problems/index.html": "79 hard, unsolved problems in data and AI engineering",
+}
+DESCRIPTIONS = {
+    "learn/agent-harness-sim/index.html": "Free AI agent harness simulator. Send a message to a claims assistant and watch every step: "
+                                          "tools, guardrail checks, code, the JSON to and from the model, and the trace.",
+    "learn/agent-harness/index.html": "Free, hand-drawn tutorial on the agent harness: the code around an AI model that makes an agent "
+                                      "safe and reliable. One real agent end to end, with real code.",
+}
+OG_IMAGE = f"{SITE}/assets/og-card.png"
+PERSON = {"@type": "Person", "name": "Basant Choudhary", "url": f"{SITE}/about/"}
+ORG = {"@type": "Organization", "name": "Clean Data Engineering", "url": f"{SITE}/",
+       "logo": {"@type": "ImageObject", "url": OG_IMAGE}}
+COURSES = ("learn/agent-harness/", "learn/eval-harness/")
+SIMS = ("learn/agent-harness-sim/", "learn/llm-api-sim/", "learn/data-platform-sim/")
+SUFFIX = " · Clean Data Engineering"
+
+
+def _attr(s):
+    import html as h
+    return h.escape(s, quote=True)
+
+
+def _head(s):
+    i = s.find("</head>")
+    return (s[:i], s[i:]) if i >= 0 else (None, None)
+
+
+def apply_titles(rels):
+    """Swap in the search-friendly title and description on the pages in TITLES / DESCRIPTIONS."""
+    n = 0
+    for rel in rels:
+        key = str(rel)
+        if key not in TITLES and key not in DESCRIPTIONS:
+            continue
+        p = ROOT / rel
+        s = p.read_text(errors="ignore")
+        head, rest = _head(s)
+        if head is None:
+            continue
+        new = head
+        if key in TITLES:
+            t = TITLES[key]
+            new = re.sub(r"<title>.*?</title>", lambda m: f"<title>{_attr(t)}</title>", new, count=1, flags=re.S)
+            new = re.sub(r'<meta property="og:title" content="[^"]*">', lambda m: f'<meta property="og:title" content="{_attr(t)}">', new)
+        if key in DESCRIPTIONS:
+            d = DESCRIPTIONS[key]
+            new = re.sub(r'<meta name="description" content="[^"]*">', lambda m: f'<meta name="description" content="{_attr(d)}">', new, count=1)
+            new = re.sub(r'<meta property="og:description" content="[^"]*">', lambda m: f'<meta property="og:description" content="{_attr(d)}">', new)
+        if new != head:
+            p.write_text(new + rest)
+            n += 1
+    return n
+
+
+def _meta(head, rx):
+    m = re.search(rx, head, re.S)
+    return m.group(1).strip() if m else ""
+
+
+def add_social(rels):
+    """Open Graph and Twitter card tags so a shared link shows a title, summary and picture."""
+    n = 0
+    for rel in rels:
+        p = ROOT / rel
+        s = p.read_text(errors="ignore")
+        head, rest = _head(s)
+        if head is None or 'http-equiv="refresh"' in head:
+            continue
+        title = _meta(head, r'property="og:title" content="([^"]*)"') or _meta(head, r"<title>(.*?)</title>")
+        desc = _meta(head, r'name="description" content="([^"]*)"')
+        want = {
+            'property="og:title"': f'<meta property="og:title" content="{title}">' if title else "",
+            'property="og:description"': f'<meta property="og:description" content="{desc}">' if desc else "",
+            'property="og:url"': f'<meta property="og:url" content="{url_of(rel)}">',
+            'property="og:type"': f'<meta property="og:type" content="{"article" if str(rel).startswith("writing/") and str(rel).count("/") == 2 else "website"}">',
+            'property="og:site_name"': '<meta property="og:site_name" content="Clean Data Engineering">',
+            'property="og:image"': f'<meta property="og:image" content="{OG_IMAGE}">',
+            'name="twitter:card"': '<meta name="twitter:card" content="summary_large_image">',
+        }
+        add = [tag for marker, tag in want.items() if tag and marker not in head]
+        if add:
+            p.write_text(head + "\n".join(add) + "\n" + rest)
+            n += 1
+    return n
+
+
+def _post_date(slug):
+    f = ROOT / "_writing" / "posts" / f"{slug}.md"
+    if f.exists():
+        m = re.search(r"^date:\s*(\d{4}-\d{2}-\d{2})", f.read_text(errors="ignore"), re.M)
+        if m:
+            return m.group(1)
+    return None
+
+
+def _clean_title(t):
+    import html as h
+    t = h.unescape(t)
+    return t[: -len(SUFFIX)] if t.endswith(SUFFIX) else t
+
+
+def add_jsonld(rels):
+    """Give every page that has no structured data one block: what the page is (article, course, simulator,
+    collection) plus a breadcrumb trail. Search engines and AI assistants read this to know what they are
+    looking at. Pages whose builders already write JSON-LD are left alone. Re-running replaces our block."""
+    import html as h
+    auto = re.compile(r'\n?<script type="application/ld\+json" data-seo="auto">.*?</script>', re.S)
+    titles = {}
+    for rel in rels:
+        s = (ROOT / rel).read_text(errors="ignore")
+        titles[url_of(rel)] = _clean_title(_meta(s[: s.find("</head>")], r"<title>(.*?)</title>"))
+    n = 0
+    for rel in rels:
+        p = ROOT / rel
+        s = auto.sub("", p.read_text(errors="ignore"))
+        head, rest = _head(s)
+        if head is None or 'http-equiv="refresh"' in head or "application/ld+json" in s:
+            continue
+        key, url = str(rel), url_of(rel)
+        name = titles[url]
+        desc = h.unescape(_meta(head, r'name="description" content="([^"]*)"'))
+        mod = lastmod(rel)
+        base = {"name": name, "url": url, "description": desc, "inLanguage": "en", "isAccessibleForFree": True}
+        course = next((c for c in COURSES if key.startswith(c)), None)
+        if key.startswith("writing/") and key.count("/") == 2:
+            main = {"@type": "BlogPosting", "headline": name[:110], **base, "datePublished": _post_date(rel.parts[1]) or mod,
+                    "dateModified": mod, "author": PERSON, "publisher": ORG, "image": OG_IMAGE, "mainEntityOfPage": url}
+        elif course and key == course + "index.html":
+            main = {"@type": "Course", **base, "provider": ORG, "author": PERSON,
+                    "offers": {"@type": "Offer", "price": 0, "priceCurrency": "USD", "category": "Free"},
+                    "hasCourseInstance": {"@type": "CourseInstance", "courseMode": "Online", "courseWorkload": "PT5H"}}
+        elif course:
+            main = {"@type": "LearningResource", **base, "isPartOf": {"@type": "Course", "url": f"{SITE}/{course}",
+                    "name": titles.get(f"{SITE}/{course}", "")}, "author": PERSON, "publisher": ORG, "dateModified": mod}
+        elif key.startswith(SIMS):
+            main = {"@type": "LearningResource", **base, "learningResourceType": "Interactive simulation",
+                    "author": PERSON, "publisher": ORG, "dateModified": mod}
+        elif key.startswith(("learn/", "certifications/", "concepts/", "paths/", "problems/")) and key.count("/") >= 2:
+            main = {"@type": "LearningResource", **base, "author": PERSON, "publisher": ORG, "dateModified": mod}
+        elif key.count("/") == 1:
+            main = {"@type": "CollectionPage", **base, "publisher": ORG}
+        else:
+            main = {"@type": "WebPage", **base, "publisher": ORG, "dateModified": mod}
+        crumbs, path = [{"@type": "ListItem", "position": 1, "name": "Home", "item": f"{SITE}/"}], ""
+        parts = [x for x in key.replace("index.html", "").split("/") if x]
+        for part in parts:
+            path += part if part.endswith(".html") else part + "/"
+            u = f"{SITE}/{path}"
+            crumbs.append({"@type": "ListItem", "position": len(crumbs) + 1,
+                           "name": titles.get(u) or part.replace("-", " ").replace(".html", "").capitalize(), "item": u})
+        graph = [{"@context": "https://schema.org", **main}]
+        if len(crumbs) > 1:
+            graph.append({"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": crumbs})
+        block = json.dumps(graph, ensure_ascii=False).replace("</", "<\\/")
+        p.write_text(head + f'<script type="application/ld+json" data-seo="auto">{block}</script>\n' + rest)
+        n += 1
+    return n
+
+
 def main():
     rels = list(pages())
     print(f"filled description/canonical on {fill_gaps(rels)} pages")
+    print(f"search titles/descriptions on {apply_titles(rels)} pages")
+    print(f"social card tags on {add_social(rels)} pages")
+    print(f"structured data (JSON-LD) on {add_jsonld(rels)} pages")
     n = write_sitemap(rels)
     write_robots()
     write_llms()
