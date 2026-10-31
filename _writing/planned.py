@@ -38,6 +38,8 @@ PLANNED = [
      "Which parts of the agent stack are adopted and here to stay, which are still in flux, and how to keep your agent tool-agnostic with ports, adapters and contract tests."),
     ("Choosing your agent loop: LangGraph vs OpenAI Agents SDK vs Claude Agent SDK vs plain code", "ai", "builders", "decision",
      "A comparison of orchestration and loop frameworks, with a 'pick this when' table."),
+    ("Just use Postgres: the one database your agent needs", "ai", "builders", "decision",
+     "Why PostgreSQL is here to stay for agents: one database for state, memory with pgvector, checkpoints, durable workflows, queues and the audit log, on every cloud (Lakebase, Azure, AlloyDB, Aurora, Neon)."),
     ("DBOS vs Temporal: durable agents without the drama", "ai", "builders", "decision",
      "Durable execution for long-running agents: the two models, their trade-offs, and when you need neither."),
     ("Seatbelts for agents: guardrails that actually hold", "ai", "builders", "explainer",
