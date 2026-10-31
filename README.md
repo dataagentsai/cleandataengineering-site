@@ -39,7 +39,7 @@ hand-made pages. `python3 _site/hubs.py` writes the hub pages: /simulators/, /re
 /assets/, /leaders/ (the one-minute version + questions leaders ask, for business and technology leaders),
 /papers/ (citable releases) and /about/. The home page's first screen is three lanes (Learn, Build with us, For
 leaders) plus a counts line; its styles are in the `home-css` block, which `_site/theme.py` leaves
-alone. The counts are hand-written; the latest post on the counts line is filled by `_writing/build.py`.
+alone. The counts are hand-written; a "From the blog" row (three picks) and a "Top 10 to read first" section under the first screen are hand-picked; edit them in index.html.
 
 ## SEO
 

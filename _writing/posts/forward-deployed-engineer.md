@@ -5,7 +5,7 @@ subject: career
 audience: builders
 kind: explainer
 draft: false
-summary: A forward-deployed engineer works inside a customer's team to make a product or AI system actually work in their world. The job runs in six steps: discovery, a scope that does as much as possible without a model, a prototype, deploying in the customer's own cloud, proving it with evals and cost numbers, and handing over. It needs engineering plus five traits: listening, writing, judgement, ownership of the customer's result, and the big picture.
+summary: A forward-deployed engineer works inside a customer's team to make a product or AI system actually work in their world. The job runs in six steps: discovery, a scope that does as much as possible without a model, a prototype, deploying in the customer's own cloud, proving it with evals and cost numbers, and handing over. It needs engineering plus ten traits, from listening and judgement to ownership of the customer's result and the big picture.
 linkedin: "Forward-deployed engineer" sounds like a job title from a spy film. It is really an engineer who sits with the customer until the thing works in their world, with their data, their rules and their cloud. Here is the job in six steps, the skills it needs, and how to grow into it.
 deeper: /concepts/deterministic-first/
 deeper_label: deterministic-first, the habit at the heart of step two
@@ -44,7 +44,7 @@ The posts on [offline evals](/writing/offline-evals/) and [measuring agent ROI](
 
 ## The skills mix
 
-Engineering is the base. You need to build things that run, read unfamiliar systems quickly and debug in someone else's environment. But engineering alone is not enough, and it is the other five that make the job.
+Engineering is the base. You need to build things that run, read unfamiliar systems quickly and debug in someone else's environment. But engineering alone is not enough, and it is the ten traits across the top that make the job.
 
 {{drawing: fde-skills}}
 
@@ -53,8 +53,13 @@ Engineering is the base. You need to build things that run, read unfamiliar syst
 - **Judgement.** Deciding what not to build. Saying "this part does not need a model". Telling the customer early that their data cannot support what they hoped. Choosing the boring, reliable option when the exciting one would make a better demo.
 - **Ownership.** You are measured by whether the customer succeeds, not by whether your code is correct. If the data turns out to be scanned PDFs, that is your problem too, because it decides the result. Report bad news early with a next step, and measure the outcome ("claims cleared in 12 minutes instead of 40") rather than the activity ("six features shipped").
 - **The big picture.** Every system sits in a chain. Know who feeds the data you depend on, who uses your output next, and which company goal the work serves. A change that works in your piece but breaks the payments team downstream is not a working change.
+- **Earning trust.** Keep small promises, say "I don't know yet" when you don't, and never let the customer be surprised by bad news. Everything else rests on this.
+- **Comfort with ambiguity.** There is rarely a full spec. Turn "make AI work for our claims team" into a concrete first step this week, and let the next step come from what you learn.
+- **Learning speed.** New domain, new data, new cloud, every engagement. Pick up enough insurance, pharma or retail in days to ask good questions.
+- **Pragmatism.** Ship the good-enough version that solves today's problem. Perfect is often just a later date.
+- **Carrying lessons back.** The gap you closed by hand at one customer will appear at the next. Turn the fix into a reusable piece and take it back to the product team; this is what makes an FDE worth more than a contractor.
 
-A useful test: could you explain what you built, why, and which company goal it moves, to the customer's finance lead in five minutes? If yes, the other five are working. The habit underneath all of them is in [fail fast, own the result](/writing/fail-fast-own-the-result/).
+A useful test: could you explain what you built, why, and which company goal it moves, to the customer's finance lead in five minutes? If yes, the traits are working. The habit underneath all of them is in [fail fast, own the result](/writing/fail-fast-own-the-result/).
 
 ## How it differs from nearby roles
 

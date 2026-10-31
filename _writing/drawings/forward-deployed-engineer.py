@@ -56,18 +56,21 @@ def drawing_fde_path():
 
 def drawing_fde_skills():
     b, t = kit.box, kit.text
-    d = t(500, 22, "a T-shape: one deep skill, five wide ones across the top", "sm", "middle")
+    d = t(500, 22, "a T-shape: one deep skill, ten traits across the top", "sm", "middle")
     tops = [("Listening", ["the problem inside", "the request"]), ("Writing", ["scope, notes,", "runbook"]),
             ("Judgement", ["what not to", "build"]), ("Ownership", ["their result,", "not my code"]),
-            ("Big picture", ["upstream, downstream,", "company goals"])]
+            ("Big picture", ["upstream, downstream,", "company goals"]),
+            ("Earning trust", ["small promises", "kept"]), ("Ambiguity", ["a first step", "without a spec"]),
+            ("Learning speed", ["new domain", "in days"]), ("Pragmatism", ["good enough,", "shipped"]),
+            ("Lessons back", ["one fix becomes", "a product piece"])]
     for i, (title, sub) in enumerate(tops):
-        d += b(15 + i * 197, 45, 182, 90, title, sub, "bxs")
-    d += b(378, 150, 245, 170, "Engineering", ["build, debug and", "deploy in someone", "else's environment"], "solid")
-    d += t(220, 230, ["the stem gets you", "in the door"], "sm", "middle")
-    d += t(780, 230, ["the bar makes it", "work for them"], "sm", "middle")
-    return figure(1000, 335, d,
-                  "A T-shape. The stem is engineering: build, debug and deploy in someone else's environment. The top bar has five traits: listening, writing, judgement, ownership of the customer's result, and the big picture of upstream, downstream and company goals.",
-                  "Engineering is the stem. Five traits across the top turn it into the FDE job.")
+        d += b(15 + (i % 5) * 197, 42 + (i // 5) * 82, 182, 72, title, sub, "bxs")
+    d += b(378, 214, 245, 135, "Engineering", ["build, debug and", "deploy in someone", "else's environment"], "solid")
+    d += t(220, 285, ["the stem gets you", "in the door"], "sm", "middle")
+    d += t(780, 285, ["the bar makes it", "work for them"], "sm", "middle")
+    return figure(1000, 365, d,
+                  "A T-shape. The stem is engineering. The top bar has ten traits: listening, writing, judgement, ownership, big picture, earning trust, comfort with ambiguity, learning speed, pragmatism, and carrying lessons back to the product.",
+                  "Engineering is the stem. Ten traits across the top turn it into the FDE job.")
 
 
 def drawing_fde_roles():
