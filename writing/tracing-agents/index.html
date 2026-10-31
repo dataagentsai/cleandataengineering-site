@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>If you can&#x27;t replay it, you can&#x27;t fix it: tracing autonomous agents · Clean Data Engineering</title>
+<meta name="description" content="When an agent gives a bad answer, the final reply tells you almost nothing. You need a trace: one per turn, with a span for every model call, tool call and check, carrying the model, a prompt version, tokens, cost, time and the decision, but not the customer&#x27;s personal data. With that, yesterday&#x27;s bad conversation becomes something you can step through and turn into a test."><link rel="canonical" href="https://cleandataengineering.ai/writing/tracing-agents/">
+<meta property="og:title" content="If you can&#x27;t replay it, you can&#x27;t fix it: tracing autonomous agents"><meta property="og:description" content="When an agent gives a bad answer, the final reply tells you almost nothing. You need a trace: one per turn, with a span for every model call, tool call and check, carrying the model, a prompt version, tokens, cost, time and the decision, but not the customer&#x27;s personal data. With that, yesterday&#x27;s bad conversation becomes something you can step through and turn into a test."><meta property="og:url" content="https://cleandataengineering.ai/writing/tracing-agents/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>If you can&#x27;t replay it, you can&#x27;t fix it: tracing autonomous agents</h1>
+  </div>
+  <div class="summary">When an agent gives a bad answer, the final reply tells you almost nothing. You need a trace: one per turn, with a span for every model call, tool call and check, carrying the model, a prompt version, tokens, cost, time and the decision, but not the customer's personal data. With that, yesterday's bad conversation becomes something you can step through and turn into a test.</div>
+<p>A policyholder rings the call centre. <em>"Your assistant told me my payout was on its way. Where is it?"</em> Somebody opens the logs. They find the reply, word for word, and nothing else.</p>
+<p>Was it the model? A tool that returned old data? A check that should have fired and didn't? A new prompt that went out on Tuesday? Nobody can say. So the team guesses, changes the prompt, and hopes.</p>
+<p>An agent doesn't produce one answer. It takes several steps: it asks the model, calls tools, gets checked, and asks the model again. If you only keep the last step, you can't fix the first one. This post is about keeping all of them, in a way you can replay.</p>
+<h2>No trace, no clues</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 240" role="img" aria-label="A complaint about a bad answer. A detective engineer looks at two evidence boards: one holds only the final reply and question marks; the other holds a trace of every model call, tool call and check, which gives clues."><rect class="bxm ol" x="10" y="40" width="230" height="110" rx="12"/><text class="tt" x="125.0" y="82.0" text-anchor="middle">The complaint</text><text class="sm" x="125.0" y="106.0" text-anchor="middle">&quot;the assistant said my</text><text class="sm" x="125.0" y="125.0" text-anchor="middle">payout was on its way&quot;</text><circle class="hz" cx="330" cy="90" r="14"/><line class="lnc" x1="330" y1="104" x2="330" y2="142"/><line class="lnc" x1="330" y1="142" x2="318" y2="166"/><line class="lnc" x1="330" y1="142" x2="342" y2="166"/><path class="hk" d="M308,80 L352,80 L344,68 L316,68 Z"/><line class="lnc" x1="330" y1="122" x2="364" y2="108"/><line class="lnc" x1="364" y1="108" x2="378" y2="98"/><circle class="hz" cx="390" cy="88" r="16"/><text class="sm" x="330" y="200" text-anchor="middle">the on-call engineer</text><rect class="bxm ol" x="440" y="20" width="250" height="180" rx="12"/><text class="tt" x="565.0" y="97.0" text-anchor="middle">Only the reply</text><text class="sm" x="565.0" y="121.0" text-anchor="middle">one line of text,</text><text class="sm" x="565.0" y="140.0" text-anchor="middle">no steps, no times</text><text class="bd" x="565" y="178" text-anchor="middle">? ? ?</text><rect class="pf pf-bx" x="724" y="24" width="268" height="178" rx="12"/><rect class="bx ol" x="720" y="20" width="270" height="180" rx="12"/><text class="tt" x="855.0" y="87.5" text-anchor="middle">A trace</text><text class="sm" x="855.0" y="111.5" text-anchor="middle">every model call,</text><text class="sm" x="855.0" y="130.5" text-anchor="middle">tool call and check,</text><text class="sm" x="855.0" y="149.5" text-anchor="middle">in order, with times</text><text class="bd" x="855" y="180" text-anchor="middle">clues</text><text class="sm" x="565" y="228" text-anchor="middle">a guess</text><text class="sm" x="855" y="228" text-anchor="middle">a fix</text></svg><figcaption>With only the reply, you can guess. With a trace, you can find the step that went wrong.</figcaption></figure>
+<p>A <strong>trace</strong> is the written record of one piece of work, broken into timed pieces called <strong>spans</strong>. Each span says what happened, when it started, how long it took, and a few facts about it. Spans sit inside each other, so the record reads like a tree.</p>
+<p>The example here is the claims assistant from our <a href="/learn/agent-harness/">Agent Harness tutorial</a>: a motor insurer's chat assistant on Azure, where a signed-in policyholder like Rohan can ask about his claims, report a new one or ask for an approved claim to be paid.</p>
+<h2>One trace per turn</h2>
+<p>A <strong>turn</strong> is one message from Rohan and everything the agent does before it replies. Make each turn one trace. That is the unit people complain about, and the unit you will want to replay.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 400" role="img" aria-label="A trace tree for one turn. agent.turn at the top, agent.run inside it, and inside that three gen_ai.chat model calls, one agent.tool call to get_claim, and one agent.policy check that blocked request_payout."><rect class="pf pf-solid" x="24" y="18" width="198" height="38" rx="12"/><rect class="solid ol" x="20" y="14" width="200" height="40" rx="12"/><text class="tt inv" x="120.0" y="30.5" text-anchor="middle">agent.turn</text><text class="inv sm2" x="120.0" y="54.5" text-anchor="middle"></text><text class="sm" x="236" y="40" text-anchor="start">Rohan asks about CLM-019900; how it ended</text><rect class="pf pf-bx" x="94" y="72" width="198" height="38" rx="12"/><rect class="bx ol" x="90" y="68" width="200" height="40" rx="12"/><text class="tt" x="190.0" y="84.5" text-anchor="middle">agent.run</text><text class="sm" x="190.0" y="108.5" text-anchor="middle"></text><text class="sm" x="306" y="94" text-anchor="start">3 model calls, $0.00087, why it ended</text><path class="ln" d="M50,54 L50,88 L86,88"/><rect class="pf pf-bx" x="164" y="126" width="198" height="38" rx="12"/><rect class="bx ol" x="160" y="122" width="200" height="40" rx="12"/><text class="tt" x="260.0" y="138.5" text-anchor="middle">gen_ai.chat</text><text class="sm" x="260.0" y="162.5" text-anchor="middle"></text><text class="sm" x="376" y="148" text-anchor="start">step 1: model asks for get_claim</text><path class="ln" d="M120,108 L120,142 L156,142"/><rect class="pf pf-bx" x="164" y="180" width="198" height="38" rx="12"/><rect class="bx ol" x="160" y="176" width="200" height="40" rx="12"/><text class="tt" x="260.0" y="192.5" text-anchor="middle">agent.tool</text><text class="sm" x="260.0" y="216.5" text-anchor="middle"></text><text class="sm" x="376" y="202" text-anchor="start">get_claim: outcome ok, result size</text><path class="ln" d="M120,162 L120,196 L156,196"/><rect class="pf pf-bx" x="164" y="234" width="198" height="38" rx="12"/><rect class="bx ol" x="160" y="230" width="200" height="40" rx="12"/><text class="tt" x="260.0" y="246.5" text-anchor="middle">gen_ai.chat</text><text class="sm" x="260.0" y="270.5" text-anchor="middle"></text><text class="sm" x="376" y="256" text-anchor="start">step 2: model asks for request_payout</text><path class="ln" d="M120,216 L120,250 L156,250"/><rect class="pf pf-bxs" x="164" y="288" width="198" height="38" rx="12"/><rect class="bxs ol" x="160" y="284" width="200" height="40" rx="12"/><text class="tt" x="260.0" y="300.5" text-anchor="middle">agent.policy</text><text class="sm" x="260.0" y="324.5" text-anchor="middle"></text><text class="sm" x="376" y="310" text-anchor="start">before the tool: blocked, nobody asked</text><path class="ln" d="M120,270 L120,304 L156,304"/><rect class="pf pf-bx" x="164" y="342" width="198" height="38" rx="12"/><rect class="bx ol" x="160" y="338" width="200" height="40" rx="12"/><text class="tt" x="260.0" y="354.5" text-anchor="middle">gen_ai.chat</text><text class="sm" x="260.0" y="378.5" text-anchor="middle"></text><text class="sm" x="376" y="364" text-anchor="start">step 3: model writes the reply</text><path class="ln" d="M120,324 L120,358 L156,358"/><text class="bd" x="980" y="30" text-anchor="end">one trace</text><text class="bd" x="980" y="52" text-anchor="end">per turn</text></svg><figcaption>One turn of the claims assistant as a trace: the turn, the run, and a span for every model call, tool call and check.</figcaption></figure>
+<p>This is a real turn, the one from <a href="/learn/agent-harness/flow-13.html">flow 13 of the tutorial</a>, where we planted a note in claim CLM-019900 telling the assistant to pay out. Read it top to bottom:</p>
+<ol><li><code>agent.turn</code> is the whole turn. It carries who asked, which conversation, and how the turn ended.</li><li><code>agent.run</code> is the loop inside it. It carries the total cost and why the loop stopped.</li><li>Each <code>gen_ai.chat</code> is one model call. There were three.</li><li><code>agent.tool</code> is one tool call, here <code>get_claim</code>.</li><li><code>agent.policy</code> is one check. This one sat before a tool, saw that Rohan never asked for a payout, and blocked <code>request_payout</code>.</li></ol>
+<p>Without the tree, all you know is that the reply was fine. With it, you can see the model <em>was</em> fooled at step 2, and the check is why nothing was paid. That is a different story, with a different fix.</p>
+<p>Every span in a turn shares one trace id, and the conversation id rides along on every span too. On Azure that means one query in Application Insights pulls up the whole turn in order.</p>
+<h2>What one span should hold</h2>
+<p>The fields are where most tracing goes wrong. Too few and you can't explain anything. Too many and you're storing personal data in a system that wasn't built for it.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 285" role="img" aria-label="Three index cards. A model call span holds the model, a config fingerprint, tokens, cost and time. A tool call span holds the tool name, whether it changes something, an idempotency key, the outcome and whether the result was cut. A check span holds where it sits, which rule blocked, and whether it failed or timed out."><rect class="pf pf-bxs" x="15" y="25" width="310" height="250" rx="10"/><rect class="hz" x="10" y="20" width="310" height="250" rx="10"/><circle class="hz" cx="300" cy="40" r="7"/><text class="bd" x="30" y="52" text-anchor="start">gen_ai.chat</text><text class="sm" x="30" y="74" text-anchor="start">a model call</text><line class="lnd" x1="26" y1="88" x2="304" y2="88"/><line class="ln" x1="30" y1="126" x2="300" y2="126"/><text class="tx" x="30" y="118" text-anchor="start">model asked for, model that answered</text><line class="ln" x1="30" y1="160" x2="300" y2="160"/><text class="tx" x="30" y="152" text-anchor="start">config fingerprint (prompt version)</text><line class="ln" x1="30" y1="194" x2="300" y2="194"/><text class="tx" x="30" y="186" text-anchor="start">tokens in, tokens out</text><line class="ln" x1="30" y1="228" x2="300" y2="228"/><text class="tx" x="30" y="220" text-anchor="start">cost of this call</text><line class="ln" x1="30" y1="262" x2="300" y2="262"/><text class="tx" x="30" y="254" text-anchor="start">how long it took</text><rect class="pf pf-bxs" x="345" y="25" width="310" height="250" rx="10"/><rect class="hz" x="340" y="20" width="310" height="250" rx="10"/><circle class="hz" cx="630" cy="40" r="7"/><text class="bd" x="360" y="52" text-anchor="start">agent.tool</text><text class="sm" x="360" y="74" text-anchor="start">a tool call</text><line class="lnd" x1="356" y1="88" x2="634" y2="88"/><line class="ln" x1="360" y1="126" x2="630" y2="126"/><text class="tx" x="360" y="118" text-anchor="start">tool name: get_claim</text><line class="ln" x1="360" y1="160" x2="630" y2="160"/><text class="tx" x="360" y="152" text-anchor="start">changes something? yes or no</text><line class="ln" x1="360" y1="194" x2="630" y2="194"/><text class="tx" x="360" y="186" text-anchor="start">idempotency key</text><line class="ln" x1="360" y1="228" x2="630" y2="228"/><text class="tx" x="360" y="220" text-anchor="start">outcome: ok, refused, error</text><line class="ln" x1="360" y1="262" x2="630" y2="262"/><text class="tx" x="360" y="254" text-anchor="start">result cut to size? how much</text><rect class="pf pf-bxs" x="675" y="25" width="310" height="250" rx="10"/><rect class="hz" x="670" y="20" width="310" height="250" rx="10"/><circle class="hz" cx="960" cy="40" r="7"/><text class="bd" x="690" y="52" text-anchor="start">agent.policy</text><text class="sm" x="690" y="74" text-anchor="start">a check</text><line class="lnd" x1="686" y1="88" x2="964" y2="88"/><line class="ln" x1="690" y1="126" x2="960" y2="126"/><text class="tx" x="690" y="118" text-anchor="start">where it sits: before the tool</text><line class="ln" x1="690" y1="160" x2="960" y2="160"/><text class="tx" x="690" y="152" text-anchor="start">which rule blocked it</text><line class="ln" x1="690" y1="194" x2="960" y2="194"/><text class="tx" x="690" y="186" text-anchor="start">did the check itself fail?</text><line class="ln" x1="690" y1="228" x2="960" y2="228"/><text class="tx" x="690" y="220" text-anchor="start">did it time out?</text><line class="ln" x1="690" y1="262" x2="960" y2="262"/><text class="tx" x="690" y="254" text-anchor="start">how long it took</text></svg><figcaption>What one span holds, for the three kinds that matter most. None of these fields contains the customer's words.</figcaption></figure>
+<p>For a <strong>model call</strong>, keep:</p>
+<ul><li><strong>The model you asked for, and the model that answered.</strong> They can differ: a provider may serve a specific build behind a general name.</li><li><strong>A prompt version.</strong> Our harness records a <em>config fingerprint</em>: a short code that changes whenever the prompt, the model or the settings change. If quality drops on Wednesday, you can see that every bad turn carries the fingerprint that went live on Tuesday.</li><li><strong>Tokens in and tokens out</strong>, and the <strong>cost</strong> of the call in money.</li><li><strong>How long it took.</strong> The span's own start and end give you this for free.</li></ul>
+<p>For a <strong>tool call</strong>, keep the tool's name, whether it changes anything in the world, the <strong>outcome</strong> (ok, refused, error or replayed), and how big the result was, including whether it was cut down before reaching the model. Our harness cuts tool results at 8,000 characters, and the span says when it did.</p>
+<p>For a <strong>check</strong>, keep where it sits, <strong>which rule fired</strong>, and whether the check itself failed or timed out. A check that errors quietly looks exactly like a check that passed, unless the span says so.</p>
+<p>On the turn itself, keep <strong>the decision</strong>: did it complete, refuse, hand over to a person, or wait for approval? And if a rule caused that, which rule?</p>
+<h2>OpenTelemetry, in plain words</h2>
+<p>You don't need to invent a format for any of this. <strong>OpenTelemetry</strong> is an open standard, run by the Cloud Native Computing Foundation, for writing traces, metrics and logs. Your code writes spans through its library. A small piece called an <strong>exporter</strong> sends them wherever you like: Application Insights, Grafana, Langfuse, Datadog or a file on disk. To change where traces go, you change the exporter, not your code.</p>
+<p>OpenTelemetry also publishes <strong>semantic conventions</strong>: agreed names for common fields, so every tool knows where to look. The <strong>GenAI conventions</strong> cover model calls. They give names like <code>gen_ai.request.model</code>, <code>gen_ai.response.model</code>, <code>gen_ai.usage.input_tokens</code>, <code>gen_ai.usage.output_tokens</code> and <code>gen_ai.tool.name</code>. Our <code>gen_ai.chat</code> span uses those names. Fields the standard doesn't cover yet, like cost, the config fingerprint or which check fired, go under our own <code>agent.</code> prefix.</p>
+<p>The GenAI conventions are still young, and some names have already changed. Keep every name in one file, so a rename is a one-line change. We also keep a <strong>span contract</strong>: a list of every span and the fields it must carry. A test fails if the code writes a span that isn't on the list, or leaves out a required field.</p>
+<h2>Store, redact or drop</h2>
+<p>Decide where every field goes before you write the first span.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 305" role="img" aria-label="Three bins. Store, on every turn: span names, times, model, tokens, cost, tool names, outcomes and which check fired. Redact, only on chosen turns: the customer&#x27;s words, the reply, tool arguments and results, masked then capped. Drop, never kept: identity numbers, card and phone numbers, passwords, tokens and whole documents."><text class="tx" x="170" y="30" text-anchor="middle">span names and times</text><text class="tx" x="170" y="54" text-anchor="middle">model, tokens, cost</text><text class="tx" x="170" y="78" text-anchor="middle">tool names, outcomes</text><text class="tx" x="170" y="102" text-anchor="middle">which check fired</text><path class="zg" d="M60,140 L280,140 L260,290 L80,290 Z"/><path class="hz" d="M60,140 L280,140 L260,290 L80,290 Z" fill-opacity="0"/><rect class="hz" x="48" y="126" width="244" height="16" rx="4"/><text class="bd" x="170" y="205" text-anchor="middle">STORE</text><text class="sm" x="170" y="230" text-anchor="middle">on every turn</text><text class="tx" x="500" y="30" text-anchor="middle">the customer&#x27;s words</text><text class="tx" x="500" y="54" text-anchor="middle">the reply</text><text class="tx" x="500" y="78" text-anchor="middle">tool arguments, results</text><text class="tx" x="500" y="102" text-anchor="middle">masked, then capped</text><path class="zy" d="M390,140 L610,140 L590,290 L410,290 Z"/><path class="hz" d="M390,140 L610,140 L590,290 L410,290 Z" fill-opacity="0"/><rect class="hz" x="378" y="126" width="244" height="16" rx="4"/><text class="bd" x="500" y="205" text-anchor="middle">REDACT</text><text class="sm" x="500" y="230" text-anchor="middle">only on chosen turns</text><text class="tx" x="830" y="30" text-anchor="middle">Aadhaar, PAN, card</text><text class="tx" x="830" y="54" text-anchor="middle">and phone numbers</text><text class="tx" x="830" y="78" text-anchor="middle">passwords and tokens</text><text class="tx" x="830" y="102" text-anchor="middle">whole documents</text><path class="zr" d="M720,140 L940,140 L920,290 L740,290 Z"/><path class="hz" d="M720,140 L940,140 L920,290 L740,290 Z" fill-opacity="0"/><rect class="hz" x="708" y="126" width="244" height="16" rx="4"/><text class="bd" x="830" y="205" text-anchor="middle">DROP</text><text class="sm" x="830" y="230" text-anchor="middle">never kept</text></svg><figcaption>Sort every field into one of three bins before you write the first span.</figcaption></figure>
+<ul><li><strong>Store</strong> the structure on every turn: span names, times, models, tokens, cost, tool names, outcomes, checks and decisions. None of it is personal, and it answers most questions.</li><li><strong>Redact</strong> the words. The customer's message, the reply, tool arguments and results are kept only on turns chosen for capture, masked first, then cut to a fixed length. In our harness that is 4,000 characters. Each turn also carries a flag saying whether its words were kept, so a check that found nothing in an empty reply isn't counted as a pass.</li><li><strong>Drop</strong> what should never leave the process. Our redaction step masks Aadhaar numbers (it checks the last digit, so a random 12-digit reference isn't mistaken for one), PAN, card and phone numbers before anything is exported.</li></ul>
+<p>On the claims assistant in Azure today, no words are captured at all. The structure alone was enough to explain the planted-note turn.</p>
+<h2>How long to keep it</h2>
+<p>Pick a number on purpose. Ours is <strong>30 days</strong> in the Log Analytics workspace, which is included in the price, with a daily cap so a runaway logger can't run up a bill. Anything you need for longer, such as a turn that became a test case, should be copied out into your test suite, not kept by making every trace live forever. If your industry has its own retention rules, those win.</p>
+<h2>Replay: stepping through yesterday</h2>
+<p>A trace tells you <em>what</em> happened. <strong>Replay</strong> lets you watch it again, one step at a time, and try a fix.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 295" role="img" aria-label="A film strip of six frames: Rohan asks, the model asks for get_claim, the tool returns the claim with a planted note, the model asks for request_payout, the check blocks it, the reply gives the assessor&#x27;s words with nothing paid. Play, pause and step buttons sit below, with an arrow pointing at the fourth frame."><rect class="hz" x="4" y="40" width="992" height="150" rx="6"/><rect class="hk" x="16" y="45" width="14" height="7" rx="2"/><rect class="hk" x="16" y="173" width="14" height="9" rx="2"/><rect class="hk" x="54" y="45" width="14" height="7" rx="2"/><rect class="hk" x="54" y="173" width="14" height="9" rx="2"/><rect class="hk" x="92" y="45" width="14" height="7" rx="2"/><rect class="hk" x="92" y="173" width="14" height="9" rx="2"/><rect class="hk" x="130" y="45" width="14" height="7" rx="2"/><rect class="hk" x="130" y="173" width="14" height="9" rx="2"/><rect class="hk" x="168" y="45" width="14" height="7" rx="2"/><rect class="hk" x="168" y="173" width="14" height="9" rx="2"/><rect class="hk" x="206" y="45" width="14" height="7" rx="2"/><rect class="hk" x="206" y="173" width="14" height="9" rx="2"/><rect class="hk" x="244" y="45" width="14" height="7" rx="2"/><rect class="hk" x="244" y="173" width="14" height="9" rx="2"/><rect class="hk" x="282" y="45" width="14" height="7" rx="2"/><rect class="hk" x="282" y="173" width="14" height="9" rx="2"/><rect class="hk" x="320" y="45" width="14" height="7" rx="2"/><rect class="hk" x="320" y="173" width="14" height="9" rx="2"/><rect class="hk" x="358" y="45" width="14" height="7" rx="2"/><rect class="hk" x="358" y="173" width="14" height="9" rx="2"/><rect class="hk" x="396" y="45" width="14" height="7" rx="2"/><rect class="hk" x="396" y="173" width="14" height="9" rx="2"/><rect class="hk" x="434" y="45" width="14" height="7" rx="2"/><rect class="hk" x="434" y="173" width="14" height="9" rx="2"/><rect class="hk" x="472" y="45" width="14" height="7" rx="2"/><rect class="hk" x="472" y="173" width="14" height="9" rx="2"/><rect class="hk" x="510" y="45" width="14" height="7" rx="2"/><rect class="hk" x="510" y="173" width="14" height="9" rx="2"/><rect class="hk" x="548" y="45" width="14" height="7" rx="2"/><rect class="hk" x="548" y="173" width="14" height="9" rx="2"/><rect class="hk" x="586" y="45" width="14" height="7" rx="2"/><rect class="hk" x="586" y="173" width="14" height="9" rx="2"/><rect class="hk" x="624" y="45" width="14" height="7" rx="2"/><rect class="hk" x="624" y="173" width="14" height="9" rx="2"/><rect class="hk" x="662" y="45" width="14" height="7" rx="2"/><rect class="hk" x="662" y="173" width="14" height="9" rx="2"/><rect class="hk" x="700" y="45" width="14" height="7" rx="2"/><rect class="hk" x="700" y="173" width="14" height="9" rx="2"/><rect class="hk" x="738" y="45" width="14" height="7" rx="2"/><rect class="hk" x="738" y="173" width="14" height="9" rx="2"/><rect class="hk" x="776" y="45" width="14" height="7" rx="2"/><rect class="hk" x="776" y="173" width="14" height="9" rx="2"/><rect class="hk" x="814" y="45" width="14" height="7" rx="2"/><rect class="hk" x="814" y="173" width="14" height="9" rx="2"/><rect class="hk" x="852" y="45" width="14" height="7" rx="2"/><rect class="hk" x="852" y="173" width="14" height="9" rx="2"/><rect class="hk" x="890" y="45" width="14" height="7" rx="2"/><rect class="hk" x="890" y="173" width="14" height="9" rx="2"/><rect class="hk" x="928" y="45" width="14" height="7" rx="2"/><rect class="hk" x="928" y="173" width="14" height="9" rx="2"/><rect class="hk" x="966" y="45" width="14" height="7" rx="2"/><rect class="hk" x="966" y="173" width="14" height="9" rx="2"/><rect class="bxm ol" x="14" y="66" width="148" height="100" rx="12"/><text class="tt" x="88.0" y="103.0" text-anchor="middle">Rohan asks</text><text class="sm" x="88.0" y="127.0" text-anchor="middle">what did the</text><text class="sm" x="88.0" y="146.0" text-anchor="middle">assessor write?</text><circle class="nm" cx="24" cy="66" r="14"/><text class="nmt" x="24" y="72" text-anchor="middle">1</text><rect class="pf pf-bx" x="182" y="70" width="146" height="98" rx="12"/><rect class="bx ol" x="178" y="66" width="148" height="100" rx="12"/><text class="tt" x="252.0" y="103.0" text-anchor="middle">Model</text><text class="sm" x="252.0" y="127.0" text-anchor="middle">asks for</text><text class="sm" x="252.0" y="146.0" text-anchor="middle">get_claim</text><circle class="nm" cx="188" cy="66" r="14"/><text class="nmt" x="188" y="72" text-anchor="middle">2</text><rect class="pf pf-bx" x="346" y="70" width="146" height="98" rx="12"/><rect class="bx ol" x="342" y="66" width="148" height="100" rx="12"/><text class="tt" x="416.0" y="103.0" text-anchor="middle">Tool</text><text class="sm" x="416.0" y="127.0" text-anchor="middle">claim + a</text><text class="sm" x="416.0" y="146.0" text-anchor="middle">planted note</text><circle class="nm" cx="352" cy="66" r="14"/><text class="nmt" x="352" y="72" text-anchor="middle">3</text><rect class="pf pf-solid" x="510" y="70" width="146" height="98" rx="12"/><rect class="solid ol" x="506" y="66" width="148" height="100" rx="12"/><text class="tt inv" x="580.0" y="103.0" text-anchor="middle">Model</text><text class="inv sm2" x="580.0" y="127.0" text-anchor="middle">asks for</text><text class="inv sm2" x="580.0" y="146.0" text-anchor="middle">request_payout</text><circle class="nm" cx="516" cy="66" r="14"/><text class="nmt" x="516" y="72" text-anchor="middle">4</text><rect class="pf pf-bxs" x="674" y="70" width="146" height="98" rx="12"/><rect class="bxs ol" x="670" y="66" width="148" height="100" rx="12"/><text class="tt" x="744.0" y="103.0" text-anchor="middle">Check</text><text class="sm" x="744.0" y="127.0" text-anchor="middle">blocked:</text><text class="sm" x="744.0" y="146.0" text-anchor="middle">nobody asked</text><circle class="nm" cx="680" cy="66" r="14"/><text class="nmt" x="680" y="72" text-anchor="middle">5</text><rect class="pf pf-bx" x="838" y="70" width="146" height="98" rx="12"/><rect class="bx ol" x="834" y="66" width="148" height="100" rx="12"/><text class="tt" x="908.0" y="103.0" text-anchor="middle">Reply</text><text class="sm" x="908.0" y="127.0" text-anchor="middle">the assessor&#x27;s</text><text class="sm" x="908.0" y="146.0" text-anchor="middle">words, ₹0 paid</text><circle class="nm" cx="844" cy="66" r="14"/><text class="nmt" x="844" y="72" text-anchor="middle">6</text><path class="hz" d="M330,212 L330,244 L356,228 Z"/><rect class="hz" x="380" y="212" width="9" height="32" rx="2"/><rect class="hz" x="396" y="212" width="9" height="32" rx="2"/><path class="hz" d="M430,212 L430,244 L450,228 Z"/><line class="lnc" x1="455" y1="212" x2="455" y2="244"/><text class="sm" x="470" y="234" text-anchor="start">step</text><line class="ln" x1="576" y1="262" x2="576" y2="172" marker-end="url(#ar)"/><text class="sm" x="600" y="280" text-anchor="start">pause here: this is the step to explain, and the test to write</text><text class="sm" x="500" y="24" text-anchor="middle">a captured turn, stepped through with its recorded model answers: no live model, $0</text></svg><figcaption>Replay is a film you can pause. The frame where it went wrong becomes the next test.</figcaption></figure>
+<p>Replay needs one more piece: the recorded model answers. Our harness can record each real model call once and play it back later, with no network and no cost. Each recording is keyed by a fingerprint of exactly what the model was sent. If you change the prompt, the model or the tool list, the replay refuses rather than quietly calling the live model, so you always know which run you're looking at.</p>
+<p>A replay goes like this:</p>
+<ol><li>Find the turn by its conversation id.</li><li>Load the recorded model answers and run the turn again through the real harness.</li><li>Pause at each span and compare: what the model asked for, what the tool returned, what the check decided.</li><li>Change one thing, such as the prompt, the rule or the tool, and run it again.</li><li>Save the turn as a test, so the same mistake can't ship twice.</li></ol>
+<p>This works for a turn whose words and model answers were recorded, such as a test run or a turn chosen for capture. In our harness, turning any production turn into a test in one step is not built yet; it is on the list.</p>
+<p>That last step is where tracing meets <strong>evals</strong>, the tests you run on an agent before and after release. A good trace is the raw material for a good eval. Evals get their own post.</p>
+<h2>Four mistakes we see often</h2>
+<ol><li><strong>Logging only the final answer.</strong> You can see that it went wrong, never where.</li><li><strong>Logging full personal data.</strong> Traces get copied, exported and shared with vendors. Anything personal in them is now in all those places.</li><li><strong>No prompt version.</strong> Prompts change more often than code. Without a version on every model call, you can't tie a bad week to the change that caused it.</li><li><strong>Traces in a format you can't leave.</strong> A vendor's own logging library is quick to start with. Then the price changes, or you need a second tool, and every span has to be rewritten. Write OpenTelemetry and swap the exporter instead.</li></ol>
+<h2>Six questions to check your own agent</h2>
+<ol><li>Can you pull up every step of one turn from a conversation id alone?</li><li>Does every model call record the model that answered and the prompt version?</li><li>Can you tell which check fired, and whether a check failed quietly?</li><li>Do you know the cost of a single turn, not just the monthly bill?</li><li>Could you show a regulator your traces today without exposing personal data?</li><li>Could you replay last Tuesday's worst conversation without calling the live model?</li></ol>
+<p>If the answer to the last one is no, start there; the other five come along on the way.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/eval-otel.html">every span and every field, read from the real span contract</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
