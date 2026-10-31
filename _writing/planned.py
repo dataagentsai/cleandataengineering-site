@@ -34,6 +34,8 @@ PLANNED = [
      "Inversion of control, ports and adapters, strategy, chain of responsibility for guards, decorators for retries, and contract tests per port."),
     ("The autonomous agent tech stack, one concern at a time", "ai", "builders", "explainer",
      "A complete map of the tools for each concern: loop, models, tools, memory, context, guardrails, security, human in the loop, tracing, evals, durability and cost."),
+    ("One harness, five homes: the agent harness on Azure, GCP, AWS, Databricks and open source", "ai", "builders", "decision",
+     "The same harness concerns mapped to each platform's products side by side, where each platform is strong or thin, and how to pick."),
     ("Building agents on a moving ship: what has settled, what is still open, and how not to get stuck", "ai", "builders", "decision",
      "Which parts of the agent stack are adopted and here to stay, which are still in flux, and how to keep your agent tool-agnostic with ports, adapters and contract tests."),
     ("Choosing your agent loop: LangGraph vs OpenAI Agents SDK vs Claude Agent SDK vs plain code", "ai", "builders", "decision",
