@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent-to-agent protocols (A2A): worth watching, not yet settled · Clean Data Engineering</title>
+<meta name="description" content="Agent-to-agent protocols promise that agents built by different teams or companies can find each other and hand over work in one standard way. A2A is the leading one, and it is worth learning, but in October 2026 it is still moving. Don&#x27;t bet your agent on it yet. Put hand-offs behind a port, pass a typed ticket with depth and fan-out limits, keep one trace across agents, and check identity at every hop, so plugging A2A in later is one adapter."><link rel="canonical" href="https://cleandataengineering.ai/writing/a2a-not-settled/">
+<meta property="og:title" content="Agent-to-agent protocols (A2A): worth watching, not yet settled"><meta property="og:description" content="Agent-to-agent protocols promise that agents built by different teams or companies can find each other and hand over work in one standard way. A2A is the leading one, and it is worth learning, but in October 2026 it is still moving. Don&#x27;t bet your agent on it yet. Put hand-offs behind a port, pass a typed ticket with depth and fan-out limits, keep one trace across agents, and check identity at every hop, so plugging A2A in later is one adapter."><meta property="og:url" content="https://cleandataengineering.ai/writing/a2a-not-settled/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>Agent-to-agent protocols (A2A): worth watching, not yet settled</h1>
+  </div>
+  <div class="summary">Agent-to-agent protocols promise that agents built by different teams or companies can find each other and hand over work in one standard way. A2A is the leading one, and it is worth learning, but in October 2026 it is still moving. Don't bet your agent on it yet. Put hand-offs behind a port, pass a typed ticket with depth and fan-out limits, keep one trace across agents, and check identity at every hop, so plugging A2A in later is one adapter.</div>
+<p>Meera runs the support agent for a furniture shop in Pune. A customer asks what delivery to Nagpur will cost. The answer lives with a logistics partner, who now runs an agent of their own, built by another company, on another cloud.</p>
+<p>Today, someone on Meera's team writes custom glue for that one pair of agents. Next month a second partner arrives, and someone writes the glue again.</p>
+<p>Agent-to-agent protocols promise to end that. The best known is A2A. It is a good idea, and it is worth learning. It is also still moving. This post explains what it does, how it differs from MCP, and how to be ready for it without betting your agent on it.</p>
+<h2>Two embassies and a standard envelope</h2>
+<p>Think of two embassies. They don't share staff, language or rules. They still work together, because both agree on the envelope: who it is from, who it is for, what is being asked, and a reference number for the reply.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 335" role="img" aria-label="Two embassy buildings with flags. Your agent, at Meera&#x27;s shop, on the left; their agent, at a logistics partner, on the right, with a notice board beside it labelled agent card. A sealed envelope travels between them, marked from, to, task ID and what is asked. A dashed arrow brings replies and status updates back with the same task ID."><line class="lnc" x1="135.0" y1="60" x2="135.0" y2="15"/><rect class="bxs" x="135.0" y="15" width="34" height="20" rx="2"/><path class="hz" d="M38,110 L135.0,60 L232,110 Z"/><rect class="hz" x="50" y="110" width="170" height="130" rx="3"/><line class="ln" x1="72" y1="122" x2="72" y2="232"/><line class="ln" x1="198" y1="122" x2="198" y2="232"/><rect class="hz" x="115.0" y="188" width="40" height="52" rx="18"/><line class="lnc" x1="785.0" y1="60" x2="785.0" y2="15"/><rect class="pf pf-solid" x="785.0" y="15" width="34" height="20" rx="2"/><path class="hz" d="M688,110 L785.0,60 L882,110 Z"/><rect class="hz" x="700" y="110" width="170" height="130" rx="3"/><line class="ln" x1="722" y1="122" x2="722" y2="232"/><line class="ln" x1="848" y1="122" x2="848" y2="232"/><rect class="hz" x="765.0" y="188" width="40" height="52" rx="18"/><line class="lnc" x1="935" y1="150" x2="935" y2="240"/><rect class="hz" x="895" y="95" width="80" height="60" rx="4"/><line class="ln" x1="907" y1="110" x2="963" y2="110"/><line class="ln" x1="907" y1="123" x2="963" y2="123"/><line class="ln" x1="907" y1="136" x2="963" y2="136"/><text class="sm" x="935" y="82" text-anchor="middle">agent card</text><rect class="hz" x="420" y="120" width="160" height="90" rx="4"/><path class="ln" d="M420,120 L500,170 L580,120"/><circle class="bxs" cx="500" cy="170" r="11"/><text class="bd" x="500" y="92" text-anchor="middle">the standard envelope</text><text class="sm" x="500" y="236" text-anchor="middle">from, to, task ID, what is asked</text><line class="ln" x1="232" y1="165" x2="412" y2="165" marker-end="url(#ar)"/><line class="ln" x1="588" y1="165" x2="688" y2="165" marker-end="url(#ar)"/><path class="lnd" d="M700,250 Q500,300 232,250" marker-end="url(#ar)"/><text class="sm" x="500" y="300" text-anchor="middle">replies and status updates, same task ID</text><rect class="pf pf-bx" x="29" y="264" width="218" height="58" rx="12"/><rect class="bx ol" x="25" y="260" width="220" height="60" rx="12"/><text class="tt" x="135.0" y="286.5" text-anchor="middle">Your agent</text><text class="sm" x="135.0" y="310.5" text-anchor="middle">Meera&#x27;s shop</text><rect class="pf pf-solid" x="679" y="264" width="218" height="58" rx="12"/><rect class="solid ol" x="675" y="260" width="220" height="60" rx="12"/><text class="tt inv" x="785.0" y="286.5" text-anchor="middle">Their agent</text><text class="inv sm2" x="785.0" y="310.5" text-anchor="middle">logistics partner</text></svg><figcaption>An agent-to-agent protocol is a standard envelope. Neither embassy needs to know how the other works inside; the notice board says what it offers.</figcaption></figure>
+<p>An agent-to-agent protocol is that envelope for agents. It is an agreed way for an agent from one team or company to find out what another agent can do, ask it to do something, and follow the work until it is done. Neither side has to know how the other is built.</p>
+<p><strong>A2A</strong> (short for Agent2Agent) is the leading attempt. Google started it in 2025 and later handed it to the Linux Foundation, so no single company owns it now. It is built from a few simple parts:</p>
+<ol><li><strong>An agent card.</strong> This is the notice board outside the embassy. It is a small document, published at a known web address, that says what the agent is called, what skills it offers, where to send requests, and how callers must sign in.</li><li><strong>A task.</strong> This is the case file. When one agent asks another for work, the work becomes a task with an ID and a status that moves through a lifecycle: submitted, working, waiting for more input, then completed, failed or cancelled. Long work can stream updates instead of making the caller wait in silence.</li><li><strong>Messages.</strong> These are the letters. Each message carries parts, such as text, a file or structured data. A finished task hands back its results as well.</li></ol>
+<p>It all travels over ordinary web requests, which is part of its appeal.</p>
+<h2>MCP is for tools, A2A is for agents</h2>
+<p>People often mix up A2A and MCP. They solve neighbouring problems.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 320" role="img" aria-label="Two halves. Left, agent to tool with MCP: your agent, in charge, sends get order 4417 to a toolbox labelled order tool; one call, one answer, back in a moment. Right, agent to agent with A2A: your agent hands a goal, quote delivery by Friday, to their agent, which plans its own steps and uses its own toolbox; a dashed arrow comes back with a possible question, and the work may take minutes."><text class="bd" x="240" y="30" text-anchor="middle">Agent to tool: MCP</text><text class="sm" x="240" y="52" text-anchor="middle">it does exactly what it is told</text><rect class="pf pf-bx" x="24" y="114" width="148" height="78" rx="12"/><rect class="bx ol" x="20" y="110" width="150" height="80" rx="12"/><text class="tt" x="95.0" y="146.5" text-anchor="middle">Your agent</text><text class="sm" x="95.0" y="170.5" text-anchor="middle">in charge</text><line class="ln" x1="172" y1="150" x2="290" y2="150" marker-end="url(#ar)"/><text class="sm" x="231" y="132" text-anchor="middle">get order 4417</text><path class="ln" d="M340.0,118 L340.0,102 L390.0,102 L390.0,118"/><rect class="hz" x="300" y="118" width="130" height="70" rx="6"/><line class="ln" x1="300" y1="140" x2="430" y2="140"/><rect class="bxs" x="355.0" y="133" width="20" height="14" rx="2"/><text class="tx" x="365" y="225" text-anchor="middle">Order tool</text><text class="sm" x="240" y="280" text-anchor="middle">one call, one answer,</text><text class="sm" x="240" y="300" text-anchor="middle">back in a moment</text><line class="lnd" x1="495" y1="20" x2="495" y2="310"/><text class="bd" x="755" y="30" text-anchor="middle">Agent to agent: A2A</text><text class="sm" x="755" y="52" text-anchor="middle">it decides how to do the work</text><rect class="pf pf-bx" x="524" y="114" width="148" height="78" rx="12"/><rect class="bx ol" x="520" y="110" width="150" height="80" rx="12"/><text class="tt" x="595.0" y="146.5" text-anchor="middle">Your agent</text><text class="sm" x="595.0" y="170.5" text-anchor="middle">hands over a goal</text><line class="ln" x1="672" y1="140" x2="818" y2="140" marker-end="url(#ar)"/><text class="sm" x="745" y="104" text-anchor="middle">quote delivery</text><text class="sm" x="745" y="124" text-anchor="middle">by Friday</text><path class="lnd" d="M818,175 L672,175" marker-end="url(#ar)"/><text class="sm" x="745" y="200" text-anchor="middle">a question back?</text><rect class="pf pf-solid" x="829" y="114" width="158" height="78" rx="12"/><rect class="solid ol" x="825" y="110" width="160" height="80" rx="12"/><text class="tt inv" x="905.0" y="146.5" text-anchor="middle">Their agent</text><text class="inv sm2" x="905.0" y="170.5" text-anchor="middle">plans its own steps</text><line class="ln" x1="905" y1="192" x2="905" y2="218" marker-end="url(#ar)"/><path class="ln" d="M880.0,236 L880.0,220 L930.0,220 L930.0,236"/><rect class="hz" x="860" y="236" width="90" height="50" rx="6"/><line class="ln" x1="860" y1="258" x2="950" y2="258"/><rect class="bxs" x="895.0" y="251" width="20" height="14" rx="2"/><text class="sm" x="755" y="280" text-anchor="middle">may take minutes,</text><text class="sm" x="755" y="300" text-anchor="middle">uses its own tools</text></svg><figcaption>MCP reaches a tool that does what it is told. A2A reaches another agent that decides how, and may use MCP for its own tools.</figcaption></figure>
+<p><strong>MCP</strong>, the Model Context Protocol, connects an agent to a <strong>tool</strong>. A tool does exactly what it's told: "get order 4417" returns order 4417. The agent stays in charge of every step. We covered it in <a href="/writing/mcp-here-to-stay/">MCP is here to stay</a>.</p>
+<p><strong>A2A</strong> connects an agent to <strong>another agent</strong>. You don't tell the other agent how to do the work. You hand over a goal, such as "quote delivery of a 40 kg sofa to Nagpur by Friday", and it decides the steps, perhaps calling its own tools over MCP. The work can take minutes, can come back with a question, and can fail in ways a function call can't.</p>
+<p>So the two fit together. MCP is how an agent reaches its tools. A2A is how one agent reaches another agent that has tools of its own.</p>
+<h2>Where it stands in October 2026</h2>
+<p>In <a href="/writing/moving-ship/">building on a moving ship</a> we split the agent stack into settled planks and sliding crates. MCP is close to a plank. A2A is still a crate.</p>
+<p>That is our judgement, not a criticism. Several things are still open:</p>
+<ol><li><strong>The spec itself has kept changing</strong> between versions. That is normal for a young standard, and costly for anyone who wrote against the old shape.</li><li><strong>Finding agents is unsolved at scale.</strong> An agent card says what one agent can do. Knowing which agents exist, which version is live and which ones you are allowed to call needs a registry, and there is no agreed one.</li><li><strong>Trust across companies is hard.</strong> Signing in between two organisations, and proving which person a request is really for, is where most of the real work sits.</li><li><strong>Limits and tracing are left to you.</strong> How deep a chain of hand-offs may go, who pays for it, and how one trace follows a request across companies are not settled by any protocol today.</li></ol>
+<p>Our own tutorial reached the same verdict. In the <a href="/learn/agent-harness/tech-17.html">17 · Agent-to-agent</a> page, the claims agent's design picks A2A endpoints with a typed hand-off ticket, depth and fan-out limits and one trace. Its status is honest: designed, not built. Inside one service, a plain in-process hand-off is fine.</p>
+<p>And before any protocol, ask whether you need a second agent at all. Most teams don't, as we argued in <a href="/writing/one-agent-or-many/">one agent or many</a>.</p>
+<h2>Stay ready without betting on it</h2>
+<p>You don't have to choose between adopting A2A now and ignoring it. Build what any hand-off needs, and leave the wire format for later.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 360" role="img" aria-label="Your agent calls only a lavender hand-off port. A thick line plugs the port into an in-process adapter, today a function call, which reaches our other agent in the same service. A dashed line leads to an A2A adapter, for later when it settles, which would reach a partner&#x27;s agent at another company. Below, a yellow strip: the same for both adapters, typed ticket, depth and fan-out limits, one trace, identity at each hop."><rect class="pf pf-bx" x="29" y="129" width="188" height="88" rx="12"/><rect class="bx ol" x="25" y="125" width="190" height="90" rx="12"/><text class="tt" x="120.0" y="157.0" text-anchor="middle">Your agent</text><text class="sm" x="120.0" y="181.0" text-anchor="middle">calls only</text><text class="sm" x="120.0" y="200.0" text-anchor="middle">the port</text><line class="ln" x1="217" y1="170" x2="273" y2="170" marker-end="url(#ar)"/><rect class="pf pf-solid" x="279" y="129" width="198" height="88" rx="12"/><rect class="solid ol" x="275" y="125" width="200" height="90" rx="12"/><text class="tt inv" x="375.0" y="157.0" text-anchor="middle">Hand-off port</text><text class="inv sm2" x="375.0" y="181.0" text-anchor="middle">hand this work</text><text class="inv sm2" x="375.0" y="200.0" text-anchor="middle">to that agent</text><rect class="pf pf-bx" x="584" y="44" width="228" height="68" rx="12"/><rect class="bx ol" x="580" y="40" width="230" height="70" rx="12"/><text class="tt" x="695.0" y="71.5" text-anchor="middle">In-process adapter</text><text class="sm" x="695.0" y="95.5" text-anchor="middle">today: a function call</text><rect class="bxm ol" x="580" y="195" width="230" height="70" rx="12"/><text class="tt" x="695.0" y="226.5" text-anchor="middle">A2A adapter</text><text class="sm" x="695.0" y="250.5" text-anchor="middle">later, when it settles</text><line class="lnc" x1="477" y1="165" x2="578" y2="78"/><line class="lnd" x1="477" y1="178" x2="578" y2="228"/><line class="ln" x1="812" y1="75" x2="843" y2="75" marker-end="url(#ar)"/><rect class="pf pf-bx" x="849" y="44" width="143" height="68" rx="12"/><rect class="bx ol" x="845" y="40" width="145" height="70" rx="12"/><text class="tt" x="917.5" y="71.5" text-anchor="middle">Same service</text><text class="sm" x="917.5" y="95.5" text-anchor="middle">our other agent</text><line class="ln" x1="812" y1="230" x2="843" y2="230" marker-end="url(#ar)"/><rect class="bxm ol" x="845" y="195" width="145" height="70" rx="12"/><text class="tt" x="917.5" y="226.5" text-anchor="middle">Partner&#x27;s agent</text><text class="sm" x="917.5" y="250.5" text-anchor="middle">another company</text><text class="sm" x="500" y="100" text-anchor="end">plugged in</text><rect class="pf pf-bxs" x="204" y="294" width="598" height="53" rx="12"/><rect class="bxs ol" x="200" y="290" width="600" height="55" rx="12"/><text class="tt" x="500.0" y="314.0" text-anchor="middle">The same for both adapters</text><text class="sm" x="500.0" y="338.0" text-anchor="middle">typed ticket, depth and fan-out limits, one trace, identity at each hop</text></svg><figcaption>Stay ready without betting. Today the port uses a plain function call; when A2A settles, you add one adapter and change one line of config.</figcaption></figure>
+<ol><li><strong>Keep hand-offs behind a port.</strong> A port is a small interface in your own code that names the job, here "hand this work to that agent". Your agent calls only the port. Today the adapter behind it can be a plain function call inside the same service. Later, an A2A adapter can sit beside it, and switching is one adapter and one line of config.</li><li><strong>Pass a typed hand-off ticket.</strong> The receiver needs everything, not a chat summary. Make the ticket a typed object with named fields, checked before it leaves. More on it below.</li><li><strong>Set depth and fan-out limits.</strong> <em>Depth</em> is how many hand-offs deep a chain may go. <em>Fan-out</em> is how many agents one agent may call for a single task. The harness enforces both, not the agents, so two agents can never pass a task back and forth until your money runs out.</li><li><strong>Keep one trace across agents.</strong> Every hand-off carries the trace ID of the original request, so the whole journey shows up as one story with each agent's cost and time on its own part. <a href="/writing/tracing-agents/">Tracing autonomous agents</a> shows the setup.</li><li><strong>Check identity at each hop.</strong> Every receiving agent checks two things: which agent is calling, and which person the work is really for. Pass a narrowed permission for this one task, never the user's full sign-in, and let each agent check it again before it acts.</li></ol>
+<p>None of these five depend on A2A, and you would need all of them on top of A2A anyway.</p>
+<h3>The typed hand-off ticket</h3>
+<p>Here is what Meera's agent sends to the logistics agent.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 395" role="img" aria-label="A drawn hand-off ticket, number T-2291, with eight fields: goal, quote delivery for order 4417; facts, 40 kg sofa, Pune to Nagpur; limits, customer pays up to 2,500 rupees; deadline, delivered by Friday; depth, hand-off 1 of at most 2; fan-out, may call at most 2 agents; trace ID tr-8f31, same as the request; on behalf of customer Ravi, quote only. A torn-off stub has a ticked box: checked before it leaves."><rect class="pf pf-bxs" x="128" y="26" width="760" height="356" rx="14"/><rect class="hz" x="120" y="20" width="760" height="356" rx="14"/><line class="lnd" x1="730" y1="34" x2="730" y2="362"/><text class="lbl" x="150" y="58" text-anchor="start">HAND-OFF TICKET</text><text class="sm" x="700" y="58" text-anchor="end">T-2291</text><line class="ln" x1="140" y1="72" x2="710" y2="72"/><text class="bd" x="150" y="104" text-anchor="start">goal</text><text class="tx" x="320" y="104" text-anchor="start">quote delivery for order 4417</text><text class="bd" x="150" y="138" text-anchor="start">facts</text><text class="tx" x="320" y="138" text-anchor="start">40 kg sofa, Pune to Nagpur</text><text class="bd" x="150" y="172" text-anchor="start">limits</text><text class="tx" x="320" y="172" text-anchor="start">customer pays up to ₹2,500</text><text class="bd" x="150" y="206" text-anchor="start">deadline</text><text class="tx" x="320" y="206" text-anchor="start">delivered by Friday</text><text class="bd" x="150" y="240" text-anchor="start">depth</text><text class="tx" x="320" y="240" text-anchor="start">hand-off 1 of at most 2</text><text class="bd" x="150" y="274" text-anchor="start">fan-out</text><text class="tx" x="320" y="274" text-anchor="start">may call at most 2 agents</text><text class="bd" x="150" y="308" text-anchor="start">trace ID</text><text class="tx" x="320" y="308" text-anchor="start">tr-8f31, same as the request</text><text class="bd" x="150" y="342" text-anchor="start">on behalf of</text><text class="tx" x="320" y="342" text-anchor="start">customer Ravi, quote only</text><rect class="bxs" x="785" y="150" width="44" height="44" rx="6"/><path class="lnc" d="M795,172 L805,184 L822,158"/><text class="sm" x="807" y="230" text-anchor="middle">checked</text><text class="sm" x="807" y="250" text-anchor="middle">before it</text><text class="sm" x="807" y="270" text-anchor="middle">leaves</text></svg><figcaption>A typed hand-off ticket. Every field is named and checked before it leaves, so nothing the receiver needs is lost in a summary.</figcaption></figure>
+<p>Each field has a job. The <strong>goal</strong> and <strong>facts</strong> stop the receiver guessing. The <strong>limits</strong> and <strong>deadline</strong> carry the customer's constraints, which a summary would drop. <strong>Depth</strong> and <strong>fan-out</strong> let the next agent know how much room is left. The <strong>trace ID</strong> keeps one story. <strong>On behalf of</strong> says whose permission this is.</p>
+<p>The <a href="https://github.com/dataagentsai/ai-assurance-catalog">AI Assurance Catalog</a> puts the reason plainly: silent context loss at a hand-off "produces confidently wrong work with no error anywhere in the trace" (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0062.yaml">AAC-0062</a>). A typed ticket, with a test that checks nothing the receiver needs is missing, is the fix. Its neighbours, AAC-0061 to AAC-0067, cover loops, budgets, failures and tracing.</p>
+<p>When A2A does settle, this ticket simply rides inside an A2A message as structured data. Nothing about it has to change.</p>
+<h2>Mistakes we see often</h2>
+<ol><li><strong>Writing the protocol into business logic.</strong> If A2A field names appear in the code that decides a refund, every spec change becomes a project.</li><li><strong>Treating another agent like a tool.</strong> An agent can take minutes, ask a question back, or fail halfway. Code that expects an instant answer will hang or guess.</li><li><strong>Trusting the agent card.</strong> A card is a claim about what an agent can do, written by its owner. Test what the agent actually does before you route real work to it.</li><li><strong>Forwarding the user's full sign-in.</strong> The third agent in a chain should hold a permission for one task, not the keys to the customer's account.</li><li><strong>No limit on depth.</strong> Without it, a chain of polite agents can loop or fan out until the bill tells you.</li><li><strong>Waiting for the standard before building the basics.</strong> Tickets, limits, traces and identity checks are needed whatever protocol wins. Build them now.</li></ol>
+<h2>Six questions to check your own design</h2>
+<ol><li>Does your agent hand work to other agents through one port, or is hand-off code spread across the loop?</li><li>Is every hand-off a typed ticket, and is there a test that it carries everything the receiver needs?</li><li>What stops a chain of hand-offs from going too deep or calling too many agents?</li><li>Can one trace show the whole request across every agent, with each agent's cost on its own part?</li><li>At each hop, who checks which agent is calling and which person the work is for?</li><li>If you adopted A2A next quarter, how many files would change?</li></ol>
+<p>Watch A2A closely, build the hand-off basics today, and plug the protocol in when it stops moving.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/tech-17.html">agent-to-agent hand-offs in the Agent Harness tutorial, with the full comparison</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

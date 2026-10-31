@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build only the gaps: AgentTwin assembled from open-source tools · Clean Data Engineering</title>
+<meta name="description" content="AgentTwin is an assembler. Where a proven open-source tool already does a job, it plugs that tool in behind a port and builds nothing. It builds only four things no tool did: the world description format, the stand-ins that project that world into the agent&#x27;s systems, the judges that read the world&#x27;s state, and the switch between pretend and real. Of 38 tools we looked at, 12 are in use, 6 were turned down, and every decision has a written reason."><link rel="canonical" href="https://cleandataengineering.ai/writing/agenttwin-assembled/">
+<meta property="og:title" content="Build only the gaps: AgentTwin assembled from open-source tools"><meta property="og:description" content="AgentTwin is an assembler. Where a proven open-source tool already does a job, it plugs that tool in behind a port and builds nothing. It builds only four things no tool did: the world description format, the stand-ins that project that world into the agent&#x27;s systems, the judges that read the world&#x27;s state, and the switch between pretend and real. Of 38 tools we looked at, 12 are in use, 6 were turned down, and every decision has a written reason."><meta property="og:url" content="https://cleandataengineering.ai/writing/agenttwin-assembled/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · AI Engineering · Builders · 7 min read · 2026-10-31</p>
+    <h1>Build only the gaps: AgentTwin assembled from open-source tools</h1>
+  </div>
+  <div class="summary">AgentTwin is an assembler. Where a proven open-source tool already does a job, it plugs that tool in behind a port and builds nothing. It builds only four things no tool did: the world description format, the stand-ins that project that world into the agent's systems, the judges that read the world's state, and the switch between pretend and real. Of 38 tools we looked at, 12 are in use, 6 were turned down, and every decision has a written reason.</div>
+<p>When you start building a tool, the tempting first step is a blank folder and a big plan. You will write your own test runner, your own fake customers, your own attack library, your own clock. It feels like progress for about a month.</p>
+<p>Then you notice that every one of those already exists, written by people who spent years on it, and yours is the worst version.</p>
+<p><strong>AgentTwin</strong> puts a real AI agent in a pretend world and checks what changed in that world (the <a href="/writing/agenttwin-flight-simulator/">first post</a> explains it). This post is about how it was put together. It is an <strong>assembler</strong>: it uses open-source tools for every job they already do well, and builds only the pieces nobody had built.</p>
+<h2>Buy most bricks, make a few</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 275" role="img" aria-label="A cartoon of a Lego build. On the left, a shop with shelves of blue bricks stands for open-source tools. In the middle, the AgentTwin model is built mostly from shop bricks, with four lavender bricks mixed in. On the right, a workbench at home holds the four custom bricks: world format, stand-ins, judges and mode switch."><text class="sm" x="500" y="22" text-anchor="middle">buy every brick the shop sells; make only the shapes it doesn&#x27;t</text><rect class="hz" x="40" y="72" width="230" height="150" rx="6"/><path class="hz" d="M30,72 L30,48 L280,48 L280,72 Q264,86 249,72 Q233,86 218,72 Q202,86 186,72 Q170,86 155,72 Q139,86 124,72 Q108,86 92,72 Q76,86 61,72 Q45,86 30,72 Z"/><text class="lbl" x="155" y="66" text-anchor="middle">SHOP</text><line class="ln" x1="52" y1="140" x2="258" y2="140"/><line class="ln" x1="52" y1="200" x2="258" y2="200"/><rect class="pf pf-bx" x="61" y="111" width="40" height="26" rx="3"/><rect class="hz" x="66" y="102" width="12" height="7" rx="2"/><rect class="hz" x="58" y="108" width="40" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="61" y="171" width="40" height="26" rx="3"/><rect class="hz" x="66" y="162" width="12" height="7" rx="2"/><rect class="hz" x="58" y="168" width="40" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="111" y="111" width="40" height="26" rx="3"/><rect class="hz" x="116" y="102" width="12" height="7" rx="2"/><rect class="hz" x="108" y="108" width="40" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="111" y="171" width="40" height="26" rx="3"/><rect class="hz" x="116" y="162" width="12" height="7" rx="2"/><rect class="hz" x="108" y="168" width="40" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="161" y="111" width="40" height="26" rx="3"/><rect class="hz" x="166" y="102" width="12" height="7" rx="2"/><rect class="hz" x="158" y="108" width="40" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="161" y="171" width="40" height="26" rx="3"/><rect class="hz" x="166" y="162" width="12" height="7" rx="2"/><rect class="hz" x="158" y="168" width="40" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="211" y="111" width="40" height="26" rx="3"/><rect class="hz" x="216" y="102" width="12" height="7" rx="2"/><rect class="hz" x="208" y="108" width="40" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="211" y="171" width="40" height="26" rx="3"/><rect class="hz" x="216" y="162" width="12" height="7" rx="2"/><rect class="hz" x="208" y="168" width="40" height="26" rx="3" fill-opacity="0"/><text class="bd" x="155" y="250" text-anchor="middle">the shop: open-source tools</text><line class="ln" x1="282" y1="150" x2="385" y2="150" marker-end="url(#ar)"/><text class="sm" x="333" y="138" text-anchor="middle">most</text><rect class="pf pf-bx" x="403" y="203" width="96" height="26" rx="3"/><rect class="hz" x="408" y="194" width="12" height="7" rx="2"/><rect class="hz" x="432" y="194" width="12" height="7" rx="2"/><rect class="hz" x="456" y="194" width="12" height="7" rx="2"/><rect class="hz" x="480" y="194" width="12" height="7" rx="2"/><rect class="hz" x="400" y="200" width="96" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="503" y="203" width="100" height="26" rx="3"/><rect class="hz" x="508" y="194" width="12" height="7" rx="2"/><rect class="hz" x="532" y="194" width="12" height="7" rx="2"/><rect class="hz" x="556" y="194" width="12" height="7" rx="2"/><rect class="hz" x="580" y="194" width="12" height="7" rx="2"/><rect class="hz" x="500" y="200" width="100" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="423" y="175" width="70" height="26" rx="3"/><rect class="hz" x="428" y="166" width="12" height="7" rx="2"/><rect class="hz" x="452" y="166" width="12" height="7" rx="2"/><rect class="hz" x="420" y="172" width="70" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-solid" x="497" y="175" width="60" height="26" rx="3"/><rect class="hz" x="502" y="166" width="12" height="7" rx="2"/><rect class="hz" x="526" y="166" width="12" height="7" rx="2"/><rect class="hz" x="494" y="172" width="60" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="561" y="175" width="42" height="26" rx="3"/><rect class="hz" x="566" y="166" width="12" height="7" rx="2"/><rect class="hz" x="558" y="172" width="42" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="413" y="147" width="90" height="26" rx="3"/><rect class="hz" x="418" y="138" width="12" height="7" rx="2"/><rect class="hz" x="442" y="138" width="12" height="7" rx="2"/><rect class="hz" x="466" y="138" width="12" height="7" rx="2"/><rect class="hz" x="410" y="144" width="90" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="507" y="147" width="80" height="26" rx="3"/><rect class="hz" x="512" y="138" width="12" height="7" rx="2"/><rect class="hz" x="536" y="138" width="12" height="7" rx="2"/><rect class="hz" x="560" y="138" width="12" height="7" rx="2"/><rect class="hz" x="504" y="144" width="80" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-solid" x="433" y="119" width="50" height="26" rx="3"/><rect class="hz" x="438" y="110" width="12" height="7" rx="2"/><rect class="hz" x="462" y="110" width="12" height="7" rx="2"/><rect class="hz" x="430" y="116" width="50" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-bx" x="487" y="119" width="70" height="26" rx="3"/><rect class="hz" x="492" y="110" width="12" height="7" rx="2"/><rect class="hz" x="516" y="110" width="12" height="7" rx="2"/><rect class="hz" x="484" y="116" width="70" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-solid" x="453" y="91" width="46" height="26" rx="3"/><rect class="hz" x="458" y="82" width="12" height="7" rx="2"/><rect class="hz" x="450" y="88" width="46" height="26" rx="3" fill-opacity="0"/><rect class="pf pf-solid" x="503" y="91" width="50" height="26" rx="3"/><rect class="hz" x="508" y="82" width="12" height="7" rx="2"/><rect class="hz" x="532" y="82" width="12" height="7" rx="2"/><rect class="hz" x="500" y="88" width="50" height="26" rx="3" fill-opacity="0"/><text class="bd" x="500" y="250" text-anchor="middle">the model: AgentTwin</text><rect class="pf pf-solid" x="714" y="74" width="128" height="48" rx="12"/><rect class="solid ol" x="710" y="70" width="130" height="50" rx="12"/><text class="tt inv" x="775.0" y="91.5" text-anchor="middle">World format</text><text class="inv sm2" x="775.0" y="115.5" text-anchor="middle"></text><rect class="pf pf-solid" x="854" y="74" width="128" height="48" rx="12"/><rect class="solid ol" x="850" y="70" width="130" height="50" rx="12"/><text class="tt inv" x="915.0" y="91.5" text-anchor="middle">Stand-ins</text><text class="inv sm2" x="915.0" y="115.5" text-anchor="middle"></text><rect class="pf pf-solid" x="714" y="139" width="128" height="48" rx="12"/><rect class="solid ol" x="710" y="135" width="130" height="50" rx="12"/><text class="tt inv" x="775.0" y="156.5" text-anchor="middle">Judges</text><text class="inv sm2" x="775.0" y="180.5" text-anchor="middle"></text><rect class="pf pf-solid" x="854" y="139" width="128" height="48" rx="12"/><rect class="solid ol" x="850" y="135" width="130" height="50" rx="12"/><text class="tt inv" x="915.0" y="156.5" text-anchor="middle">Mode switch</text><text class="inv sm2" x="915.0" y="180.5" text-anchor="middle"></text><rect class="hz" x="700" y="200" width="290" height="14" rx="3"/><line class="lnc" x1="715" y1="214" x2="715" y2="236"/><line class="lnc" x1="975" y1="214" x2="975" y2="236"/><text class="bd" x="845" y="260" text-anchor="middle">made at home: only 4</text><line class="ln" x1="698" y1="150" x2="615" y2="150" marker-end="url(#ar)"/><text class="sm" x="656" y="138" text-anchor="middle">4</text></svg><figcaption>Most bricks come from the shop. Four had to be made at home, because no shop sold them.</figcaption></figure>
+<p>Think of a Lego model. You buy almost every brick from the shop: they are cheap, they fit, and they never wobble. For the one odd shape your model needs and no set sells, you make a custom brick at home.</p>
+<p>A good build is mostly shop bricks. A bad build is a home-made brick for every part, each one a little lopsided.</p>
+<p>For AgentTwin, the shop is open source. We looked at 38 tools that do some part of testing an agent: running tests, inventing edge values, playing a customer, writing attacks, faking data, moving the clock, injecting faults. Then we asked of each one: does it do a job we need, and does it do it well enough?</p>
+<h2>The four pieces nothing else did</h2>
+<p>Four jobs had no tool. These are AgentTwin's own.</p>
+<ol><li><strong>The world format.</strong> A file that describes the agent's world: its users, systems and data, rules, faults and time. The loader refuses a world that could not exist, such as an order that shipped before it was placed. <a href="/writing/describe-the-world/">Describe the world, not the test</a> covers it.</li><li><strong>The stand-ins.</strong> We call this the <em>projection</em>: turning the world file into pretend systems the agent can call. A stand-in holds state and refuses what the real system would refuse. A canned mock that says "OK" to everything can't do this.</li><li><strong>The four judges.</strong> They read the world's state after a run, not the chat. Only a judge that reads state can say <em>a refund was owed and never issued</em>. Nothing changed, nothing false was said, and a judge reading the transcript would pass it.</li><li><strong>The mode switch.</strong> The same scenario runs in one of four modes: against the stand-in (mock), against recorded real answers (replay), against a real system (real), or against both at once to see where they differ (shadow).</li></ol>
+<p>Everything else is adopted.</p>
+<h2>The core in the middle, tools on ports</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 375" role="img" aria-label="AgentTwin&#x27;s core in the middle, holding the four pieces it builds itself: the world format, the stand-ins, four judges and the mode switch. Around it, six adopted tools plug into small port circles on the core&#x27;s edge: pytest, Hypothesis and allpairspy on the left; LangWatch Scenario, PyRIT and time-machine on the right."><text class="sm" x="500" y="26" text-anchor="middle">the core never imports a tool: each one plugs into a port</text><rect class="pf pf-solid" x="355" y="65" width="300" height="270" rx="22"/><rect class="hz" x="350" y="60" width="300" height="270" rx="22" fill-opacity="0"/><text class="bd" x="500" y="92" text-anchor="middle">AgentTwin core: built</text><rect class="pf pf-bxs" x="366" y="114" width="123" height="68" rx="12"/><rect class="bxs ol" x="362" y="110" width="125" height="70" rx="12"/><text class="tt" x="424.5" y="141.5" text-anchor="middle">World format</text><text class="sm" x="424.5" y="165.5" text-anchor="middle"></text><rect class="pf pf-bxs" x="517" y="114" width="123" height="68" rx="12"/><rect class="bxs ol" x="513" y="110" width="125" height="70" rx="12"/><text class="tt" x="575.5" y="141.5" text-anchor="middle">Stand-ins</text><text class="sm" x="575.5" y="165.5" text-anchor="middle"></text><rect class="pf pf-bxs" x="366" y="204" width="123" height="68" rx="12"/><rect class="bxs ol" x="362" y="200" width="125" height="70" rx="12"/><text class="tt" x="424.5" y="231.5" text-anchor="middle">Four judges</text><text class="sm" x="424.5" y="255.5" text-anchor="middle"></text><rect class="pf pf-bxs" x="517" y="204" width="123" height="68" rx="12"/><rect class="bxs ol" x="513" y="200" width="125" height="70" rx="12"/><text class="tt" x="575.5" y="231.5" text-anchor="middle">Mode switch</text><text class="sm" x="575.5" y="255.5" text-anchor="middle"></text><text class="sm" x="500" y="310" text-anchor="middle">the four gaps</text><rect class="pf pf-bx" x="24" y="89" width="238" height="63" rx="12"/><rect class="bx ol" x="20" y="85" width="240" height="65" rx="12"/><text class="tt" x="140.0" y="114.0" text-anchor="middle">pytest</text><text class="sm" x="140.0" y="138.0" text-anchor="middle">runs every scenario</text><line class="ln" x1="262" y1="117" x2="336" y2="117" marker-end="url(#ar)"/><circle class="hz" cx="350" cy="117" r="9"/><rect class="pf pf-bx" x="24" y="174" width="238" height="63" rx="12"/><rect class="bx ol" x="20" y="170" width="240" height="65" rx="12"/><text class="tt" x="140.0" y="199.0" text-anchor="middle">Hypothesis</text><text class="sm" x="140.0" y="223.0" text-anchor="middle">invents edge values</text><line class="ln" x1="262" y1="202" x2="336" y2="202" marker-end="url(#ar)"/><circle class="hz" cx="350" cy="202" r="9"/><rect class="pf pf-bx" x="24" y="259" width="238" height="63" rx="12"/><rect class="bx ol" x="20" y="255" width="240" height="65" rx="12"/><text class="tt" x="140.0" y="284.0" text-anchor="middle">allpairspy</text><text class="sm" x="140.0" y="308.0" text-anchor="middle">picks combinations</text><line class="ln" x1="262" y1="287" x2="336" y2="287" marker-end="url(#ar)"/><circle class="hz" cx="350" cy="287" r="9"/><rect class="pf pf-bx" x="744" y="89" width="238" height="63" rx="12"/><rect class="bx ol" x="740" y="85" width="240" height="65" rx="12"/><text class="tt" x="860.0" y="114.0" text-anchor="middle">LangWatch Scenario</text><text class="sm" x="860.0" y="138.0" text-anchor="middle">plays the customer</text><line class="ln" x1="738" y1="117" x2="664" y2="117" marker-end="url(#ar)"/><circle class="hz" cx="650" cy="117" r="9"/><rect class="pf pf-bx" x="744" y="174" width="238" height="63" rx="12"/><rect class="bx ol" x="740" y="170" width="240" height="65" rx="12"/><text class="tt" x="860.0" y="199.0" text-anchor="middle">PyRIT</text><text class="sm" x="860.0" y="223.0" text-anchor="middle">rewrites attacks</text><line class="ln" x1="738" y1="202" x2="664" y2="202" marker-end="url(#ar)"/><circle class="hz" cx="650" cy="202" r="9"/><rect class="pf pf-bx" x="744" y="259" width="238" height="63" rx="12"/><rect class="bx ol" x="740" y="255" width="240" height="65" rx="12"/><text class="tt" x="860.0" y="284.0" text-anchor="middle">time-machine</text><text class="sm" x="860.0" y="308.0" text-anchor="middle">moves the clock</text><line class="ln" x1="738" y1="287" x2="664" y2="287" marker-end="url(#ar)"/><circle class="hz" cx="650" cy="287" r="9"/><text class="lbl" x="140" y="345" text-anchor="middle">ADOPTED</text><text class="lbl" x="860" y="345" text-anchor="middle">ADOPTED</text><text class="sm" x="500" y="362" text-anchor="middle">small circles are ports: unplug one tool, plug in another</text></svg><figcaption>Built in the middle, adopted around the edge. Every adopted tool reaches the core only through a port.</figcaption></figure>
+<p>A <strong>port</strong> is a socket in the code: a small, fixed interface that says what a job needs, such as "give me the customer's next message". An <strong>adapter</strong> is the plug that connects one tool to that socket. The pattern is explained in <a href="/writing/harness-design-patterns/">Swap anything, break nothing</a>.</p>
+<p>AgentTwin has one hard constraint: <strong>the format and the engine never import an adopted tool.</strong> The reason, written in its code, is that a simulator that imported one tool would only ever simulate one stack. So each tool sits behind a port, with its adapter outside the core.</p>
+<p>That is what lets a team on Azure swap the open-source customer simulator for Microsoft's managed one. Two of the 38 tools are exactly this: Azure versions of a job an open-source tool already fills, behind the same port.</p>
+<p>The ports also keep weight out. LangWatch Scenario, the library that plays the customer, pulls in about 380 MB of dependencies and pins older versions of some shared libraries. Because it sits behind a port in its own optional install, nobody who doesn't use it carries any of that.</p>
+<h2>The decision rule: three questions</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 435" role="img" aria-label="A three-question card, with a small person holding a magnifying glass. Question 1: does it exist? If no, build it, small and behind a port. Question 2: is it good enough behind a port? If no, look again or extend it. Question 3: what exactly is the gap? If you can&#x27;t name it, don&#x27;t build. If you can, build only that gap and write down why."><circle class="hz" cx="90" cy="60" r="14"/><line class="lnc" x1="90" y1="74" x2="90" y2="112"/><line class="lnc" x1="90" y1="112" x2="78" y2="136"/><line class="lnc" x1="90" y1="112" x2="102" y2="136"/><circle class="hz" cx="140" cy="88" r="16"/><line class="lnc" x1="129" y1="100" x2="104" y2="122"/><text class="sm" x="110" y="175" text-anchor="middle">check first,</text><text class="sm" x="110" y="195" text-anchor="middle">design second</text><circle class="nm" cx="250" cy="65" r="14"/><text class="nmt" x="250" y="71" text-anchor="middle">1</text><rect class="pf pf-bxs" x="284" y="34" width="338" height="68" rx="12"/><rect class="bxs ol" x="280" y="30" width="340" height="70" rx="12"/><text class="tt" x="450.0" y="61.5" text-anchor="middle">Does it exist?</text><text class="sm" x="450.0" y="85.5" text-anchor="middle">search before you design</text><line class="ln" x1="622" y1="65" x2="718" y2="65" marker-end="url(#ar)"/><text class="sm" x="670" y="55" text-anchor="middle">no</text><rect class="bxm ol" x="720" y="30" width="250" height="70" rx="12"/><text class="tt" x="845.0" y="61.5" text-anchor="middle">No: build it</text><text class="sm" x="845.0" y="85.5" text-anchor="middle">small, behind a port</text><line class="ln" x1="450" y1="102" x2="450" y2="138" marker-end="url(#ar)"/><text class="sm" x="475" y="124" text-anchor="middle">yes</text><circle class="nm" cx="250" cy="175" r="14"/><text class="nmt" x="250" y="181" text-anchor="middle">2</text><rect class="pf pf-bxs" x="284" y="144" width="338" height="68" rx="12"/><rect class="bxs ol" x="280" y="140" width="340" height="70" rx="12"/><text class="tt" x="450.0" y="171.5" text-anchor="middle">Good enough, behind a port?</text><text class="sm" x="450.0" y="195.5" text-anchor="middle">does the job, can be unplugged</text><line class="ln" x1="622" y1="175" x2="718" y2="175" marker-end="url(#ar)"/><text class="sm" x="670" y="165" text-anchor="middle">no</text><rect class="bxm ol" x="720" y="140" width="250" height="70" rx="12"/><text class="tt" x="845.0" y="171.5" text-anchor="middle">No: look again</text><text class="sm" x="845.0" y="195.5" text-anchor="middle">or extend it</text><line class="ln" x1="450" y1="212" x2="450" y2="248" marker-end="url(#ar)"/><text class="sm" x="475" y="234" text-anchor="middle">yes</text><circle class="nm" cx="250" cy="285" r="14"/><text class="nmt" x="250" y="291" text-anchor="middle">3</text><rect class="pf pf-bxs" x="284" y="254" width="338" height="68" rx="12"/><rect class="bxs ol" x="280" y="250" width="340" height="70" rx="12"/><text class="tt" x="450.0" y="281.5" text-anchor="middle">What exactly is the gap?</text><text class="sm" x="450.0" y="305.5" text-anchor="middle">one sentence: what it doesn&#x27;t do</text><line class="ln" x1="622" y1="285" x2="718" y2="285" marker-end="url(#ar)"/><text class="sm" x="670" y="275" text-anchor="middle">no</text><rect class="bxm ol" x="720" y="250" width="250" height="70" rx="12"/><text class="tt" x="845.0" y="281.5" text-anchor="middle">Can&#x27;t name it?</text><text class="sm" x="845.0" y="305.5" text-anchor="middle">then don&#x27;t build</text><line class="ln" x1="450" y1="322" x2="450" y2="358" marker-end="url(#ar)"/><text class="sm" x="490" y="344" text-anchor="middle">named</text><rect class="pf pf-solid" x="324" y="364" width="258" height="60" rx="12"/><rect class="solid ol" x="320" y="360" width="260" height="62" rx="12"/><text class="tt inv" x="450.0" y="387.5" text-anchor="middle">Build only that gap</text><text class="inv sm2" x="450.0" y="411.5" text-anchor="middle">and write down why</text></svg><figcaption>The decision rule. Each "yes" moves you down the card; you only build at the bottom, and only the named gap.</figcaption></figure>
+<p>Before building anything, we ask three questions in order.</p>
+<ol><li><strong>Does it exist?</strong> Check first, before designing. A search costs minutes. A build costs weeks.</li><li><strong>Is it good enough, behind a port?</strong> It doesn't have to be perfect. It has to do the job, and you have to be able to unplug it later.</li><li><strong>What exactly is the gap?</strong> Name what the existing tool doesn't do, and why it can't be extended to do it. If you can't name the gap in one sentence, don't build.</li></ol>
+<p>The third question usually shrinks the build a lot. Take choosing scenarios. A small library called allpairspy picks a short list of test combinations that still covers every pair of values, for example every customer type meeting every fault. It works, but for the clothing-shop agent it left 187 of 468 possible pairs uncovered. The gap was not "write a scenario picker". It was "fill in the missing pairs". So allpairspy stays, and a small piece of our own code tops it up.</p>
+<h2>In or out, and why</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 425" role="img" aria-label="Two baskets. The In basket, holding 12 of 38 tools, with examples: pytest, one runner so one report; Hypothesis, finds odd inputs and is already a dependency; LangWatch Scenario, only its customer because AgentTwin judges by state. The Out basket, holding 6 of 38: WireMock and Prism, canned answers that would let a shipped order cancel; garak, tests the model not the agent; DeepTeam, overlaps promptfoo. The other 20 wait with a reason."><text class="lbl" x="250" y="26" text-anchor="middle">IN</text><text class="lbl" x="760" y="26" text-anchor="middle">OUT</text><rect class="pf pf-bx" x="49" y="49" width="408" height="60" rx="12"/><rect class="bx ol" x="45" y="45" width="410" height="62" rx="12"/><text class="tt" x="250.0" y="72.5" text-anchor="middle">pytest</text><text class="sm" x="250.0" y="96.5" text-anchor="middle">one runner, so one report</text><rect class="pf pf-bx" x="49" y="126" width="408" height="60" rx="12"/><rect class="bx ol" x="45" y="122" width="410" height="62" rx="12"/><text class="tt" x="250.0" y="149.5" text-anchor="middle">Hypothesis</text><text class="sm" x="250.0" y="173.5" text-anchor="middle">finds odd inputs; already a dependency</text><rect class="pf pf-bx" x="49" y="203" width="408" height="60" rx="12"/><rect class="bx ol" x="45" y="199" width="410" height="62" rx="12"/><text class="tt" x="250.0" y="226.5" text-anchor="middle">LangWatch Scenario</text><text class="sm" x="250.0" y="250.5" text-anchor="middle">only its customer: we judge by state</text><line class="ln" x1="250" y1="272" x2="250" y2="296" marker-end="url(#ar)"/><rect class="bxm ol" x="555" y="45" width="410" height="62" rx="12"/><text class="tt" x="760.0" y="72.5" text-anchor="middle">WireMock / Prism</text><text class="sm" x="760.0" y="96.5" text-anchor="middle">canned answers: a shipped order &#x27;cancels&#x27;</text><rect class="bxm ol" x="555" y="122" width="410" height="62" rx="12"/><text class="tt" x="760.0" y="149.5" text-anchor="middle">garak</text><text class="sm" x="760.0" y="173.5" text-anchor="middle">tests the model, not the agent</text><rect class="bxm ol" x="555" y="199" width="410" height="62" rx="12"/><text class="tt" x="760.0" y="226.5" text-anchor="middle">DeepTeam</text><text class="sm" x="760.0" y="250.5" text-anchor="middle">overlaps promptfoo: one is enough</text><line class="ln" x1="760" y1="272" x2="760" y2="296" marker-end="url(#ar)"/><path class="hz" d="M95,300 L405,300 L375,385 L125,385 Z"/><line class="ln" x1="105" y1="320" x2="398" y2="320"/><line class="ln" x1="115" y1="366" x2="382" y2="366"/><text class="bd" x="250" y="348" text-anchor="middle">in use: 12 of 38</text><path class="hz" d="M605,300 L915,300 L885,385 L635,385 Z"/><line class="ln" x1="615" y1="320" x2="908" y2="320"/><line class="ln" x1="625" y1="366" x2="892" y2="366"/><text class="bd" x="760" y="348" text-anchor="middle">opted out: 6 of 38</text><text class="sm" x="500" y="410" text-anchor="middle">the other 20 wait with a reason: next, evaluate, later, or the Azure version</text></svg><figcaption>Sorted into two baskets, each with a one-line reason. The reasons matter more than the verdicts.</figcaption></figure>
+<p>Of the 38 tools, here is where each one landed as of 30 October 2026:</p>
+<div class="tw"><table><tr><th>Decision</th><th>Tools</th><th>Means</th></tr><tr><td>In use</td><td>12</td><td>plugged in and working today</td></tr><tr><td>Opt in next</td><td>7</td><td>chosen, not plugged in yet</td></tr><tr><td>Evaluate</td><td>6</td><td>must prove itself first</td></tr><tr><td>Later</td><td>5</td><td>right tool, not needed yet</td></tr><tr><td>Cloud binding</td><td>2</td><td>the Azure version, behind the same port</td></tr><tr><td>Opt out</td><td>6</td><td>turned down, for the reason given</td></tr></table></div>
+<p>A few of the reasons, because the reasons are the useful part.</p>
+<p><strong>In.</strong> <em>pytest</em> runs every scenario, because a second test runner would split the evidence across two reports. <em>Hypothesis</em> invents hundreds of odd inputs to break a rule, and was already a dependency. <em>PyRIT</em>, Microsoft's red-teaming toolkit, rewrites one attack many ways; 180 generated attack cases held on both reference agents. <em>time-machine</em> moves the clock forward so "30 days later" takes a second.</p>
+<p><strong>In, but only part of it.</strong> From LangWatch Scenario we use only the simulated customer, not its judge, because AgentTwin judges by state, not by words. From PyRIT we use only the fixed, free rewrites; its model-driven parts need a paid model. <em>AgentDojo</em>, a research set of prompt-injection attacks, is copied in as data, because installing the package would pull in five model vendors' libraries.</p>
+<p><strong>Out.</strong> <em>WireMock</em> and <em>Prism</em> return canned answers; a canned mock would cancel a shipped order and the test would pass while proving nothing. <em>garak</em> probes the model, not the agent around it, and AgentTwin's question is whether harm reached the world. <em>DeepTeam</em> overlaps <em>promptfoo</em>, and one red-team generator is enough. <em>GraphWalker</em> walks every path through a state diagram; we use its idea, but a Java tool for one algorithm was too heavy.</p>
+<p>Turned down is not the same as wrong. Each one is a good tool for a different question.</p>
+<h2>Mistakes we made, or nearly made</h2>
+<ol><li><strong>Planning a whole framework.</strong> Early plans listed parts to build: a clock, a population of customers, a fault injector. Each one already existed. Starting from "what do we build?" instead of "what exists?" nearly cost weeks.</li><li><strong>Adopting a tool without a port.</strong> Import a tool straight into your core and it decides your dependency versions, your cloud and your upgrade schedule. The day you need to swap it, the swap is a rewrite.</li><li><strong>Taking the whole tool when you need one part.</strong> LangWatch Scenario's judge reads the conversation. Had we taken it along with the customer, we would have two judges that disagree, and the wrong one would be easier to read.</li><li><strong>No record of why a tool was turned down.</strong> Six months later someone suggests WireMock again, and the team argues it from scratch. AgentTwin keeps an adoption file, ADOPTION.md, where every row has a verdict and a reason, including the rejections.</li><li><strong>Calling a tool adopted before it is plugged in.</strong> At one design check, most of the tools listed as "adopted" were still only planned. Keep "in use" and "chosen" as separate labels, and be honest about which is which.</li></ol>
+<h2>Six questions to check your own build-vs-adopt choices</h2>
+<ol><li>For the last thing you built, did you search for an existing tool before you designed it?</li><li>Can you name, in one sentence, the gap each home-made piece fills?</li><li>Could you swap any adopted tool in an afternoon, or is it imported all through your code?</li><li>When you adopt a tool, do you take only the part you need?</li><li>Is there a written reason for every tool you turned down, where the next person will find it?</li><li>Do your labels tell apart a tool that is working today from one you merely chose?</li></ol>
+<p>Buy the bricks the shop sells, and save your hands for the shapes it doesn't.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agenttwin/open-source/">all 38 tools, one card each, with the reason for every decision</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
