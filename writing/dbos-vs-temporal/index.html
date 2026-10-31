@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DBOS vs Temporal: durable agents without the drama · Clean Data Engineering</title>
+<meta name="description" content="Durable execution lets a long agent task survive crashes, restarts and waits of days, with each step done once. DBOS does it as a library that keeps state in the Postgres you already run; Temporal does it with a separate, mature cluster that workers poll. Pick by what you already run and what you need, and if no task waits longer than one request, you may need neither."><link rel="canonical" href="https://cleandataengineering.ai/writing/dbos-vs-temporal/">
+<meta property="og:title" content="DBOS vs Temporal: durable agents without the drama"><meta property="og:description" content="Durable execution lets a long agent task survive crashes, restarts and waits of days, with each step done once. DBOS does it as a library that keeps state in the Postgres you already run; Temporal does it with a separate, mature cluster that workers poll. Pick by what you already run and what you need, and if no task waits longer than one request, you may need neither."><meta property="og:url" content="https://cleandataengineering.ai/writing/dbos-vs-temporal/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>DBOS vs Temporal: durable agents without the drama</h1>
+  </div>
+  <div class="summary">Durable execution lets a long agent task survive crashes, restarts and waits of days, with each step done once. DBOS does it as a library that keeps state in the Postgres you already run; Temporal does it with a separate, mature cluster that workers poll. Pick by what you already run and what you need, and if no task waits longer than one request, you may need neither.</div>
+<p>Most agent turns are over in a few seconds. A customer asks, the model thinks, a tool runs, and the answer goes back. If the server falls over halfway, you retry and nobody notices.</p>
+<p>Then one day the agent has to wait. A payout above ₹25,000 needs a claims handler to approve it, and the handler might reply in five minutes or in two days. In those two days your server will restart, deploy, and maybe scale to zero. Something has to remember exactly where the agent was, and make sure the money is paid once, not twice.</p>
+<p>That something is <strong>durable execution</strong>. DBOS and Temporal are two good ways to get it, built in very different shapes. This post compares them fairly, and ends with the case where you need neither.</p>
+<h2>What durable execution is</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 315" role="img" aria-label="A video game path with three save-point flags marked step 1, 2 and 3 saved. A stick person walks on past the third flag and is hit by a lightning bolt labelled crash. A dashed arrow loops back from the crash to the third flag: reload from the last save and carry on."><path class="ln" d="M20,250 Q260,244 500,250 T980,250"/><line class="lnc" x1="120" y1="250" x2="120" y2="150"/><path class="hz" d="M120,150 L172,166 L120,182 Z"/><circle class="hk" cx="120" cy="150" r="5"/><text class="sm" x="120" y="276" text-anchor="middle">step 1 saved</text><line class="lnc" x1="330" y1="250" x2="330" y2="150"/><path class="hz" d="M330,150 L382,166 L330,182 Z"/><circle class="hk" cx="330" cy="150" r="5"/><text class="sm" x="330" y="276" text-anchor="middle">step 2 saved</text><line class="lnc" x1="540" y1="250" x2="540" y2="150"/><path class="hz" d="M540,150 L592,166 L540,182 Z"/><circle class="hk" cx="540" cy="150" r="5"/><text class="sm" x="540" y="276" text-anchor="middle">step 3 saved</text><circle class="bx" cx="680" cy="181" r="13"/><line class="lnc" x1="680" y1="194" x2="680" y2="226"/><line class="lnc" x1="680" y1="226" x2="667" y2="248"/><line class="lnc" x1="680" y1="226" x2="693" y2="248"/><line class="lnc" x1="680" y1="204" x2="664" y2="218"/><line class="lnc" x1="680" y1="204" x2="696" y2="218"/><path class="hz" d="M842,110 L808,182 L834,182 L812,244 L872,160 L844,160 L866,110 Z"/><text class="bd" x="890" y="160" text-anchor="start">crash!</text><text class="sm" x="890" y="184" text-anchor="start">restart,</text><text class="sm" x="890" y="204" text-anchor="start">deploy</text><path class="lnd" d="M840,100 Q700,20 566,128" marker-end="url(#ar)"/><text class="sm" x="705" y="40" text-anchor="middle">reload from the last save, carry on</text><text class="sm" x="330" y="300" text-anchor="middle">finished steps are never played again; they hand back their saved result</text></svg><figcaption>Durable execution is a save point after every step. A crash costs you the step in progress, never the whole task.</figcaption></figure>
+<p>Think of a video game with save points. You play, you reach a flag, the game saves. If the power goes, you don't start the game again. You reload and carry on from the last flag.</p>
+<p>Durable execution does the same for a piece of code. You write the long task as a <strong>workflow</strong>, a function split into <strong>steps</strong>. After each step finishes, its result is saved somewhere safe. If the process dies, the workflow is run again from the top, but every finished step hands back its saved result instead of running again. So the code catches up to where it was, and carries on.</p>
+<p>That gives you three things:</p>
+<ol><li><strong>It survives crashes and restarts.</strong> Progress lives in storage, not in memory.</li><li><strong>It can wait for days.</strong> A waiting workflow is a saved record, not a running thread, so it costs almost nothing.</li><li><strong>Each step runs once,</strong> as far as the outside world can tell, as long as the steps themselves are safe to retry. More on that in the mistakes.</li></ol>
+<h2>Two shapes for the same job</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 335" role="img" aria-label="Left: DBOS. Your app holds your agent code and the DBOS library with its workflow and step decorators, and saves to your own Postgres. Right: Temporal. Your app holds agent code and workers, which poll a separate Temporal cluster that keeps each run&#x27;s event history in its own database and search index."><text class="lbl" x="250" y="26" text-anchor="middle">DBOS: A LIBRARY IN YOUR APP</text><text class="lbl" x="750" y="26" text-anchor="middle">TEMPORAL: A SEPARATE SERVICE</text><line class="lnd" x1="500" y1="12" x2="500" y2="330"/><rect class="hz" x="20" y="45" width="270" height="235" rx="14"/><text class="bd" x="155" y="72" text-anchor="middle">your app</text><rect class="pf pf-bx" x="44" y="92" width="228" height="62" rx="12"/><rect class="bx ol" x="40" y="88" width="230" height="64" rx="12"/><text class="tt" x="155.0" y="126.0" text-anchor="middle">your agent code</text><rect class="pf pf-solid" x="44" y="174" width="228" height="90" rx="12"/><rect class="solid ol" x="40" y="170" width="230" height="92" rx="12"/><text class="tt inv" x="155.0" y="203.0" text-anchor="middle">DBOS library</text><text class="inv sm2" x="155.0" y="227.0" text-anchor="middle">@DBOS.workflow()</text><text class="inv sm2" x="155.0" y="246.0" text-anchor="middle">@DBOS.step()</text><line class="ln" x1="292" y1="216" x2="340" y2="216" marker-end="url(#ar)"/><text class="sm" x="316" y="200" text-anchor="middle">saves</text><path class="bx" d="M345,136 L345,264 A70.0,16 0 0 0 485,264 L485,136 A70.0,16 0 0 0 345,136 A70.0,16 0 0 0 485,136"/><text class="bd" x="415" y="196" text-anchor="middle">your</text><text class="bd" x="415" y="220" text-anchor="middle">Postgres</text><text class="sm" x="415" y="246" text-anchor="middle">dbos tables</text><text class="sm" x="250" y="318" text-anchor="middle">no new server: one process, one database you already run</text><rect class="hz" x="515" y="45" width="200" height="235" rx="14"/><text class="bd" x="615" y="72" text-anchor="middle">your app</text><rect class="pf pf-bx" x="534" y="92" width="168" height="62" rx="12"/><rect class="bx ol" x="530" y="88" width="170" height="64" rx="12"/><text class="tt" x="615.0" y="126.0" text-anchor="middle">agent code</text><rect class="pf pf-bx" x="534" y="174" width="168" height="90" rx="12"/><rect class="bx ol" x="530" y="170" width="170" height="92" rx="12"/><text class="tt" x="615.0" y="203.0" text-anchor="middle">workers</text><text class="sm" x="615.0" y="227.0" text-anchor="middle">workflows and</text><text class="sm" x="615.0" y="246.0" text-anchor="middle">activities</text><rect class="bxm ol" x="782" y="60" width="198" height="74" rx="12"/><text class="tt" x="881.0" y="93.5" text-anchor="middle">its own database</text><text class="sm" x="881.0" y="117.5" text-anchor="middle">and search index</text><line class="ln" x1="881" y1="168" x2="881" y2="138" marker-end="url(#ar)"/><rect class="pf pf-solid" x="786" y="174" width="196" height="90" rx="12"/><rect class="solid ol" x="782" y="170" width="198" height="92" rx="12"/><text class="tt inv" x="881.0" y="203.0" text-anchor="middle">Temporal cluster</text><text class="inv sm2" x="881.0" y="227.0" text-anchor="middle">keeps each run&#x27;s</text><text class="inv sm2" x="881.0" y="246.0" text-anchor="middle">event history</text><line class="ln" x1="717" y1="200" x2="779" y2="200" marker-end="url(#ar)"/><text class="sm" x="748" y="191" text-anchor="middle">polls</text><line class="ln" x1="779" y1="234" x2="717" y2="234" marker-end="url(#ar)"/><text class="sm" x="748" y="256" text-anchor="middle">results</text><text class="sm" x="750" y="318" text-anchor="middle">a cluster you run, or Temporal Cloud runs it for you</text></svg><figcaption>Same promise, two shapes. DBOS lives inside your app and your database; Temporal is a service your workers talk to.</figcaption></figure>
+<p><strong>DBOS is a library inside your app.</strong> You add it to your Python code and mark functions with decorators: <code>@DBOS.workflow()</code> on the workflow, <code>@DBOS.step()</code> on each step. DBOS writes each step's result into tables in your own Postgres. There is no separate server to run. When your app starts, DBOS looks for workflows that were still running and carries each one on from its last finished step.</p>
+<p><strong>Temporal is a separate service.</strong> A Temporal cluster, which you run yourself or rent as Temporal Cloud, keeps an <strong>event history</strong> for every workflow run: a list of everything that happened, in order. Your own processes run <strong>workers</strong>, which poll the cluster for work. Temporal splits your code in two. <strong>Workflow</strong> code decides what happens next and must be deterministic, which means it gives the same result every time it is replayed from the history. <strong>Activity</strong> code does the real work, such as calling an API or writing to a database. After a crash, a worker replays the workflow from its event history to rebuild where it was.</p>
+<p>Temporal is mature, runs at very large scale, and has software kits for many languages. DBOS is younger and smaller. It started with Python and TypeScript; if your team writes in something else, check its current list before you choose.</p>
+<p>Both get you the same promise. The difference is where the state lives and what you have to run.</p>
+<h2>One payout, two ways</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 370" role="img" aria-label="Two rows for one ₹30,000 payout. DBOS: a step checks the amount against ₹25,000, the workflow waits for a message with DBOS.recv and holds no thread, two days later Asha&#x27;s approval arrives with DBOS.send, and a step pays once. Temporal: an activity checks, workflow code waits for a signal, the signal arrives, an activity pays once."><text class="lbl" x="20" y="40" text-anchor="start">DBOS</text><rect class="pf pf-bx" x="24" y="70" width="188" height="82" rx="12"/><rect class="bx ol" x="20" y="66" width="190" height="84" rx="12"/><text class="tt" x="115.0" y="104.5" text-anchor="middle">Step: check</text><text class="sm" x="115.0" y="128.5" text-anchor="middle">₹30,000 &gt; ₹25,000</text><circle class="nm" cx="32" cy="66" r="14"/><text class="nmt" x="32" y="72" text-anchor="middle">1</text><line class="ln" x1="212" y1="108" x2="252" y2="108" marker-end="url(#ar)"/><rect class="pf pf-solid" x="259" y="70" width="198" height="82" rx="12"/><rect class="solid ol" x="255" y="66" width="200" height="84" rx="12"/><text class="tt inv" x="355.0" y="95.0" text-anchor="middle">Wait for a message</text><text class="inv sm2" x="355.0" y="119.0" text-anchor="middle">DBOS.recv(),</text><text class="inv sm2" x="355.0" y="138.0" text-anchor="middle">no thread held</text><circle class="nm" cx="267" cy="66" r="14"/><text class="nmt" x="267" y="72" text-anchor="middle">2</text><line class="lnd" x1="458" y1="108" x2="596" y2="108"/><text class="sm" x="527" y="98" text-anchor="middle">two days</text><rect class="bxm ol" x="600" y="66" width="180" height="84" rx="12"/><text class="tt" x="690.0" y="104.5" text-anchor="middle">Approve arrives</text><text class="sm" x="690.0" y="128.5" text-anchor="middle">Asha: DBOS.send()</text><circle class="nm" cx="612" cy="66" r="14"/><text class="nmt" x="612" y="72" text-anchor="middle">3</text><line class="ln" x1="782" y1="108" x2="812" y2="108" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="819" y="70" width="163" height="82" rx="12"/><rect class="bxs ol" x="815" y="66" width="165" height="84" rx="12"/><text class="tt" x="897.5" y="104.5" text-anchor="middle">Step: pay</text><text class="sm" x="897.5" y="128.5" text-anchor="middle">once, by its key</text><circle class="nm" cx="827" cy="66" r="14"/><text class="nmt" x="827" y="72" text-anchor="middle">4</text><text class="sm" x="527" y="178" text-anchor="middle">the wait is one row in your Postgres</text><text class="lbl" x="20" y="214" text-anchor="start">TEMPORAL</text><rect class="pf pf-bx" x="24" y="244" width="188" height="82" rx="12"/><rect class="bx ol" x="20" y="240" width="190" height="84" rx="12"/><text class="tt" x="115.0" y="278.5" text-anchor="middle">Activity: check</text><text class="sm" x="115.0" y="302.5" text-anchor="middle">runs on a worker</text><circle class="nm" cx="32" cy="240" r="14"/><text class="nmt" x="32" y="246" text-anchor="middle">1</text><line class="ln" x1="212" y1="282" x2="252" y2="282" marker-end="url(#ar)"/><rect class="pf pf-solid" x="259" y="244" width="198" height="82" rx="12"/><rect class="solid ol" x="255" y="240" width="200" height="84" rx="12"/><text class="tt inv" x="355.0" y="269.0" text-anchor="middle">Wait for a signal</text><text class="inv sm2" x="355.0" y="293.0" text-anchor="middle">workflow code,</text><text class="inv sm2" x="355.0" y="312.0" text-anchor="middle">nothing running</text><circle class="nm" cx="267" cy="240" r="14"/><text class="nmt" x="267" y="246" text-anchor="middle">2</text><line class="lnd" x1="458" y1="282" x2="596" y2="282"/><text class="sm" x="527" y="272" text-anchor="middle">two days</text><rect class="bxm ol" x="600" y="240" width="180" height="84" rx="12"/><text class="tt" x="690.0" y="278.5" text-anchor="middle">Signal arrives</text><text class="sm" x="690.0" y="302.5" text-anchor="middle">Asha: Approve</text><circle class="nm" cx="612" cy="240" r="14"/><text class="nmt" x="612" y="246" text-anchor="middle">3</text><line class="ln" x1="782" y1="282" x2="812" y2="282" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="819" y="244" width="163" height="82" rx="12"/><rect class="bxs ol" x="815" y="240" width="165" height="84" rx="12"/><text class="tt" x="897.5" y="278.5" text-anchor="middle">Activity: pay</text><text class="sm" x="897.5" y="302.5" text-anchor="middle">once, by its key</text><circle class="nm" cx="827" cy="240" r="14"/><text class="nmt" x="827" y="246" text-anchor="middle">4</text><text class="sm" x="527" y="352" text-anchor="middle">the wait is events in the cluster&#x27;s history</text></svg><figcaption>The same payout in both. The story is identical; only where the wait is written down differs.</figcaption></figure>
+<p>Say Rohan asks the claims assistant to release ₹30,000. The automatic limit is ₹25,000, so a handler, Asha, must approve it. She replies two days later.</p>
+<p><strong>In DBOS,</strong> the payout is one workflow function:</p>
+<ol><li>A step reads the claim and sees ₹30,000 is above the limit.</li><li>The workflow calls <code>DBOS.recv()</code> to wait for a message. Nothing is running now; there is just a row in Postgres saying the workflow is waiting.</li><li>Rohan's turn ends at once. He is told nothing has been paid yet.</li><li>Two days later, Asha clicks Approve. Her desk calls <code>DBOS.send()</code> with the workflow's id.</li><li>The workflow wakes, re-reads the claim in a step to check nothing changed, and pays in another step.</li></ol>
+<p><strong>In Temporal,</strong> the shape is nearly the same. An activity reads the claim. The workflow code waits for a <strong>signal</strong>, Temporal's word for a message sent to a running workflow. Asha's desk sends that signal through the cluster. A worker picks up the workflow again, and an activity makes the payment.</p>
+<p>The real flow, step by step, is in the tutorial's <a href="/learn/agent-harness/dbos-approval.html">payout flow</a>. Why the approval belongs in a durable wait at all, and what Asha should see on her card, is in <a href="/writing/human-in-the-loop/">Human in the loop without humans in the way</a>.</p>
+<h2>The trade-offs</h2>
+<div class="tw"><table><tr><th></th><th>DBOS</th><th>Temporal</th></tr><tr><td>What you run</td><td>your app and the Postgres you already have</td><td>a cluster with its own database, or Temporal Cloud</td></tr><tr><td>What you pay for</td><td>nothing new</td><td>the cluster's servers and the people to run them, or the Cloud bill</td></tr><tr><td>Time for each step</td><td>one write to your own database</td><td>a round trip through the cluster</td></tr><tr><td>Languages</td><td>check its current list</td><td>many, mature</td></tr><tr><td>Seeing what is running</td><td>query its tables in your Postgres</td><td>a web interface over every run's history</td></tr><tr><td>Scale</td><td>as far as your Postgres goes</td><td>very large, proven</td></tr><tr><td>Team skills</td><td>Postgres and your app</td><td>a new service and its replay rules</td></tr></table></div>
+<p>A few of these need a word more.</p>
+<ul><li><strong>Running it.</strong> Our comparison in the tutorial put Temporal's ongoing work for the team as "low on Cloud; high self-hosted". DBOS adds no infrastructure at all, because it reuses the database the agent already writes its other state to, as <a href="/writing/just-use-postgres/">Just use Postgres</a> argues.</li><li><strong>Rules on your code.</strong> Temporal's are strict: workflow code may not read the clock, make random numbers, or do input and output directly. That strictness is what makes its replay reliable. DBOS asks the same thing in a lighter way: put anything that changes between runs inside a step. In the tutorial even reading the clock is a step, so a replay sees the same time.</li><li><strong>Changing code while runs are waiting.</strong> Temporal has mature tools for running old and new versions of a workflow side by side. In the tutorial we handle it the plain way: before changing a workflow's steps, let the waiting ones finish.</li></ul>
+<p>Our verdict in the Agent Harness was DBOS, because its state lives in the Postgres we already run, so it adds nothing. We would move to Temporal for long chains of steps that must be undone one by one if something fails late, which people call sagas, or when we need mature versioning. A bank with many teams writing in many languages is a different place from a single agent team with one database, and Temporal fits it well.</p>
+<h2>When you need neither</h2>
+<p>Plenty of agents never wait. Each turn reads, thinks, calls a tool or two, and answers in under ten seconds. Nothing has to survive a restart in the middle, because the client can simply try again.</p>
+<p>For those, you need two things, both small:</p>
+<ul><li><strong>An idempotency key.</strong> <em>Idempotent</em> means doing it twice has the same effect as doing it once. Give each write a key, such as the tool call's id, and record it before the write runs. A second attempt with the same key gets the first answer back.</li><li><strong>A retry.</strong> If the turn fails, run it again. The key makes the retry safe.</li></ul>
+<p>That is all the tutorial's ordinary turns use. Only two functions in the whole harness are workflows: the payout approval and the hand-off to a person. Everything else is a turn with a key.</p>
+<h2>Which one, in three questions</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 355" role="img" aria-label="Three questions in a row. Does a task wait or outlive a request? No leads to neither: an idempotency key and a retry. Yes leads to: many languages, huge volume, long undo chains? Yes leads to Temporal. No leads to: already run Postgres? Yes leads to DBOS."><rect class="pf pf-bxs" x="24" y="34" width="278" height="102" rx="12"/><rect class="bxs ol" x="20" y="30" width="280" height="104" rx="12"/><text class="tt" x="160.0" y="76.0" text-anchor="middle">Does a task wait,</text><text class="tt" x="160.0" y="100.0" text-anchor="middle">or outlive a request?</text><line class="ln" x1="302" y1="82" x2="357" y2="82" marker-end="url(#ar)"/><text class="sm" x="329.5" y="74.0" text-anchor="middle">yes</text><rect class="pf pf-bxs" x="364" y="34" width="278" height="102" rx="12"/><rect class="bxs ol" x="360" y="30" width="280" height="104" rx="12"/><text class="tt" x="500.0" y="76.0" text-anchor="middle">Many languages, huge</text><text class="tt" x="500.0" y="100.0" text-anchor="middle">volume, long undos?</text><line class="ln" x1="642" y1="82" x2="697" y2="82" marker-end="url(#ar)"/><text class="sm" x="669.5" y="74.0" text-anchor="middle">no</text><rect class="pf pf-bxs" x="704" y="34" width="278" height="102" rx="12"/><rect class="bxs ol" x="700" y="30" width="280" height="104" rx="12"/><text class="tt" x="840.0" y="76.0" text-anchor="middle">Already run</text><text class="tt" x="840.0" y="100.0" text-anchor="middle">Postgres?</text><line class="ln" x1="160" y1="136" x2="160" y2="210" marker-end="url(#ar)"/><text class="sm" x="172" y="178" text-anchor="start">no</text><line class="ln" x1="500" y1="136" x2="500" y2="210" marker-end="url(#ar)"/><text class="sm" x="512" y="178" text-anchor="start">yes</text><line class="ln" x1="840" y1="136" x2="840" y2="210" marker-end="url(#ar)"/><text class="sm" x="852" y="178" text-anchor="start">yes</text><rect class="bxm ol" x="20" y="213" width="280" height="96" rx="12"/><text class="tt" x="160.0" y="248.0" text-anchor="middle">Neither</text><text class="sm" x="160.0" y="272.0" text-anchor="middle">an idempotency key</text><text class="sm" x="160.0" y="291.0" text-anchor="middle">and a retry</text><rect class="pf pf-solid" x="364" y="217" width="278" height="94" rx="12"/><rect class="solid ol" x="360" y="213" width="280" height="96" rx="12"/><text class="tt inv" x="500.0" y="248.0" text-anchor="middle">Temporal</text><text class="inv sm2" x="500.0" y="272.0" text-anchor="middle">Cloud, unless a team</text><text class="inv sm2" x="500.0" y="291.0" text-anchor="middle">will run the cluster</text><rect class="pf pf-solid" x="704" y="217" width="278" height="94" rx="12"/><rect class="solid ol" x="700" y="213" width="280" height="96" rx="12"/><text class="tt inv" x="840.0" y="248.0" text-anchor="middle">DBOS</text><text class="inv sm2" x="840.0" y="272.0" text-anchor="middle">a library and a few</text><text class="inv sm2" x="840.0" y="291.0" text-anchor="middle">tables in your Postgres</text><text class="sm" x="980" y="340" text-anchor="end">no Postgres yet? a managed one is often smaller than a cluster</text></svg><figcaption>Three questions, asked in order. Most agent teams stop at the first one.</figcaption></figure>
+<ol><li><strong>Does any task wait for a person or a timer, or run longer than one request?</strong> If not, use an idempotency key and a retry, and stop there.</li><li><strong>Do you have many services in many languages, or very large volume, or long undo chains?</strong> Then Temporal, on Temporal Cloud unless you have a team to run the cluster.</li><li><strong>Do you already run Postgres?</strong> Then DBOS. It is a library and a few tables, not a new system.</li></ol>
+<h2>Mistakes we see</h2>
+<ol><li><strong>Non-deterministic code inside the workflow.</strong> Reading the clock, a random number, or an API call made directly in workflow code gives a different answer on replay, and the workflow takes a different path. Put it in a step, or an activity in Temporal.</li><li><strong>Steps that are not idempotent.</strong> A step can run, do its work, and crash before its result is saved. On restart it runs again. If that step sends money, the payment system must recognise the repeat by its key, or Rohan is paid twice.</li><li><strong>Holding a thread while waiting.</strong> Waiting inside a web request or a <code>while</code> loop with a sleep ties up a server and is lost on a restart. Use the framework's durable wait, such as <code>DBOS.recv()</code> or a durable sleep, or a Temporal signal or timer.</li><li><strong>No answer for silence.</strong> A wait with no timeout hangs forever. Decide what happens when nobody replies, and make it the safe answer.</li><li><strong>A cluster for a three-second task.</strong> Adopting Temporal, with its servers, workers and replay rules, for turns that never wait is cost and complexity with nothing to show for it.</li></ol>
+<h2>Six questions to check your own setup</h2>
+<ol><li>Which of your agent's tasks can wait longer than one request, and could you name them all?</li><li>If your server restarts while one of them is waiting, what brings it back, and from which step?</li><li>Can every step that touches the outside world be run twice without a second effect?</li><li>Does any workflow code read the clock, make a random number, or call an API outside a step?</li><li>Who runs your workflow engine, and what does it cost each month, in servers and in people?</li><li>If your tasks never wait, what would you lose by removing the engine and keeping just keys and retries?</li></ol>
+<p>Durable execution should be boring: a save point after every step, and nobody paid twice.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/dbos.html">DBOS in the Agent Harness tutorial: what it does, the payout flow, the hand-off flow, and crash and restart</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
