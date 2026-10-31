@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stop writing pipelines: one metadata-driven ingestion framework for 500 tables · Clean Data Engineering</title>
+<meta name="description" content="Most teams bring data in with one hand-written pipeline per source table, and by table 500 nobody can keep them all working. A metadata-driven framework keeps one row of settings per table in a config store and runs one generic pipeline that reads it. Adding table 501 becomes a reviewed row, not new code."><link rel="canonical" href="https://cleandataengineering.ai/writing/metadata-driven-ingestion/">
+<meta property="og:title" content="Stop writing pipelines: one metadata-driven ingestion framework for 500 tables"><meta property="og:description" content="Most teams bring data in with one hand-written pipeline per source table, and by table 500 nobody can keep them all working. A metadata-driven framework keeps one row of settings per table in a config store and runs one generic pipeline that reads it. Adding table 501 becomes a reviewed row, not new code."><meta property="og:url" content="https://cleandataengineering.ai/writing/metadata-driven-ingestion/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · Data Engineering · Builders · 7 min read · 2026-10-31</p>
+    <h1>Stop writing pipelines: one metadata-driven ingestion framework for 500 tables</h1>
+  </div>
+  <div class="summary">Most teams bring data in with one hand-written pipeline per source table, and by table 500 nobody can keep them all working. A metadata-driven framework keeps one row of settings per table in a config store and runs one generic pipeline that reads it. Adding table 501 becomes a reviewed row, not new code.</div>
+<p>Priya joins a data team and is asked to bring in one more table from the shop database. She opens the repository and finds 212 pipelines, one per table. Most are copies of each other with small changes. Some load everything every night, some only new rows. Three of them handle a renamed column in three different ways, and one has a database password pasted into it.</p>
+<p>She copies the closest one, changes the table name, and adds pipeline 213. It works. It is also one more thing someone has to fix when the source changes.</p>
+<p>There is a better way, and it is not a new tool. It is a habit: <strong>describe each table, don't code it.</strong></p>
+<h2>500 pipelines, or one engine and a table</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 305" role="img" aria-label="On the left, twelve small script pages are scattered and tangled with dashed lines, labelled 500 small programs. On the right, a metadata store drawn as a grid with one row per table feeds a single engine, which writes to bronze."><text class="lbl" x="220" y="28" text-anchor="middle">before: one pipeline per table</text><text class="lbl" x="745" y="28" text-anchor="middle">after: one engine reads a table of settings</text><path class="lnd" d="M75,90 Q160,250 260,110 T430,200"/><path class="lnd" d="M120,240 Q230,40 330,230"/><g transform="rotate(-6 67 85)"><rect class="hz" x="40" y="55" width="54" height="60" rx="3"/><line class="ln" x1="48" y1="69" x2="86" y2="69"/><line class="ln" x1="48" y1="79" x2="78" y2="79"/><line class="ln" x1="48" y1="89" x2="86" y2="89"/><line class="ln" x1="48" y1="99" x2="78" y2="99"/></g><g transform="rotate(4 162 85)"><rect class="hz" x="135" y="55" width="54" height="60" rx="3"/><line class="ln" x1="143" y1="69" x2="181" y2="69"/><line class="ln" x1="143" y1="79" x2="173" y2="79"/><line class="ln" x1="143" y1="89" x2="181" y2="89"/><line class="ln" x1="143" y1="99" x2="173" y2="99"/></g><g transform="rotate(-3 257 85)"><rect class="hz" x="230" y="55" width="54" height="60" rx="3"/><line class="ln" x1="238" y1="69" x2="276" y2="69"/><line class="ln" x1="238" y1="79" x2="268" y2="79"/><line class="ln" x1="238" y1="89" x2="276" y2="89"/><line class="ln" x1="238" y1="99" x2="268" y2="99"/></g><g transform="rotate(7 352 85)"><rect class="hz" x="325" y="55" width="54" height="60" rx="3"/><line class="ln" x1="333" y1="69" x2="371" y2="69"/><line class="ln" x1="333" y1="79" x2="363" y2="79"/><line class="ln" x1="333" y1="89" x2="371" y2="89"/><line class="ln" x1="333" y1="99" x2="363" y2="99"/></g><g transform="rotate(3 85 157)"><rect class="hz" x="58" y="127" width="54" height="60" rx="3"/><line class="ln" x1="66" y1="141" x2="104" y2="141"/><line class="ln" x1="66" y1="151" x2="96" y2="151"/><line class="ln" x1="66" y1="161" x2="104" y2="161"/><line class="ln" x1="66" y1="171" x2="96" y2="171"/></g><g transform="rotate(-7 180 157)"><rect class="hz" x="153" y="127" width="54" height="60" rx="3"/><line class="ln" x1="161" y1="141" x2="199" y2="141"/><line class="ln" x1="161" y1="151" x2="191" y2="151"/><line class="ln" x1="161" y1="161" x2="199" y2="161"/><line class="ln" x1="161" y1="171" x2="191" y2="171"/></g><g transform="rotate(5 275 157)"><rect class="hz" x="248" y="127" width="54" height="60" rx="3"/><line class="ln" x1="256" y1="141" x2="294" y2="141"/><line class="ln" x1="256" y1="151" x2="286" y2="151"/><line class="ln" x1="256" y1="161" x2="294" y2="161"/><line class="ln" x1="256" y1="171" x2="286" y2="171"/></g><g transform="rotate(-4 370 157)"><rect class="hz" x="343" y="127" width="54" height="60" rx="3"/><line class="ln" x1="351" y1="141" x2="389" y2="141"/><line class="ln" x1="351" y1="151" x2="381" y2="151"/><line class="ln" x1="351" y1="161" x2="389" y2="161"/><line class="ln" x1="351" y1="171" x2="381" y2="171"/></g><g transform="rotate(-5 67 229)"><rect class="hz" x="40" y="199" width="54" height="60" rx="3"/><line class="ln" x1="48" y1="213" x2="86" y2="213"/><line class="ln" x1="48" y1="223" x2="78" y2="223"/><line class="ln" x1="48" y1="233" x2="86" y2="233"/><line class="ln" x1="48" y1="243" x2="78" y2="243"/></g><g transform="rotate(6 162 229)"><rect class="hz" x="135" y="199" width="54" height="60" rx="3"/><line class="ln" x1="143" y1="213" x2="181" y2="213"/><line class="ln" x1="143" y1="223" x2="173" y2="223"/><line class="ln" x1="143" y1="233" x2="181" y2="233"/><line class="ln" x1="143" y1="243" x2="173" y2="243"/></g><g transform="rotate(-2 257 229)"><rect class="hz" x="230" y="199" width="54" height="60" rx="3"/><line class="ln" x1="238" y1="213" x2="276" y2="213"/><line class="ln" x1="238" y1="223" x2="268" y2="223"/><line class="ln" x1="238" y1="233" x2="276" y2="233"/><line class="ln" x1="238" y1="243" x2="268" y2="243"/></g><g transform="rotate(4 352 229)"><rect class="hz" x="325" y="199" width="54" height="60" rx="3"/><line class="ln" x1="333" y1="213" x2="371" y2="213"/><line class="ln" x1="333" y1="223" x2="363" y2="223"/><line class="ln" x1="333" y1="233" x2="371" y2="233"/><line class="ln" x1="333" y1="243" x2="363" y2="243"/></g><text class="sm" x="220" y="290" text-anchor="middle">500 small programs, 500 ways to break</text><line class="lnd" x1="480" y1="50" x2="480" y2="290"/><rect class="hz" x="515" y="80" width="160" height="140" rx="4"/><rect class="pf pf-bxs" x="515" y="80" width="160" height="28" rx="4"/><line class="ln" x1="515" y1="108" x2="675" y2="108"/><line class="ln" x1="515" y1="136" x2="675" y2="136"/><line class="ln" x1="515" y1="164" x2="675" y2="164"/><line class="ln" x1="515" y1="192" x2="675" y2="192"/><line class="ln" x1="580" y1="80" x2="580" y2="220"/><text class="sm" x="595" y="240" text-anchor="middle">metadata store</text><text class="sm" x="595" y="258" text-anchor="middle">one row per table</text><line class="ln" x1="677" y1="150" x2="703" y2="150" marker-end="url(#ar)"/><rect class="pf pf-solid" x="709" y="99" width="128" height="108" rx="12"/><rect class="solid ol" x="705" y="95" width="130" height="110" rx="12"/><text class="tt inv" x="770.0" y="137.0" text-anchor="middle">Engine</text><text class="inv sm2" x="770.0" y="161.0" text-anchor="middle">one pipeline,</text><text class="inv sm2" x="770.0" y="180.0" text-anchor="middle">tested once</text><line class="ln" x1="837" y1="150" x2="863" y2="150" marker-end="url(#ar)"/><rect class="pf pf-bx" x="869" y="109" width="123" height="88" rx="12"/><rect class="bx ol" x="865" y="105" width="125" height="90" rx="12"/><text class="tt" x="927.5" y="146.5" text-anchor="middle">Bronze</text><text class="sm" x="927.5" y="170.5" text-anchor="middle">every table</text></svg><figcaption>Hundreds of hand-written pipelines, or one engine that reads what to do from a table.</figcaption></figure>
+<p>On the left is the usual path. Every table gets its own pipeline. Each one is small, but together they are hundreds of slightly different programs, each with its own bugs.</p>
+<p>On the right is the metadata-driven path. The settings for every table live in a <strong>metadata store</strong>: a small database whose only job is to describe the platform. One generic pipeline, the <strong>engine</strong>, reads a table's settings and loads it. The engine is written once, tested once, and fixed once.</p>
+<p>"Metadata" here just means data about data: where a table lives and how to load it, rather than the rows themselves.</p>
+<p>The engine only does ingestion. It copies data from the source into <strong>bronze</strong>, the layer that keeps every row exactly as it arrived plus a note of when and where it came from. Cleaning is silver's job, later.</p>
+<h2>What one config row holds</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 300" role="img" aria-label="One config row for the orders table, drawn as eight boxes: source shop_db Postgres, format database table, load type incremental, keys order_id, schedule every hour, watermark column updated_at, schema columns and types, and connection kv://shop-db-readonly, a secret reference."><rect class="hz" x="5" y="45" width="990" height="245" rx="10"/><rect class="hz" x="25" y="22" width="150" height="34" rx="6"/><text class="bd" x="100" y="45" text-anchor="middle">table: orders</text><text class="sm" x="985" y="38" text-anchor="end">one row of settings, edited by pull request</text><rect class="pf pf-bx" x="29" y="79" width="220" height="83" rx="12"/><rect class="bx ol" x="25" y="75" width="222" height="85" rx="12"/><text class="tt" x="136.0" y="114.0" text-anchor="middle">Source</text><text class="sm" x="136.0" y="138.0" text-anchor="middle">shop_db, Postgres</text><rect class="pf pf-bx" x="271" y="79" width="220" height="83" rx="12"/><rect class="bx ol" x="267" y="75" width="222" height="85" rx="12"/><text class="tt" x="378.0" y="114.0" text-anchor="middle">Format</text><text class="sm" x="378.0" y="138.0" text-anchor="middle">database table</text><rect class="pf pf-solid" x="513" y="79" width="220" height="83" rx="12"/><rect class="solid ol" x="509" y="75" width="222" height="85" rx="12"/><text class="tt inv" x="620.0" y="114.0" text-anchor="middle">Load type</text><text class="inv sm2" x="620.0" y="138.0" text-anchor="middle">incremental</text><rect class="pf pf-bx" x="755" y="79" width="220" height="83" rx="12"/><rect class="bx ol" x="751" y="75" width="222" height="85" rx="12"/><text class="tt" x="862.0" y="114.0" text-anchor="middle">Keys</text><text class="sm" x="862.0" y="138.0" text-anchor="middle">order_id</text><rect class="pf pf-bx" x="29" y="184" width="220" height="83" rx="12"/><rect class="bx ol" x="25" y="180" width="222" height="85" rx="12"/><text class="tt" x="136.0" y="219.0" text-anchor="middle">Schedule</text><text class="sm" x="136.0" y="243.0" text-anchor="middle">every hour</text><rect class="pf pf-bx" x="271" y="184" width="220" height="83" rx="12"/><rect class="bx ol" x="267" y="180" width="222" height="85" rx="12"/><text class="tt" x="378.0" y="219.0" text-anchor="middle">Watermark column</text><text class="sm" x="378.0" y="243.0" text-anchor="middle">updated_at</text><rect class="pf pf-bx" x="513" y="184" width="220" height="83" rx="12"/><rect class="bx ol" x="509" y="180" width="222" height="85" rx="12"/><text class="tt" x="620.0" y="219.0" text-anchor="middle">Schema</text><text class="sm" x="620.0" y="243.0" text-anchor="middle">columns and types</text><rect class="pf pf-bxs" x="755" y="184" width="220" height="83" rx="12"/><rect class="bxs ol" x="751" y="180" width="222" height="85" rx="12"/><text class="tt" x="862.0" y="219.0" text-anchor="middle">Connection</text><text class="sm" x="862.0" y="243.0" text-anchor="middle">kv://shop-db-readonly</text></svg><figcaption>What one row in the metadata store says about one table. The connection is a pointer to a secret, never the secret.</figcaption></figure>
+<p>For each table, the metadata store answers eight questions.</p>
+<ol><li><strong>Source.</strong> Which system it comes from, such as the shop's Postgres database, an SFTP folder or a REST API.</li><li><strong>Format.</strong> How the data arrives: a database table, CSV, JSON, Parquet.</li><li><strong>Load type.</strong> One of three. A <em>full load</em> copies the whole table every run, which is fine for small reference tables. An <em>incremental</em> load copies only rows changed since last time, using a column such as <code>updated_at</code>. <em>Change data capture</em>, or CDC, reads the database's own change log, so it sees every insert, update and delete in order.</li><li><strong>Keys.</strong> The column or columns that identify a row, such as <code>order_id</code>. Silver will need these to remove duplicates.</li><li><strong>Schedule.</strong> How often it runs: every hour, every night at 2 a.m.</li><li><strong>Watermark column.</strong> For incremental loads, the column that says how far we got.</li><li><strong>Schema.</strong> The columns and types we expect, so a surprise can be spotted.</li><li><strong>Connection.</strong> A <em>reference</em> to a secret, such as <code>kv://shop-db-readonly</code>, never the password itself.</li></ol>
+<p>Two details make this work at scale.</p>
+<p>First, settings come in three tiers: platform defaults, then source settings, then table settings. A table setting beats a source setting, which beats a platform default. So you set "incremental" once for the whole shop database and override it only for the one table that needs CDC.</p>
+<p>Second, the <strong>watermark value</strong> itself, the actual "we loaded up to 9 a.m. yesterday", does not live in the config. Config says what <em>should</em> happen. A separate state table records what <em>did</em> happen. Mixing them means a settings change can quietly rewrite history.</p>
+<p>People don't type these rows into the database by hand. They write a short YAML file per source and change it through a pull request. A loader then writes it into the store.</p>
+<pre><code>source: shop_db
+type: postgres
+config:
+  ingestion.connection_ref: kv://shop-db-readonly
+  ingestion.mode: incremental
+datasets:
+  - name: orders
+    config:
+      ingestion.watermark_column: updated_at
+      silver.key: order_id
+  - name: customers
+    config:
+      ingestion.mode: cdc
+      silver.key: customer_id</code></pre>
+<h2>One run, step by step</h2>
+<p>Here is what the engine does when the scheduler says "load orders now".</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 310" role="img" aria-label="Seven numbered steps in a snake. Top row: read config, check watermark, extract, land the files. Bottom row, right to left: write to bronze in one commit with the batch id, move the watermark only after step 5 succeeds, log the run."><rect class="pf pf-bx" x="19" y="34" width="198" height="98" rx="12"/><rect class="bx ol" x="15" y="30" width="200" height="100" rx="12"/><text class="tt" x="115.0" y="67.0" text-anchor="middle">Read config</text><text class="sm" x="115.0" y="91.0" text-anchor="middle">merge the tiers,</text><text class="sm" x="115.0" y="110.0" text-anchor="middle">take a fingerprint</text><circle class="nm" cx="21" cy="36" r="14"/><text class="nmt" x="21" y="42" text-anchor="middle">1</text><line class="ln" x1="217" y1="80" x2="258" y2="80" marker-end="url(#ar)"/><rect class="pf pf-bx" x="264" y="34" width="198" height="98" rx="12"/><rect class="bx ol" x="260" y="30" width="200" height="100" rx="12"/><text class="tt" x="360.0" y="67.0" text-anchor="middle">Check watermark</text><text class="sm" x="360.0" y="91.0" text-anchor="middle">last good run:</text><text class="sm" x="360.0" y="110.0" text-anchor="middle">26 Oct, 09:00</text><circle class="nm" cx="266" cy="36" r="14"/><text class="nmt" x="266" y="42" text-anchor="middle">2</text><line class="ln" x1="462" y1="80" x2="503" y2="80" marker-end="url(#ar)"/><rect class="pf pf-bx" x="509" y="34" width="198" height="98" rx="12"/><rect class="bx ol" x="505" y="30" width="200" height="100" rx="12"/><text class="tt" x="605.0" y="67.0" text-anchor="middle">Extract</text><text class="sm" x="605.0" y="91.0" text-anchor="middle">only rows changed</text><text class="sm" x="605.0" y="110.0" text-anchor="middle">after the watermark</text><circle class="nm" cx="511" cy="36" r="14"/><text class="nmt" x="511" y="42" text-anchor="middle">3</text><line class="ln" x1="707" y1="80" x2="748" y2="80" marker-end="url(#ar)"/><rect class="pf pf-bx" x="754" y="34" width="198" height="98" rx="12"/><rect class="bx ol" x="750" y="30" width="200" height="100" rx="12"/><text class="tt" x="850.0" y="67.0" text-anchor="middle">Land the files</text><text class="sm" x="850.0" y="91.0" text-anchor="middle">untouched, in</text><text class="sm" x="850.0" y="110.0" text-anchor="middle">batch=b-0912/</text><circle class="nm" cx="756" cy="36" r="14"/><text class="nmt" x="756" y="42" text-anchor="middle">4</text><line class="ln" x1="850" y1="132" x2="850" y2="193" marker-end="url(#ar)"/><rect class="pf pf-solid" x="754" y="199" width="198" height="98" rx="12"/><rect class="solid ol" x="750" y="195" width="200" height="100" rx="12"/><text class="tt inv" x="850.0" y="232.0" text-anchor="middle">Write to bronze</text><text class="inv sm2" x="850.0" y="256.0" text-anchor="middle">one commit,</text><text class="inv sm2" x="850.0" y="275.0" text-anchor="middle">with the batch id</text><circle class="nm" cx="756" cy="201" r="14"/><text class="nmt" x="756" y="207" text-anchor="middle">5</text><line class="ln" x1="748" y1="245" x2="707" y2="245" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="509" y="199" width="198" height="98" rx="12"/><rect class="bxs ol" x="505" y="195" width="200" height="100" rx="12"/><text class="tt" x="605.0" y="232.0" text-anchor="middle">Update watermark</text><text class="sm" x="605.0" y="256.0" text-anchor="middle">only after step 5</text><text class="sm" x="605.0" y="275.0" text-anchor="middle">has succeeded</text><circle class="nm" cx="511" cy="201" r="14"/><text class="nmt" x="511" y="207" text-anchor="middle">6</text><line class="ln" x1="503" y1="245" x2="462" y2="245" marker-end="url(#ar)"/><rect class="pf pf-bx" x="264" y="199" width="198" height="98" rx="12"/><rect class="bx ol" x="260" y="195" width="200" height="100" rx="12"/><text class="tt" x="360.0" y="232.0" text-anchor="middle">Log the run</text><text class="sm" x="360.0" y="256.0" text-anchor="middle">status, rows,</text><text class="sm" x="360.0" y="275.0" text-anchor="middle">fingerprint</text><circle class="nm" cx="266" cy="201" r="14"/><text class="nmt" x="266" y="207" text-anchor="middle">7</text><text class="sm" x="120" y="230" text-anchor="middle">if the job dies</text><text class="sm" x="120" y="250" text-anchor="middle">before step 6,</text><text class="sm" x="120" y="270" text-anchor="middle">nothing is lost and</text><text class="sm" x="120" y="290" text-anchor="middle">nothing doubles</text></svg><figcaption>One run of the engine. The watermark moves only after bronze has the data.</figcaption></figure>
+<ol><li><strong>Read the config.</strong> Merge platform, source and table settings into one set, and take a short fingerprint of it, so you can later prove which settings this run used.</li><li><strong>Check the watermark.</strong> Read from the state table how far the last good run reached, say <code>2026-10-26 09:00</code>.</li><li><strong>Extract.</strong> Ask the source for rows where <code>updated_at</code> is later than that.</li><li><strong>Land the files.</strong> Write them, untouched, to a landing folder for this batch, such as <code>landing/shop_db/orders/batch=b-0912/</code>. Write a completion marker last, so nobody reads half a batch.</li><li><strong>Write to bronze.</strong> Append the files to the bronze table in one commit, adding columns for when the row arrived, which source it came from and its <strong>batch id</strong>. Before appending, check whether this batch id already succeeded. If it did, stop: a retried job adds nothing.</li><li><strong>Update the watermark.</strong> Only now move it forward, to the latest <code>updated_at</code> in the batch.</li><li><strong>Log the run.</strong> Record the status, row counts, batch id and the settings fingerprint in the run log.</li></ol>
+<p>The order matters. If the job dies after step 5, the watermark hasn't moved, the batch check stops a double append, and the next run picks up cleanly.</p>
+<p>The same engine handles all three load types. A full load simply skips the watermark steps. A CDC load reads change events instead of querying by date. The load type is a setting, not a different pipeline.</p>
+<h2>Adding table 501</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 270" role="img" aria-label="A person adds a few lines of YAML, opens a pull request a teammate reviews, a validator checks known keys, right types and no secrets, the loader writes one more row into the metadata store, and the next run loads the table. A dashed arrow from the validator back to the YAML says: fails, fix it and push again."><circle class="bx" cx="45" cy="95" r="13"/><line class="lnc" x1="45" y1="108" x2="45" y2="137"/><line class="lnc" x1="45" y1="137" x2="35" y2="157"/><line class="lnc" x1="45" y1="137" x2="57" y2="157"/><line class="lnc" x1="45" y1="119" x2="65" y2="109"/><line class="lnc" x1="45" y1="119" x2="29" y2="127"/><text class="sm" x="500" y="26" text-anchor="middle">adding table 501: no new pipeline, no new code</text><rect class="pf pf-bx" x="99" y="64" width="148" height="108" rx="12"/><rect class="bx ol" x="95" y="60" width="150" height="110" rx="12"/><text class="tt" x="170.0" y="111.5" text-anchor="middle">A few lines</text><text class="sm" x="170.0" y="135.5" text-anchor="middle">of YAML</text><line class="ln" x1="247" y1="115" x2="273" y2="115" marker-end="url(#ar)"/><rect class="pf pf-bx" x="279" y="64" width="148" height="108" rx="12"/><rect class="bx ol" x="275" y="60" width="150" height="110" rx="12"/><text class="tt" x="350.0" y="102.0" text-anchor="middle">Pull request</text><text class="sm" x="350.0" y="126.0" text-anchor="middle">a teammate</text><text class="sm" x="350.0" y="145.0" text-anchor="middle">reviews it</text><line class="ln" x1="427" y1="115" x2="453" y2="115" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="459" y="64" width="148" height="108" rx="12"/><rect class="bxs ol" x="455" y="60" width="150" height="110" rx="12"/><text class="tt" x="530.0" y="102.0" text-anchor="middle">Validator</text><text class="sm" x="530.0" y="126.0" text-anchor="middle">known keys, right</text><text class="sm" x="530.0" y="145.0" text-anchor="middle">types, no secrets</text><line class="ln" x1="607" y1="115" x2="633" y2="115" marker-end="url(#ar)"/><rect class="pf pf-solid" x="639" y="64" width="148" height="108" rx="12"/><rect class="solid ol" x="635" y="60" width="150" height="110" rx="12"/><text class="tt inv" x="710.0" y="111.5" text-anchor="middle">Metadata store</text><text class="inv sm2" x="710.0" y="135.5" text-anchor="middle">one more row</text><line class="ln" x1="787" y1="115" x2="813" y2="115" marker-end="url(#ar)"/><rect class="bxm ol" x="815" y="60" width="150" height="110" rx="12"/><text class="tt" x="890.0" y="111.5" text-anchor="middle">Next run</text><text class="sm" x="890.0" y="135.5" text-anchor="middle">loads it</text><path class="lnd" d="M530,172 Q350,262 172,174" marker-end="url(#ar)"/><text class="sm" x="350" y="252" text-anchor="middle">fails: fix it and push again</text></svg><figcaption>Table 501 is a reviewed change to a config file, checked by a machine before it reaches the store.</figcaption></figure>
+<p>When someone needs a new table, they:</p>
+<ol><li>add a few lines of YAML for it,</li><li>open a pull request, where a teammate reviews it,</li><li>let the validator check it: every key must be a known key, every value the right type, the connection a secret reference, the load type one of the allowed three,</li><li>merge, and the loader writes it into the metadata store.</li></ol>
+<p>The next scheduled run picks it up. No new pipeline, no new deployment of code. Git keeps the history of every change, and the store is what the engine reads at run time.</p>
+<h2>What goes wrong</h2>
+<h3>Config with no validation</h3>
+<p>A typo like <code>ingestion.mod: incremental</code> is accepted silently, so the engine falls back to the default and starts full-loading a table with a billion rows. <strong>Check every key against a registry of known keys, types and allowed values before anything reaches the store.</strong> Reject what you don't recognise.</p>
+<h3>Secrets in the config</h3>
+<p>Someone puts the password in the YAML "just for now". Now it is in git history forever and readable by everyone with access to the repository. <strong>Config holds a reference to a secret store</strong>, such as Key Vault, Secrets Manager or Databricks secrets. The validator should refuse anything that looks like a password.</p>
+<h3>No run log</h3>
+<p>A number changed last month and someone asks why. The settings have been edited three times since. Without a run log you can only guess. <strong>Every run writes one row</strong>: status, counts, batch id, and the fingerprint and full copy of the settings it used.</p>
+<h3>Watermark updated before the write succeeds</h3>
+<p>The engine moves the watermark forward, then the bronze write fails. The next run starts from the new watermark, and those rows are gone for good. Nobody notices until a monthly total doesn't match. <strong>The watermark moves last</strong>, only after bronze has committed and the run is logged as successful.</p>
+<h3>One giant generic notebook nobody can test</h3>
+<p>"Generic" turns into one 3,000-line notebook full of <code>if source_type == ...</code> branches. Nobody dares change it, so people start copying it, and you are back to 500 pipelines. <strong>Keep the engine small and split into parts</strong>: a mover that gets data into landing (this part can be a tool such as Data Factory, Lakeflow Connect or dlt), and your own lander that writes bronze the same way every time. Give each part tests that run without a real source.</p>
+<h2>Six questions to check your own setup</h2>
+<ol><li>How many lines of code does it take to add a new table today?</li><li>If someone mistypes a setting, what stops it?</li><li>Can you find a password anywhere in your config or its git history?</li><li>For last Tuesday's load of your biggest table, can you say which settings it ran with and how many rows it brought in?</li><li>If a job dies halfway through, does the next run lose rows, double them, or neither?</li><li>Could a new joiner read your engine and its tests in an afternoon?</li></ol>
+<p>Write the engine once, then let each new table be a row someone can review.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/data-platform-architecture/ingestion/">ingestion, from sources to bronze, with code</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

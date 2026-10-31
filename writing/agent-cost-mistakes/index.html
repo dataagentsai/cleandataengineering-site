@@ -1,0 +1,244 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Why your agent costs $4 per question: 9 cost mistakes · Clean Data Engineering</title>
+<meta name="description" content="Teams often find out what their agent costs from the invoice, and the number per question is far higher than anyone guessed. It is rarely the model&#x27;s price. It is the harness around the model resending everything, looping, retrying and never measuring. Here are the nine mistakes behind the bill, a worked example of how they add up, and the questions to check your own agent."><link rel="canonical" href="https://cleandataengineering.ai/writing/agent-cost-mistakes/">
+<meta property="og:title" content="Why your agent costs $4 per question: 9 cost mistakes"><meta property="og:description" content="Teams often find out what their agent costs from the invoice, and the number per question is far higher than anyone guessed. It is rarely the model&#x27;s price. It is the harness around the model resending everything, looping, retrying and never measuring. Here are the nine mistakes behind the bill, a worked example of how they add up, and the questions to check your own agent."><meta property="og:url" content="https://cleandataengineering.ai/writing/agent-cost-mistakes/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Field note · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>Why your agent costs $4 per question: 9 cost mistakes</h1>
+  </div>
+  <div class="summary">Teams often find out what their agent costs from the invoice, and the number per question is far higher than anyone guessed. It is rarely the model's price. It is the harness around the model resending everything, looping, retrying and never measuring. Here are the nine mistakes behind the bill, a worked example of how they add up, and the questions to check your own agent.</div>
+<p>The demo was cheap. A few cents of testing, a happy pilot, a green light. Then the first full month of real traffic arrives, someone divides the invoice by the number of questions answered, and gets something like $4 per question.</p>
+<p>That number is not a statistic. It is the kind of bill teams discover, and the pattern behind it is almost always the same. The model's price per token was fine. The harness around the model, meaning the ordinary code that builds the prompt, runs the loop and calls the tools, was quietly multiplying it.</p>
+<p>This note walks through how a question gets to $4, the nine mistakes that do it, and what our own agent pays for the same kind of work.</p>
+<h2>How a question turns into $4</h2>
+<p>An autonomous agent works in a loop. The model reads the context, picks a step, a tool runs, the result goes back in, and the model reads everything again. Every trip round the loop is a fresh model call, and you pay for every token it reads.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 295" role="img" aria-label="An agent loop of three boxes: the model reads the whole context again, a tool runs, the result goes back in, and round again up to trip 16. Each trip feeds a taxi meter that reads $3.99."><rect class="pf pf-solid" x="24" y="94" width="168" height="78" rx="12"/><rect class="solid ol" x="20" y="90" width="170" height="80" rx="12"/><text class="tt inv" x="105.0" y="117.0" text-anchor="middle">The model</text><text class="inv sm2" x="105.0" y="141.0" text-anchor="middle">reads the whole</text><text class="inv sm2" x="105.0" y="160.0" text-anchor="middle">context again</text><line class="ln" x1="192" y1="130" x2="218" y2="130" marker-end="url(#ar)"/><rect class="pf pf-bx" x="224" y="94" width="148" height="78" rx="12"/><rect class="bx ol" x="220" y="90" width="150" height="80" rx="12"/><text class="tt" x="295.0" y="126.5" text-anchor="middle">A tool</text><text class="sm" x="295.0" y="150.5" text-anchor="middle">runs</text><line class="ln" x1="372" y1="130" x2="398" y2="130" marker-end="url(#ar)"/><rect class="pf pf-bx" x="404" y="94" width="148" height="78" rx="12"/><rect class="bx ol" x="400" y="90" width="150" height="80" rx="12"/><text class="tt" x="475.0" y="126.5" text-anchor="middle">The result</text><text class="sm" x="475.0" y="150.5" text-anchor="middle">goes back in</text><path class="ln" d="M475,172 Q290,265 105,172" marker-end="url(#ar)"/><text class="sm" x="290" y="258" text-anchor="middle">round again: trip 2, trip 3, up to trip 16</text><line class="ln" x1="552" y1="130" x2="636" y2="160" marker-end="url(#ar)"/><text class="sm" x="596" y="128" text-anchor="middle">fare</text><path class="hz" d="M700,150 L732,102 L868,102 L900,150 Z"/><rect class="hz" x="640" y="150" width="320" height="70" rx="18"/><path class="ln" d="M745,145 L760,112 L795,112 L795,145 Z"/><path class="ln" d="M810,145 L810,112 L845,112 L862,145 Z"/><line class="ln" x1="802" y1="155" x2="802" y2="212"/><circle class="hz" cx="710" cy="222" r="24"/><circle class="hk" cx="710" cy="222" r="6"/><circle class="hz" cx="890" cy="222" r="24"/><circle class="hk" cx="890" cy="222" r="6"/><rect class="bxs" x="745" y="52" width="110" height="44" rx="6"/><text class="bd" x="800" y="81" text-anchor="middle">$3.99</text><line class="ln" x1="790" y1="96" x2="790" y2="102"/><line class="ln" x1="810" y1="96" x2="810" y2="102"/><text class="sm" x="800" y="30" text-anchor="middle">the meter</text><text class="sm" x="800" y="280" text-anchor="middle">it ticks on every trip, not on every answer</text></svg><figcaption>An agent is a taxi with the meter running. Every trip round the loop is another fare. (Made-up example.)</figcaption></figure>
+<p>Here is a made-up but typical example. The prices are example prices, not any vendor's list: $3 per million input tokens and $15 per million output tokens.</p>
+<ol><li>The system prompt, the tool descriptions and the question come to 10,000 tokens. A token is a piece of a word, roughly three quarters of one.</li><li>Each step calls a tool that returns a whole web page or a full database dump: about 8,000 tokens, kept in the context forever.</li><li>The agent takes 16 steps. Step 1 reads 10,000 tokens. Step 16 reads 130,000.</li><li>Added up, that is 1,120,000 input tokens: $3.36.</li><li>The model writes about 1,000 tokens per step: $0.24.</li><li>The last call times out and is retried, resending all 130,000 tokens: $0.39.</li></ol>
+<p>Total: <strong>$3.99 for one question.</strong></p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 215" role="img" aria-label="A stacked bar for one question costing $3.99: input tokens $3.36, one retry $0.39, output tokens $0.24."><text class="bd" x="500" y="26" text-anchor="middle">one question, $3.99 in total (a made-up example)</text><rect class="solid" x="50" y="80" width="758" height="60" rx="4"/><rect class="bxs" x="808" y="80" width="88" height="60" rx="4"/><rect class="bx" x="896" y="80" width="54" height="60" rx="4"/><text class="tx" x="428.9473684210526" y="172" text-anchor="middle">input: re-reading the context, $3.36</text><text class="sm" x="428.9473684210526" y="194" text-anchor="middle">16 steps, 1,120,000 tokens</text><text class="sm" x="851.8796992481202" y="66" text-anchor="middle">one retry, $0.39</text><text class="tx" x="950" y="172" text-anchor="end">the answers, $0.24</text><text class="sm" x="950" y="194" text-anchor="end">16,000 tokens</text></svg><figcaption>Where the money went. Input tokens dominate; the model's actual answers are a sliver at the end. Example prices: $3 per million tokens in, $15 out.</figcaption></figure>
+<p>Look at where the money went. The model's answers, the part that feels like "the AI working", cost 24 cents. Almost everything else was the agent re-reading things it had already read.</p>
+<h2>Mistakes 1, 2 and 5: paying for the same tokens again and again</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 395" role="img" aria-label="Columns for steps 1 to 5 and step 16. Each column is the prompt plus one more tool result than the last: 10,000 tokens sent at step 1, 42,000 at step 5, 130,000 at step 16."><text class="sm" x="500" y="24" text-anchor="middle">each step sends everything again: the prompt plus every tool result so far</text><rect class="bx" x="40" y="50" width="22" height="14" rx="3"/><text class="sm" x="70" y="62" text-anchor="start">prompt and tools, 10,000 tokens</text><rect class="bxs" x="40" y="74" width="22" height="14" rx="3"/><text class="sm" x="70" y="86" text-anchor="start">one tool result, 8,000 tokens</text><rect class="bx" x="60" y="320" width="90" height="20" rx="3"/><text class="tx" x="105" y="362" text-anchor="middle">step 1</text><text class="sm" x="105" y="382" text-anchor="middle">10,000 sent</text><rect class="bx" x="190" y="320" width="90" height="20" rx="3"/><rect class="bxs" x="190" y="304" width="90" height="16" rx="3"/><text class="tx" x="235" y="362" text-anchor="middle">step 2</text><text class="sm" x="235" y="382" text-anchor="middle">18,000 sent</text><rect class="bx" x="320" y="320" width="90" height="20" rx="3"/><rect class="bxs" x="320" y="304" width="90" height="16" rx="3"/><rect class="bxs" x="320" y="288" width="90" height="16" rx="3"/><text class="tx" x="365" y="362" text-anchor="middle">step 3</text><text class="sm" x="365" y="382" text-anchor="middle">26,000 sent</text><rect class="bx" x="450" y="320" width="90" height="20" rx="3"/><rect class="bxs" x="450" y="304" width="90" height="16" rx="3"/><rect class="bxs" x="450" y="288" width="90" height="16" rx="3"/><rect class="bxs" x="450" y="272" width="90" height="16" rx="3"/><text class="tx" x="495" y="362" text-anchor="middle">step 4</text><text class="sm" x="495" y="382" text-anchor="middle">34,000 sent</text><rect class="bx" x="580" y="320" width="90" height="20" rx="3"/><rect class="bxs" x="580" y="304" width="90" height="16" rx="3"/><rect class="bxs" x="580" y="288" width="90" height="16" rx="3"/><rect class="bxs" x="580" y="272" width="90" height="16" rx="3"/><rect class="bxs" x="580" y="256" width="90" height="16" rx="3"/><text class="tx" x="625" y="362" text-anchor="middle">step 5</text><text class="sm" x="625" y="382" text-anchor="middle">42,000 sent</text><rect class="bx" x="820" y="320" width="90" height="20" rx="3"/><rect class="bxs" x="820" y="304" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="288" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="272" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="256" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="240" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="224" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="208" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="192" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="176" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="160" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="144" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="128" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="112" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="96" width="90" height="16" rx="3"/><rect class="bxs" x="820" y="80" width="90" height="16" rx="3"/><text class="tx" x="865" y="362" text-anchor="middle">step 16</text><text class="sm" x="865" y="382" text-anchor="middle">130,000 sent</text><text class="sm" x="720" y="310" text-anchor="middle">and so on</text><line class="lnd" x1="680" y1="345" x2="760" y2="345"/></svg><figcaption>The context snowball. Nothing is ever dropped, so the last step reads thirteen times what the first did.</figcaption></figure>
+<p><strong>1. Context bloat.</strong> The context is everything sent to the model on one call. If every step sends the whole history plus every raw tool result, the context grows like a snowball and each step costs more than the last. The fix is a context budget: cut long tool results to a fixed size, and drop old exchanges from the middle once the context passes a limit. Our tutorial agent cuts any tool result at 8,000 characters and keeps each call's context near 24,000 characters.</p>
+<p><strong>2. No prompt caching.</strong> Many providers can reuse the unchanged beginning of a prompt and charge less for it. That only works if the beginning really is unchanged, byte for byte. Put the system prompt and tool list first and keep them identical between calls; put anything that changes, such as the time or the user's name, after them. In a scale estimate in our tutorial, the planners assumed 60% of input would hit the cache, and losing that was one of the biggest jumps in the total.</p>
+<p><strong>5. Retries that resend everything.</strong> A timeout on a 130,000-token call costs you the full call again. Cap the number of retries, and never retry an answer that came back unreadable, because the same input usually gives the same mess.</p>
+<p>Fix only mistake 1 in the example, by cutting each tool result to about 2,000 tokens, and the same 16 steps cost about $1.56 instead of $3.99.</p>
+<h2>Mistakes 3, 7 and 8: the wrong worker for the job</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 320" role="img" aria-label="A question goes to a router, which is a rule or a small model. It sends a status lookup to plain code for $0 in 104 ms, simple steps to a small model, and only the one hard step to the big model. Coin stacks grow from none to four."><rect class="bxm ol" x="10" y="120" width="150" height="80" rx="12"/><text class="tt" x="85.0" y="156.5" text-anchor="middle">A question</text><text class="sm" x="85.0" y="180.5" text-anchor="middle"></text><line class="ln" x1="162" y1="160" x2="193" y2="160" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="199" y="114" width="188" height="98" rx="12"/><rect class="bxs ol" x="195" y="110" width="190" height="100" rx="12"/><text class="tt" x="290.0" y="147.0" text-anchor="middle">The router</text><text class="sm" x="290.0" y="171.0" text-anchor="middle">a rule, or a</text><text class="sm" x="290.0" y="190.0" text-anchor="middle">small model</text><line class="ln" x1="387" y1="160" x2="468" y2="50" marker-end="url(#ar)"/><rect class="pf pf-bx" x="474" y="14" width="218" height="78" rx="12"/><rect class="bx ol" x="470" y="10" width="220" height="80" rx="12"/><text class="tt" x="580.0" y="37.0" text-anchor="middle">Plain code</text><text class="sm" x="580.0" y="61.0" text-anchor="middle">a status lookup</text><text class="sm" x="580.0" y="80.0" text-anchor="middle">104 ms, $0</text><text class="sm" x="760" y="56" text-anchor="middle">free</text><line class="ln" x1="387" y1="160" x2="468" y2="160" marker-end="url(#ar)"/><rect class="pf pf-bx" x="474" y="124" width="218" height="78" rx="12"/><rect class="bx ol" x="470" y="120" width="220" height="80" rx="12"/><text class="tt" x="580.0" y="147.0" text-anchor="middle">Small model</text><text class="sm" x="580.0" y="171.0" text-anchor="middle">the simple steps</text><text class="sm" x="580.0" y="190.0" text-anchor="middle">cheap per token</text><ellipse class="hz" cx="760" cy="178" rx="22" ry="7"/><line class="ln" x1="387" y1="160" x2="468" y2="270" marker-end="url(#ar)"/><rect class="pf pf-solid" x="474" y="234" width="218" height="78" rx="12"/><rect class="solid ol" x="470" y="230" width="220" height="80" rx="12"/><text class="tt inv" x="580.0" y="257.0" text-anchor="middle">Big model</text><text class="inv sm2" x="580.0" y="281.0" text-anchor="middle">the one hard step</text><text class="inv sm2" x="580.0" y="300.0" text-anchor="middle">only when needed</text><ellipse class="hz" cx="760" cy="288" rx="22" ry="7"/><ellipse class="hz" cx="760" cy="279" rx="22" ry="7"/><ellipse class="hz" cx="760" cy="270" rx="22" ry="7"/><ellipse class="hz" cx="760" cy="261" rx="22" ry="7"/><text class="sm" x="880" y="40" text-anchor="middle">what each</text><text class="sm" x="880" y="60" text-anchor="middle">step costs</text><text class="sm" x="880" y="170" text-anchor="middle">most steps</text><text class="sm" x="880" y="190" text-anchor="middle">land here</text></svg><figcaption>The right worker for each step. Code first, a small model next, the big model only where it earns its price.</figcaption></figure>
+<p><strong>3. The biggest model for every step.</strong> Deciding "is this a status question or a refund?" doesn't need the strongest model you can buy. Use a small, cheap model for routing and simple steps, and keep the big one for the step that really needs reasoning. Choose with a test set, not a hunch: the cheapest model that passes your tests is the right one.</p>
+<p>Run the trimmed example on a model priced at $0.15 per million tokens in and $0.75 out, which is what our tutorial agent actually pays, and the question costs about 8 cents.</p>
+<p><strong>7. Calling the model for things code can answer.</strong> "What's the status of claim CLM-1042?" is a database lookup. Deterministic-first means: if plain code can answer for certain, answer without the model. In our tutorial agent, the direct path answers in 104 milliseconds for $0, against about 7 seconds through the loop.</p>
+<p><strong>8. Multi-agent chatter.</strong> Splitting one job across several agents that talk to each other means each agent reads the others' messages, and each message is another full model call. Every hand-off between agents is a context that gets sent again. Start with one agent and a few tools. Add a second agent only when you can name what it does that a tool can't.</p>
+<h2>Mistakes 4 and 6: nothing stops the meter</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 355" role="img" aria-label="Three nested budgets. Per month: a budget with alerts and a kill switch; tell a person or switch off. Per task: steps, time and money, 12 trips, 60 seconds or $0.50 in our tutorial; stop with a reason and hand over. Per step: output tokens and tool-result size; cut and carry on."><rect class="bx" x="20" y="20" width="960" height="320" rx="16"/><text class="lbl" x="36" y="44" text-anchor="start">PER MONTH</text><text class="sm" x="36" y="66" text-anchor="start">a budget with alerts, and a kill switch someone on call can flip</text><text class="bd" x="964" y="44" text-anchor="end">tell a person, or switch off</text><rect class="bxs" x="60" y="90" width="880" height="230" rx="16"/><text class="lbl" x="76" y="114" text-anchor="start">PER TASK</text><text class="sm" x="76" y="136" text-anchor="start">steps, time and money: in our tutorial, 12 trips, 60 seconds or $0.50</text><text class="bd" x="924" y="114" text-anchor="end">stop with a reason, hand over</text><rect class="bx" x="100" y="160" width="800" height="140" rx="16"/><text class="lbl" x="116" y="184" text-anchor="start">PER STEP</text><text class="sm" x="116" y="206" text-anchor="start">output tokens per call, and the size of each tool result</text><text class="bd" x="884" y="184" text-anchor="end">cut and carry on</text><polygon class="hz" points="487.7,220 512.3,220 530,237.7 530,262.3 512.3,280 487.7,280 470,262.3 470,237.7"/><text class="lbl" x="500" y="255" text-anchor="middle">STOP</text></svg><figcaption>Budgets at three sizes. Each runaway is only visible at one of them, so you need all three.</figcaption></figure>
+<p><strong>4. Runaway loops with no step budget.</strong> An agent that can't find what it wants will keep asking. Without a limit, it asks forever and pays every time. Give each task a maximum number of steps, and stop when the agent makes the same tool call with the same arguments a third time, because that is a loop, not progress.</p>
+<p><strong>6. No per-task budget or kill switch.</strong> A step limit counts trips. A money limit counts dollars. You want both, at more than one level:</p>
+<ul><li><strong>Per step:</strong> a cap on output tokens and on the size of each tool result. When it is hit, cut and carry on.</li><li><strong>Per task:</strong> a cap on steps, time and money. When it is hit, stop with a named reason and hand over to a person.</li><li><strong>Per month:</strong> a budget with alerts, and a kill switch an operator can flip without a deploy.</li></ul>
+<p>Our tutorial agent stops a turn at 12 trips, 60 seconds or $0.50, whichever comes first. The money check happens between calls, because you can't un-spend a call that has already been made. The monthly Azure budget only sends an email; it never switches anything off, which is why the per-task limits matter more. The full set is on the <a href="/learn/agent-harness/cost-budgets.html">budgets page</a>.</p>
+<h2>Mistake 9: no cost meter</h2>
+<p><strong>9. Nobody knows the cost per task.</strong> Cloud bills arrive by resource, hours late: so much for the model, so much for the database. They can't tell you that one claim cost a tenth of a cent and another cost $2. Only your own code can.</p>
+<p>The fix is a small meter. When each model response arrives, read the token counts it reports, multiply by a price table in your code, and add it to the running total for the task. Write that total on the trace, the record of every step in the run. Now you can sort tasks by cost, find the expensive ones and see which mistake caused them. Make a model with no price fail at start-up rather than count as free.</p>
+<p>The number to watch is cost per task, or better, cost per task actually resolved. A rising total bill with a flat cost per task is growth. A flat number of users with a rising cost per task is a problem.</p>
+<h2>What our own agent pays</h2>
+<p>Our tutorial agent is a claims assistant for a motor insurer. Its real turns, priced by its own meter in October 2026, cost between $0.00014 and $0.00093 each when they go through the loop: well under a tenth of a cent. Turns answered by the direct path, refused or blocked before the model cost $0 in model tokens.</p>
+<p>What makes a turn dearer is more trips round the loop. One turn sent 652 tokens on its first trip and 1,535 on its second, the snowball in miniature. The dearest turns took three trips. At those prices, twelve trips would cost about 5 cents, so the $0.50 ceiling has never been reached.</p>
+<p>None of that comes from a clever model. It comes from the nine fixes above, and most of them are the same harness parts that keep the agent safe.</p>
+<h2>9 questions to check your own agent's cost</h2>
+<ol><li>Can you name the cost of one task, from your own trace, not the cloud bill?</li><li>How many input tokens does the last step of a typical task send, compared with the first?</li><li>Are tool results cut to a fixed size before they go back to the model?</li><li>Is the start of every prompt identical between calls, so caching can work?</li><li>Which steps use your biggest model, and has a test shown a smaller one fails them?</li><li>What share of questions could plain code answer without the model?</li><li>What is the maximum number of steps a task can take, and what happens when it is hit?</li><li>Is there a money limit per task, and a kill switch someone can flip today?</li><li>If you run more than one agent, can you say what each one costs per task?</li></ol>
+<p>Find the cost of one task first; every other fix starts from that number.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/cost.html">Cost, where the money goes, in the Agent Harness tutorial</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
