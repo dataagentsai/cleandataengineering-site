@@ -403,6 +403,25 @@ DRAWINGS = {"guard-card": drawing_guard_card, "guard-how": drawing_guard_how, "g
             "agent-loop": drawing_agent_loop, "four-checks": drawing_four_checks, "build-order": drawing_build_order}
 
 
+def load_drawing_modules():
+    """Each post may keep its drawings in _writing/drawings/<slug>.py with a DRAWINGS dict.
+    The module gets kit, figure, E and ROOT as globals, so it needs no imports of its own."""
+    import importlib.util
+    for f in sorted((ROOT / "_writing" / "drawings").glob("*.py")):
+        spec = importlib.util.spec_from_file_location(f"drawings_{f.stem}", f)
+        mod = importlib.util.module_from_spec(spec)
+        mod.kit, mod.figure, mod.E, mod.ROOT = kit, figure, E, ROOT
+        spec.loader.exec_module(mod)
+        for k, v in mod.DRAWINGS.items():
+            if k in DRAWINGS:
+                raise SystemExit(f"drawing name '{k}' in {f.name} is already used")
+            DRAWINGS[k] = v
+
+
+if kit is not None:
+    load_drawing_modules()
+
+
 # ------------------------------------------------------------------ pages
 
 def site_parts():
