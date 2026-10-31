@@ -36,9 +36,11 @@ SECTIONS = [
             ("Problem Lab", "/learn/data-platform-sim/problems/"),
             ("Performance stories", "/learn/data-platform-sim/performance/"),
         ]),
-        ("Certification prep", "/certifications/", [
+        ("Certifications", "/certifications/", [
+            ("AI engineering", "/certifications/#ai"),
+            ("Data engineering", "/certifications/#data"),
             ("Claude Certified Architect", "/certifications/claude-certified-architect/CCA-F/"),
-            ("Claude Architect, Professional", "/certifications/claude-certified-architect/CCAR-P/"),
+            ("Claude Architect, Professional", "/certifications/claude-certified-architect/CCAR-P/CCAR-P_Study_Guide.html"),
             ("Microsoft AI-103", "/certifications/azure-ai-engineer/"),
         ]),
         ("Worried about AI?", "/mindset/", []),
