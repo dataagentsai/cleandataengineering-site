@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Swap anything, break nothing: software design patterns for agent harnesses · Clean Data Engineering</title>
+<meta name="description" content="Everything around an agent changes every few months: the model, the gateway, the trace backend, the cloud. A handful of old software design patterns keep those changes small. Put each vendor behind a port, pick the adapter in one YAML file, line up the checks so any one can stop a call, wrap calls in retries and traces, and make every adapter pass the same contract tests."><link rel="canonical" href="https://cleandataengineering.ai/writing/harness-design-patterns/">
+<meta property="og:title" content="Swap anything, break nothing: software design patterns for agent harnesses"><meta property="og:description" content="Everything around an agent changes every few months: the model, the gateway, the trace backend, the cloud. A handful of old software design patterns keep those changes small. Put each vendor behind a port, pick the adapter in one YAML file, line up the checks so any one can stop a call, wrap calls in retries and traces, and make every adapter pass the same contract tests."><meta property="og:url" content="https://cleandataengineering.ai/writing/harness-design-patterns/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>Swap anything, break nothing: software design patterns for agent harnesses</h1>
+  </div>
+  <div class="summary">Everything around an agent changes every few months: the model, the gateway, the trace backend, the cloud. A handful of old software design patterns keep those changes small. Put each vendor behind a port, pick the adapter in one YAML file, line up the checks so any one can stop a call, wrap calls in retries and traces, and make every adapter pass the same contract tests.</div>
+<p>Here is a week in the life of an agent team. On Monday the model you chose gets a cheaper sibling. On Wednesday the company says everything must run on Azure. On Friday someone wants traces in a different tool. None of these is a big idea. Each should take an afternoon.</p>
+<p>In most agent code, each one takes a fortnight. The vendor's library is called in the loop, in the tools, in the checks and in the tests. An <code>if env == "azure"</code> sits in nine places. A swap becomes a hunt.</p>
+<p>The fix is old. A <strong>design pattern</strong> is a named, well-tested shape for code, and a few of them solved "swap the part, keep the machine" decades ago. This post walks through six of them, using the open-source <a href="https://github.com/dataagentsai/reference-agent">reference agent</a>, a customer-support agent for a clothing shop, as the example.</p>
+<h2>Sockets and plugs</h2>
+<p>The first pattern has two names that mean nearly the same thing: <strong>code to an interface</strong>, and <strong>ports and adapters</strong>.</p>
+<p>A <strong>port</strong> is a socket in the wall. It says what shape a part must have, and nothing about who made it. An <strong>adapter</strong> is a plug: one vendor's product, shaped to fit that socket. Your harness only ever touches the socket.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 325" role="img" aria-label="A cartoon. Your harness is wired to a wall socket labelled the port, LLMClient. Four plugs hang beside it: scripted, litellm-proxy, groq-direct and apim-ai-gateway. A cable joins the socket to the litellm-proxy plug, and a yellow note, the YAML, points at that cable and says model: litellm-proxy."><rect class="pf pf-bx" x="14" y="114" width="198" height="98" rx="12"/><rect class="bx ol" x="10" y="110" width="200" height="100" rx="12"/><text class="tt" x="110.0" y="147.0" text-anchor="middle">Your harness</text><text class="sm" x="110.0" y="171.0" text-anchor="middle">only knows the</text><text class="sm" x="110.0" y="190.0" text-anchor="middle">socket&#x27;s shape</text><line class="lnc" x1="212" y1="160" x2="250" y2="160"/><rect class="hz" x="250" y="90" width="120" height="140" rx="14"/><circle class="hz" cx="310" cy="160" r="34"/><rect class="hk" x="296" y="146" width="7" height="22" rx="3"/><rect class="hk" x="317" y="146" width="7" height="22" rx="3"/><text class="bd" x="310" y="256" text-anchor="middle">the port</text><text class="sm" x="310" y="278" text-anchor="middle">LLMClient</text><rect class="hz" x="626" y="20" width="50" height="40" rx="8"/><rect class="hk" x="610" y="29" width="16" height="6" rx="2"/><rect class="hk" x="610" y="45" width="16" height="6" rx="2"/><path class="ln" d="M676,40 Q688,40 690,52"/><text class="tx" x="706" y="36" text-anchor="start">scripted</text><text class="sm" x="706" y="57" text-anchor="start">canned answers, for tests</text><rect class="hz" x="626" y="100" width="50" height="40" rx="8"/><rect class="hk" x="610" y="109" width="16" height="6" rx="2"/><rect class="hk" x="610" y="125" width="16" height="6" rx="2"/><path class="ln" d="M676,120 Q688,120 690,132"/><text class="tx" x="706" y="116" text-anchor="start">litellm-proxy</text><text class="sm" x="706" y="137" text-anchor="start">the open-source gateway</text><rect class="hz" x="626" y="180" width="50" height="40" rx="8"/><rect class="hk" x="610" y="189" width="16" height="6" rx="2"/><rect class="hk" x="610" y="205" width="16" height="6" rx="2"/><path class="ln" d="M676,200 Q688,200 690,212"/><text class="tx" x="706" y="196" text-anchor="start">groq-direct</text><text class="sm" x="706" y="217" text-anchor="start">straight to Groq</text><rect class="hz" x="626" y="260" width="50" height="40" rx="8"/><rect class="hk" x="610" y="269" width="16" height="6" rx="2"/><rect class="hk" x="610" y="285" width="16" height="6" rx="2"/><path class="ln" d="M676,280 Q688,280 690,292"/><text class="tx" x="706" y="276" text-anchor="start">apim-ai-gateway</text><text class="sm" x="706" y="297" text-anchor="start">Azure&#x27;s gateway</text><path class="lnc" d="M344,160 Q470,160 608,125"/><rect class="pf pf-bxs" x="404" y="240" width="188" height="70" rx="12"/><rect class="bxs ol" x="400" y="236" width="190" height="72" rx="12"/><text class="tt" x="495.0" y="268.5" text-anchor="middle">The YAML</text><text class="sm" x="495.0" y="292.5" text-anchor="middle">model: litellm-proxy</text><line class="ln" x1="495" y1="234" x2="495" y2="158" marker-end="url(#ar)"/></svg><figcaption>The port is the socket, each adapter is a plug, and one line of YAML picks which plug goes in.</figcaption></figure>
+<p>In the reference agent, the model port is one small interface. Every model call in the agent goes through this one method:</p>
+<pre><code>class LLMClient(Protocol):
+    async def complete(self, request: ModelRequest) -&gt; ModelResponse: ...</code></pre>
+<p>Four adapters fit it today: <code>scripted</code> (canned answers, no network, for tests), <code>litellm-proxy</code> (the open-source gateway), <code>groq-direct</code> (straight to Groq from a laptop) and <code>apim-ai-gateway</code> (Azure's gateway). The loop has no idea which one it holds.</p>
+<p>The agent has ten ports like this, from <code>secrets</code> and <code>telemetry</code> to <code>state</code>, <code>identity</code> and <code>approval</code>. The telemetry port is a good one to study: the loop writes OpenTelemetry spans and never learns where they go. We wrote about that in <a href="/writing/opentelemetry-for-agents/">instrument your agent once, send traces anywhere</a>.</p>
+<p>The rule that makes this real: <strong>each vendor library is imported by exactly one adapter module</strong>. The reference agent doesn't trust people to remember this. An import check runs with the tests, and it says, in effect, "nothing may import <code>openai</code>, <code>anthropic</code> or <code>groq</code> except the <code>llm</code> module". It fails closed, so a new module inherits the ban without anyone adding it.</p>
+<h2>One file picks the plugs</h2>
+<p>The other half of the first pattern is <strong>inversion of control</strong>. Normally a piece of code chooses its own parts: the loop would create a Groq client itself. Inverted, the loop is <em>handed</em> a model client and never chooses. Something else does the choosing, in one place, called the <strong>composition root</strong>.</p>
+<p>In the reference agent, the composition root reads YAML. Each port names an adapter:</p>
+<pre><code>model:     { adapter: litellm-proxy }
+state:     { adapter: postgres }
+identity:  { adapter: keycloak }
+telemetry: { adapter: otel-to-langfuse }</code></pre>
+<p>Moving to Azure is a different YAML file, not different code. Here is what the open-source stack and the Azure stack each bind:</p>
+<div class="tw"><table><tr><th>Port</th><th>Open-source stack</th><th>Azure stack</th></tr><tr><td>model</td><td>litellm-proxy</td><td>apim-ai-gateway</td></tr><tr><td>state</td><td>postgres</td><td>azure-postgresql-flexible</td></tr><tr><td>identity</td><td>keycloak</td><td>entra-id</td></tr><tr><td>telemetry</td><td>otel-to-langfuse</td><td>azure-monitor-otel</td></tr><tr><td>approval</td><td>temporal-updates</td><td>dbos-workflows</td></tr><tr><td>secrets</td><td>environment-settings</td><td>key-vault</td></tr></table></div>
+<p>Notice the state row: both stacks run PostgreSQL, one on a laptop and one managed by Azure. That choice is argued in <a href="/writing/just-use-postgres/">just use Postgres</a>.</p>
+<p>Startup refuses a YAML file that names an unknown adapter or writes a secret as a plain value. A wrong file stops the agent before the first customer, not during their conversation.</p>
+<p>The same idea works for checks. The companion eval harness has an <code>evaluators.yaml</code> where each check names its adapter: groundedness from Azure AI Evaluation, faithfulness from Ragas, tool correctness from DeepEval, personal data from Presidio. Four vendors, one result format, one file.</p>
+<h2>A fixed recipe with swappable slots</h2>
+<p>The second and third patterns work together inside a turn.</p>
+<p><strong>Template method</strong>, or pipeline, means the steps and their order are fixed, and only what happens inside a step can vary. Every turn of the agent runs the same recipe.</p>
+<p><strong>Strategy</strong> means one slot, several interchangeable ways to fill it, chosen while the program runs.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 312" role="img" aria-label="Five steps in a row, the same every turn: route, build context, ask the model, check then act, write it down. Under route, a dashed slot asks which path: answer directly, refuse, a person, or the loop. Under ask the model, a dashed slot asks which model, small or strong, named in config."><text class="sm" x="500" y="26" text-anchor="middle">the template: the same five steps, in the same order, every turn</text><rect class="pf pf-bx" x="14" y="54" width="168" height="94" rx="12"/><rect class="bx ol" x="10" y="50" width="170" height="96" rx="12"/><text class="tt" x="95.0" y="94.5" text-anchor="middle">Route</text><text class="sm" x="95.0" y="118.5" text-anchor="middle">is a model needed?</text><circle class="nm" cx="22" cy="50" r="14"/><text class="nmt" x="22" y="56" text-anchor="middle">1</text><line class="ln" x1="182" y1="98" x2="210" y2="98" marker-end="url(#ar)"/><rect class="pf pf-bx" x="216" y="54" width="168" height="94" rx="12"/><rect class="bx ol" x="212" y="50" width="170" height="96" rx="12"/><text class="tt" x="297.0" y="94.5" text-anchor="middle">Build context</text><text class="sm" x="297.0" y="118.5" text-anchor="middle">what it sees</text><circle class="nm" cx="224" cy="50" r="14"/><text class="nmt" x="224" y="56" text-anchor="middle">2</text><line class="ln" x1="384" y1="98" x2="412" y2="98" marker-end="url(#ar)"/><rect class="pf pf-solid" x="418" y="54" width="168" height="94" rx="12"/><rect class="solid ol" x="414" y="50" width="170" height="96" rx="12"/><text class="tt inv" x="499.0" y="94.5" text-anchor="middle">Ask the model</text><text class="inv sm2" x="499.0" y="118.5" text-anchor="middle">one call, typed</text><circle class="nm" cx="426" cy="50" r="14"/><text class="nmt" x="426" y="56" text-anchor="middle">3</text><line class="ln" x1="586" y1="98" x2="614" y2="98" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="620" y="54" width="168" height="94" rx="12"/><rect class="bxs ol" x="616" y="50" width="170" height="96" rx="12"/><text class="tt" x="701.0" y="94.5" text-anchor="middle">Check, then act</text><text class="sm" x="701.0" y="118.5" text-anchor="middle">the gates, the tool</text><circle class="nm" cx="628" cy="50" r="14"/><text class="nmt" x="628" y="56" text-anchor="middle">4</text><line class="ln" x1="788" y1="98" x2="816" y2="98" marker-end="url(#ar)"/><rect class="pf pf-bx" x="822" y="54" width="168" height="94" rx="12"/><rect class="bx ol" x="818" y="50" width="170" height="96" rx="12"/><text class="tt" x="903.0" y="94.5" text-anchor="middle">Write it down</text><text class="sm" x="903.0" y="118.5" text-anchor="middle">trace and state</text><circle class="nm" cx="830" cy="50" r="14"/><text class="nmt" x="830" y="56" text-anchor="middle">5</text><line class="lnd" x1="95" y1="148" x2="95" y2="194"/><rect class="bxm ol" x="10" y="196" width="170" height="104" rx="12"/><text class="tt" x="95.0" y="225.5" text-anchor="middle">Which path?</text><text class="sm" x="95.0" y="249.5" text-anchor="middle">answer directly,</text><text class="sm" x="95.0" y="268.5" text-anchor="middle">refuse, a person,</text><text class="sm" x="95.0" y="287.5" text-anchor="middle">or the loop</text><line class="lnd" x1="499" y1="148" x2="499" y2="194"/><rect class="bxm ol" x="414" y="196" width="170" height="104" rx="12"/><text class="tt" x="499.0" y="235.0" text-anchor="middle">Which model?</text><text class="sm" x="499.0" y="259.0" text-anchor="middle">small or strong,</text><text class="sm" x="499.0" y="278.0" text-anchor="middle">named in config</text><text class="sm" x="230" y="238" text-anchor="start">strategies: one slot,</text><text class="sm" x="230" y="258" text-anchor="start">several ways to fill it</text><text class="sm" x="800" y="238" text-anchor="middle">the slots change;</text><text class="sm" x="800" y="258" text-anchor="middle">the order never does</text></svg><figcaption>Template method fixes the steps of a turn. Strategy fills a slot inside a step with one of several interchangeable choices.</figcaption></figure>
+<p>The reference agent's first step is a strategy. A small router reads each message and picks a path: answer directly without a model, refuse, hand to a person, or run the full loop. "Get me a human" never costs a model call. The same slot idea fits model choice: say, a small cheap model to sort the question and a stronger one to write the reply, each named in configuration.</p>
+<p>The loop itself is the template. Its description is plain: open the tool surface, take steps until one ends the run, and stop on the step budget if none does. The reference agent even lets a framework own the loop, behind the same function signature, so the recipe stays put while the cook changes.</p>
+<h2>Security gates for every call</h2>
+<p>The fourth pattern is <strong>chain of responsibility</strong>: a line of handlers, each looking at the same request, where any one can stop it.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 285" role="img" aria-label="A suitcase labelled refund of 40,000 rupees waits at a line of three airport security gates: allowed tool, did they ask, under the limit. Past the gates is the tool, issue_refund."><line class="ln" x1="10" y1="212" x2="990" y2="212"/><rect class="hz" x="22" y="140" width="84" height="62" rx="8"/><path class="ln" d="M50,140 L50,128 L78,128 L78,140"/><line class="ln" x1="22" y1="162" x2="106" y2="162"/><text class="sm" x="64" y="120" text-anchor="middle">refund ₹40,000</text><rect class="pf pf-bxs" x="194" y="40" width="158" height="54" rx="12"/><rect class="bxs ol" x="190" y="36" width="160" height="56" rx="12"/><text class="tt" x="270.0" y="60.5" text-anchor="middle">Allowed tool?</text><text class="sm" x="270.0" y="84.5" text-anchor="middle"></text><line class="lnc" x1="210" y1="92" x2="210" y2="212"/><line class="lnc" x1="330" y1="92" x2="330" y2="212"/><rect class="pf pf-bxs" x="384" y="40" width="158" height="54" rx="12"/><rect class="bxs ol" x="380" y="36" width="160" height="56" rx="12"/><text class="tt" x="460.0" y="60.5" text-anchor="middle">Did they ask?</text><text class="sm" x="460.0" y="84.5" text-anchor="middle"></text><line class="lnc" x1="400" y1="92" x2="400" y2="212"/><line class="lnc" x1="520" y1="92" x2="520" y2="212"/><rect class="pf pf-bxs" x="574" y="40" width="158" height="54" rx="12"/><rect class="bxs ol" x="570" y="36" width="160" height="56" rx="12"/><text class="tt" x="650.0" y="60.5" text-anchor="middle">Under the limit?</text><text class="sm" x="650.0" y="84.5" text-anchor="middle"></text><line class="lnc" x1="590" y1="92" x2="590" y2="212"/><line class="lnc" x1="710" y1="92" x2="710" y2="212"/><line class="ln" x1="108" y1="172" x2="778" y2="172" marker-end="url(#ar)"/><rect class="pf pf-bx" x="784" y="120" width="198" height="88" rx="12"/><rect class="bx ol" x="780" y="116" width="200" height="90" rx="12"/><text class="tt" x="880.0" y="157.5" text-anchor="middle">The tool</text><text class="sm" x="880.0" y="181.5" text-anchor="middle">issue_refund</text><text class="sm" x="500" y="246" text-anchor="middle">they run in order, and the first gate that says no stops the call: the tool never runs</text><text class="sm" x="500" y="270" text-anchor="middle">a gate that crashes, or runs out of time, says no too</text></svg><figcaption>Chain of responsibility. Each check is a gate; any one can turn the call back, and a new check is one more gate in the line.</figcaption></figure>
+<p>Think of airport security. You pass the gates in order, and any gate can turn you back. In the harness, checks sit at four points of a turn: before the model, after the model, before a tool and after a tool. (Where they sit, and why, is the heart of <a href="/writing/model-is-ten-percent/">the model is 10%</a>.)</p>
+<p>At each point the reference agent runs its rules in order, and the first block wins. Two details matter more than they look:</p>
+<ol><li><strong>A rule that crashes blocks.</strong> If the check for "did the customer ask for this refund?" throws an error, the refund doesn't run. The other choice, log and let it through, gives you a guard everyone believes in and nobody has.</li><li><strong>A rule that runs out of time blocks too.</strong> A point can have a time budget, and a rule still running when it is spent counts as a no.</li></ol>
+<h2>Russian dolls around a call</h2>
+<p>The fifth pattern is the <strong>decorator</strong>: wrap an object in another object with the same shape, which adds one job and then passes the call inward.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 320" role="img" aria-label="Nested layers like Russian dolls around a tool call, get_order. From the outside in: trace, every try written down; cache, answer at once if seen before; retry, wait and try again; timeout, give up if too slow. Three small dolls stand beside it."><rect class="pf pf-bx" x="14" y="14" width="738" height="298" rx="14"/><rect class="bx ol" x="10" y="10" width="740" height="300" rx="14"/><text class="bd" x="70" y="140" text-anchor="middle">Trace</text><text class="sm" x="70" y="166" text-anchor="middle">every try</text><text class="sm" x="70" y="186" text-anchor="middle">written down</text><rect class="pf pf-bxs" x="134" y="34" width="598" height="258" rx="14"/><rect class="bxs ol" x="130" y="30" width="600" height="260" rx="14"/><text class="bd" x="190" y="140" text-anchor="middle">Cache</text><text class="sm" x="190" y="166" text-anchor="middle">seen it?</text><text class="sm" x="190" y="186" text-anchor="middle">answer at once</text><rect class="pf pf-bx" x="254" y="54" width="458" height="218" rx="14"/><rect class="bx ol" x="250" y="50" width="460" height="220" rx="14"/><text class="bd" x="310" y="140" text-anchor="middle">Retry</text><text class="sm" x="310" y="166" text-anchor="middle">failed? wait,</text><text class="sm" x="310" y="186" text-anchor="middle">try again</text><rect class="pf pf-bxs" x="374" y="74" width="318" height="178" rx="14"/><rect class="bxs ol" x="370" y="70" width="320" height="180" rx="14"/><text class="bd" x="430" y="140" text-anchor="middle">Timeout</text><text class="sm" x="430" y="166" text-anchor="middle">too slow?</text><text class="sm" x="430" y="186" text-anchor="middle">give up</text><rect class="pf pf-solid" x="496" y="114" width="178" height="98" rx="12"/><rect class="solid ol" x="492" y="110" width="180" height="100" rx="12"/><text class="tt inv" x="582.0" y="156.5" text-anchor="middle">The tool call</text><text class="inv sm2" x="582.0" y="180.5" text-anchor="middle">get_order</text><path class="hz" d="M782.5,150 Q772.5,112.5 790.0,95.0 L820.0,95.0 Q837.5,112.5 827.5,150 Z"/><circle class="hz" cx="805" cy="83.75" r="16.25"/><ellipse class="pf pf-bxs" cx="805" cy="125.0" rx="11.25" ry="13.75"/><path class="hz" d="M862.0,150 Q854.0,120.0 868.0,106.0 L892.0,106.0 Q906.0,120.0 898.0,150 Z"/><circle class="hz" cx="880" cy="97.0" r="13.0"/><ellipse class="pf pf-bxs" cx="880" cy="130.0" rx="9.0" ry="11.0"/><path class="hz" d="M928.5,150 Q922.5,127.5 933.0,117.0 L951.0,117.0 Q961.5,127.5 955.5,150 Z"/><circle class="hz" cx="942" cy="110.25" r="9.75"/><ellipse class="pf pf-bxs" cx="942" cy="135.0" rx="6.75" ry="8.25"/><text class="sm" x="875" y="200" text-anchor="middle">each doll adds</text><text class="sm" x="875" y="220" text-anchor="middle">one job; the call</text><text class="sm" x="875" y="240" text-anchor="middle">inside never</text><text class="sm" x="875" y="260" text-anchor="middle">changes</text></svg><figcaption>Decorators. Each wrapper has the same shape as the call inside, adds one job, and passes the call inward.</figcaption></figure>
+<p>The reference agent wraps every network model adapter in <code>ResilientLLM</code>. It has the same <code>complete</code> method as the client inside it, so the loop can't tell it's there. It waits out a rate limit for exactly as long as the provider asks, retries real failures a few times with growing pauses, and stops calling a provider that is clearly down. It never retries an answer it couldn't read, because the same prompt to the same model would mostly buy a second bill.</p>
+<p>Order matters, and it is easy to get wrong:</p>
+<ul><li><strong>Trace outermost</strong>, so you see every try, including cache hits.</li><li><strong>Cache next</strong>, so a hit skips everything below it.</li><li><strong>Retry outside the timeout</strong>, so each try gets its own clock.</li></ul>
+<p>One warning: retrying a write is only safe if something underneath stops it happening twice. In the reference agent, a ledger of request keys at the tool boundary does that job. Without one, a retry is how a timeout becomes a double refund.</p>
+<h2>The same exam for every adapter</h2>
+<p>The last pattern is the one that makes all the others safe: <strong>contract tests per port</strong>. Each port has one table of test rows, and every adapter for that port must pass every row.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 320" role="img" aria-label="An exam sheet for the model port with two rows: a text answer comes back typed with its usage, and a tool call comes back with parsed arguments. Dashed lines lead to five desks: scripted, litellm-proxy, groq-direct and apim-ai-gateway each have two ticks; your new adapter must pass both."><path class="hz" d="M20,20 L320,20 L360,60 L360,305 L20,305 Z"/><path class="ln" d="M320,20 L320,60 L360,60"/><text class="lbl" x="40" y="56" text-anchor="start">THE MODEL PORT&#x27;S EXAM</text><text class="tx" x="40" y="104" text-anchor="start">Row 1: a text answer</text><text class="tx" x="40" y="124" text-anchor="start">comes back typed, with</text><text class="tx" x="40" y="144" text-anchor="start">its usage</text><text class="tx" x="40" y="192" text-anchor="start">Row 2: a tool call</text><text class="tx" x="40" y="212" text-anchor="start">comes back with parsed</text><text class="tx" x="40" y="232" text-anchor="start">arguments</text><text class="sm" x="40" y="286" text-anchor="start">one sheet, every adapter</text><line class="lnd" x1="362" y1="165" x2="468" y2="44"/><rect class="pf pf-bx" x="474" y="24" width="258" height="46" rx="12"/><rect class="bx ol" x="470" y="20" width="260" height="48" rx="12"/><text class="tt" x="600.0" y="40.5" text-anchor="middle">scripted</text><text class="sm" x="600.0" y="64.5" text-anchor="middle"></text><path class="lnc" d="M752,44 l7,8 l14,-16"/><path class="lnc" d="M792,44 l7,8 l14,-16"/><line class="lnd" x1="362" y1="165" x2="468" y2="104"/><rect class="pf pf-bx" x="474" y="84" width="258" height="46" rx="12"/><rect class="bx ol" x="470" y="80" width="260" height="48" rx="12"/><text class="tt" x="600.0" y="100.5" text-anchor="middle">litellm-proxy</text><text class="sm" x="600.0" y="124.5" text-anchor="middle"></text><path class="lnc" d="M752,104 l7,8 l14,-16"/><path class="lnc" d="M792,104 l7,8 l14,-16"/><line class="lnd" x1="362" y1="165" x2="468" y2="164"/><rect class="pf pf-bx" x="474" y="144" width="258" height="46" rx="12"/><rect class="bx ol" x="470" y="140" width="260" height="48" rx="12"/><text class="tt" x="600.0" y="160.5" text-anchor="middle">groq-direct</text><text class="sm" x="600.0" y="184.5" text-anchor="middle"></text><path class="lnc" d="M752,164 l7,8 l14,-16"/><path class="lnc" d="M792,164 l7,8 l14,-16"/><line class="lnd" x1="362" y1="165" x2="468" y2="224"/><rect class="pf pf-bx" x="474" y="204" width="258" height="46" rx="12"/><rect class="bx ol" x="470" y="200" width="260" height="48" rx="12"/><text class="tt" x="600.0" y="220.5" text-anchor="middle">apim-ai-gateway</text><text class="sm" x="600.0" y="244.5" text-anchor="middle"></text><path class="lnc" d="M752,224 l7,8 l14,-16"/><path class="lnc" d="M792,224 l7,8 l14,-16"/><line class="lnd" x1="362" y1="165" x2="468" y2="284"/><rect class="bxm ol" x="470" y="260" width="260" height="48" rx="12"/><text class="tt" x="600.0" y="280.5" text-anchor="middle">your new adapter</text><text class="sm" x="600.0" y="304.5" text-anchor="middle"></text><text class="sm" x="780" y="291" text-anchor="start">must pass both</text></svg><figcaption>Contract tests. Every adapter for a port sits the same exam, row by row, before it may be bound in YAML.</figcaption></figure>
+<p>The model port's table has rows like "a text answer comes back typed, with its usage" and "a tool call comes back with parsed arguments". All four model adapters run the same rows, with the vendor's web traffic answered inside the test, so there is no network and no cost. The identity, secrets, telemetry, approval and records ports each have their own table. A new adapter joins by being registered, and is then held to the rows the others pass. You can see the tables drawn in <a href="/learn/agent-harness/test-contract.html">contract tests: every plug fits its socket</a>.</p>
+<h2>What goes wrong</h2>
+<ul><li><strong>Vendor calls sprinkled through the loop.</strong> The vendor's library is imported in the loop, in a tool and in a check. Every swap becomes a search, and you'll miss one.</li><li><strong>If-branches on environment.</strong> <code>if env == "azure"</code> in nine places means nine places to get wrong, and the branch you don't run locally is the one that breaks. Pick adapters in one file instead.</li><li><strong>Interfaces shaped like one vendor's API.</strong> If your model port takes that vendor's message objects, it isn't a port, it's a copy. Write the port in your own words, such as <code>ModelRequest</code> and <code>ModelResponse</code>, and let each adapter translate.</li><li><strong>No contract tests.</strong> The swap passes review and the agent starts, but the new adapter drops the token count. Nothing crashes; the cost meter just reads zero until someone notices.</li></ul>
+<h2>Five questions to check your own harness</h2>
+<ol><li>How many files import your model vendor's library? Is the answer one?</li><li>Can you switch cloud by changing a configuration file and nothing else?</li><li>If one check crashes, does the call it was checking stop or go through?</li><li>Where are retries, timeouts and traces added: in one wrapper, or in every caller?</li><li>If you add a new adapter tomorrow, which tests must it pass before it ships?</li></ol>
+<p>Vendors will keep changing; build the harness so a change is a new plug, not a new house.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/tech-compare.html">every concern of the harness, with the Azure and open-source choices side by side</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
