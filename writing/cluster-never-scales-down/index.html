@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your Databricks cluster scales up and never comes back down · Clean Data Engineering</title>
+<meta name="description" content="Autoscaling on Databricks grows a cluster quickly and shrinks it slowly, and sometimes not at all. The usual reasons are a minimum set too high, clusters that are never quite idle, workers holding data the autoscaler doesn&#x27;t want to throw away, and streaming or shared workloads that keep everything busy. This note explains each one, the fixes, and how to see it in your own cluster events and billing tables."><link rel="canonical" href="https://cleandataengineering.ai/writing/cluster-never-scales-down/">
+<meta property="og:title" content="Your Databricks cluster scales up and never comes back down"><meta property="og:description" content="Autoscaling on Databricks grows a cluster quickly and shrinks it slowly, and sometimes not at all. The usual reasons are a minimum set too high, clusters that are never quite idle, workers holding data the autoscaler doesn&#x27;t want to throw away, and streaming or shared workloads that keep everything busy. This note explains each one, the fixes, and how to see it in your own cluster events and billing tables."><meta property="og:url" content="https://cleandataengineering.ai/writing/cluster-never-scales-down/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Field note · Data Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>Your Databricks cluster scales up and never comes back down</h1>
+  </div>
+  <div class="summary">Autoscaling on Databricks grows a cluster quickly and shrinks it slowly, and sometimes not at all. The usual reasons are a minimum set too high, clusters that are never quite idle, workers holding data the autoscaler doesn't want to throw away, and streaming or shared workloads that keep everything busy. This note explains each one, the fixes, and how to see it in your own cluster events and billing tables.</div>
+<p>Riya turns on autoscaling for the team's shared cluster: minimum 2 workers, maximum 10. The morning load arrives at 9 a.m., the cluster grows to 10, and the job finishes by 9:40. At 6 p.m. she looks again. The cluster still has 10 workers.</p>
+<p>Nothing is broken. Autoscaling did exactly what it is built to do. It just turns out that growing and shrinking are not mirror images of each other.</p>
+<p>Our <a href="/writing/databricks-cost-leaks/">ten cost leaks post</a> gave this problem one paragraph. This note goes deep on it: why an autoscaling cluster grows easily but stays big, and how to make it come back down.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 380" role="img" aria-label="A cartoon of a hand pump inflating a balloon labelled 10 workers at 6 p.m. The pump is labelled scale-up, quick and eager. The balloon&#x27;s valve is crossed out, labelled scale-down, slow and cautious, stuck by a high minimum, data on the workers and work that never quite stops."><text class="sm" x="500" y="24" text-anchor="middle">the pump works every time; the valve sticks</text><rect class="hz" x="110" y="150" width="60" height="150" rx="6"/><line class="lnc" x1="140" y1="150" x2="140" y2="95"/><rect class="hz" x="100" y="82" width="80" height="16" rx="6"/><rect class="hz" x="90" y="300" width="100" height="14" rx="4"/><text class="bd" x="140" y="345" text-anchor="middle">scale-up:</text><text class="bd" x="140" y="365" text-anchor="middle">quick and eager</text><path class="ln" d="M170,280 Q330,320 476,286"/><ellipse class="pf pf-solid" cx="500" cy="150" rx="120" ry="105"/><ellipse class="hz" cx="500" cy="150" rx="120" ry="105" style="fill:none"/><path class="ln" d="M455,90 Q470,70 495,66"/><text class="bd" x="500" y="145" text-anchor="middle">10 workers</text><text class="sm" x="500" y="168" text-anchor="middle">at 6 p.m.</text><path class="hz" d="M488,253 L512,253 L506,272 L494,272 Z"/><rect class="bxs" x="476" y="272" width="48" height="26" rx="4"/><line class="lnc" x1="470" y1="275" x2="530" y2="295"/><line class="lnc" x1="470" y1="295" x2="530" y2="275"/><text class="bd" x="500" y="330" text-anchor="middle">scale-down:</text><text class="bd" x="500" y="350" text-anchor="middle">slow and cautious</text><path class="lnd" d="M540,285 Q620,300 690,270"/><text class="sm" x="700" y="250" text-anchor="start">valve stuck by:</text><text class="sm" x="700" y="270" text-anchor="start">a high minimum,</text><text class="sm" x="700" y="290" text-anchor="start">data on the workers,</text><text class="sm" x="700" y="310" text-anchor="start">work that never quite stops</text></svg><figcaption>Autoscaling grows a cluster easily. Shrinking it is where things get stuck.</figcaption></figure>
+<h2>What autoscaling actually promises</h2>
+<p>Autoscaling means you give a cluster a <strong>minimum</strong> and a <strong>maximum</strong> number of workers, and Databricks adds or removes workers between those two numbers as the load changes. A worker is one of the machines that runs Spark tasks. You pay for every worker for every minute it is running, busy or not.</p>
+<p>Two things matter for this post:</p>
+<ul><li><strong>Scale-up is eager.</strong> When tasks are queuing, adding workers is safe. The worst case is that you paid for a few extra minutes.</li><li><strong>Scale-down is cautious.</strong> Removing a worker is only safe if it has nothing useful on it. So the autoscaler waits until workers look idle, and removing them can take longer than adding them did.</li></ul>
+<p>Databricks has two flavours. <strong>Optimized autoscaling</strong>, on the Premium plan and above, scales down more aggressively than <strong>standard autoscaling</strong>. If your workspace is on the Standard plan, or a cluster was created in a way that uses standard autoscaling, expect slower shrinking.</p>
+<h2>What it looks like over a day</h2>
+<p>Draw the number of workers across a working day and the problem is easy to see.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 335" role="img" aria-label="A line chart of workers from 6 a.m. to 10 p.m. Both lines rise from 2 to 10 at 9 a.m. for the morning load. The healthy dashed line falls back to 2 by about 11 a.m. The sticky thick line stays at 10 until 9 p.m."><text class="sm" x="500" y="24" text-anchor="middle">workers on a shared cluster, minimum 2, maximum 10 (illustrative)</text><line class="ln" x1="120" y1="270" x2="940" y2="270"/><line class="ln" x1="120" y1="270" x2="120" y2="60"/><line class="ln" x1="114" y1="270" x2="120" y2="270"/><text class="sm" x="108" y="275.0" text-anchor="end">0</text><line class="ln" x1="114" y1="230" x2="120" y2="230"/><text class="sm" x="108" y="235.0" text-anchor="end">2</text><line class="ln" x1="114" y1="70" x2="120" y2="70"/><text class="sm" x="108" y="75.0" text-anchor="end">10</text><text class="sm" x="120.0" y="320" text-anchor="middle">6 a.m.</text><text class="sm" x="273.75" y="320" text-anchor="middle">9 a.m.</text><text class="sm" x="427.5" y="320" text-anchor="middle">noon</text><text class="sm" x="581.25" y="320" text-anchor="middle">3 p.m.</text><text class="sm" x="735.0" y="320" text-anchor="middle">6 p.m.</text><text class="sm" x="888.75" y="320" text-anchor="middle">9 p.m.</text><path class="zr" opacity="0.45" d="M289,70 L889,70 L889,230 L366,230 L325,70 Z"/><path class="lnc" d="M120,230 L274,230 L289,70 L889,70 L889,270 L940,270" style="fill:none"/><path class="lnd" d="M289,70 L325,70 L366,230 L940,230" style="fill:none;stroke-width:3"/><text class="bd" x="581.25" y="56.0" text-anchor="middle">sticky (thick line): stays at 10 until it is terminated at night</text><text class="tx" x="581.25" y="256.0" text-anchor="middle">healthy (dashed line): back to 2 once the load is done</text><text class="bd" x="581.25" y="155.0" text-anchor="middle">shaded: idle workers you pay for</text></svg><figcaption>Same morning load, two clusters. The area between the lines is the cost.</figcaption></figure>
+<p>The healthy cluster rises for the morning load and falls back to its minimum once the load is done. The sticky one rises at 9 a.m. and stays near the top until someone terminates it, or until auto-termination kicks in at night.</p>
+<p>Here is what that shape costs. <strong>This is an example, with made-up round numbers, not a real bill.</strong> Say each worker costs ₹60 an hour, counting both the Databricks charge and the cloud machine. The cluster really needs 2 workers after 10 a.m., but sits at 8 until 8 p.m.</p>
+<ul><li>Extra workers: 8 minus 2 is 6.</li><li>Extra hours: 10 a.m. to 8 p.m. is 10.</li><li>Extra cost per day: 6 workers times 10 hours times ₹60 is ₹3,600.</li><li>Over 22 working days: about ₹79,200 a month, for one cluster doing nothing in the afternoon.</li></ul>
+<p>Use your own rates. The point is that the cost grows with idle hours, and idle hours are invisible unless you look.</p>
+<h2>Six reasons the cluster stays big</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 345" role="img" aria-label="Three numbered panels. One: a high floor, workers standing on a raised platform labelled minimum workers. Two: data on board, a worker carrying cached tables and shuffle files, labelled remove me and this work is redone. Three: never quite idle, a tap dripping a little work all day."><text class="sm" x="500" y="24" text-anchor="middle">three small reasons a worker is never removed</text><circle class="nm" cx="160" cy="60" r="14"/><text class="nmt" x="160" y="66" text-anchor="middle">1</text><rect class="pf pf-bx" x="44" y="84" width="238" height="88" rx="12"/><rect class="bx ol" x="40" y="80" width="240" height="90" rx="12"/><text class="tt" x="160.0" y="112.0" text-anchor="middle">A high floor</text><text class="sm" x="160.0" y="136.0" text-anchor="middle">the minimum is 8,</text><text class="sm" x="160.0" y="155.0" text-anchor="middle">so 8 is the smallest</text><circle class="nm" cx="500" cy="60" r="14"/><text class="nmt" x="500" y="66" text-anchor="middle">2</text><rect class="pf pf-bxs" x="384" y="84" width="238" height="88" rx="12"/><rect class="bxs ol" x="380" y="80" width="240" height="90" rx="12"/><text class="tt" x="500.0" y="112.0" text-anchor="middle">Data on board</text><text class="sm" x="500.0" y="136.0" text-anchor="middle">cached tables and</text><text class="sm" x="500.0" y="155.0" text-anchor="middle">shuffle files</text><circle class="nm" cx="840" cy="60" r="14"/><text class="nmt" x="840" y="66" text-anchor="middle">3</text><rect class="pf pf-bx" x="724" y="84" width="238" height="88" rx="12"/><rect class="bx ol" x="720" y="80" width="240" height="90" rx="12"/><text class="tt" x="840.0" y="112.0" text-anchor="middle">Never quite idle</text><text class="sm" x="840.0" y="136.0" text-anchor="middle">a stream, or a trickle</text><text class="sm" x="840.0" y="155.0" text-anchor="middle">of small queries</text><rect class="hz" x="70" y="250" width="180" height="40" rx="4"/><rect class="pf pf-solid" x="80" y="222" width="22" height="26" rx="3"/><rect class="pf pf-solid" x="108" y="222" width="22" height="26" rx="3"/><rect class="pf pf-solid" x="136" y="222" width="22" height="26" rx="3"/><rect class="pf pf-solid" x="164" y="222" width="22" height="26" rx="3"/><rect class="pf pf-solid" x="192" y="222" width="22" height="26" rx="3"/><rect class="pf pf-solid" x="220" y="222" width="22" height="26" rx="3"/><text class="sm" x="160" y="276" text-anchor="middle">minimum workers</text><line class="lnd" x1="60" y1="310" x2="260" y2="310"/><text class="sm" x="160" y="330" text-anchor="middle">zero is down here</text><rect class="hz" x="460" y="225" width="80" height="80" rx="8"/><text class="sm" x="500" y="320" text-anchor="middle">a worker</text><rect class="bxs" x="470" y="240" width="24" height="22" rx="2"/><rect class="bxs" x="500" y="240" width="24" height="22" rx="2"/><rect class="bxs" x="470" y="270" width="24" height="22" rx="2"/><rect class="bxs" x="500" y="270" width="24" height="22" rx="2"/><text class="sm" x="560" y="255" text-anchor="start">remove me and</text><text class="sm" x="560" y="275" text-anchor="start">this work is redone</text><rect class="hz" x="800" y="200" width="60" height="16" rx="4"/><rect class="hz" x="822" y="216" width="16" height="14" rx="2"/><path class="bxs" d="M826,242 q4,-8 8,0 a4,4 0 1,1 -8,0 Z"/><path class="bxs" d="M826,262 q4,-8 8,0 a4,4 0 1,1 -8,0 Z"/><path class="bxs" d="M826,282 q4,-8 8,0 a4,4 0 1,1 -8,0 Z"/><rect class="hz" x="790" y="295" width="80" height="22" rx="4"/><text class="sm" x="880" y="250" text-anchor="start">a little work,</text><text class="sm" x="880" y="270" text-anchor="start">all day long</text></svg><figcaption>Most sticky clusters come down to one of these three: a floor set too high, data on the workers, or work that never fully stops.</figcaption></figure>
+<h3>1. The minimum is set too high</h3>
+<p>Autoscaling never goes below the minimum. A cluster with a minimum of 8 is a fixed cluster of 8 that can sometimes grow. Minimums often get raised once, after a slow morning, and are never lowered again.</p>
+<h3>2. Idle all-purpose clusters with long or no auto-termination</h3>
+<p>All-purpose clusters are the ones people attach notebooks to. Auto-termination stops a cluster after a set time with no activity. If it is switched off, or set to many hours, the cluster sits at its minimum (or worse, at whatever size it reached) all evening and all weekend.</p>
+<h3>3. Workers holding cached data or shuffle files are kept</h3>
+<p>A shuffle is when Spark moves rows between workers for a join or a group-by, writing intermediate files on the workers' local disks. A cache is data someone asked Spark to keep in memory or on local disk, for example with <code>df.cache()</code>. If a worker holding those files is removed, the work behind them may have to be redone. So the autoscaler can be reluctant to remove such workers, and a forgotten <code>cache()</code> in a notebook can keep machines alive long after anyone needs them.</p>
+<h3>4. Streaming jobs on autoscaling clusters</h3>
+<p>A streaming job processes small batches all day. The cluster is rarely fully idle, so classic autoscaling often sees just enough activity to keep workers, and streaming clusters can grow during a burst and then stay large. This is why Databricks recommends fixed-size clusters for Structured Streaming on classic compute, or enhanced autoscaling in declarative pipelines (Lakeflow Declarative Pipelines, formerly Delta Live Tables), which was built with streaming in mind. Our <a href="/writing/databricks-streaming/">streaming post</a> covers how to run those jobs well.</p>
+<h3>5. One heavy job sharing a cluster with many small ones</h3>
+<p>The heavy job pushes the cluster to its maximum. Then a steady trickle of small notebook queries and short jobs keeps a few tasks running on most workers. No worker is ever idle enough to remove. The cluster stays sized for the heavy job, paid for by the small ones.</p>
+<p>A skewed job does something similar. If one task does most of the work, the rest of the cluster waits for it. The rule we use flags skew when the slowest task takes more than 5 times the median.</p>
+<h3>6. Scale-down is slower and more cautious than scale-up</h3>
+<p>Even with none of the above, shrinking simply happens later than growing. Workers are removed only after they have been idle for a while, and often a few at a time. For a short, spiky load, the cluster may spend more time coming down than it spent working.</p>
+<h2>What goes wrong when people fix it</h2>
+<ul><li><strong>Setting the maximum very low</strong> to "control cost". Jobs run longer on fewer machines, and the total bill can go up instead of down.</li><li><strong>Turning auto-termination down to 2 or 3 minutes</strong> on a cluster people use all day. Every coffee break means a cold start, and people start running a loop to keep it awake.</li><li><strong>Turning autoscaling off everywhere.</strong> For batch jobs on their own cluster, autoscaling usually helps. The trouble is mostly shared, streaming and interactive clusters.</li><li><strong>Fixing one cluster by hand.</strong> Without a cluster policy, the next cluster someone creates has the same settings as the old one.</li></ul>
+<h2>The fixes</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 390" role="img" aria-label="A pinned checklist card titled Make it come back down, with seven ticked items: job compute for each scheduled job, a minimum of 1 or 2 for batch work, auto-termination on every all-purpose cluster, a cluster policy that enforces all of this, serverless where it fits, streams on their own fixed-size cluster, watch the event log and billing tables."><text class="sm" x="500" y="24" text-anchor="middle">pin it next to your cluster settings</text><rect class="hz" x="250" y="45" width="500" height="330" rx="10"/><rect class="pf pf-bxs" x="258" y="53" width="484" height="44" rx="6"/><text class="bd" x="500" y="82" text-anchor="middle">Make it come back down</text><rect class="hz" x="285" y="111" width="18" height="18" rx="3"/><path class="lnc" d="M288,120 L293,125 L301,113" style="fill:none"/><text class="tx" x="320" y="126" text-anchor="start">Job compute for each scheduled job</text><rect class="hz" x="285" y="147" width="18" height="18" rx="3"/><path class="lnc" d="M288,156 L293,161 L301,149" style="fill:none"/><text class="tx" x="320" y="162" text-anchor="start">A minimum of 1 or 2 for batch work</text><rect class="hz" x="285" y="183" width="18" height="18" rx="3"/><path class="lnc" d="M288,192 L293,197 L301,185" style="fill:none"/><text class="tx" x="320" y="198" text-anchor="start">Auto-termination on every all-purpose cluster</text><rect class="hz" x="285" y="219" width="18" height="18" rx="3"/><path class="lnc" d="M288,228 L293,233 L301,221" style="fill:none"/><text class="tx" x="320" y="234" text-anchor="start">A cluster policy that enforces all of this</text><rect class="hz" x="285" y="255" width="18" height="18" rx="3"/><path class="lnc" d="M288,264 L293,269 L301,257" style="fill:none"/><text class="tx" x="320" y="270" text-anchor="start">Serverless where it fits</text><rect class="hz" x="285" y="291" width="18" height="18" rx="3"/><path class="lnc" d="M288,300 L293,305 L301,293" style="fill:none"/><text class="tx" x="320" y="306" text-anchor="start">Streams on their own fixed-size cluster</text><rect class="hz" x="285" y="327" width="18" height="18" rx="3"/><path class="lnc" d="M288,336 L293,341 L301,329" style="fill:none"/><text class="tx" x="320" y="342" text-anchor="start">Watch the event log and billing tables</text><circle class="bxs" cx="500" cy="45" r="9"/></svg><figcaption>The fix checklist. A cluster policy turns most of these from good habits into defaults.</figcaption></figure>
+<ol><li><strong>Job compute per job.</strong> A job cluster starts for one job and ends with it, so there is nothing left to shrink. It is also billed at a lower rate than all-purpose compute.</li><li><strong>Sensible minimums.</strong> Start with a minimum of 1 or 2 for batch work and let autoscaling grow. Raise the minimum only if you can name the reason.</li><li><strong>Auto-termination on every all-purpose cluster.</strong> Pick something that fits how people work, such as 20 to 30 minutes idle.</li><li><strong>Cluster policies.</strong> A policy can limit the minimum and maximum workers and require auto-termination, so good settings are the default and bad ones are impossible.</li><li><strong>Serverless where it fits.</strong> With serverless compute for notebooks, jobs or SQL warehouses, Databricks manages the size for you, and you stop tuning minimums at all. Check that your workloads and region are supported first.</li><li><strong>Separate clusters for streaming.</strong> Give each long-running stream its own fixed-size cluster, or run it in a declarative pipeline with enhanced autoscaling.</li><li><strong>Unpersist what you cache.</strong> Call <code>unpersist()</code> when a cached table is no longer needed, and don't leave <code>cache()</code> in scheduled code by habit.</li></ol>
+<h2>How to watch it</h2>
+<p>You can't fix what you don't see. Two places show this problem clearly.</p>
+<p><strong>The cluster event log.</strong> Every cluster has an event log in its page that records when it started, resized and terminated. Read a day of it. If you see a resize up in the morning and no resize down until termination, you have a sticky cluster.</p>
+<p><strong>The billing system tables.</strong> <code>system.billing.usage</code> records usage per cluster per day. A query like this shows which clusters used the most DBUs (Databricks Units, the unit the price list is written in) last week:</p>
+<pre><code>SELECT usage_metadata.cluster_id,
+       usage_date,
+       SUM(usage_quantity) AS dbus
+FROM system.billing.usage
+WHERE usage_date &gt;= current_date() - 7
+  AND usage_metadata.cluster_id IS NOT NULL
+GROUP BY ALL
+ORDER BY dbus DESC
+LIMIT 20;</code></pre>
+<p>A shared cluster near the top every day, with no heavy job to explain it, is the first one to look at. Where your workspace has the compute system tables, they also show each cluster's settings over time, including its minimum, maximum and auto-termination.</p>
+<h2>Six questions to check your own workspace</h2>
+<ol><li>What is the minimum worker count on each of your autoscaling clusters, and who decided it?</li><li>Which all-purpose clusters have auto-termination off, or set to more than an hour?</li><li>In yesterday's event log for your busiest shared cluster, when did it last resize down?</li><li>Which streaming jobs run on autoscaling all-purpose clusters?</li><li>Which scheduled jobs share a cluster with people's notebooks?</li><li>Do you have a cluster policy that every new cluster must use?</li></ol>
+<p>A cluster that grows in the morning should be small again by lunch; if it isn't, the valve is stuck, not the pump.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/data-platform-sim/performance/">Performance stories, every fix measured</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
