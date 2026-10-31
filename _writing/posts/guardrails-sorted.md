@@ -4,7 +4,7 @@ date: 2026-10-31
 subject: ai
 audience: builders
 kind: explainer
-draft: true
+draft: false
 summary: "Guardrails" sounds like one product you buy. In a working agent it is about fifty small checks, each with a job, a place and a price. We sorted 57 common ones. 39 are plain rules in code, and only 2 need an LLM judge. Here are the labels, the pictures, and the 15 to build first.
 linkedin: We sorted 57 common guardrails for autonomous agents. 39 are plain if-statements. Only 2 need an LLM judge. If your guardrail plan starts with "add a second model to check the first", start here instead.
 deeper: /learn/agent-guardrails/

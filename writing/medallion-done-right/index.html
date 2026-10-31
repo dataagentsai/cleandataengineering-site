@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Bronze, Silver, Gold, and where most teams get it wrong · Clean Data Engineering</title>
+<meta name="description" content="Almost every lakehouse says it uses the medallion architecture. Fewer use it well. The layers aren&#x27;t folders; each one is a promise about the data inside it. This post draws the layers as a kitchen, then shows the seven mistakes we see most and the one test that prevents them."><link rel="canonical" href="https://cleandataengineering.ai/writing/medallion-done-right/">
+<meta property="og:title" content="Bronze, Silver, Gold, and where most teams get it wrong"><meta property="og:description" content="Almost every lakehouse says it uses the medallion architecture. Fewer use it well. The layers aren&#x27;t folders; each one is a promise about the data inside it. This post draws the layers as a kitchen, then shows the seven mistakes we see most and the one test that prevents them."><meta property="og:url" content="https://cleandataengineering.ai/writing/medallion-done-right/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · Data Engineering · Builders · 4 min read · 2026-10-31</p>
+    <h1>Bronze, Silver, Gold, and where most teams get it wrong</h1>
+  </div>
+  <div class="summary">Almost every lakehouse says it uses the medallion architecture. Fewer use it well. The layers aren't folders; each one is a promise about the data inside it. This post draws the layers as a kitchen, then shows the seven mistakes we see most and the one test that prevents them.</div>
+<p>Ask ten data teams whether they use the medallion architecture and nine will say yes. They have a bronze schema, a silver schema and a gold schema. Then ask why two dashboards show two different revenue numbers, and the room goes quiet.</p>
+<p>The layers were created. The promises behind them were not kept.</p>
+<h2>The layers as a kitchen</h2>
+<p>The easiest way to see what each layer is for is to walk through a kitchen.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 265" role="img" aria-label="Five rooms of a kitchen in a row: the delivery bag (landing), the store room (bronze), the prep counter (silver), the dish (gold) and the menu (semantic), each with a small drawing."><text class="sm" x="500" y="30" text-anchor="middle">you never cook straight from the delivery bag, and you can always go back to the store room</text><rect class="bxm ol" x="5" y="55" width="180" height="110" rx="12"/><text class="tt" x="95.0" y="97.0" text-anchor="middle">Landing</text><text class="sm" x="95.0" y="121.0" text-anchor="middle">the delivery bag</text><text class="sm" x="95.0" y="140.0" text-anchor="middle">files as they came</text><line class="ln" x1="187" y1="110" x2="209" y2="110" marker-end="url(#ar)"/><path class="hz" d="M70,205 L120,205 L115,252 L75,252 Z"/><path class="ln" d="M85,205 Q95,188 105,205"/><rect class="pf pf-bx" x="211" y="59" width="178" height="108" rx="12"/><rect class="bx ol" x="207" y="55" width="180" height="110" rx="12"/><text class="tt" x="297.0" y="97.0" text-anchor="middle">Bronze</text><text class="sm" x="297.0" y="121.0" text-anchor="middle">the store room</text><text class="sm" x="297.0" y="140.0" text-anchor="middle">keeps everything</text><line class="ln" x1="389" y1="110" x2="411" y2="110" marker-end="url(#ar)"/><rect class="hz" x="265" y="192" width="64" height="60" rx="4"/><line class="ln" x1="265" y1="212" x2="329" y2="212"/><line class="ln" x1="265" y1="232" x2="329" y2="232"/><rect class="bxs" x="271" y="199" width="10" height="12" rx="2"/><rect class="bxs" x="286" y="219" width="10" height="12" rx="2"/><rect class="bxs" x="301" y="199" width="10" height="12" rx="2"/><rect class="bxs" x="316" y="219" width="10" height="12" rx="2"/><rect class="pf pf-bx" x="413" y="59" width="178" height="108" rx="12"/><rect class="bx ol" x="409" y="55" width="180" height="110" rx="12"/><text class="tt" x="499.0" y="97.0" text-anchor="middle">Silver</text><text class="sm" x="499.0" y="121.0" text-anchor="middle">the prep counter</text><text class="sm" x="499.0" y="140.0" text-anchor="middle">cleaned, one of each</text><line class="ln" x1="591" y1="110" x2="613" y2="110" marker-end="url(#ar)"/><rect class="hz" x="461" y="232" width="76" height="20" rx="6"/><ellipse class="bxs" cx="491" cy="224" rx="16" ry="8"/><line class="lnc" x1="513" y1="226" x2="533" y2="210"/><rect class="pf pf-bxs" x="615" y="59" width="178" height="108" rx="12"/><rect class="bxs ol" x="611" y="55" width="180" height="110" rx="12"/><text class="tt" x="701.0" y="97.0" text-anchor="middle">Gold</text><text class="sm" x="701.0" y="121.0" text-anchor="middle">the dish</text><text class="sm" x="701.0" y="140.0" text-anchor="middle">cooked for one use</text><line class="ln" x1="793" y1="110" x2="815" y2="110" marker-end="url(#ar)"/><ellipse class="hz" cx="701" cy="238" rx="42" ry="13"/><ellipse class="bxs" cx="701" cy="230" rx="20" ry="11"/><rect class="pf pf-solid" x="817" y="59" width="178" height="108" rx="12"/><rect class="solid ol" x="813" y="55" width="180" height="110" rx="12"/><text class="tt inv" x="903.0" y="97.0" text-anchor="middle">Semantic</text><text class="inv sm2" x="903.0" y="121.0" text-anchor="middle">the menu</text><text class="inv sm2" x="903.0" y="140.0" text-anchor="middle">one name per dish</text><rect class="hz" x="879" y="190" width="48" height="62" rx="4"/><line class="ln" x1="889" y1="204" x2="917" y2="204"/><line class="ln" x1="889" y1="218" x2="917" y2="218"/><line class="ln" x1="889" y1="232" x2="917" y2="232"/></svg><figcaption>The medallion as a kitchen. Each room has one job, and food only moves to the right.</figcaption></figure>
+<ul><li><strong>Landing</strong> is the delivery bag. Files exactly as they arrived: CSV, JSON, API pages. Nobody touches them.</li><li><strong>Bronze</strong> is the store room. Every row ever received, in the source's own shape, plus a note of when and where it came from. Nothing is cleaned or thrown away.</li><li><strong>Silver</strong> is the prep counter. One clean row per real thing: one per order, one per customer. Types fixed, duplicates removed, codes standardised.</li><li><strong>Gold</strong> is the dish. Tables cooked for one use: a sales star schema, a feature table for a model, a data product for another team.</li><li><strong>Semantic</strong> is the menu. One name and one definition for every number people quote, such as <em>net revenue</em>, so every dashboard and every chatbot gives the same answer.</li></ul>
+<p>You never cook straight from the delivery bag. And because the store room keeps everything, you can always go back and cook again.</p>
+<h2>Data moves one way</h2>
+<p>The whole architecture rests on one rule.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 305" role="img" aria-label="A row of layers: sources, landing, bronze, silver, gold, semantic. Dashboards and a conversation UI read from gold and semantic. A dashed line from an analyst to bronze is crossed out."><rect class="bxm ol" x="5" y="40" width="140" height="80" rx="12"/><text class="tt" x="75.0" y="76.5" text-anchor="middle">Sources</text><text class="sm" x="75.0" y="100.5" text-anchor="middle"></text><line class="ln" x1="147" y1="80" x2="169" y2="80" marker-end="url(#ar)"/><rect class="bxm ol" x="171" y="40" width="140" height="80" rx="12"/><text class="tt" x="241.0" y="76.5" text-anchor="middle">Landing</text><text class="sm" x="241.0" y="100.5" text-anchor="middle"></text><line class="ln" x1="313" y1="80" x2="335" y2="80" marker-end="url(#ar)"/><rect class="pf pf-bx" x="341" y="44" width="138" height="78" rx="12"/><rect class="bx ol" x="337" y="40" width="140" height="80" rx="12"/><text class="tt" x="407.0" y="76.5" text-anchor="middle">Bronze</text><text class="sm" x="407.0" y="100.5" text-anchor="middle"></text><line class="ln" x1="479" y1="80" x2="501" y2="80" marker-end="url(#ar)"/><rect class="pf pf-bx" x="507" y="44" width="138" height="78" rx="12"/><rect class="bx ol" x="503" y="40" width="140" height="80" rx="12"/><text class="tt" x="573.0" y="76.5" text-anchor="middle">Silver</text><text class="sm" x="573.0" y="100.5" text-anchor="middle"></text><line class="ln" x1="645" y1="80" x2="667" y2="80" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="673" y="44" width="138" height="78" rx="12"/><rect class="bxs ol" x="669" y="40" width="140" height="80" rx="12"/><text class="tt" x="739.0" y="76.5" text-anchor="middle">Gold</text><text class="sm" x="739.0" y="100.5" text-anchor="middle"></text><line class="ln" x1="811" y1="80" x2="833" y2="80" marker-end="url(#ar)"/><rect class="pf pf-solid" x="839" y="44" width="138" height="78" rx="12"/><rect class="solid ol" x="835" y="40" width="140" height="80" rx="12"/><text class="tt inv" x="905.0" y="76.5" text-anchor="middle">Semantic</text><text class="inv sm2" x="905.0" y="100.5" text-anchor="middle"></text><text class="sm" x="500" y="22" text-anchor="middle">data moves one way: each layer is built only from the one before it</text><rect class="bxm ol" x="640" y="220" width="160" height="70" rx="12"/><text class="tt" x="720.0" y="251.5" text-anchor="middle">Dashboards</text><text class="sm" x="720.0" y="275.5" text-anchor="middle"></text><line class="ln" x1="720" y1="218" x2="738" y2="124" marker-end="url(#ar)"/><rect class="bxm ol" x="825" y="220" width="170" height="70" rx="12"/><text class="tt" x="910.0" y="251.5" text-anchor="middle">Conversation UI</text><text class="sm" x="910.0" y="275.5" text-anchor="middle"></text><line class="ln" x1="905" y1="218" x2="905" y2="124" marker-end="url(#ar)"/><rect class="bxm ol" x="300" y="220" width="160" height="70" rx="12"/><text class="tt" x="380.0" y="251.5" text-anchor="middle">An analyst</text><text class="sm" x="380.0" y="275.5" text-anchor="middle">in a hurry</text><line class="lnd" x1="380" y1="218" x2="407" y2="124"/><line class="lnc" x1="380" y1="160" x2="408" y2="186"/><line class="lnc" x1="408" y1="160" x2="380" y2="186"/><text class="sm" x="140" y="250" text-anchor="middle">readers start at gold</text><text class="sm" x="140" y="270" text-anchor="middle">or semantic; nobody</text><text class="sm" x="140" y="290" text-anchor="middle">reads bronze</text></svg><figcaption>The one-way spine, and who is allowed to read where.</figcaption></figure>
+<p>Each layer is built <strong>only from the layer before it</strong>. Silver is built from bronze, gold from silver, never the other way around. Readers start at gold or semantic. Nobody reads bronze, not even an analyst in a hurry.</p>
+<p>That one rule is what lets you rebuild any layer from the one below it when a bug is found.</p>
+<h2>Seven mistakes we see most</h2>
+<h3>1. Cleaning in bronze</h3>
+<p>Someone adds "just a small fix" to the bronze load: a date parse, a filter on test rows. Now bronze no longer holds what arrived. When the fix turns out to be wrong, there is nothing left to rebuild from. <strong>Bronze keeps everything, as it came.</strong></p>
+<h3>2. Business rules in silver</h3>
+<p>Silver starts to say "active customers only" or "revenue excluding refunds". Those are choices for one use. The next team that needs all customers has to go back to bronze. <strong>Silver cleans; it doesn't decide.</strong></p>
+<h3>3. Dashboards reading silver, or bronze</h3>
+<p>It's quicker, until the silver table changes shape and twelve reports break overnight. <strong>Readers start at gold or semantic.</strong> Those layers are the published contract; the layers below may change.</p>
+<h3>4. Dropping bad rows silently</h3>
+<p>A row fails a check, and a <code>WHERE</code> clause quietly removes it. Totals stop matching the source and nobody can say why.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 290" role="img" aria-label="Rows from bronze pass through a check. Rows that pass go to silver. Rows that fail go to quarantine with their reason, and are replayed after a fix."><rect class="pf pf-bx" x="14" y="74" width="168" height="88" rx="12"/><rect class="bx ol" x="10" y="70" width="170" height="90" rx="12"/><text class="tt" x="95.0" y="111.5" text-anchor="middle">Bronze</text><text class="sm" x="95.0" y="135.5" text-anchor="middle">every row received</text><line class="ln" x1="182" y1="115" x2="268" y2="115" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="274" y="64" width="198" height="108" rx="12"/><rect class="bxs ol" x="270" y="60" width="200" height="110" rx="12"/><text class="tt" x="370.0" y="102.0" text-anchor="middle">The check</text><text class="sm" x="370.0" y="126.0" text-anchor="middle">the data contract:</text><text class="sm" x="370.0" y="145.0" text-anchor="middle">types, keys, rules</text><line class="ln" x1="472" y1="95" x2="640" y2="50" marker-end="url(#ar)"/><text class="sm" x="556.0" y="64.5" text-anchor="middle">passes</text><rect class="pf pf-bx" x="646" y="14" width="188" height="78" rx="12"/><rect class="bx ol" x="642" y="10" width="190" height="80" rx="12"/><text class="tt" x="737.0" y="46.5" text-anchor="middle">Silver</text><text class="sm" x="737.0" y="70.5" text-anchor="middle">clean rows</text><line class="ln" x1="472" y1="140" x2="640" y2="185" marker-end="url(#ar)"/><text class="sm" x="556.0" y="178" text-anchor="middle">fails</text><rect class="bxm ol" x="642" y="145" width="190" height="90" rx="12"/><text class="tt" x="737.0" y="177.0" text-anchor="middle">Quarantine</text><text class="sm" x="737.0" y="201.0" text-anchor="middle">the row + the reason</text><text class="sm" x="737.0" y="220.0" text-anchor="middle">never dropped</text><path class="lnd" d="M690,237 Q480,280 380,172" marker-end="url(#ar)"/><text class="sm" x="520" y="278" text-anchor="middle">fix the rule or the source, then replay</text></svg><figcaption>Bad rows are parked with a reason, never silently dropped.</figcaption></figure>
+<p><strong>Bad rows go to quarantine with the reason.</strong> Someone fixes the rule or the source, and the rows are replayed. Nothing disappears.</p>
+<h3>5. One gold table per dashboard</h3>
+<p>Every new report gets its own gold table, each with its own copy of "revenue". After a year there are forty of them and six definitions. <strong>Gold is shaped by use, not by chart.</strong> The definition of a number lives once, in the semantic layer.</p>
+<h3>6. No semantic layer at all</h3>
+<p>Without it, every dashboard tool and every AI assistant writes its own SQL for the same number. That is where the "two revenues" meeting comes from. On Databricks this is a metric view. Elsewhere it might be dbt's semantic layer or Cube. Whichever you use, <strong>one definition, used everywhere.</strong></p>
+<h3>7. Quality checks added at the end</h3>
+<p>Checks get bolted on after the first bad week, and only on gold. By then bad rows have travelled through every layer. <strong>Checks belong on every hop</strong>, declared once with the pipeline, switched on from day one.</p>
+<h2>The one test that prevents them</h2>
+<p>Nearly every mistake above is a step sitting in the wrong layer. When you write a new transformation, ask four questions in order.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 262" role="img" aria-label="Four questions in a row, asked in order. Kept exactly as it came? Bronze. Cleans one real thing, for any use? Silver. Shapes data for one use? Gold. Defines a number people quote? Semantic."><text class="sm" x="500" y="22" text-anchor="middle">where does this step belong? ask in order</text><rect class="bxm ol" x="10" y="40" width="220" height="96" rx="12"/><text class="tt" x="120.0" y="72.5" text-anchor="middle">Kept exactly</text><text class="tt" x="120.0" y="96.5" text-anchor="middle">as it came?</text><text class="sm" x="120.0" y="120.5" text-anchor="middle"></text><line class="ln" x1="120" y1="138" x2="120" y2="186" marker-end="url(#ar)"/><text class="sm" x="138" y="166" text-anchor="start">yes</text><rect class="pf pf-bx" x="44" y="192" width="158" height="60" rx="12"/><rect class="bx ol" x="40" y="188" width="160" height="62" rx="12"/><text class="tt" x="120.0" y="215.5" text-anchor="middle">Bronze</text><text class="sm" x="120.0" y="239.5" text-anchor="middle"></text><line class="ln" x1="232" y1="88" x2="256" y2="88" marker-end="url(#ar)"/><text class="sm" x="244.0" y="78" text-anchor="middle">no</text><rect class="bxm ol" x="258" y="40" width="220" height="96" rx="12"/><text class="tt" x="368.0" y="72.5" text-anchor="middle">Cleans one real</text><text class="tt" x="368.0" y="96.5" text-anchor="middle">thing, for any use?</text><text class="sm" x="368.0" y="120.5" text-anchor="middle"></text><line class="ln" x1="368" y1="138" x2="368" y2="186" marker-end="url(#ar)"/><text class="sm" x="386" y="166" text-anchor="start">yes</text><rect class="pf pf-bx" x="292" y="192" width="158" height="60" rx="12"/><rect class="bx ol" x="288" y="188" width="160" height="62" rx="12"/><text class="tt" x="368.0" y="215.5" text-anchor="middle">Silver</text><text class="sm" x="368.0" y="239.5" text-anchor="middle"></text><line class="ln" x1="480" y1="88" x2="504" y2="88" marker-end="url(#ar)"/><text class="sm" x="492.0" y="78" text-anchor="middle">no</text><rect class="bxm ol" x="506" y="40" width="220" height="96" rx="12"/><text class="tt" x="616.0" y="72.5" text-anchor="middle">Shapes data</text><text class="tt" x="616.0" y="96.5" text-anchor="middle">for one use?</text><text class="sm" x="616.0" y="120.5" text-anchor="middle"></text><line class="ln" x1="616" y1="138" x2="616" y2="186" marker-end="url(#ar)"/><text class="sm" x="634" y="166" text-anchor="start">yes</text><rect class="pf pf-bxs" x="540" y="192" width="158" height="60" rx="12"/><rect class="bxs ol" x="536" y="188" width="160" height="62" rx="12"/><text class="tt" x="616.0" y="215.5" text-anchor="middle">Gold</text><text class="sm" x="616.0" y="239.5" text-anchor="middle"></text><line class="ln" x1="728" y1="88" x2="752" y2="88" marker-end="url(#ar)"/><text class="sm" x="740.0" y="78" text-anchor="middle">no</text><rect class="bxm ol" x="754" y="40" width="220" height="96" rx="12"/><text class="tt" x="864.0" y="72.5" text-anchor="middle">Defines a number</text><text class="tt" x="864.0" y="96.5" text-anchor="middle">people quote?</text><text class="sm" x="864.0" y="120.5" text-anchor="middle"></text><line class="ln" x1="864" y1="138" x2="864" y2="186" marker-end="url(#ar)"/><text class="sm" x="882" y="166" text-anchor="start">yes</text><rect class="pf pf-solid" x="788" y="192" width="158" height="60" rx="12"/><rect class="solid ol" x="784" y="188" width="160" height="62" rx="12"/><text class="tt inv" x="864.0" y="215.5" text-anchor="middle">Semantic</text><text class="inv sm2" x="864.0" y="239.5" text-anchor="middle"></text></svg><figcaption>The layer test. Most medallion mistakes are a step sitting one box too far left or right.</figcaption></figure>
+<ol><li>Does it keep the data exactly as it came? It belongs in <strong>bronze</strong>.</li><li>Does it clean one real thing, in a way that's right for every use? <strong>Silver</strong>.</li><li>Does it shape data for one particular use? <strong>Gold</strong>.</li><li>Does it define a number that people quote? <strong>Semantic</strong>.</li></ol>
+<p>If a step doesn't fit cleanly, it's usually two steps. Split it.</p>
+<h2>A few things the medallion doesn't do</h2>
+<ul><li><strong>It isn't a data model.</strong> Gold still needs real modelling, such as facts and dimensions. The medallion tells you <em>where</em> that goes, not <em>how</em> to do it.</li><li><strong>More layers don't help.</strong> "Platinum" and "diamond" layers usually mean gold has lost its definition. Fix the definition instead.</li><li><strong>The names don't matter.</strong> Raw, cleaned, curated works just as well, as long as each layer keeps its promise.</li></ul>
+<h2>Check your own lakehouse</h2>
+<ol><li>Could you rebuild silver from bronze tomorrow if you had to?</li><li>Does any dashboard read from silver or bronze?</li><li>Where do rows that fail a check go?</li><li>How many tables define "revenue"?</li><li>Are your quality checks on every layer, or only the last one?</li></ol>
+<p>If any answer surprises you, start there. The layers are cheap to create. The promises are what make them worth having.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/medallion-architecture/">the medallion architecture, layer by layer, with code</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

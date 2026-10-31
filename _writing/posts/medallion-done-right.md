@@ -4,7 +4,7 @@ date: 2026-10-31
 subject: data
 audience: builders
 kind: explainer
-draft: true
+draft: false
 summary: Almost every lakehouse says it uses the medallion architecture. Fewer use it well. The layers aren't folders; each one is a promise about the data inside it. This post draws the layers as a kitchen, then shows the seven mistakes we see most and the one test that prevents them.
 linkedin: Every lakehouse has bronze, silver and gold folders. Most of them still end up with two dashboards showing two different revenue numbers. The layers are promises, not folders. Seven common mistakes and one test, drawn simply.
 deeper: /learn/medallion-architecture/
