@@ -32,6 +32,7 @@ SECTIONS = [
             ("Agent guardrails", "/learn/agent-guardrails/"),
         ]),
         ("Simulators", "/simulators/", [
+            ("Claude API Simulator", "/learn/llm-api-sim/"),
             ("Agent Harness Simulator", "/learn/agent-harness-sim/"),
             ("DataTwin Studio", "/learn/data-platform-sim/"),
             ("Problem Lab", "/learn/data-platform-sim/problems/"),

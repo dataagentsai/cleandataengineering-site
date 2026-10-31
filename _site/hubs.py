@@ -58,6 +58,9 @@ def simulators():
 <h1>Simulators</h1>
 <p class="lede">Reading about a system is one thing; watching it work, step by step, and then breaking it on purpose is how it sticks. Every simulator here says whether its numbers were <b>recorded for real</b> or are <b>illustrative</b>, never passed off as measured.</p>""" + group(
         "agents", "AI agents", "Watch an agent work, then watch it fail and see what catches it.", [
+            card("Claude API Simulator", "/learn/llm-api-sim/", "one request, one response",
+                 "Change the request (model, system prompt, max_tokens, effort, thinking, temperature, stop sequences, a tool, streaming) and watch the Python, TypeScript and cURL code, the JSON response or streamed events, the tokens and the cost update.",
+                 [("Open the simulator", "/learn/llm-api-sim/")], peri, "ill"),
             card("Agent Harness Simulator", "/learn/agent-harness-sim/", "the claims assistant, one turn at a time",
                  "Type a message and watch every step: the systems it talks to, the checks that fire, the code, the variables, the JSON to and from the model, and the trace.",
                  [("Open the simulator", "/learn/agent-harness-sim/"), ("The tutorial", "/learn/agent-harness/")], peri),
