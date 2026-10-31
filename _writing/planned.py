@@ -20,6 +20,14 @@ PLANNED = [
      "The right streaming architecture: Lakeflow vs Structured Streaming, when a frequent batch is enough, and checkpoints."),
     ("Your Databricks bill has a leak: 10 cost mistakes we keep seeing", "data", "builders", "field-note",
      "Oversized clusters, all-purpose compute for jobs, small files, skew, idle warehouses and missing auto-stop."),
+    ("Unity Catalog done right: one governance model for data and AI", "data", "builders", "explainer",
+     "Catalogs, schemas, permissions, lineage and tags, and why the same governance has to cover models and agents too."),
+    ("Data contracts: stop breaking the team downstream", "data", "builders", "explainer",
+     "What a data contract holds, where it is checked, and how it fits metadata-driven ingestion and data quality."),
+    ("Delta, Iceberg, or both? Open table formats are settled", "data", "builders", "decision",
+     "Why open table formats are here to stay, how Delta and Iceberg compare, and how to read both without picking a side."),
+    ("CI/CD for Databricks with Asset Bundles", "data", "builders", "explainer",
+     "One bundle for jobs, pipelines and dashboards; dev, test and prod targets; and a pipeline that deploys on merge."),
     ("Your Databricks cluster scales up and never comes back down", "data", "builders", "field-note", ""),
     ("What repeats is broken", "data", "builders", "explainer", ""),
 
@@ -38,6 +46,16 @@ PLANNED = [
      "The same harness concerns mapped to each platform's products side by side, where each platform is strong or thin, and how to pick."),
     ("Building agents on a moving ship: what has settled, what is still open, and how not to get stuck", "ai", "builders", "decision",
      "Which parts of the agent stack are adopted and here to stay, which are still in flux, and how to keep your agent tool-agnostic with ports, adapters and contract tests."),
+    ("MCP is here to stay: give your agent tools the standard way", "ai", "builders", "decision",
+     "Why the Model Context Protocol has settled as the way agents reach tools and data, how to adopt it, and what to secure."),
+    ("Context engineering: what goes into the window, and what stays out", "ai", "builders", "explainer",
+     "Instructions, tool results, memory and retrieved data competing for space, and how choosing well cuts both cost and mistakes."),
+    ("Agent memory without the magic", "ai", "builders", "explainer",
+     "Short-term vs long-term memory, what to store, what to forget, and where it lives."),
+    ("One agent or many? When multi-agent is a mistake", "ai", "builders", "decision",
+     "When splitting into several agents helps, when one agent with good tools is better, and the cost of getting it wrong."),
+    ("Agent-to-agent protocols (A2A): worth watching, not yet settled", "ai", "builders", "explainer",
+     "What A2A promises, where it stands today, and how to stay ready without betting on it."),
     ("Choosing your agent loop: LangGraph vs OpenAI Agents SDK vs Claude Agent SDK vs plain code", "ai", "builders", "decision",
      "A comparison of orchestration and loop frameworks, with a 'pick this when' table."),
     ("Just use Postgres: the one database your agent needs", "ai", "builders", "decision",
@@ -58,6 +76,10 @@ PLANNED = [
      "Why OpenTelemetry is the one settled bet in a moving stack, its GenAI conventions, and how to adopt it so you can switch between Langfuse, Phoenix, Datadog or Azure Monitor without touching agent code."),
     ("Before it ships: offline evals for autonomous agents", "ai", "builders", "explainer",
      "Golden datasets, LLM-as-judge vs deterministic checks, baselines, and catching regressions."),
+    ("It passed offline. Now watch it live: online evals and monitoring", "ai", "builders", "explainer",
+     "Sampling real conversations, scoring them, alerting on drift, and feeding failures back into the offline test set."),
+    ("Shipping agents: versioning prompts, models and tools together", "ai", "builders", "explainer",
+     "Treating prompt, model and tool versions as one release, with canary rollouts and a quick rollback."),
     ("The agent testing pyramid", "ai", "builders", "explainer",
      "The whole testing strategy: unit, tool contracts, simulation, evals and production monitoring."),
     # AgentTwin (simulation: what an agent must face before it meets real people)
@@ -79,10 +101,19 @@ PLANNED = [
     ("Most of an agent is ordinary software", "ai", "builders", "explainer", ""),
     ("Why we wrote our own agent loop", "ai", "builders", "decision", ""),
     ("The horse and the harness", "ai", "leaders", "leader-brief", ""),
+    ("Should you build or buy your agent? A one-page guide for leaders", "ai", "leaders", "leader-brief",
+     "The questions that decide it: how special your process is, who owns the data, what it costs to run, and what you can switch later."),
+    ("Measuring agent ROI: what to count before you scale", "ai", "leaders", "leader-brief",
+     "Cost per task, hours saved, error rate and human review time, counted before and after, in plain numbers."),
 
     # ---- LLM Engineering
     ("There is no best model, only the best model for this step", "llm", "builders", "decision",
      "How to pick models for a vertical agent: test on your own tasks, weigh accuracy against cost and speed, open vs closed, where data may go, and a model per step."),
+
+    ("The LLM gateway: the switch between your agent and every model", "llm", "builders", "explainer",
+     "Routing, fallbacks, caching, budgets and keys in one place, so changing models never means changing agent code."),
+    ("Prompt, RAG or fine-tune? Pick in that order", "llm", "builders", "decision",
+     "What each one fixes, what it costs, and why most teams should exhaust the first before reaching for the next."),
 
     # ---- Cost
     ("What one conversation costs: under a tenth of a cent", "cost", "leaders", "leader-brief", ""),
@@ -90,4 +121,8 @@ PLANNED = [
     # ---- Career
     ("The AI engineer roadmap: what to learn, in what order, and what to skip", "career", "builders", "explainer",
      "A phased path from data or software engineer to AI engineer, with a picture map of the skills."),
+    ("From data engineer to AI engineer: the 6-month switch", "career", "builders", "explainer",
+     "What a data engineer already knows that transfers, the gaps to close month by month, and a project to prove it."),
+    ("What a forward-deployed engineer actually does", "career", "builders", "explainer",
+     "Discovery, a deterministic-first scope, a prototype, deploying in the customer's cloud, proving it with evals and cost, and handing over."),
 ]
