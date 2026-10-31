@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streaming on Databricks without the pain · Clean Data Engineering</title>
+<meta name="description" content="Most teams that ask for streaming need fresh data, not a stream. Start by asking how fresh the data must be; often a batch every 5 to 15 minutes is enough and far simpler. When you do stream, run the same medallion at two speeds, keep your checkpoints, set a watermark, and pick a trigger that matches how often the data actually arrives."><link rel="canonical" href="https://cleandataengineering.ai/writing/databricks-streaming/">
+<meta property="og:title" content="Streaming on Databricks without the pain"><meta property="og:description" content="Most teams that ask for streaming need fresh data, not a stream. Start by asking how fresh the data must be; often a batch every 5 to 15 minutes is enough and far simpler. When you do stream, run the same medallion at two speeds, keep your checkpoints, set a watermark, and pick a trigger that matches how often the data actually arrives."><meta property="og:url" content="https://cleandataengineering.ai/writing/databricks-streaming/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · Data Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>Streaming on Databricks without the pain</h1>
+  </div>
+  <div class="summary">Most teams that ask for streaming need fresh data, not a stream. Start by asking how fresh the data must be; often a batch every 5 to 15 minutes is enough and far simpler. When you do stream, run the same medallion at two speeds, keep your checkpoints, set a watermark, and pick a trigger that matches how often the data actually arrives.</div>
+<p>Priya's product manager says the sales dashboard must be "real-time". Two weeks later Priya has a cluster running day and night, a Kafka topic, a folder of checkpoints she is scared to touch, and a dashboard that people look at twice a day.</p>
+<p>Nobody did anything wrong. They just answered the second question first. The first question is whether you need streaming at all.</p>
+<p>This post gives a simple way to decide, and then the handful of ideas that keep a stream boring once you have one.</p>
+<h2>First question: do you need streaming at all?</h2>
+<p>Streaming means the pipeline keeps running and picks up new data within seconds or a few minutes of it arriving. That is powerful, and it costs money and attention every hour of the day. Ask three questions before you build one.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 385" role="img" aria-label="Three questions on the left: does someone act within minutes, is it needed within the hour, is hours old fine or does it arrive in drops. Answers lead right to streaming, frequent batch, or batch."><text class="sm" x="500" y="22" text-anchor="middle">ask in order; stop at the first answer that fits</text><circle class="nm" cx="30" cy="75" r="14"/><text class="nmt" x="30" y="81" text-anchor="middle">1</text><rect class="pf pf-bx" x="54" y="44" width="258" height="78" rx="12"/><rect class="bx ol" x="50" y="40" width="260" height="80" rx="12"/><text class="tt" x="180.0" y="76.5" text-anchor="middle">Act within minutes?</text><text class="sm" x="180.0" y="100.5" text-anchor="middle">someone acts on it fast</text><circle class="nm" cx="30" cy="185" r="14"/><text class="nmt" x="30" y="191" text-anchor="middle">2</text><rect class="pf pf-bx" x="54" y="154" width="258" height="78" rx="12"/><rect class="bx ol" x="50" y="150" width="260" height="80" rx="12"/><text class="tt" x="180.0" y="186.5" text-anchor="middle">Needed within the hour?</text><text class="sm" x="180.0" y="210.5" text-anchor="middle">most dashboards are</text><circle class="nm" cx="30" cy="295" r="14"/><text class="nmt" x="30" y="301" text-anchor="middle">3</text><rect class="pf pf-bx" x="54" y="264" width="258" height="78" rx="12"/><rect class="bx ol" x="50" y="260" width="260" height="80" rx="12"/><text class="tt" x="180.0" y="296.5" text-anchor="middle">Hours old is fine?</text><text class="sm" x="180.0" y="320.5" text-anchor="middle">or it arrives in drops</text><line class="ln" x1="180" y1="122" x2="180" y2="148" marker-end="url(#ar)"/><text class="sm" x="196" y="140" text-anchor="start">no</text><line class="ln" x1="180" y1="232" x2="180" y2="258" marker-end="url(#ar)"/><text class="sm" x="196" y="250" text-anchor="start">no</text><line class="ln" x1="312" y1="80" x2="618" y2="80" marker-end="url(#ar)"/><text class="sm" x="465.0" y="72.0" text-anchor="middle">yes</text><line class="ln" x1="312" y1="190" x2="618" y2="190" marker-end="url(#ar)"/><text class="sm" x="465.0" y="182.0" text-anchor="middle">yes</text><line class="ln" x1="312" y1="300" x2="618" y2="300" marker-end="url(#ar)"/><text class="sm" x="465.0" y="292.0" text-anchor="middle">yes</text><rect class="pf pf-solid" x="624" y="44" width="358" height="78" rx="12"/><rect class="solid ol" x="620" y="40" width="360" height="80" rx="12"/><text class="tt inv" x="800.0" y="76.5" text-anchor="middle">Streaming</text><text class="inv sm2" x="800.0" y="100.5" text-anchor="middle">seconds fresh, always on</text><rect class="pf pf-bxs" x="624" y="154" width="358" height="78" rx="12"/><rect class="bxs ol" x="620" y="150" width="360" height="80" rx="12"/><text class="tt" x="800.0" y="186.5" text-anchor="middle">Frequent batch</text><text class="sm" x="800.0" y="210.5" text-anchor="middle">every 5 to 15 minutes</text><rect class="pf pf-bx" x="624" y="264" width="358" height="78" rx="12"/><rect class="bx ol" x="620" y="260" width="360" height="80" rx="12"/><text class="tt" x="800.0" y="296.5" text-anchor="middle">Batch</text><text class="sm" x="800.0" y="320.5" text-anchor="middle">hourly or daily, simplest</text><text class="sm" x="465" y="368" text-anchor="middle">cost and effort go up as you climb</text><line class="lnd" x1="600" y1="335" x2="600" y2="50"/></svg><figcaption>Do you really need streaming? Most answers land on the middle box.</figcaption></figure>
+<ol><li><strong>Does someone act on this data within minutes?</strong> A fraud check that blocks a payment, stock levels in a quick-commerce store, a live operations screen. If nobody acts that fast, you don't need it that fast.</li><li><strong>Is it needed within the hour, but not within seconds?</strong> For most dashboards and reports, data that is 5 to 15 minutes old is fine. That is a frequent batch, not a stream.</li><li><strong>Is hours old fine, or does the data arrive in drops anyway?</strong> If a partner sends a file every hour, an always-on stream will spend most of each hour waiting. Run a batch on the same schedule as the drops.</li></ol>
+<p>Here is the trade-off in one table.</p>
+<div class="tw"><table><tr><th>Choice</th><th>How fresh</th><th>What it costs</th><th>How hard to run</th></tr><tr><td>Batch (hourly or daily)</td><td>hours</td><td>only while it runs</td><td>easiest</td></tr><tr><td>Frequent batch (every 5 to 15 minutes)</td><td>minutes</td><td>only while it runs, plus start-up time</td><td>easy</td></tr><tr><td>Streaming (always on)</td><td>seconds</td><td>all day, every day</td><td>hardest</td></tr></table></div>
+<p>The middle row is the one most teams should pick first. And as you'll see below, you can write it as streaming code from day one, so moving to a real stream later is a setting, not a rewrite.</p>
+<h2>One medallion, two speeds</h2>
+<p>If you do need streaming, you don't need a second architecture. The same bronze, silver and gold layers from the <a href="/writing/medallion-done-right/">medallion post</a> work at two speeds.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 330" role="img" aria-label="Bronze, silver and gold boxes in a row. A dashed slow lane from daily files enters once a day. A thick fast lane from an event stream flows through continuously."><text class="sm" x="500" y="22" text-anchor="middle">the same layers, the same rules; only the speed changes</text><rect class="pf pf-bx" x="254" y="109" width="198" height="128" rx="12"/><rect class="bx ol" x="250" y="105" width="200" height="130" rx="12"/><text class="tt" x="350.0" y="166.5" text-anchor="middle">Bronze</text><text class="sm" x="350.0" y="190.5" text-anchor="middle">same contract, same checks</text><rect class="pf pf-bx" x="504" y="109" width="198" height="128" rx="12"/><rect class="bx ol" x="500" y="105" width="200" height="130" rx="12"/><text class="tt" x="600.0" y="166.5" text-anchor="middle">Silver</text><text class="sm" x="600.0" y="190.5" text-anchor="middle">same contract, same checks</text><rect class="pf pf-bxs" x="754" y="109" width="198" height="128" rx="12"/><rect class="bxs ol" x="750" y="105" width="200" height="130" rx="12"/><text class="tt" x="850.0" y="166.5" text-anchor="middle">Gold</text><text class="sm" x="850.0" y="190.5" text-anchor="middle">same contract, same checks</text><rect class="bxm ol" x="20" y="40" width="180" height="60" rx="12"/><text class="tt" x="110.0" y="66.5" text-anchor="middle">Daily files</text><text class="sm" x="110.0" y="90.5" text-anchor="middle">slow lane</text><rect class="bxm ol" x="20" y="240" width="180" height="60" rx="12"/><text class="tt" x="110.0" y="266.5" text-anchor="middle">Event stream</text><text class="sm" x="110.0" y="290.5" text-anchor="middle">fast lane</text><path class="lnd" d="M202,70 Q235,72 248,128" marker-end="url(#ar)"/><path class="lnc" d="M202,270 Q235,268 248,212" marker-end="url(#ar)"/><line class="lnd" x1="452" y1="135" x2="498" y2="135" marker-end="url(#ar)"/><line class="lnc" x1="452" y1="205" x2="498" y2="205" marker-end="url(#ar)"/><line class="lnd" x1="702" y1="135" x2="748" y2="135" marker-end="url(#ar)"/><line class="lnc" x1="702" y1="205" x2="748" y2="205" marker-end="url(#ar)"/><text class="sm" x="600" y="75" text-anchor="middle">dashed: most tables, in batches, say once a day</text><text class="sm" x="600" y="275" text-anchor="middle">thick: a few hot tables, flowing all the time</text></svg><figcaption>One medallion, two speeds. Hot tables use the fast lane through the very same layers.</figcaption></figure>
+<p>Most tables move on the slow lane, in batches. A few hot tables move on the fast lane: events land in a bronze stream, flow into silver streaming tables, and feed gold tables that update incrementally, which means only the new rows are processed each time. The contracts, quality checks and one-way rule are the same on both lanes. Only the speed changes.</p>
+<p>This matters because the alternative, a separate streaming system beside the batch one, means every rule is written twice and the two copies drift apart.</p>
+<h2>Your two ways to build it on Databricks</h2>
+<ul><li><strong>Structured Streaming in your own code.</strong> This is Spark's streaming engine. You write the read, the transformation and the write in Python or SQL, and you choose the checkpoint location, the trigger and the write logic yourself. Full control, and full responsibility.</li><li><strong>Lakeflow Declarative Pipelines</strong> (formerly Delta Live Tables). You declare the tables you want, such as a streaming table for silver and a materialized view for gold, and the pipeline works out the order, runs Structured Streaming underneath and manages the checkpoints for you. You also declare quality expectations next to each table.</li></ul>
+<p>For sources, two names come up again and again. <strong>Auto Loader</strong> watches a cloud storage folder and picks up each new file once, which is the usual way to stream files into bronze. <strong>Kafka</strong> and <strong>Azure Event Hubs</strong> are the usual sources when the data is a stream of events to begin with.</p>
+<p>A fair rule of thumb: if your team wants the plumbing handled, start with declarative pipelines. If you need unusual write logic or fine control, write Structured Streaming yourself. Either way, the ideas below are the same.</p>
+<h2>Checkpoints, and why you never delete them</h2>
+<p>A checkpoint is a small folder where the stream writes down how far it has got: which files or which Kafka messages it has already processed, plus any running totals it is keeping.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 350" role="img" aria-label="An open book with a bookmark. Beside it: the checkpoint records what is done; a restart opens at the bookmark and writes each row once to a Delta table. Deleting the checkpoint means starting over or skipping ahead."><path class="hz" d="M60,90 Q160,70 250,95 L250,285 Q160,262 60,280 Z"/><path class="hz" d="M250,95 Q340,70 440,90 L440,280 Q340,262 250,285 Z"/><line class="ln" x1="80" y1="120" x2="230" y2="122"/><line class="ln" x1="80" y1="146" x2="230" y2="148"/><line class="ln" x1="80" y1="172" x2="230" y2="174"/><line class="ln" x1="80" y1="198" x2="230" y2="200"/><line class="ln" x1="80" y1="224" x2="230" y2="226"/><line class="ln" x1="80" y1="250" x2="230" y2="252"/><line class="ln" x1="270" y1="122" x2="420" y2="120"/><line class="ln" x1="270" y1="148" x2="420" y2="146"/><line class="ln" x1="270" y1="174" x2="420" y2="172"/><path class="pf pf-bxs" d="M330,60 L360,60 L360,175 L345,160 L330,175 Z"/><path class="ln" d="M330,60 L360,60 L360,175 L345,160 L330,175 Z"/><text class="sm" x="250" y="320" text-anchor="middle">read up to here; carry on from here</text><rect class="pf pf-solid" x="524" y="44" width="198" height="78" rx="12"/><rect class="solid ol" x="520" y="40" width="200" height="80" rx="12"/><text class="tt inv" x="620.0" y="67.0" text-anchor="middle">Checkpoint</text><text class="inv sm2" x="620.0" y="91.0" text-anchor="middle">what&#x27;s done,</text><text class="inv sm2" x="620.0" y="110.0" text-anchor="middle">running totals</text><rect class="pf pf-bx" x="524" y="164" width="198" height="78" rx="12"/><rect class="bx ol" x="520" y="160" width="200" height="80" rx="12"/><text class="tt" x="620.0" y="196.5" text-anchor="middle">Restart</text><text class="sm" x="620.0" y="220.5" text-anchor="middle">opens at the bookmark</text><line class="ln" x1="620" y1="122" x2="620" y2="158" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="764" y="164" width="218" height="78" rx="12"/><rect class="bxs ol" x="760" y="160" width="220" height="80" rx="12"/><text class="tt" x="870.0" y="196.5" text-anchor="middle">Delta table</text><text class="sm" x="870.0" y="220.5" text-anchor="middle">each row once</text><line class="ln" x1="722" y1="200" x2="758" y2="200" marker-end="url(#ar)"/><rect class="bxm ol" x="520" y="270" width="460" height="70" rx="12"/><text class="tt" x="750.0" y="301.5" text-anchor="middle">Delete it</text><text class="sm" x="750.0" y="325.5" text-anchor="middle">start over (duplicates) or skip ahead (a silent gap)</text><line class="lnc" x1="532" y1="282" x2="556" y2="306"/><line class="lnc" x1="556" y1="282" x2="532" y2="306"/></svg><figcaption>A checkpoint is a bookmark. Lose it and the stream either rereads the book or skips chapters.</figcaption></figure>
+<p>Think of it as a bookmark. When the stream stops, for a deploy, a crash or a cluster restart, it opens the book at the bookmark and carries on. Nothing is read twice and nothing is skipped.</p>
+<p>Delete the checkpoint and you've thrown away the bookmark. Depending on how the stream is set up, it either starts from the very beginning and writes everything again, or starts from "now" and silently skips whatever arrived in between. Both are bad, and neither shows up as an error.</p>
+<p>So: one checkpoint per stream, never shared, never deleted to "fix" something. If you change a stream so much that the old checkpoint no longer fits, treat it as a new stream with a new checkpoint and a planned backfill.</p>
+<h3>Exactly-once into Delta</h3>
+<p>Exactly-once means each record ends up in the target table one time, even if the stream crashes and restarts halfway. When a stream writes to a Delta table, the checkpoint and Delta's transaction log work together so that a batch is either fully committed or not at all, and a restarted batch is not written twice. That is the main reason to keep the bookmark safe.</p>
+<h3>MERGE in foreachBatch for upserts</h3>
+<p>A plain stream only appends rows. But silver usually needs one row per order, updated when the order changes. That is an upsert: update the row if it exists, insert it if it doesn't.</p>
+<p>The common pattern is <code>foreachBatch</code>, which hands you each small batch of new rows as an ordinary table. Inside it you run a Delta <code>MERGE</code> on the business key, such as the order ID. Write the MERGE so that running it twice on the same batch gives the same result, because after a crash a batch can be replayed. A MERGE by key that keeps the latest version of each row is naturally safe in this way.</p>
+<h2>Late data and watermarks</h2>
+<p>Events don't always arrive in order. A delivery app on a phone in a lift might send its "order delivered" event ten minutes late.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 315" role="img" aria-label="A train for the 10:05 window holds its doors for 10 minutes. A passenger four minutes late gets on and is counted. One twenty-five minutes late misses it."><line class="lnc" x1="20" y1="250" x2="980" y2="250"/><rect class="hz" x="40" y="130" width="420" height="110" rx="14"/><rect class="pf pf-bx" x="62" y="150" width="70" height="44" rx="4"/><rect class="ln" x="62" y="150" width="70" height="44" rx="4" fill="none"/><rect class="pf pf-bx" x="157" y="150" width="70" height="44" rx="4"/><rect class="ln" x="157" y="150" width="70" height="44" rx="4" fill="none"/><rect class="pf pf-bx" x="252" y="150" width="70" height="44" rx="4"/><rect class="ln" x="252" y="150" width="70" height="44" rx="4" fill="none"/><rect class="pf pf-bx" x="347" y="150" width="70" height="44" rx="4"/><rect class="ln" x="347" y="150" width="70" height="44" rx="4" fill="none"/><circle class="hz" cx="90" cy="246" r="12"/><circle class="hz" cx="200" cy="246" r="12"/><circle class="hz" cx="310" cy="246" r="12"/><circle class="hz" cx="420" cy="246" r="12"/><text class="bd" x="250" y="225" text-anchor="middle">the 10:05 window</text><circle class="hz" cx="560" cy="90" r="34"/><line class="lnc" x1="560" y1="90" x2="560" y2="66"/><line class="lnc" x1="560" y1="90" x2="578" y2="98"/><text class="sm" x="560" y="150" text-anchor="middle">doors held</text><text class="sm" x="560" y="170" text-anchor="middle">10 minutes</text><circle class="hz" cx="650" cy="188" r="10"/><line class="lnc" x1="650" y1="198" x2="650" y2="222"/><line class="lnc" x1="650" y1="222" x2="641" y2="238"/><line class="lnc" x1="650" y1="222" x2="659" y2="238"/><line class="lnc" x1="650" y1="206" x2="636" y2="198"/><line class="ln" x1="630" y1="205" x2="480" y2="205" marker-end="url(#ar)"/><text class="sm" x="650" y="280" text-anchor="middle">4 minutes late:</text><text class="sm" x="650" y="300" text-anchor="middle">counted</text><circle class="hz" cx="880" cy="188" r="10"/><line class="lnc" x1="880" y1="198" x2="880" y2="222"/><line class="lnc" x1="880" y1="222" x2="871" y2="238"/><line class="lnc" x1="880" y1="222" x2="889" y2="238"/><line class="lnc" x1="880" y1="206" x2="866" y2="198"/><text class="sm" x="880" y="280" text-anchor="middle">25 minutes late:</text><text class="sm" x="880" y="300" text-anchor="middle">missed the train</text><rect class="pf pf-bxs" x="704" y="34" width="278" height="88" rx="12"/><rect class="bxs ol" x="700" y="30" width="280" height="90" rx="12"/><text class="tt" x="840.0" y="62.0" text-anchor="middle">The watermark</text><text class="sm" x="840.0" y="86.0" text-anchor="middle">how long to wait;</text><text class="sm" x="840.0" y="105.0" text-anchor="middle">then close and forget</text></svg><figcaption>A watermark is a train that waits a fixed time. Without one, the train waits for ever and the platform fills up.</figcaption></figure>
+<p>A watermark is how long the stream waits for late events, like a train that holds the doors for a fixed time. You might say "wait up to 10 minutes past the event time". Events within that window are counted. Events later than that miss the train.</p>
+<p>The watermark matters most when the stream keeps a running state, for example counting orders per 5-minute window, removing duplicates, or joining two streams. Without a watermark, the stream must keep every window open for ever in case a late event turns up. That state grows every day until the stream slows down and eventually falls over. With a watermark, old windows are closed and their state is dropped.</p>
+<p>Pick the wait from how late your data really arrives, not from a guess. Too short and you drop real events. Too long and you keep more state than you need.</p>
+<h2>Triggers: how often the tap runs</h2>
+<p>A trigger decides when the stream processes new data. Think of a tap.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 340" role="img" aria-label="Three taps. Always on: a steady flow, compute never stops. Every N minutes: drips on a schedule while compute stays on. Available now: one drop, then the tap is off until the next scheduled run."><text class="sm" x="500" y="22" text-anchor="middle">same code, same checkpoint; only the trigger changes</text><rect class="hz" x="60" y="60" width="90" height="26" rx="6"/><path class="hz" d="M150,66 L180,66 Q192,66 192,80 L192,100 L172,100 L172,86 L150,86 Z"/><rect class="hz" x="96" y="44" width="20" height="16" rx="3"/><rect class="pf pf-bx" x="174" y="102" width="16" height="70"/><line class="ln" x1="174" y1="102" x2="174" y2="172"/><line class="ln" x1="190" y1="102" x2="190" y2="172"/><path class="hz" d="M142,180 L222,180 L214,212 L150,212 Z"/><rect class="pf pf-solid" x="24" y="239" width="298" height="88" rx="12"/><rect class="solid ol" x="20" y="235" width="300" height="90" rx="12"/><text class="tt inv" x="170.0" y="267.0" text-anchor="middle">Always on</text><text class="inv sm2" x="170.0" y="291.0" text-anchor="middle">new data in seconds;</text><text class="inv sm2" x="170.0" y="310.0" text-anchor="middle">compute never stops</text><rect class="hz" x="390" y="60" width="90" height="26" rx="6"/><path class="hz" d="M480,66 L510,66 Q522,66 522,80 L522,100 L502,100 L502,86 L480,86 Z"/><rect class="hz" x="426" y="44" width="20" height="16" rx="3"/><ellipse class="pf pf-bx" cx="512" cy="118" rx="6" ry="8"/><ellipse class="ln" cx="512" cy="118" rx="6" ry="8" fill="none"/><ellipse class="pf pf-bx" cx="512" cy="140" rx="6" ry="8"/><ellipse class="ln" cx="512" cy="140" rx="6" ry="8" fill="none"/><path class="hz" d="M472,180 L552,180 L544,212 L480,212 Z"/><rect class="pf pf-bx" x="354" y="239" width="298" height="88" rx="12"/><rect class="bx ol" x="350" y="235" width="300" height="90" rx="12"/><text class="tt" x="500.0" y="267.0" text-anchor="middle">Every N minutes</text><text class="sm" x="500.0" y="291.0" text-anchor="middle">say every 10 minutes;</text><text class="sm" x="500.0" y="310.0" text-anchor="middle">compute still on</text><rect class="hz" x="720" y="60" width="90" height="26" rx="6"/><path class="hz" d="M810,66 L840,66 Q852,66 852,80 L852,100 L832,100 L832,86 L810,86 Z"/><rect class="hz" x="756" y="44" width="20" height="16" rx="3"/><ellipse class="pf pf-bx" cx="842" cy="118" rx="6" ry="8"/><ellipse class="ln" cx="842" cy="118" rx="6" ry="8" fill="none"/><path class="hz" d="M802,180 L882,180 L874,212 L810,212 Z"/><rect class="pf pf-bxs" x="684" y="239" width="298" height="88" rx="12"/><rect class="bxs ol" x="680" y="235" width="300" height="90" rx="12"/><text class="tt" x="830.0" y="267.0" text-anchor="middle">Available now</text><text class="sm" x="830.0" y="291.0" text-anchor="middle">process what&#x27;s there,</text><text class="sm" x="830.0" y="310.0" text-anchor="middle">then stop; schedule it</text></svg><figcaption>Triggers as a tap. Available-now is streaming code run as a batch, and usually the right place to start.</figcaption></figure>
+<ul><li><strong>Always on.</strong> The stream keeps running and processes new data in small batches as soon as it arrives. Freshest, and the cluster never stops.</li><li><strong>Every N minutes.</strong> The stream stays running but processes on a fixed schedule, such as every 10 minutes. Smoother, but the cluster is still on.</li><li><strong>Available now.</strong> The stream starts, processes everything that has arrived since the last checkpoint, and stops. You schedule it as a job, say every 15 minutes or every hour.</li></ul>
+<p>Available-now is the quiet hero. It is streaming code, with its checkpoint, exactly-once writes and watermarks, run as a batch. That is the frequent batch from the first section. When the business later needs seconds instead of minutes, you change the trigger, not the pipeline.</p>
+<h2>A stream that runs all day costs all day</h2>
+<p>This is the part that surprises people. An always-on stream keeps its compute running whether ten events arrive or ten million. Take an example cluster at ₹200 an hour. Always on, that's ₹4,800 a day. Run the same code with available-now once an hour, taking about five minutes each time, and it is roughly two hours of compute a day, plus start-up time.</p>
+<p>Before you leave a stream always on, look at when the data actually arrives.</p>
+<h2>Mistakes we see most</h2>
+<ol><li><strong>Streaming everything.</strong> Every table gets a stream because one table needed it. Stream the few hot tables; batch the rest.</li><li><strong>Deleting checkpoints.</strong> Done to "reset" a stuck stream. The result is duplicates or a silent gap.</li><li><strong>No watermark.</strong> State grows for ever, the stream gets slower each week, and one day it runs out of memory.</li><li><strong>Always-on compute for data that arrives hourly.</strong> Paying for 24 hours to process a few minutes of work. Use available-now on a schedule.</li><li><strong>Schema changes breaking the stream.</strong> The source adds a column and the stream stops at 2 a.m. Decide in advance what happens: Auto Loader can track the schema and keep unexpected fields in a rescued column instead of losing them, and your pipeline should alert someone and restart cleanly rather than fail in silence.</li></ol>
+<h2>Questions to check your own setup</h2>
+<ol><li>Who acts on this data, and how quickly do they really need it?</li><li>Could this stream run with available-now on a schedule instead?</li><li>Does every stream have its own checkpoint, and does anyone on the team know never to delete it?</li><li>Does every stream that counts, deduplicates or joins have a watermark?</li><li>Is your MERGE safe to run twice on the same batch?</li><li>What happens, and who hears about it, when the source adds a column?</li></ol>
+<p>Streaming is a speed, not a separate world. Choose the slowest speed the business can live with, and the rest gets much easier.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/data-platform-architecture/#streaming">the streaming lane in the full data platform architecture</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

@@ -1,0 +1,234 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Just use Postgres: the one database your agent needs · Clean Data Engineering</title>
+<meta name="description" content="An agent needs to remember a lot of different things: the conversation, what it already did, what is waiting for a person, and what it decided. One PostgreSQL database can hold all of it, which means one thing to secure, back up and pay for. Move a job out only when you see a clear sign that it has outgrown Postgres."><link rel="canonical" href="https://cleandataengineering.ai/writing/just-use-postgres/">
+<meta property="og:title" content="Just use Postgres: the one database your agent needs"><meta property="og:description" content="An agent needs to remember a lot of different things: the conversation, what it already did, what is waiting for a person, and what it decided. One PostgreSQL database can hold all of it, which means one thing to secure, back up and pay for. Move a job out only when you see a clear sign that it has outgrown Postgres."><meta property="og:url" content="https://cleandataengineering.ai/writing/just-use-postgres/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>Just use Postgres: the one database your agent needs</h1>
+  </div>
+  <div class="summary">An agent needs to remember a lot of different things: the conversation, what it already did, what is waiting for a person, and what it decided. One PostgreSQL database can hold all of it, which means one thing to secure, back up and pay for. Move a job out only when you see a clear sign that it has outgrown Postgres.</div>
+<p>Draw the architecture of a typical agent and count the databases. There is Redis for the conversation, a vector database for memory, a queue, a workflow engine with its own store, a log store for the audit trail, and the app's own database. Six things to secure, back up, monitor and pay for, before the agent has answered one question.</p>
+<p>Now look at what each of them actually holds. A few thousand rows of conversation. Some approvals waiting for a person. A list of tool calls already made. That is not six databases' worth of work. It is a few tables.</p>
+<p>As <a href="/writing/model-is-ten-percent/">The model is 10%</a> argues, most of a working agent is the ordinary software around the model, and much of that software is remembering things carefully. Our claims assistant keeps everything that matters in one PostgreSQL server. This post shows what goes in it, and the honest signs that something has outgrown it.</p>
+<h2>One database, many jobs</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 335" role="img" aria-label="A Swiss army knife whose body is PostgreSQL. Seven blades fan out: checkpoints, memory with pgvector, workflows with DBOS, queues, the ledger, approvals and the audit log."><path class="hz" d="M382,227 L228,186 L204,189 L223,203 L378,245 Z"/><text class="bd" x="191" y="190" text-anchor="end">checkpoints</text><path class="hz" d="M426,229 L303,126 L281,119 L292,140 L414,243 Z"/><text class="bd" x="270" y="115" text-anchor="end">memory (pgvector)</text><path class="hz" d="M468,232 L401,87 L383,71 L384,95 L452,240 Z"/><text class="bd" x="377" y="63" text-anchor="end">workflows (DBOS)</text><path class="hz" d="M509,236 L509,76 L500,54 L491,76 L491,236 Z"/><text class="bd" x="500" y="45" text-anchor="middle">queues</text><path class="hz" d="M548,240 L616,95 L617,71 L599,87 L532,232 Z"/><text class="bd" x="623" y="63" text-anchor="start">the ledger</text><path class="hz" d="M586,243 L708,140 L719,119 L697,126 L574,229 Z"/><text class="bd" x="730" y="115" text-anchor="start">approvals</text><path class="hz" d="M622,245 L777,203 L796,189 L772,186 L618,227 Z"/><text class="bd" x="809" y="190" text-anchor="start">audit log</text><rect class="hz" x="330" y="232" width="340" height="84" rx="12"/><rect class="pf pf-solid" x="334" y="236" width="338" height="82" rx="12"/><rect class="solid ol" x="330" y="232" width="340" height="84" rx="12"/><text class="tt inv" x="500.0" y="270.5" text-anchor="middle">PostgreSQL</text><text class="inv sm2" x="500.0" y="294.5" text-anchor="middle">one database, one backup, one bill</text><circle class="hz" cx="640" cy="274" r="9"/></svg><figcaption>One Postgres, seven jobs. Each blade is just a table or two.</figcaption></figure>
+<p>PostgreSQL (Postgres for short) is a relational database that has been around for more than thirty years. It is not exciting, and that is the point. It has transactions, which means several writes either all happen or none do, plus row locks, JSON columns, and extensions such as vector search.</p>
+<p>An agent needs seven kinds of memory, and Postgres can hold every one:</p>
+<ol><li><strong>Conversation state and checkpoints.</strong> A checkpoint is the conversation saved at the end of a turn, so the next turn can pick up where the last one stopped.</li><li><strong>Memory with search by meaning.</strong> The pgvector extension stores <em>embeddings</em>, lists of numbers that capture what a piece of text means, and finds the nearest ones. So "my car was hit" can find a note about a "rear-end collision".</li><li><strong>Durable workflows.</strong> A durable workflow is a function whose progress is saved after every step, so it can wait for days and survive a restart. DBOS, a small Python library, keeps all its workflow state in Postgres tables.</li><li><strong>Queues.</strong> A table of jobs, plus <code>SELECT ... FOR UPDATE SKIP LOCKED</code>, lets many workers each take a different job without stepping on each other. A worker skips rows another worker has already locked.</li><li><strong>The idempotency and delivery ledger.</strong> <em>Idempotent</em> means doing it twice has the same effect as doing it once. The ledger is a table that records each write before it runs, so a retry gets the first answer instead of a second payout.</li><li><strong>Approvals.</strong> A row for each action waiting for a person, with who decided and when.</li><li><strong>The audit log.</strong> An append-only table, one that is only ever added to, of who did what and why.</li></ol>
+<h2>Six stores, or one</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 340" role="img" aria-label="Left: an agent wired to six separate stores: Redis, a vector database, a queue, a workflow database, a log store and an app database. Right: the same agent with one PostgreSQL holding checkpoints, the ledger, approvals, escalations, the DBOS tables, and jobs, memory and audit."><text class="lbl" x="240" y="22" text-anchor="middle">BEFORE: SIX STORES</text><text class="lbl" x="760" y="22" text-anchor="middle">AFTER: ONE POSTGRES</text><line class="lnd" x1="500" y1="10" x2="500" y2="330"/><rect class="bxm ol" x="5" y="40" width="130" height="56" rx="12"/><text class="tt" x="70.0" y="74.0" text-anchor="middle">Redis</text><line class="lnd" x1="135" y1="68" x2="178" y2="168"/><rect class="bxm ol" x="5" y="140" width="130" height="56" rx="12"/><text class="tt" x="70.0" y="174.0" text-anchor="middle">Vector DB</text><line class="lnd" x1="135" y1="168" x2="178" y2="168"/><rect class="bxm ol" x="5" y="240" width="130" height="56" rx="12"/><text class="tt" x="70.0" y="274.0" text-anchor="middle">Queue</text><line class="lnd" x1="135" y1="268" x2="178" y2="168"/><rect class="bxm ol" x="345" y="40" width="130" height="56" rx="12"/><text class="tt" x="410.0" y="74.0" text-anchor="middle">Workflow DB</text><line class="lnd" x1="345" y1="68" x2="302" y2="168"/><rect class="bxm ol" x="345" y="140" width="130" height="56" rx="12"/><text class="tt" x="410.0" y="174.0" text-anchor="middle">Log store</text><line class="lnd" x1="345" y1="168" x2="302" y2="168"/><rect class="bxm ol" x="345" y="240" width="130" height="56" rx="12"/><text class="tt" x="410.0" y="274.0" text-anchor="middle">App DB</text><line class="lnd" x1="345" y1="268" x2="302" y2="168"/><rect class="pf pf-solid" x="182" y="144" width="122" height="54" rx="12"/><rect class="solid ol" x="178" y="140" width="124" height="56" rx="12"/><text class="tt inv" x="240.0" y="174.0" text-anchor="middle">Agent</text><text class="sm" x="240" y="322" text-anchor="middle">6 logins · 6 backups · 6 bills</text><rect class="pf pf-solid" x="534" y="144" width="122" height="54" rx="12"/><rect class="solid ol" x="530" y="140" width="124" height="56" rx="12"/><text class="tt inv" x="592.0" y="174.0" text-anchor="middle">Agent</text><line class="ln" x1="656" y1="168" x2="716" y2="168" marker-end="url(#ar)"/><path class="bx" d="M720,56 L720,284 A130.0,16 0 0 0 980,284 L980,56 A130.0,16 0 0 0 720,56 A130.0,16 0 0 0 980,56"/><text class="bd" x="850" y="92" text-anchor="middle">PostgreSQL</text><text class="sm" x="850" y="124" text-anchor="middle">checkpoints</text><text class="sm" x="850" y="150" text-anchor="middle">requests (ledger)</text><text class="sm" x="850" y="176" text-anchor="middle">approvals</text><text class="sm" x="850" y="202" text-anchor="middle">escalations</text><text class="sm" x="850" y="228" text-anchor="middle">dbos.* (workflows)</text><text class="sm" x="850" y="254" text-anchor="middle">jobs, memory, audit</text><text class="sm" x="760" y="322" text-anchor="middle">1 login · 1 backup · 1 bill</text></svg><figcaption>Every extra store is another login, backup schedule and bill. One Postgres holds the same jobs as tables.</figcaption></figure>
+<p>Each extra store looks free on the day you add it. The bill arrives later, in four ways.</p>
+<ul><li><strong>Security.</strong> Every store needs its own logins, network rules, encryption keys and access reviews. Every one is a place where customer data can leak.</li><li><strong>Backups.</strong> Six stores means six backup schedules that are never quite in step. Restore them after an incident and the conversation says a payout is waiting, while the workflow engine says it was paid.</li><li><strong>Transactions.</strong> With one database, "save the approval and record it in the audit log" is one transaction. With two stores, you need extra machinery to keep them agreeing, and you will get it wrong at least once.</li><li><strong>Money and people.</strong> Each store is a line on the bill and a thing someone must understand at 2 a.m.</li></ul>
+<p>With one Postgres, a join answers questions that would otherwise need a script across three systems: "show me every approval Asha decided this week, with the conversation that led to it."</p>
+<h2>One turn, table by table</h2>
+<p>Here is what the claims assistant writes when Rohan, a policyholder, sends a message. Everything lives in one database, <code>claims_agent</code>, in a schema called <code>agent_state</code>, with DBOS's own tables in a schema called <code>dbos</code>.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 420" role="img" aria-label="Six steps of one turn and the tables each touches: front door reads checkpoints and adds a row to requests; anything waiting reads approvals and the dbos tables; the model writes nothing; each write tool claims a row in requests; save writes checkpoints; settle updates requests."><rect class="pf pf-bx" x="44" y="24" width="228" height="46" rx="12"/><rect class="bx ol" x="40" y="20" width="230" height="48" rx="12"/><text class="tt" x="155.0" y="50.0" text-anchor="middle">Front door</text><circle class="nm" cx="30" cy="44" r="14"/><text class="nmt" x="30" y="50" text-anchor="middle">1</text><line class="ln" x1="272" y1="44" x2="332" y2="44" marker-end="url(#ar)"/><text class="tx" x="342" y="50" text-anchor="start">read the newest checkpoint; add a delivery row</text><text class="bd" x="980" y="50" text-anchor="end">checkpoints, requests</text><rect class="pf pf-bx" x="44" y="86" width="228" height="46" rx="12"/><rect class="bx ol" x="40" y="82" width="230" height="48" rx="12"/><text class="tt" x="155.0" y="112.0" text-anchor="middle">Anything waiting?</text><circle class="nm" cx="30" cy="106" r="14"/><text class="nmt" x="30" y="112" text-anchor="middle">2</text><line class="ln" x1="272" y1="106" x2="332" y2="106" marker-end="url(#ar)"/><text class="tx" x="342" y="112" text-anchor="start">a payout or a hand-off still pending?</text><text class="bd" x="980" y="112" text-anchor="end">approvals, dbos</text><rect class="pf pf-solid" x="44" y="148" width="228" height="46" rx="12"/><rect class="solid ol" x="40" y="144" width="230" height="48" rx="12"/><text class="tt inv" x="155.0" y="174.0" text-anchor="middle">The model thinks</text><circle class="nm" cx="30" cy="168" r="14"/><text class="nmt" x="30" y="174" text-anchor="middle">3</text><line class="ln" x1="272" y1="168" x2="332" y2="168" marker-end="url(#ar)"/><text class="tx" x="342" y="174" text-anchor="start">writes nothing at all</text><text class="sm" x="980" y="174" text-anchor="end">no table</text><rect class="pf pf-bxs" x="44" y="210" width="228" height="46" rx="12"/><rect class="bxs ol" x="40" y="206" width="230" height="48" rx="12"/><text class="tt" x="155.0" y="236.0" text-anchor="middle">Each write tool</text><circle class="nm" cx="30" cy="230" r="14"/><text class="nmt" x="30" y="236" text-anchor="middle">4</text><line class="ln" x1="272" y1="230" x2="332" y2="230" marker-end="url(#ar)"/><text class="tx" x="342" y="236" text-anchor="start">claim a row with the call&#x27;s key first</text><text class="bd" x="980" y="236" text-anchor="end">requests</text><rect class="pf pf-bx" x="44" y="272" width="228" height="46" rx="12"/><rect class="bx ol" x="40" y="268" width="230" height="48" rx="12"/><text class="tt" x="155.0" y="298.0" text-anchor="middle">Save</text><circle class="nm" cx="30" cy="292" r="14"/><text class="nmt" x="30" y="298" text-anchor="middle">5</text><line class="ln" x1="272" y1="292" x2="332" y2="292" marker-end="url(#ar)"/><text class="tx" x="342" y="298" text-anchor="start">insert or update this turn&#x27;s checkpoint</text><text class="bd" x="980" y="298" text-anchor="end">checkpoints</text><rect class="pf pf-bx" x="44" y="334" width="228" height="46" rx="12"/><rect class="bx ol" x="40" y="330" width="230" height="48" rx="12"/><text class="tt" x="155.0" y="360.0" text-anchor="middle">Settle</text><circle class="nm" cx="30" cy="354" r="14"/><text class="nmt" x="30" y="360" text-anchor="middle">6</text><line class="ln" x1="272" y1="354" x2="332" y2="354" marker-end="url(#ar)"/><text class="tx" x="342" y="360" text-anchor="start">mark the delivery row answered</text><text class="bd" x="980" y="360" text-anchor="end">requests</text><text class="sm" x="500" y="408" text-anchor="middle">read once at the start, guard each write in the middle, save once at the end</text></svg><figcaption>One turn of the claims assistant, by table. Every table is in the same database, claims_agent.</figcaption></figure>
+<ol><li><strong>Front door.</strong> Read the newest row in <code>checkpoints</code> for Rohan's conversation. Insert a delivery row in <code>requests</code>, marked in flight, so the same message sent twice is answered once.</li><li><strong>Anything waiting?</strong> Read <code>approvals</code> and DBOS's tables to see if a payout or a hand-off is still pending.</li><li><strong>The model thinks.</strong> No table is touched at all. Model calls are the one part of the turn that writes nothing.</li><li><strong>Each write tool.</strong> Before registering a claim or asking for a payout, insert a row in <code>requests</code> with the tool call's key. If the row is already there, the stored result comes back and the tool does not run again.</li><li><strong>Save.</strong> Insert or update the <code>checkpoints</code> row for this turn. "Insert, or update if this run id is already there" means a retried save can't make a duplicate.</li><li><strong>Settle.</strong> Mark the delivery row answered, with the reply. It is settled even when the turn failed, so a retry gets the same answer.</li></ol>
+<p>When Rohan asks to release ₹25,001 on claim CLM-010004, which is above the automatic limit of ₹25,000, step 4 starts a DBOS workflow. It writes a row in <code>approvals</code> and a row in <code>dbos.workflow_status</code>, and goes to sleep. No server is held while it waits, only rows. When Asha, the claims handler, clicks Approve, her decision lands in <code>dbos.notifications</code>, and the workflow wakes and pays once. The full story is in <a href="/writing/human-in-the-loop/">Human in the loop without humans in the way</a>.</p>
+<p>Add <code>sessions</code>, for encrypted sign-in tokens, and <code>escalations</code>, for hand-offs, and that is the whole agent: five tables of ours and DBOS's own, in one small managed server.</p>
+<p>To be honest about what is built: the conversation, the ledger, approvals, hand-offs and DBOS all run in Postgres today. Memory with pgvector is designed but not built yet. A simple audit table is easy to add, because the decision is already written in <code>approvals</code> with who decided it.</p>
+<h2>Postgres is on every cloud</h2>
+<p>You don't have to run it yourself. Managed Postgres, where the cloud handles patches, backups and failover, is offered everywhere:</p>
+<div class="tw"><table><tr><th>Where you are</th><th>Managed Postgres</th></tr><tr><td>Databricks</td><td>Lakebase</td></tr><tr><td>Azure</td><td>Azure Database for PostgreSQL</td></tr><tr><td>Google Cloud</td><td>Cloud SQL, AlloyDB</td></tr><tr><td>AWS</td><td>Aurora, RDS</td></tr><tr><td>Anywhere</td><td>Neon, Supabase</td></tr></table></div>
+<p>So choosing Postgres doesn't lock you to a cloud. The same tables and the same SQL move with you. Before you rely on pgvector, check that the extension is enabled on the service and version you picked.</p>
+<h2>When to move something out</h2>
+<p>Postgres is the right default, not the answer to everything. Three signs tell you a job has outgrown it.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 360" role="img" aria-label="Three yellow warning signs. A huge vector collection whose index no longer fits in memory: move to a search service. Heavy analytics fighting the agent: move to the lakehouse. Very high write rates: move to an event store."><path class="zy" d="M170,20 L218,68 L170,116 L122,68 Z"/><path class="ln" d="M170,20 L218,68 L170,116 L122,68 Z"/><line class="lnc" x1="170" y1="44" x2="170" y2="78"/><circle class="hk" cx="170" cy="92" r="4"/><line class="lnc" x1="170" y1="116" x2="170" y2="148"/><rect class="pf pf-bxs" x="24" y="154" width="298" height="70" rx="12"/><rect class="bxs ol" x="20" y="150" width="300" height="72" rx="12"/><text class="tt" x="170.0" y="182.5" text-anchor="middle">Huge vector collection</text><text class="sm" x="170.0" y="206.5" text-anchor="middle">the index no longer fits in memory</text><line class="ln" x1="170" y1="224" x2="170" y2="262" marker-end="url(#ar)"/><rect class="bxm ol" x="60" y="265" width="220" height="50" rx="12"/><text class="tt" x="170.0" y="296.0" text-anchor="middle">move to a search service</text><path class="zy" d="M500,20 L548,68 L500,116 L452,68 Z"/><path class="ln" d="M500,20 L548,68 L500,116 L452,68 Z"/><line class="lnc" x1="500" y1="44" x2="500" y2="78"/><circle class="hk" cx="500" cy="92" r="4"/><line class="lnc" x1="500" y1="116" x2="500" y2="148"/><rect class="pf pf-bxs" x="354" y="154" width="298" height="70" rx="12"/><rect class="bxs ol" x="350" y="150" width="300" height="72" rx="12"/><text class="tt" x="500.0" y="182.5" text-anchor="middle">Heavy analytics</text><text class="sm" x="500.0" y="206.5" text-anchor="middle">a year of rows, fighting the agent</text><line class="ln" x1="500" y1="224" x2="500" y2="262" marker-end="url(#ar)"/><rect class="bxm ol" x="390" y="265" width="220" height="50" rx="12"/><text class="tt" x="500.0" y="296.0" text-anchor="middle">move to the lakehouse</text><path class="zy" d="M830,20 L878,68 L830,116 L782,68 Z"/><path class="ln" d="M830,20 L878,68 L830,116 L782,68 Z"/><line class="lnc" x1="830" y1="44" x2="830" y2="78"/><circle class="hk" cx="830" cy="92" r="4"/><line class="lnc" x1="830" y1="116" x2="830" y2="148"/><rect class="pf pf-bxs" x="684" y="154" width="298" height="70" rx="12"/><rect class="bxs ol" x="680" y="150" width="300" height="72" rx="12"/><text class="tt" x="830.0" y="182.5" text-anchor="middle">Very high write rates</text><text class="sm" x="830.0" y="206.5" text-anchor="middle">events faster than one server writes</text><line class="ln" x1="830" y1="224" x2="830" y2="262" marker-end="url(#ar)"/><rect class="bxm ol" x="720" y="265" width="220" height="50" rx="12"/><text class="tt" x="830.0" y="296.0" text-anchor="middle">move to an event store</text><text class="sm" x="500" y="345" text-anchor="middle">move only the job that shows the sign; everything else stays in Postgres</text></svg><figcaption>The three signs that a job has outgrown Postgres. No sign, no move.</figcaption></figure>
+<ol><li><strong>The vector collection gets very large.</strong> pgvector works well while its index fits comfortably in the server's memory. When your documents grow far past that and searches slow down, move search to a dedicated service. The tutorial names Azure AI Search as the fallback if the corpus outgrows pgvector.</li><li><strong>Heavy analytics.</strong> "Cost per conversation, by week, for the last year" scans millions of rows and fights the agent for the same server. Copy the data to the lakehouse and run reports there. Postgres serves the agent; the lakehouse serves the analysts.</li><li><strong>Very high write rates.</strong> If traces or events pour in faster than one server can write them, send them to a store built for that. Keep the ledger and approvals in Postgres, because those need transactions.</li></ol>
+<p>Move only the job that shows the sign. Everything else stays where it is.</p>
+<h2>What goes wrong</h2>
+<ul><li><strong>Adding a store for each new feature.</strong> "We need memory, so add a vector database." Ask first whether a table and an extension would do.</li><li><strong>Treating Postgres as a dump.</strong> One <code>events</code> table with a JSON blob for everything is not a design. Give each job its own table with real columns, as <code>requests</code>, <code>checkpoints</code> and <code>approvals</code> have.</li><li><strong>Running reports on the agent's database.</strong> One long query at month-end slows every customer's turn. Analytics go to the lakehouse.</li><li><strong>Holding a connection while waiting.</strong> An approval can take hours. Put the wait in a durable workflow, as rows, not in an open request.</li><li><strong>No clean-up.</strong> The tutorial deletes checkpoints older than 30 days and can erase one person's rows on request. Decide this on day one.</li><li><strong>Moving out too early.</strong> Leaving Postgres because "it won't scale" before any sign appears just buys you six stores and the problems above.</li></ul>
+<h2>Seven questions to check your own agent</h2>
+<ol><li>How many separate stores does your agent write to, and could you name what each one holds?</li><li>If the server restarts in the middle of a turn, what is lost?</li><li>If the same message arrives twice, what stops a second payout?</li><li>Where does an approval wait, and does anything hold a thread while it does?</li><li>Can you restore everything to one consistent moment after an incident?</li><li>Do reports run on the same database that serves customers?</li><li>Which of the three signs have you actually seen, and which are you guessing at?</li></ol>
+<p>Start with one database, and make each new store earn its place with a sign you can point to.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/state-tables.html">the tables in the Agent Harness tutorial, one by one</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

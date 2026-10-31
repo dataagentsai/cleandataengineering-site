@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The agent testing pyramid · Clean Data Engineering</title>
+<meta name="description" content="Most of an agent is ordinary software, so most of its tests are ordinary tests that run in seconds for free. Tests that need a real model are few, and they sit near the top. This post draws the whole testing strategy as a pyramid, from unit tests at the bottom to production monitoring at the top."><link rel="canonical" href="https://cleandataengineering.ai/writing/agent-testing-pyramid/">
+<meta property="og:title" content="The agent testing pyramid"><meta property="og:description" content="Most of an agent is ordinary software, so most of its tests are ordinary tests that run in seconds for free. Tests that need a real model are few, and they sit near the top. This post draws the whole testing strategy as a pyramid, from unit tests at the bottom to production monitoring at the top."><meta property="og:url" content="https://cleandataengineering.ai/writing/agent-testing-pyramid/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>The agent testing pyramid</h1>
+  </div>
+  <div class="summary">Most of an agent is ordinary software, so most of its tests are ordinary tests that run in seconds for free. Tests that need a real model are few, and they sit near the top. This post draws the whole testing strategy as a pyramid, from unit tests at the bottom to production monitoring at the top.</div>
+<p>Ask a team how they test their agent and you often hear: "We run it against the model and look at the answers." Every test is slow, every run costs money, and the same test passes on Monday and fails on Tuesday.</p>
+<p>That isn't a testing problem. It's a shape problem. The model is one function in a large program. The rest is routing, tools, checks, state and retries, as we drew in <a href="/writing/model-is-ten-percent/">the model is 10%</a>. That code can be tested the way you test any code: exactly, quickly and for free.</p>
+<p>So the tests form a pyramid. Lots of cheap, exact tests at the bottom. A few slow, costly ones at the top. This post walks it from the bottom up.</p>
+<h2>The whole pyramid</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 482" role="img" aria-label="A pyramid of nine layers. From the wide bottom to the narrow top: unit tests, contract tests, recorded model replies, scenario simulation, golden-set evals, red teaming, failure drills, load tests, production monitoring. A dashed line sits above recorded model replies: below it nothing calls a live model. An arrow on the left points up from many, fast, free to few, slow, costly."><rect class="pf pf-solid" x="439.0" y="50" width="208" height="34" rx="12"/><rect class="solid ol" x="435.0" y="46" width="210" height="36" rx="12"/><text class="tt inv" x="540.0" y="60.5" text-anchor="middle">production monitoring</text><text class="inv sm2" x="540.0" y="84.5" text-anchor="middle"></text><rect class="pf pf-bxs" x="407.0" y="94" width="272" height="34" rx="12"/><rect class="bxs ol" x="403.0" y="90" width="274" height="36" rx="12"/><text class="tt" x="540.0" y="104.5" text-anchor="middle">load tests</text><text class="sm" x="540.0" y="128.5" text-anchor="middle"></text><rect class="pf pf-bxs" x="375.0" y="138" width="336" height="34" rx="12"/><rect class="bxs ol" x="371.0" y="134" width="338" height="36" rx="12"/><text class="tt" x="540.0" y="148.5" text-anchor="middle">failure drills</text><text class="sm" x="540.0" y="172.5" text-anchor="middle"></text><rect class="pf pf-bxs" x="343.0" y="182" width="400" height="34" rx="12"/><rect class="bxs ol" x="339.0" y="178" width="402" height="36" rx="12"/><text class="tt" x="540.0" y="192.5" text-anchor="middle">red teaming</text><text class="sm" x="540.0" y="216.5" text-anchor="middle"></text><rect class="pf pf-bxs" x="311.0" y="226" width="464" height="34" rx="12"/><rect class="bxs ol" x="307.0" y="222" width="466" height="36" rx="12"/><text class="tt" x="540.0" y="236.5" text-anchor="middle">golden-set evals</text><text class="sm" x="540.0" y="260.5" text-anchor="middle"></text><rect class="pf pf-bxs" x="279.0" y="270" width="528" height="34" rx="12"/><rect class="bxs ol" x="275.0" y="266" width="530" height="36" rx="12"/><text class="tt" x="540.0" y="280.5" text-anchor="middle">scenario simulation</text><text class="sm" x="540.0" y="304.5" text-anchor="middle"></text><rect class="pf pf-bx" x="247.0" y="314" width="592" height="34" rx="12"/><rect class="bx ol" x="243.0" y="310" width="594" height="36" rx="12"/><text class="tt" x="540.0" y="324.5" text-anchor="middle">recorded model replies</text><text class="sm" x="540.0" y="348.5" text-anchor="middle"></text><rect class="pf pf-bx" x="215.0" y="358" width="656" height="34" rx="12"/><rect class="bx ol" x="211.0" y="354" width="658" height="36" rx="12"/><text class="tt" x="540.0" y="368.5" text-anchor="middle">contract tests</text><text class="sm" x="540.0" y="392.5" text-anchor="middle"></text><rect class="pf pf-bx" x="183.0" y="402" width="720" height="34" rx="12"/><rect class="bx ol" x="179.0" y="398" width="722" height="36" rx="12"/><text class="tt" x="540.0" y="412.5" text-anchor="middle">unit tests</text><text class="sm" x="540.0" y="436.5" text-anchor="middle"></text><line class="lnd" x1="200" y1="307" x2="870" y2="307"/><text class="sm" x="990" y="263" text-anchor="end">above the line:</text><text class="sm" x="990" y="283" text-anchor="end">a real model</text><text class="sm" x="990" y="303" text-anchor="end">or real load</text><text class="sm" x="990" y="331" text-anchor="end">below it: no</text><text class="sm" x="990" y="351" text-anchor="end">live model,</text><text class="sm" x="990" y="371" text-anchor="end">$0, seconds</text><line class="ln" x1="70" y1="428" x2="70" y2="52" marker-end="url(#ar)"/><text class="bd" x="70" y="32" text-anchor="middle">few, slow, costly</text><text class="bd" x="70" y="464" text-anchor="middle">many, fast, free</text></svg><figcaption>The bottom three layers never call a live model. They are most of your tests, and they run on every save.</figcaption></figure>
+<p>The line that matters is the dashed one. Below it, the model is replaced by a script or a recording, so nothing calls a live model. Above it, a real model, real attackers or real traffic are involved, and each test costs time or money.</p>
+<p>Here are real numbers from the claims assistant in our Agent Harness tutorial: <strong>750 tests from 35 files, 0 failures, in about 80 seconds.</strong> The larger reference agent has 2,179 tests from 106 files. Almost all of them sit below the line.</p>
+<h2>Layer 1: unit tests for the harness</h2>
+<p>The harness is the code around the model: the checks, the tools, the router that picks a path. Each piece is an ordinary function, so it gets ordinary unit tests.</p>
+<p>The best way to write them is as a table. Take the rule "a payout over the ₹25,000 limit needs a person". The test is one function and a table of rows: ₹24,999, ₹25,000 and ₹25,001. One rupee under the limit, exactly on it, one rupee over. Most bugs live at the edges, so write the edges out.</p>
+<p>In the tutorial's agents, the model in these tests is a <strong>scripted model</strong>: a fake that returns the reply the test tells it to. The database and tools are in-memory fakes too. A test like "the model asks for a refund nobody requested; the check must block it" runs in milliseconds and gives the same answer every time.</p>
+<h2>Layer 2: contract tests for every tool and port</h2>
+<p>A <strong>port</strong> is a socket in your code where a vendor plugs in: the model provider, sign-in, secrets, logging, approvals, storage. Each vendor's code that fits a socket is an <strong>adapter</strong>.</p>
+<p>A contract test is one table of rows per port that every adapter must pass. In the tutorial, six ports each have their own table. The model port has four adapters, from a scripted model to an Azure gateway, and all four pass the same rows.</p>
+<p>That's what makes "swap Groq for Azure" or "swap Keycloak for Entra" a configuration change instead of a rewrite. The same idea applies to tools. If a tool says it returns a claim with an amount and a status, a test holds it to that promise.</p>
+<h2>Layer 3: recorded model replies</h2>
+<p>Sometimes you want the real loop with a real model's reply, but not the cost or the randomness. That's what a <strong>cassette</strong> is for.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 290" role="img" aria-label="Left: a real model&#x27;s reply is recorded once onto a cassette tape, saved with the question it answers. Right: the cassette plays the same reply into the agent&#x27;s real loop, with no network and no cost. If the question has changed, the test fails loudly; it never falls back to calling the real model."><text class="lbl" x="250" y="24" text-anchor="middle">ONCE: RECORD</text><text class="lbl" x="750" y="24" text-anchor="middle">EVERY TEST AFTER: REPLAY</text><line class="lnd" x1="500" y1="10" x2="500" y2="290"/><rect class="pf pf-bx" x="14" y="54" width="178" height="78" rx="12"/><rect class="bx ol" x="10" y="50" width="180" height="80" rx="12"/><text class="tt" x="100.0" y="77.0" text-anchor="middle">Real model</text><text class="sm" x="100.0" y="101.0" text-anchor="middle">costs money, and</text><text class="sm" x="100.0" y="120.0" text-anchor="middle">differs each time</text><line class="ln" x1="192" y1="90" x2="248" y2="90" marker-end="url(#ar)"/><text class="sm" x="220.0" y="82.0" text-anchor="middle">reply</text><rect class="hz" x="252" y="52" width="120" height="76" rx="8"/><rect class="pf pf-bxs" x="266" y="62" width="92" height="45.6" rx="5"/><rect class="hz" x="266" y="62" width="92" height="45.6" rx="5" fill-opacity="0"/><circle class="hz" cx="290.4" cy="86.2" r="10"/><circle class="hk" cx="290.4" cy="86.2" r="3"/><circle class="hz" cx="333.6" cy="86.2" r="10"/><circle class="hk" cx="333.6" cy="86.2" r="3"/><line class="ln" x1="290.4" y1="96.2" x2="333.6" y2="96.2"/><path class="hz" d="M276,128 L284,118 L340,118 L348,128 Z"/><text class="sm" x="312" y="152" text-anchor="middle">saved to a file</text><text class="sm" x="312" y="172" text-anchor="middle">with the question it answers</text><circle class="zr" cx="392" cy="60" r="9"/><circle class="hz" cx="392" cy="60" r="9" fill-opacity="0"/><text class="sm" x="410" y="65" text-anchor="start">rec</text><rect class="hz" x="530" y="52" width="120" height="76" rx="8"/><rect class="pf pf-bxs" x="544" y="62" width="92" height="45.6" rx="5"/><rect class="hz" x="544" y="62" width="92" height="45.6" rx="5" fill-opacity="0"/><circle class="hz" cx="568.4" cy="86.2" r="10"/><circle class="hk" cx="568.4" cy="86.2" r="3"/><circle class="hz" cx="611.6" cy="86.2" r="10"/><circle class="hk" cx="611.6" cy="86.2" r="3"/><line class="ln" x1="568.4" y1="96.2" x2="611.6" y2="96.2"/><path class="hz" d="M554,128 L562,118 L618,118 L626,128 Z"/><path class="hz" d="M534,30 L534,46 L548,38 Z"/><line class="ln" x1="652" y1="100" x2="718" y2="100" marker-end="url(#ar)"/><rect class="pf pf-solid" x="726" y="54" width="268" height="88" rx="12"/><rect class="solid ol" x="722" y="50" width="270" height="90" rx="12"/><text class="tt inv" x="857.0" y="82.0" text-anchor="middle">Your agent&#x27;s real loop</text><text class="inv sm2" x="857.0" y="106.0" text-anchor="middle">same reply every time,</text><text class="inv sm2" x="857.0" y="125.0" text-anchor="middle">no network, $0</text><rect class="pf pf-bxs" x="534" y="194" width="198" height="78" rx="12"/><rect class="bxs ol" x="530" y="190" width="200" height="80" rx="12"/><text class="tt" x="630.0" y="217.0" text-anchor="middle">The test fails</text><text class="sm" x="630.0" y="241.0" text-anchor="middle">loudly: re-record</text><text class="sm" x="630.0" y="260.0" text-anchor="middle">on purpose</text><line class="ln" x1="560" y1="132" x2="560" y2="186" marker-end="url(#ar)"/><text class="sm" x="572" y="166" text-anchor="start">question changed?</text><rect class="bxm ol" x="760" y="190" width="230" height="80" rx="12"/><text class="tt" x="875.0" y="217.0" text-anchor="middle">No live fallback</text><text class="sm" x="875.0" y="241.0" text-anchor="middle">it never quietly calls</text><text class="sm" x="875.0" y="260.0" text-anchor="middle">the real model</text></svg><figcaption>A cassette is a recorded model reply. Record once, replay forever, and fail if the question no longer matches.</figcaption></figure>
+<p>You call the real model once and save its reply to a file, keyed by a fingerprint of the question: the messages, the tool names and the settings. Every test after that plays the reply back. No network, no bill, and the same reply every time.</p>
+<p>Two rules make cassettes safe:</p>
+<ol><li><strong>A mismatch fails the test.</strong> If the question has changed, for example because a tool was added, the player refuses. You re-record on purpose.</li><li><strong>There is no fallback.</strong> The player can't quietly call the live model when it misses. A test that spends money without telling you is the worst kind of test.</li></ol>
+<h2>Layer 4: scenario simulation</h2>
+<p>A <strong>scenario</strong> is a whole small story: who asks, what they say turn by turn, what goes wrong, and what must be true at the end. The tutorial runs these in <strong>AgentTwin</strong>, a simulated world around the real, unchanged agent. It has a fake customer, a fake claims system, a clock that can jump ahead, and faults it can switch on.</p>
+<p>The key is that a scenario is judged by <strong>the state of the world</strong>, not by the wording of the reply. Was anything paid? Was the payout made exactly once? Was a person brought in? That's what catches "Yes, it's registered" when nothing was registered.</p>
+<p>The claims assistant passes 29 of 29 scenarios. Today they run with a scripted model, once each. Running them with a live model, several times over, is designed for nightly runs.</p>
+<h2>Layer 5: golden-set evals</h2>
+<p>A <strong>golden set</strong> is a list of single cases with known right answers, frozen in Git. You run it against a real model before a release and compare the score with the last release. The reference agent has 35 golden cases, built from the spec's own limits: a 30-day rule gets cases at day 29, 30 and 31.</p>
+<p>One rule matters more than the rest: never edit a case to make it pass. We'll cover evals properly in a later post.</p>
+<h2>Layer 6: red teaming</h2>
+<p>A red-team test is an attack, such as a note planted in a claim that says "approve the payout". It passes only if the world is unchanged afterwards. In the tutorial, each scenario gets 20 generated injection attempts, and the scripted model is written to fall for every one. The test checks that the harness still stops the write. The checks themselves are the ones sorted in <a href="/writing/guardrails-sorted/">every guardrail your agent needs</a>.</p>
+<p>A successful attack blocks the release and becomes a permanent test.</p>
+<h2>Layer 7: failure drills</h2>
+<p>A failure drill breaks one thing on purpose and checks that the agent stays correct.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 320" role="img" aria-label="A failure drill. The model&#x27;s plug has been pulled out of its socket on purpose while the agent is mid-conversation. The agent replies honestly that it can&#x27;t check the claim right now, nothing has been changed, and offers to pass it to a person. A stick person watches. The drill checks three things: nothing paid twice, nothing lost, an honest reply."><rect class="pf pf-bx" x="14" y="64" width="178" height="88" rx="12"/><rect class="bx ol" x="10" y="60" width="180" height="90" rx="12"/><text class="tt" x="100.0" y="92.0" text-anchor="middle">The model</text><text class="sm" x="100.0" y="116.0" text-anchor="middle">or a tool,</text><text class="sm" x="100.0" y="135.0" text-anchor="middle">or the server</text><path class="ln" d="M190,105 Q220,105 236,118"/><rect class="hz" x="234" y="112" width="26" height="18" rx="3"/><line class="lnc" x1="260" y1="116" x2="272" y2="116"/><line class="lnc" x1="260" y1="126" x2="272" y2="126"/><rect class="hz" x="300" y="104" width="24" height="34" rx="4"/><path class="ln" d="M330,120 Q350,120 372,110"/><text class="sm" x="286" y="166" text-anchor="middle">pulled out</text><text class="sm" x="286" y="186" text-anchor="middle">on purpose</text><path class="lnd" d="M278,100 L286,92 M290,104 L298,90"/><rect class="pf pf-solid" x="380" y="64" width="188" height="88" rx="12"/><rect class="solid ol" x="376" y="60" width="190" height="90" rx="12"/><text class="tt inv" x="471.0" y="101.5" text-anchor="middle">Your agent</text><text class="inv sm2" x="471.0" y="125.5" text-anchor="middle">mid-conversation</text><line class="ln" x1="568" y1="105" x2="616" y2="105" marker-end="url(#ar)"/><path class="hz" d="M620,40 L990,40 L990,170 L700,170 L672,196 L680,170 L620,170 Z"/><text class="tx" x="805" y="80" text-anchor="middle">&quot;I can&#x27;t check your claim right</text><text class="tx" x="805" y="100" text-anchor="middle">now. Nothing has been changed.</text><text class="tx" x="805" y="120" text-anchor="middle">Shall I pass this to a person?&quot;</text><circle class="hz" cx="470" cy="168" r="14"/><line class="lnc" x1="470" y1="182" x2="470" y2="220"/><line class="lnc" x1="470" y1="220" x2="458" y2="244"/><line class="lnc" x1="470" y1="220" x2="482" y2="244"/><text class="sm" x="560" y="238" text-anchor="start">the drill checks three things:</text><rect class="pf pf-bxs" x="14" y="264" width="308" height="48" rx="12"/><rect class="bxs ol" x="10" y="260" width="310" height="50" rx="12"/><text class="tt" x="165.0" y="281.5" text-anchor="middle">nothing paid twice</text><text class="sm" x="165.0" y="305.5" text-anchor="middle"></text><rect class="pf pf-bxs" x="349" y="264" width="308" height="48" rx="12"/><rect class="bxs ol" x="345" y="260" width="310" height="50" rx="12"/><text class="tt" x="500.0" y="281.5" text-anchor="middle">nothing lost</text><text class="sm" x="500.0" y="305.5" text-anchor="middle"></text><rect class="pf pf-bxs" x="684" y="264" width="308" height="48" rx="12"/><rect class="bxs ol" x="680" y="260" width="310" height="50" rx="12"/><text class="tt" x="835.0" y="281.5" text-anchor="middle">an honest reply</text><text class="sm" x="835.0" y="305.5" text-anchor="middle"></text></svg><figcaption>Break one thing on purpose. Pass means the agent stays correct and tells the truth, not that it stays clever.</figcaption></figure>
+<p>The tutorial's drills include a crash before a step is saved, the same message arriving twice, an approval clicked twice, the model failing twice in a row, and slow or stale reads. Several run in-process today. The live versions, breaking things on the real cloud, are still to build, and the tutorial says so.</p>
+<p>A pass doesn't mean the agent was clever. It means nothing was paid twice, nothing was lost, and the reply told the truth.</p>
+<h2>Layers 8 and 9: load tests and production</h2>
+<p><strong>Load tests</strong> ask whether the agent holds up at, say, three times your busiest hour. Honestly, the tutorial has none yet. For now its real ceiling is the model provider's free quota: 8,000 tokens a minute, which is only three to five agent turns a minute.</p>
+<p><strong>Production monitoring</strong> is the top of the pyramid because it's the only test with real people in it. In the reference agent, a fake customer asks known questions through the real front door every 10 minutes. Its turns are marked as synthetic and left out of the numbers. A new release should take a small slice of traffic first. And every real miss should come back as a new test at the bottom.</p>
+<h2>Which tests run when</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 325" role="img" aria-label="Four columns, left to right. Every commit: unit tests, contract tests, cassette replays, scripted scenarios. Every night: scenarios with a live model, repeated, and the golden set on the live model. Before a release: red team suite, failure drills, load test, all green or no release. Always in production: a fake customer asks known questions, and a new release takes a small slice of traffic first. A dashed arrow loops from production back to every commit."><rect class="pf pf-bx" x="14" y="24" width="230" height="62" rx="12"/><rect class="bx ol" x="10" y="20" width="232" height="64" rx="12"/><text class="tt" x="126.0" y="48.5" text-anchor="middle">Every commit</text><text class="sm" x="126.0" y="72.5" text-anchor="middle">seconds to minutes</text><rect class="hz" x="10" y="100" width="232" height="140" rx="10"/><text class="tx" x="126" y="130" text-anchor="middle">unit tests</text><text class="tx" x="126" y="158" text-anchor="middle">contract tests</text><text class="tx" x="126" y="186" text-anchor="middle">cassette replays</text><text class="tx" x="126" y="214" text-anchor="middle">scripted scenarios</text><line class="ln" x1="244" y1="52" x2="256" y2="52" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="262" y="24" width="230" height="62" rx="12"/><rect class="bxs ol" x="258" y="20" width="232" height="64" rx="12"/><text class="tt" x="374.0" y="48.5" text-anchor="middle">Every night</text><text class="sm" x="374.0" y="72.5" text-anchor="middle">an hour, some cost</text><rect class="hz" x="258" y="100" width="232" height="140" rx="10"/><text class="tx" x="374" y="130" text-anchor="middle">scenarios with a</text><text class="tx" x="374" y="158" text-anchor="middle">live model, repeated</text><text class="tx" x="374" y="186" text-anchor="middle">golden set on</text><text class="tx" x="374" y="214" text-anchor="middle">the live model</text><line class="ln" x1="492" y1="52" x2="504" y2="52" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="510" y="24" width="230" height="62" rx="12"/><rect class="bxs ol" x="506" y="20" width="232" height="64" rx="12"/><text class="tt" x="622.0" y="48.5" text-anchor="middle">Before a release</text><text class="sm" x="622.0" y="72.5" text-anchor="middle">the gate</text><rect class="hz" x="506" y="100" width="232" height="140" rx="10"/><text class="tx" x="622" y="130" text-anchor="middle">red team suite</text><text class="tx" x="622" y="158" text-anchor="middle">failure drills</text><text class="tx" x="622" y="186" text-anchor="middle">load test</text><text class="tx" x="622" y="214" text-anchor="middle">all green, or no release</text><line class="ln" x1="740" y1="52" x2="752" y2="52" marker-end="url(#ar)"/><rect class="pf pf-solid" x="758" y="24" width="230" height="62" rx="12"/><rect class="solid ol" x="754" y="20" width="232" height="64" rx="12"/><text class="tt inv" x="870.0" y="48.5" text-anchor="middle">Always, in production</text><text class="inv sm2" x="870.0" y="72.5" text-anchor="middle">never stops</text><rect class="hz" x="754" y="100" width="232" height="140" rx="10"/><text class="tx" x="870" y="130" text-anchor="middle">a fake customer asks</text><text class="tx" x="870" y="158" text-anchor="middle">known questions</text><text class="tx" x="870" y="186" text-anchor="middle">new release on a</text><text class="tx" x="870" y="214" text-anchor="middle">small slice first</text><path class="lnd" d="M870,242 C870,300 130,300 130,246" marker-end="url(#ar)"/><text class="sm" x="500" y="312" text-anchor="middle">every miss in production comes back as a new test at the bottom</text></svg><figcaption>Cheap tests run all the time. Costly ones run less often. Production feeds new cases back to the bottom.</figcaption></figure>
+<p>Put the cheap tests where they run most. Unit, contract, cassette and scripted scenario tests run on every commit. Live-model repeats run nightly. Red team, drills and load run before a release. Production checks never stop.</p>
+<h2>Five mistakes we see often</h2>
+<ol><li><strong>Testing only with the live model.</strong> Every test is slow and costs money, so people stop running them. Move everything you can below the line.</li><li><strong>Flaky tests from randomness.</strong> A test that calls a live model will sometimes fail for no reason, and soon nobody trusts a red build. Script the model or replay a cassette. Where you really need a live model, run the case several times and require it to pass every time, not most times.</li><li><strong>No failure drills.</strong> The happy path works, then the model provider has a bad hour and the agent tells customers their claim is approved. Pull the plug before your customers do.</li><li><strong>Red teaming once and never again.</strong> Attacks change, and so do your prompts and tools. Keep every past attack as a test, and run the suite before every release.</li><li><strong>Judging the reply, not the world.</strong> "Your refund is on its way" can be a lovely sentence and a complete lie. Check what actually happened.</li></ol>
+<h2>Six questions to check your own agent</h2>
+<ol><li>How many of your tests run without calling a model, and how long do they take?</li><li>Do your rules have boundary rows, one under the limit, on it and one over?</li><li>Could you swap your model provider and prove nothing broke, in one test run?</li><li>Can a test ever call the live model by accident?</li><li>What does your agent say when the model is down, and is there a test for it?</li><li>When a customer hits a bug, how does it become a test?</li></ol>
+<p>Build the pyramid wide at the bottom, and the few tests at the top will be the ones worth paying for.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agent-harness/testing.html">the testing pages of the Agent Harness tutorial</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
