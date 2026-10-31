@@ -48,6 +48,8 @@ PLANNED = [
      "The right human-in-the-loop architecture: approval points, risk tiers, async hand-offs, and what happens on timeout."),
     ("If you can't replay it, you can't fix it: tracing autonomous agents", "ai", "builders", "explainer",
      "Trace and logging design: a span per step and tool call, OpenTelemetry, and what to store vs redact."),
+    ("OpenTelemetry is here to stay: instrument your agent once, send traces anywhere", "ai", "builders", "decision",
+     "Why OpenTelemetry is the one settled bet in a moving stack, its GenAI conventions, and how to adopt it so you can switch between Langfuse, Phoenix, Datadog or Azure Monitor without touching agent code."),
     ("Before it ships: offline evals for autonomous agents", "ai", "builders", "explainer",
      "Golden datasets, LLM-as-judge vs deterministic checks, baselines, and catching regressions."),
     ("The agent testing pyramid", "ai", "builders", "explainer",
