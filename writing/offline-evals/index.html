@@ -1,0 +1,247 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Before it ships: offline evals for autonomous agents · Clean Data Engineering</title>
+<meta name="description" content="An agent can be wrong without throwing a single error, so you need a test it must pass before every release. Build a golden set of cases with known right answers, play whole conversations against a simulated world, judge each case with code first and an LLM judge only where code can&#x27;t see, compare with the last release slice by slice, and turn every production failure into a new case."><link rel="canonical" href="https://cleandataengineering.ai/writing/offline-evals/">
+<meta property="og:title" content="Before it ships: offline evals for autonomous agents"><meta property="og:description" content="An agent can be wrong without throwing a single error, so you need a test it must pass before every release. Build a golden set of cases with known right answers, play whole conversations against a simulated world, judge each case with code first and an LLM judge only where code can&#x27;t see, compare with the last release slice by slice, and turn every production failure into a new case."><meta property="og:url" content="https://cleandataengineering.ai/writing/offline-evals/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>Before it ships: offline evals for autonomous agents</h1>
+  </div>
+  <div class="summary">An agent can be wrong without throwing a single error, so you need a test it must pass before every release. Build a golden set of cases with known right answers, play whole conversations against a simulated world, judge each case with code first and an LLM judge only where code can't see, compare with the last release slice by slice, and turn every production failure into a new case.</div>
+<p>A customer asks the support agent for a refund. The agent replies, <em>"Done, ₹3,499 is on its way to your card."</em> The reply is polite, quick and well formatted. No tool threw an error. And no refund was ever issued.</p>
+<p>Unit tests won't catch that. Latency is fine, nothing turns red, and the dashboard looks healthy. The agent was wrong without failing.</p>
+<p><strong>Offline evaluation</strong> is how you catch it before customers do. "Offline" means it runs before release, in your build pipeline, on cases you wrote down, not on live traffic. This post covers its five parts, and the loop that keeps it honest.</p>
+<h2>A driving test, not a vibe check</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 285" role="img" aria-label="A new release, drawn as a learner car with an L plate, takes a driving test of golden cards, scenarios and checks on what it did. A stick-person examiner with a clipboard is the release gate. Pass leads to the keys and it ships; fail leads back to practice and round to the test again."><text class="sm" x="500" y="24" text-anchor="middle">a new prompt, model or tool is a new driver: it passes the test before it gets the keys</text><rect class="pf pf-solid" x="14" y="74" width="198" height="108" rx="12"/><rect class="solid ol" x="10" y="70" width="200" height="110" rx="12"/><text class="tt inv" x="110.0" y="112.0" text-anchor="middle">New release</text><text class="inv sm2" x="110.0" y="136.0" text-anchor="middle">new prompt, model</text><text class="inv sm2" x="110.0" y="155.0" text-anchor="middle">or tool</text><rect class="hz" x="60" y="200" width="100" height="34" rx="10"/><path class="hz" d="M78,200 L92,182 L130,182 L144,200 Z"/><circle class="hz" cx="82" cy="238" r="9"/><circle class="hz" cx="138" cy="238" r="9"/><rect class="hz" x="98" y="207" width="24" height="20" rx="2"/><text class="bd" x="110" y="223" text-anchor="middle">L</text><line class="ln" x1="212" y1="125" x2="280" y2="125" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="286" y="64" width="288" height="128" rx="12"/><rect class="bxs ol" x="282" y="60" width="290" height="130" rx="12"/><text class="tt" x="427.0" y="112.0" text-anchor="middle">The driving test</text><text class="sm" x="427.0" y="136.0" text-anchor="middle">golden cards, scenarios,</text><text class="sm" x="427.0" y="155.0" text-anchor="middle">checks on what it did</text><circle class="hz" cx="640" cy="80" r="14"/><line class="lnc" x1="640" y1="94" x2="640" y2="132"/><line class="lnc" x1="640" y1="132" x2="628" y2="156"/><line class="lnc" x1="640" y1="132" x2="652" y2="156"/><rect class="hz" x="656" y="104" width="30" height="38" rx="3"/><line class="ln" x1="661" y1="114" x2="681" y2="114"/><line class="ln" x1="661" y1="123" x2="681" y2="123"/><line class="ln" x1="661" y1="132" x2="681" y2="132"/><text class="sm" x="640" y="184" text-anchor="middle">the examiner:</text><text class="sm" x="640" y="202" text-anchor="middle">the release gate</text><line class="ln" x1="700" y1="100" x2="780" y2="70" marker-end="url(#ar)"/><text class="sm" x="740.0" y="77.0" text-anchor="middle">pass</text><line class="ln" x1="700" y1="150" x2="780" y2="205" marker-end="url(#ar)"/><text class="sm" x="740.0" y="196" text-anchor="middle">fail</text><rect class="pf pf-bx" x="786" y="34" width="208" height="78" rx="12"/><rect class="bx ol" x="782" y="30" width="210" height="80" rx="12"/><text class="tt" x="887.0" y="66.5" text-anchor="middle">The keys</text><text class="sm" x="887.0" y="90.5" text-anchor="middle">it ships</text><circle class="hz" cx="840" cy="140" r="12"/><line class="lnc" x1="852" y1="140" x2="900" y2="140"/><line class="lnc" x1="890" y1="140" x2="890" y2="152"/><line class="lnc" x1="878" y1="140" x2="878" y2="150"/><rect class="bxm ol" x="782" y="170" width="210" height="80" rx="12"/><text class="tt" x="887.0" y="206.5" text-anchor="middle">Back to practice</text><text class="sm" x="887.0" y="230.5" text-anchor="middle">fix it, test again</text><path class="lnd" d="M785,240 Q500,300 400,192" marker-end="url(#ar)"/></svg><figcaption>Offline evals are a driving test for every release. Something other than the agent marks the sheet.</figcaption></figure>
+<p>Nobody hands over car keys because a learner "seemed fine around the block". There is a test, with set manoeuvres, an examiner with a checklist, and a clear pass or fail. Fail it, and you practise and come back.</p>
+<p>Treat a new agent release the same way. A new prompt, model or tool is a new driver. Before it gets the keys, it drives a fixed route, and something other than its own confidence marks the sheet. Ten people trying it in a chat window for an afternoon is not that: it can't be repeated next week to see whether anything got worse.</p>
+<h2>Golden sets: cards with known right answers</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 310" role="img" aria-label="A stack of index cards. The front card is a golden case: the question &#x27;refund my kurta, I returned it&#x27;, the world before (returned 30 days ago, 3,499 rupees), the expected tool issue_refund once, the expected outcome one refund of 3,499 rupees, and the slice &#x27;returns, on the limit&#x27;. Cards behind it test day 29 and day 31."><rect class="hz" x="110" y="16" width="440" height="240" rx="10"/><text class="sm" x="540" y="31" text-anchor="end">day 31</text><rect class="hz" x="70" y="36" width="440" height="240" rx="10"/><text class="sm" x="500" y="51" text-anchor="end">day 29</text><rect class="pf pf-bxs" x="35" y="61" width="440" height="240" rx="10"/><rect class="hz" x="30" y="56" width="440" height="240" rx="10"/><text class="bd" x="50" y="86" text-anchor="start">golden case: returns-day-30</text><text class="sm" x="450" y="86" text-anchor="end">day 30</text><line class="lnd" x1="46" y1="100" x2="454" y2="100"/><text class="lbl" x="50" y="132" text-anchor="start">QUESTION</text><text class="tx" x="210" y="132" text-anchor="start">&quot;Refund my kurta, I returned it&quot;</text><text class="lbl" x="50" y="166" text-anchor="start">WORLD BEFORE</text><text class="tx" x="210" y="166" text-anchor="start">order returned 30 days ago, ₹3,499</text><text class="lbl" x="50" y="200" text-anchor="start">EXPECTED TOOL</text><text class="tx" x="210" y="200" text-anchor="start">issue_refund, once</text><text class="lbl" x="50" y="234" text-anchor="start">EXPECTED OUTCOME</text><text class="tx" x="210" y="234" text-anchor="start">one refund of ₹3,499</text><text class="lbl" x="50" y="268" text-anchor="start">SLICE</text><text class="tx" x="210" y="268" text-anchor="start">returns, on the limit</text><rect class="pf pf-bxs" x="604" y="64" width="378" height="88" rx="12"/><rect class="bxs ol" x="600" y="60" width="380" height="90" rx="12"/><text class="tt" x="790.0" y="92.0" text-anchor="middle">One card per edge</text><text class="sm" x="790.0" y="116.0" text-anchor="middle">the 30-day rule gets</text><text class="sm" x="790.0" y="135.0" text-anchor="middle">day 29, day 30 and day 31</text><rect class="pf pf-bx" x="604" y="184" width="378" height="88" rx="12"/><rect class="bx ol" x="600" y="180" width="380" height="90" rx="12"/><text class="tt" x="790.0" y="212.0" text-anchor="middle">Kept in Git, frozen</text><text class="sm" x="790.0" y="236.0" text-anchor="middle">never edited to make</text><text class="sm" x="790.0" y="255.0" text-anchor="middle">a failing run pass</text></svg><figcaption>A golden set is a stack of cards with known right answers, and the edges of every rule get a card each.</figcaption></figure>
+<p>A <strong>golden set</strong> is a list of single cases, each with an input and a known right answer. Think of each case as an index card:</p>
+<ul><li><strong>the question:</strong> what the customer says, plus the facts in the world before (the order, its date, its status)</li><li><strong>the expected tool:</strong> which tool the agent should call, or must not call</li><li><strong>the expected outcome:</strong> what should be true afterwards, such as "refund issued" or "handed to a person"</li><li><strong>the slice:</strong> a label for the kind of case, such as returns, cancellations, a Hindi message, or an order over the approval limit</li></ul>
+<p>Three rules make a golden set worth having.</p>
+<ol><li><strong>Generate the edges from the rules.</strong> If the policy says returns within 30 days, write cases at day 29, day 30 and day 31. In the reference agent from our <a href="/learn/agent-harness/test-golden.html">Agent Harness tutorial</a>, the golden set is 35 cases, each naming the boundary it tests.</li><li><strong>Cover every slice.</strong> A set that is 90% easy refunds will score well and prove little. Count the cards per slice and fill the thin ones.</li><li><strong>Freeze it.</strong> The set lives in Git. You never edit a case to make a failing run pass. If a case is genuinely wrong, retire it in a reviewed change with the reason written down.</li></ol>
+<p>The <a href="https://github.com/dataagentsai/ai-assurance-catalog">AI Assurance Catalog</a> puts the first rule plainly in <a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0001.yaml">AAC-0001</a>: a version-controlled set of representative inputs with expected outcomes, and every release candidate scored against it.</p>
+<h2>Scenarios: whole conversations in a pretend world</h2>
+<p>A golden card tests one turn. Real trouble often takes several: the customer changes their mind, a tool fails twice, a person approves something late. For that you need a <strong>scenario</strong>: a short story with a customer, what they say in order, and what the world looks like before. It runs the real agent against simulated systems and a clock you can fast-forward, then checks what is true in that world afterwards. The claims assistant in our tutorial has 29 scenarios, with names like <em>a-large-payout-waits-for-a-handler</em> (a ₹25,001 payout is not made until a person approves) and <em>the-handler-approves-it-twice</em> (a double click still pays once). All 29 pass at the last run.</p>
+<p>Building that pretend world is a job of its own; our tool for it, AgentTwin, gets its own posts later.</p>
+<h2>How a case is judged: code first, judge last</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 320" role="img" aria-label="Four steps in a row, numbered. One, right tool: did issue_refund actually run? Two, right arguments: this order, 3,499 rupees not 34,990. Three, world right: one refund, nothing else changed. These three are code. Four, dashed, the LLM judge, for grounding and tone only, checked against labels from a person."><text class="sm" x="500" y="24" text-anchor="middle">ask in this order and stop at the first failure</text><rect class="pf pf-bx" x="14" y="54" width="220" height="108" rx="12"/><rect class="bx ol" x="10" y="50" width="222" height="110" rx="12"/><text class="tt" x="121.0" y="92.0" text-anchor="middle">Right tool?</text><text class="sm" x="121.0" y="116.0" text-anchor="middle">did issue_refund</text><text class="sm" x="121.0" y="135.0" text-anchor="middle">actually run?</text><circle class="nm" cx="22" cy="50" r="14"/><text class="nmt" x="22" y="56" text-anchor="middle">1</text><line class="ln" x1="234" y1="105" x2="256" y2="105" marker-end="url(#ar)"/><rect class="pf pf-bx" x="262" y="54" width="220" height="108" rx="12"/><rect class="bx ol" x="258" y="50" width="222" height="110" rx="12"/><text class="tt" x="369.0" y="92.0" text-anchor="middle">Right arguments?</text><text class="sm" x="369.0" y="116.0" text-anchor="middle">this order,</text><text class="sm" x="369.0" y="135.0" text-anchor="middle">₹3,499 not ₹34,990</text><circle class="nm" cx="270" cy="50" r="14"/><text class="nmt" x="270" y="56" text-anchor="middle">2</text><line class="ln" x1="482" y1="105" x2="504" y2="105" marker-end="url(#ar)"/><rect class="pf pf-bx" x="510" y="54" width="220" height="108" rx="12"/><rect class="bx ol" x="506" y="50" width="222" height="110" rx="12"/><text class="tt" x="617.0" y="92.0" text-anchor="middle">World right?</text><text class="sm" x="617.0" y="116.0" text-anchor="middle">one refund, nothing</text><text class="sm" x="617.0" y="135.0" text-anchor="middle">else changed</text><circle class="nm" cx="518" cy="50" r="14"/><text class="nmt" x="518" y="56" text-anchor="middle">3</text><line class="ln" x1="730" y1="105" x2="752" y2="105" marker-end="url(#ar)"/><rect class="bxm ol" x="754" y="50" width="222" height="110" rx="12"/><text class="tt" x="865.0" y="92.0" text-anchor="middle">LLM judge</text><text class="sm" x="865.0" y="116.0" text-anchor="middle">grounded? tone?</text><text class="sm" x="865.0" y="135.0" text-anchor="middle">only what code can&#x27;t</text><circle class="nm" cx="766" cy="50" r="14"/><text class="nmt" x="766" y="56" text-anchor="middle">4</text><text class="bd" x="372" y="200" text-anchor="middle">code: exact, free, same answer every time</text><path class="lnd" d="M20,180 L724,180"/><path class="lnd" d="M758,180 L980,180"/><text class="sm" x="869" y="200" text-anchor="middle">a model: costs money, can be wrong</text><circle class="hz" cx="830" cy="232" r="14"/><line class="lnc" x1="830" y1="246" x2="830" y2="284"/><line class="lnc" x1="830" y1="284" x2="818" y2="308"/><line class="lnc" x1="830" y1="284" x2="842" y2="308"/><rect class="hz" x="852" y="250" width="28" height="34" rx="3"/><text class="sm" x="890" y="262" text-anchor="start">checked against</text><text class="sm" x="890" y="282" text-anchor="start">people&#x27;s labels</text></svg><figcaption>Code checks first, the judge last. The judge may only block once it agrees with people.</figcaption></figure>
+<p>When a case finishes, ask questions in this order, and stop at the first one that fails.</p>
+<ol><li><strong>Did the right tool run?</strong> Code can check this exactly from the trace. If the reply says "refunded" and <code>issue_refund</code> was never called, the case fails.</li><li><strong>With the right arguments?</strong> The right order id, the right amount, not ₹34,990 when it should be ₹3,499. Check the arguments yourself: one evaluation library we tried compares tool names, not arguments.</li><li><strong>Did the world end up right?</strong> Read the pretend systems afterwards. One refund, not two. Nothing written for another customer. Nothing paid that needed approval.</li><li><strong>Only then, an LLM judge.</strong> An <strong>LLM judge</strong> is a second model asked to grade the reply. Use it for things code can't check, such as "is every sentence supported by what the tools returned?" or "is the tone right for an upset customer?"</li></ol>
+<p>The first three are cheap, exact, and give the same answer every time. The judge costs money on every case (about $0.0005 per call in our spike) and can be wrong in ways that look confident.</p>
+<p>So a judge must earn the right to block a release. Score it against a set that people have labelled, and measure how often it agrees with them (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0084.yaml">AAC-0084</a>). Probe its known biases, such as preferring longer answers or whichever answer comes first (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0085.yaml">AAC-0085</a>). Run the same case several times and with the instructions reworded, and check the verdict holds (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0086.yaml">AAC-0086</a>). Until it passes all three, the judge only reports. That is the rule in our harness: only exact rules and calibrated judges may block.</p>
+<p>Code checks need checking too. Our first "promised but not done" rule raised 3 findings, all false alarms: the replies said "nothing has been paid yet". Once it skipped negations, it raised 0.</p>
+<h2>Baselines: beat the last release, not perfection</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 310" role="img" aria-label="Paired bars for four slices, last release against new release: refunds, cancellations and over-the-limit cases are about the same or better, but Hindi messages dropped sharply and are marked worse. The average barely moved."><text class="sm" x="500" y="22" text-anchor="middle">same frozen set, run on both releases (illustrative heights)</text><rect class="pf pf-bx" x="60" y="58.0" width="52" height="172.0" rx="4"/><rect class="hz" x="60" y="58.0" width="52" height="172.0" rx="4" fill-opacity="0"/><rect class="pf pf-solid" x="128" y="54.0" width="52" height="176.0" rx="4"/><rect class="hz" x="128" y="54.0" width="52" height="176.0" rx="4" fill-opacity="0"/><text class="tx" x="120" y="256" text-anchor="middle">Refunds</text><rect class="pf pf-bx" x="290" y="50.0" width="52" height="180.0" rx="4"/><rect class="hz" x="290" y="50.0" width="52" height="180.0" rx="4" fill-opacity="0"/><rect class="pf pf-solid" x="358" y="48.0" width="52" height="182.0" rx="4"/><rect class="hz" x="358" y="48.0" width="52" height="182.0" rx="4" fill-opacity="0"/><text class="tx" x="350" y="256" text-anchor="middle">Cancellations</text><rect class="pf pf-bx" x="520" y="62.0" width="52" height="168.0" rx="4"/><rect class="hz" x="520" y="62.0" width="52" height="168.0" rx="4" fill-opacity="0"/><rect class="zr" x="588" y="106.0" width="52" height="124.0" rx="4"/><rect class="hz" x="588" y="106.0" width="52" height="124.0" rx="4" fill-opacity="0"/><text class="tx" x="580" y="256" text-anchor="middle">Hindi messages</text><text class="bd" x="614" y="94.0" text-anchor="middle">worse</text><rect class="pf pf-bx" x="750" y="70.0" width="52" height="160.0" rx="4"/><rect class="hz" x="750" y="70.0" width="52" height="160.0" rx="4" fill-opacity="0"/><rect class="pf pf-solid" x="818" y="62.0" width="52" height="168.0" rx="4"/><rect class="hz" x="818" y="62.0" width="52" height="168.0" rx="4" fill-opacity="0"/><text class="tx" x="810" y="256" text-anchor="middle">Over the limit</text><line class="lnc" x1="20" y1="230" x2="980" y2="230"/><rect class="pf pf-bx" x="300" y="280" width="22" height="16" rx="3"/><text class="sm" x="330" y="294" text-anchor="start">last release</text><rect class="pf pf-solid" x="470" y="280" width="22" height="16" rx="3"/><text class="sm" x="500" y="294" text-anchor="start">new release</text><text class="sm" x="640" y="294" text-anchor="start">the average barely moved</text></svg><figcaption>Compare with the last release, slice by slice. The average hides the slice that broke.</figcaption></figure>
+<p>Perfection is not a useful target. The useful question is: <strong>is this release worse than the one customers have today?</strong></p>
+<p>So run the new release and the current one on the same frozen set, and compare them case by case. <a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0013.yaml">AAC-0013</a> asks for wins, losses and ties per case, because an unchanged average often hides a release that fixed one thing and broke two.</p>
+<p>Then break the score down by slice (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0017.yaml">AAC-0017</a>). In the picture, the average barely moved, but Hindi messages got worse. An average alone would have shipped that.</p>
+<p>The reference agent keeps its baseline in a committed file: the golden pass rate, the context size, and the cost per task ($0.000945). It works like a ratchet. Each number may stay the same or get better, but never worse.</p>
+<h2>The release gate: what blocks</h2>
+<p>A <strong>release gate</strong> is a short file that lists what must be true before a release goes out. Your build pipeline runs it on every change. If any line fails, the release is blocked, with no "ship it anyway" button.</p>
+<p>A sensible gate blocks a release when:</p>
+<ul><li>any must-pass check fails; in our harness, picking the right tool and saying what the reply must say both need a pass rate of 1.0, so one miss blocks</li><li>any slice is worse than the last release</li><li>any attack case succeeds, judged by the world afterwards: something was paid, written or leaked</li><li>a judge that hasn't been checked against people tries to block (it may only report)</li><li>a result is uncertain; uncertain goes to a person and is never counted as a pass</li></ul>
+<h2>Every production failure becomes a new card</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 375" role="img" aria-label="A loop of four: a miss in production (the agent said refunded but nothing was), replay the trace to find the wrong step, write a new card with question, tool, outcome and slice, and the gate runs it before every release. In the middle, a stack of cards gains one."><rect class="bxm ol" x="370" y="15" width="260" height="95" rx="12"/><text class="tt" x="500.0" y="49.5" text-anchor="middle">A miss in production</text><text class="sm" x="500.0" y="73.5" text-anchor="middle">&quot;refunded&quot;, but</text><text class="sm" x="500.0" y="92.5" text-anchor="middle">nothing was</text><rect class="pf pf-bx" x="724" y="144" width="258" height="93" rx="12"/><rect class="bx ol" x="720" y="140" width="260" height="95" rx="12"/><text class="tt" x="850.0" y="174.5" text-anchor="middle">Replay the trace</text><text class="sm" x="850.0" y="198.5" text-anchor="middle">find the step</text><text class="sm" x="850.0" y="217.5" text-anchor="middle">that went wrong</text><rect class="pf pf-bxs" x="374" y="269" width="258" height="93" rx="12"/><rect class="bxs ol" x="370" y="265" width="260" height="95" rx="12"/><text class="tt" x="500.0" y="299.5" text-anchor="middle">Write a new card</text><text class="sm" x="500.0" y="323.5" text-anchor="middle">question, tool,</text><text class="sm" x="500.0" y="342.5" text-anchor="middle">outcome, slice</text><rect class="pf pf-bx" x="24" y="144" width="258" height="93" rx="12"/><rect class="bx ol" x="20" y="140" width="260" height="95" rx="12"/><text class="tt" x="150.0" y="174.5" text-anchor="middle">The gate runs it</text><text class="sm" x="150.0" y="198.5" text-anchor="middle">before every</text><text class="sm" x="150.0" y="217.5" text-anchor="middle">release, for ever</text><path class="lnc" d="M632,60 C 720,60 850,85 850,136" marker-end="url(#ar)"/><path class="lnc" d="M850,237 C 850,300 740,312 634,312" marker-end="url(#ar)"/><path class="lnc" d="M368,312 C 260,312 150,300 150,237" marker-end="url(#ar)"/><path class="lnc" d="M150,138 C 150,85 270,60 366,60" marker-end="url(#ar)"/><rect class="hz" x="455" y="160" width="70" height="46" rx="5"/><rect class="hz" x="463" y="152" width="70" height="46" rx="5"/><rect class="hz" x="471" y="144" width="70" height="46" rx="5"/><rect class="hz" x="479" y="136" width="70" height="46" rx="5"/><rect class="pf pf-bxs" x="479" y="136" width="70" height="46" rx="5"/><text class="bd" x="514" y="164" text-anchor="middle">+1</text><text class="sm" x="500" y="232" text-anchor="middle">the golden set grows</text></svg><figcaption>Every production failure becomes a new card, so the same mistake can't ship twice.</figcaption></figure>
+<p>The golden set is never finished. Something will go wrong in production that no card covered. When it does, open the trace (our post on <a href="/writing/tracing-agents/">tracing agents</a> covers how to keep one you can replay), find the step that went wrong, and write it down as a new card or scenario with the right answer. Fix the agent. The new card now runs before every release, so that mistake can't ship again.</p>
+<p>To be honest about our own state: turning a production turn into a scenario in one step is not built yet in the claims assistant. Until it is, a person writes the card by hand. What matters is that the card gets written.</p>
+<h2>Four mistakes we see often</h2>
+<ol><li><strong>Only an average score.</strong> One number for the whole set hides the slice that broke. Always look at slices and at per-case wins and losses.</li><li><strong>A judge that was never checked against people.</strong> If nobody measured how often the judge agrees with a human, every score it gives is decoration. Let it report, not block.</li><li><strong>A golden set that never changes.</strong> The set you wrote at launch tests last spring's agent. Add every production miss, and add a card for every new tool and every new rule.</li><li><strong>Testing only the final text.</strong> "Your refund is on its way" can be word-perfect while nothing was refunded. Check the tools, the arguments and the world, then the words. The checks that run while the agent works are a different job, covered in <a href="/writing/guardrails-sorted/">every guardrail your agent needs</a>.</li></ol>
+<h2>Six questions to check your own agent</h2>
+<ol><li>Do you have a frozen golden set in Git, and can you say how many cards each slice has?</li><li>Do your cases sit on the edges of your rules: one day, one rupee, one step either side of each limit?</li><li>When a case is judged, do you check which tool ran, with which arguments, and what changed in the world, before you look at the words?</li><li>If you use an LLM judge, do you know how often it agrees with people, and does it give the same verdict twice?</li><li>Is a release compared with the last release, case by case and slice by slice?</li><li>When something failed in production last month, is it a card in your set today?</li></ol>
+<p>An agent that hasn't passed a test you wrote down hasn't passed anything.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/eval-harness/">the Eval Harness tutorial, with every check and pattern</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
