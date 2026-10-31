@@ -1,0 +1,263 @@
+[
+ {
+  "ref": "m4:s1-02",
+  "mock": 4,
+  "title": "Tool errors confusing the agent? Decide by what it can't tell apart",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Two failure kinds return the same message",
+    "Error shape",
+    "<b>errorCategory + isRetryable</b> + short description"
+   ],
+   [
+    "Brief, one-off blips (a second or two)",
+    "Transient noise",
+    "Retry with backoff inside the tool"
+   ],
+   [
+    "Policy says no (e.g. over the refund limit)",
+    "Business error",
+    "<code>retriable: false</code> + customer-friendly reason"
+   ],
+   [
+    "Lookup worked but found nothing",
+    "Valid empty result",
+    "Return success with an empty result, not an error"
+   ],
+   [
+    "Subagent can't recover locally",
+    "Propagation",
+    "Pass up the error with partial results"
+   ]
+  ],
+  "rule": "If two failures need different responses, they need different error categories. Retrying hides blips, not ambiguity."
+ },
+ {
+  "ref": "m4:s3-07",
+  "mock": 4,
+  "title": "A subagent's tool call failed: what goes back to the coordinator?",
+  "head": [
+   "What happened",
+   "Local action",
+   "What to return"
+  ],
+  "rows": [
+   [
+    "Transient fault (timeout, 503)",
+    "Retry with backoff",
+    "If still failing: structured error + partial results"
+   ],
+   [
+    "Permission or access denied",
+    "Don't retry",
+    "Category, affected items, partial results, alternatives"
+   ],
+   [
+    "Bad input (validation)",
+    "Fix the input and retry",
+    "Only if unfixable: the validation detail"
+   ],
+   [
+    "Search succeeded, found nothing",
+    "Nothing to recover",
+    "A valid empty result, clearly not an error"
+   ],
+   [
+    "Any failure",
+    "Never hide it or substitute silently",
+    "Generic 'failed' and fake success both block recovery"
+   ]
+  ],
+  "rule": "Retry only what can recover. Otherwise return structured error context with partial results and alternatives, and let the coordinator decide."
+ },
+ {
+  "ref": "m4:s6-08",
+  "mock": 4,
+  "title": "Tool returned nothing: is that an answer or a failure?",
+  "head": [
+   "Situation",
+   "Right response",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Store unreachable for minutes or longer",
+    "<code>isError</code>, transient, retryable",
+    "Caller can hold or retry later"
+   ],
+   [
+    "Brief blips of a few seconds",
+    "Local retry with backoff, then error",
+    "Recovers without bothering caller"
+   ],
+   [
+    "Genuinely nothing found",
+    "Valid empty result",
+    "A real answer"
+   ],
+   [
+    "Bad input from caller",
+    "Validation error, not retryable",
+    "Retrying won't help"
+   ],
+   [
+    "Policy forbids the action",
+    "Business error, not retryable, explanation",
+    "Needs a different path"
+   ]
+  ],
+  "rule": "Never let 'couldn't check' and 'nothing there' share a return value. Return a structured, retryable error for the first."
+ },
+ {
+  "ref": "m6:m6-s1-06",
+  "mock": 6,
+  "title": "A tool fails: what does the agent need to know to recover?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Same failure on every attempt (e.g. card closed)",
+    "Error not marked permanent",
+    "Business error, <code>isRetryable: false</code>, relayable explanation"
+   ],
+   [
+    "Brief outages that pass on a retry",
+    "Transient failure surfaced too early",
+    "Retry with backoff inside the tool"
+   ],
+   [
+    "Every failure says \"Operation failed\"",
+    "No error categories",
+    "<code>errorCategory</code> + <code>isRetryable</code> + description"
+   ],
+   [
+    "\"Nothing found\" treated as a failure",
+    "Empty result vs access failure confused",
+    "Return a valid empty result, distinct from errors"
+   ],
+   [
+    "Raw codes in mixed formats",
+    "Unnormalised output",
+    "<code>PostToolUse</code> hook to normalise"
+   ]
+  ],
+  "rule": "Tell the agent what kind of failure it is and whether a retry can help. Fix the biggest share first."
+ },
+ {
+  "ref": "m6:m6-s3-08",
+  "mock": 6,
+  "title": "Search returned nothing: did it look, or could it not look?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Brief, intermittent timeouts",
+    "Transient fault",
+    "Local retry with backoff"
+   ],
+   [
+    "<b>Outage looks like 'no results'</b>",
+    "Access failure disguised as empty result",
+    "<code>isError</code> + category + retryable; keep <code>[]</code> for real no-match"
+   ],
+   [
+    "Every failure says 'Operation failed'",
+    "Generic errors",
+    "Structured categories (transient, validation, business, permission)"
+   ],
+   [
+    "Subagent fails and the run stops",
+    "Over-termination",
+    "Return partial results and error context to the coordinator"
+   ],
+   [
+    "Claims lose their sources",
+    "Provenance",
+    "Claim-source metadata through synthesis"
+   ]
+  ],
+  "rule": "Never let 'could not look' look like 'looked and found nothing'. Return a structured, retryable error for outages."
+ },
+ {
+  "ref": "m7:m7-s1-07",
+  "mock": 7,
+  "title": "Tool failing? Ask what the agent needs to know to recover",
+  "head": [
+   "Failure",
+   "What to return",
+   "Agent then"
+  ],
+  "rows": [
+   [
+    "Policy / business rule (past cut-off)",
+    "Business category, not retryable, friendly note",
+    "Explains, offers the next option"
+   ],
+   [
+    "Timeout or brief outage",
+    "Transient category, retryable",
+    "Retries or tells the customer to wait"
+   ],
+   [
+    "Bad input (wrong ID format)",
+    "Validation category with the expected format",
+    "Fixes the call"
+   ],
+   [
+    "Not allowed for this user",
+    "Permission category",
+    "Escalates or explains"
+   ],
+   [
+    "Rule the agent <b>can check in advance</b>",
+    "Put it in the tool description",
+    "Avoids the call"
+   ]
+  ],
+  "rule": "Business-rule failures: say so, mark them not retryable, and include a sentence the agent can tell the customer."
+ },
+ {
+  "ref": "m7:m7-s4-02",
+  "mock": 7,
+  "title": "A tool fails: what should the agent be told?",
+  "head": [
+   "Kind of failure",
+   "What to return",
+   "Agent's next move"
+  ],
+  "rows": [
+   [
+    "Transient (timeout)",
+    "isError, transient category, retryable true",
+    "Retry, or retry locally first"
+   ],
+   [
+    "Business rule (workflow forbids)",
+    "isError, business category, retryable false, readable reason",
+    "Stop and explain to the user"
+   ],
+   [
+    "Validation (bad input)",
+    "isError, validation category, what was wrong",
+    "Fix the input and retry"
+   ],
+   [
+    "Valid search with no matches",
+    "Success with an empty result",
+    "Report nothing found"
+   ]
+  ],
+  "rule": "Return the error's category and whether it is retryable. A uniform \"failed\" leaves the agent guessing."
+ }
+]

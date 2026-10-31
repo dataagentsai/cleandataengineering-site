@@ -1,0 +1,344 @@
+[
+ {
+  "ref": "m4:s5-09",
+  "mock": 4,
+  "title": "Bad structured output: is it syntax or meaning?",
+  "head": [
+   "What you observe",
+   "Kind of error",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Trailing commas, bad quotes, preamble",
+    "Syntax",
+    "Tool use with JSON schema (forced tool)"
+   ],
+   [
+    "Valid JSON, impossible value (line 412 of 300)",
+    "Semantic",
+    "Validate in code, retry with the specific error"
+   ],
+   [
+    "Required field filled with invented data",
+    "Schema forces a value",
+    "Make the field nullable"
+   ],
+   [
+    "Model answers in prose, no tool call",
+    "Tool choice",
+    "<code>tool_choice</code> \"any\" or forced"
+   ],
+   [
+    "Field truly absent from the source",
+    "Missing information",
+    "Do not retry; represent absence"
+   ]
+  ],
+  "rule": "Tool use with a schema stops broken JSON. It does not stop wrong values; check those in code."
+ },
+ {
+  "ref": "m4:s6-01",
+  "mock": 4,
+  "title": "Wrong value extracted: was it misread, or never there?",
+  "head": [
+   "Situation",
+   "Right mechanism",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Field absent from the source, schema requires it",
+    "Make it nullable / optional",
+    "Removes pressure to fabricate"
+   ],
+   [
+    "Field printed but sometimes misread",
+    "Validate against system of record, retry",
+    "Catches wrong readings"
+   ],
+   [
+    "Value outside a fixed list",
+    "Enum + <code>other</code> + detail",
+    "Records it without coercion"
+   ],
+   [
+    "Absent field triggering retries",
+    "Stop retrying; represent absence",
+    "Retries can't find what isn't there"
+   ],
+   [
+    "Totals do not add up",
+    "<code>calculated_total</code> + conflict flag",
+    "Reports the mismatch"
+   ]
+  ],
+  "rule": "Required means 'produce something'. If the document may not contain the value, make the field nullable."
+ },
+ {
+  "ref": "m4:s6-02",
+  "mock": 4,
+  "title": "A value does not fit the schema: what kind of mismatch is it?",
+  "head": [
+   "Situation",
+   "Schema design",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Mostly fixed list, some unpredictable values",
+    "Enum + <code>other</code> + detail field",
+    "Keeps validation, records the rest"
+   ],
+   [
+    "A small, known, fixed set of extra codes",
+    "Add them to the enum",
+    "Closed set stays closed"
+   ],
+   [
+    "Value not present in the document",
+    "Nullable / optional",
+    "Absence is representable"
+   ],
+   [
+    "Model unsure between two valid values",
+    "<code>unclear</code> enum value + detail",
+    "Flags ambiguity"
+   ],
+   [
+    "Values entirely free-form",
+    "String field, normalise later",
+    "No list exists"
+   ]
+  ],
+  "rule": "Closed lists break on open worlds. Add <code>other</code> plus a detail field, and keep the exact text."
+ },
+ {
+  "ref": "m5:s5q-s5-09",
+  "mock": 5,
+  "title": "tool_choice: what exactly must the reply be?",
+  "head": [
+   "Need",
+   "Setting",
+   "Note"
+  ],
+  "rows": [
+   [
+    "Model may answer in text or call a tool",
+    "<code>auto</code>",
+    "Default"
+   ],
+   [
+    "Must call a tool; only one fits",
+    "<code>\"any\"</code>",
+    "Fine when one tool is attached"
+   ],
+   [
+    "Must call a tool; several attached",
+    "Forced <code>{\"type\":\"tool\",\"name\":...}</code>",
+    "Names the exact tool"
+   ],
+   [
+    "A step must run first",
+    "Forced tool on the first request",
+    "e.g. metadata before enrichment"
+   ],
+   [
+    "Empty result must still be structured",
+    "Forced tool + empty array in schema",
+    "No prose to parse"
+   ]
+  ],
+  "rule": "<code>auto</code> allows text; <code>\"any\"</code> requires some tool; forced requires that tool. With several tools attached, force the one you need."
+ },
+ {
+  "ref": "m5:s5q-s6-01",
+  "mock": 5,
+  "title": "Schema passes but the value is wrong: what kind of error is it?",
+  "head": [
+   "What you observe",
+   "Kind of error",
+   "What catches it"
+  ],
+  "rows": [
+   [
+    "Broken JSON, missing fields",
+    "Syntax / shape",
+    "Strict schema via tool use"
+   ],
+   [
+    "Value has the wrong format (bad length, letters in a number)",
+    "Format",
+    "Pattern constraints in the schema"
+   ],
+   [
+    "Right format, wrong value",
+    "Semantic",
+    "Cross-checks, <code>calculated_total</code> vs <code>stated_total</code>"
+   ],
+   [
+    "Value not in the document at all",
+    "Absent information",
+    "Nullable field, route to a person"
+   ],
+   [
+    "Errors cluster in some fields",
+    "Field-specific",
+    "Field-level accuracy measurement"
+   ]
+  ],
+  "rule": "Strict schemas remove syntax errors, not semantic ones. After adopting one, the remaining errors look correct, so you need checks on meaning."
+ },
+ {
+  "ref": "m6:m6-s6-04",
+  "mock": 6,
+  "title": "The schema can't hold what the document says: which escape hatch?",
+  "head": [
+   "What the document says",
+   "Schema fix",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Nothing about this field",
+    "Nullable / optional field",
+    "Prevents inventing a value"
+   ],
+   [
+    "A clear value outside the enum, many variants",
+    "<code>other</code> + detail string",
+    "Records it without coercion"
+   ],
+   [
+    "Text that can't be read with confidence",
+    "<code>unclear</code> + detail",
+    "Flags ambiguity"
+   ],
+   [
+    "A clear value that fits, but mapped inconsistently",
+    "Few-shot samples",
+    "Teaches the mapping"
+   ],
+   [
+    "A few stable new values",
+    "Add them to the enum",
+    "Closed set still fits"
+   ]
+  ],
+  "rule": "Null when the document says nothing; other plus detail when it says something clear that the list doesn't cover; unclear when the text itself is ambiguous."
+ },
+ {
+  "ref": "m6:m6-s6-06",
+  "mock": 6,
+  "title": "Tool-calling failure: wrong tool, or no tool?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Model replies in text, picks the right tool when it calls",
+    "No call required",
+    "<code>tool_choice: \"any\"</code>"
+   ],
+   [
+    "Model picks the wrong tool",
+    "Selection",
+    "Better descriptions, or classify then force"
+   ],
+   [
+    "A specific tool must run first",
+    "Ordering",
+    "Forced <code>{\"type\":\"tool\",\"name\":...}</code>"
+   ],
+   [
+    "Tools have one-line descriptions",
+    "Descriptions",
+    "Add inputs, examples, boundaries"
+   ],
+   [
+    "Must never call a tool in some step",
+    "Choice too open",
+    "Restrict available tools"
+   ]
+  ],
+  "rule": "auto may answer in text; any must call some tool; forced must call that one. If selection is right and only text slips through, use any."
+ },
+ {
+  "ref": "m7:m7-s6-01",
+  "mock": 7,
+  "title": "Invented values: is the schema forcing the guess?",
+  "head": [
+   "What you observe",
+   "Cause",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Value often absent; field is required",
+    "Schema forces a value",
+    "Make it nullable, describe when"
+   ],
+   [
+    "Field optional, model still fills it",
+    "Behaviour, not structure",
+    "Few-shot examples showing null"
+   ],
+   [
+    "Value printed but outside an enum's list",
+    "Closed category",
+    "Add <code>other</code> + detail"
+   ],
+   [
+    "Value present but in a wrong field",
+    "Mapping mistake",
+    "Retry with the specific error"
+   ],
+   [
+    "Value present but unreadable",
+    "Source quality",
+    "Route to a person"
+   ]
+  ],
+  "rule": "Absent value + required field = fabrication. Make the field nullable before anything else."
+ },
+ {
+  "ref": "m7:m7-s6-02",
+  "mock": 7,
+  "title": "Value doesn't fit the schema: absent, or just unlisted?",
+  "head": [
+   "Situation",
+   "Schema fix",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Value printed, outside a growing list",
+    "<code>other</code> + detail string",
+    "Keeps the value, extensible"
+   ],
+   [
+    "Value not printed / unreadable",
+    "Nullable field",
+    "Honest \"not available\""
+   ],
+   [
+    "Value ambiguous between two listed options",
+    "<code>unclear</code> + detail, or examples",
+    "Avoids a forced choice"
+   ],
+   [
+    "Small fixed set, one value missing",
+    "Add it to the enum",
+    "Stable list"
+   ],
+   [
+    "Value wrong type or format",
+    "Strict schema / retry with error",
+    "Syntax, not meaning"
+   ]
+  ],
+  "rule": "Present but unlisted → other + detail. Absent → null."
+ }
+]

@@ -1,0 +1,268 @@
+[
+ {
+  "ref": "m4:s1-03",
+  "mock": 4,
+  "title": "Messy data the model must reason over? Move work from model to code",
+  "head": [
+   "Situation",
+   "Right mechanism",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Mixed formats in tool results",
+    "<b>PostToolUse hook</b> normalises them",
+    "Model only ever sees one format"
+   ],
+   [
+    "A yes/no fact derived from data",
+    "Tool returns the <b>computed field</b>",
+    "No arithmetic left to the model"
+   ],
+   [
+    "Converter exists and its call is enforced",
+    "<code>convert_date</code> tool behind a gate",
+    "Deterministic if the call can't be skipped"
+   ],
+   [
+    "Model must choose among formats occasionally, errors tolerable",
+    "Prompt documentation with examples",
+    "Cheap, probabilistic"
+   ],
+   [
+    "Policy action must be blocked",
+    "Hook on the outgoing call",
+    "Enforcement, not formatting"
+   ]
+  ],
+  "rule": "Normalise in a hook and compute derived facts in the tool. Anything the model must remember to do is still probabilistic."
+ },
+ {
+  "ref": "m5:s5q-s1-03",
+  "mock": 5,
+  "title": "A policy keeps being broken: does it need judgement or a hard stop?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Rule must hold <b>every time</b> (control failure, legal)",
+    "Prompt compliance is probabilistic",
+    "PreToolUse hook or prerequisite gate"
+   ],
+   [
+    "Goal is <b>fewer</b> wrong calls, judgement involved",
+    "Unclear decision boundary",
+    "Explicit criteria plus a few examples"
+   ],
+   [
+    "Need to know afterwards what happened",
+    "Monitoring, not prevention",
+    "PostToolUse hook or audit log"
+   ],
+   [
+    "One tool must run before the others",
+    "Ordering",
+    "Gate, or forced <code>tool_choice</code> on that request"
+   ],
+   [
+    "Tool results arrive in mixed formats",
+    "Data shape",
+    "PostToolUse hook to normalise"
+   ]
+  ],
+  "rule": "When a rule must hold every time, put it in code that runs before the action. Prompts improve behaviour; hooks guarantee it."
+ },
+ {
+  "ref": "m5:s5q-s6-04",
+  "mock": 5,
+  "title": "Model gets numbers wrong: is the job deterministic?",
+  "head": [
+   "Situation",
+   "Right mechanism",
+   "Why"
+  ],
+  "rows": [
+   [
+    "A few fixed formats (dates, signs, decimals)",
+    "<code>PostToolUse</code> hook normalises",
+    "Exact parse, model never sees ambiguity"
+   ],
+   [
+    "Value needs outside data (rates, prices)",
+    "Tool against a dated source",
+    "Correct and traceable"
+   ],
+   [
+    "Formats vary unpredictably by layout",
+    "Few-shot examples",
+    "Code can't list every case"
+   ],
+   [
+    "Policy limit on an action",
+    "Hook blocks the call",
+    "Deterministic control"
+   ],
+   [
+    "Summed values may not match",
+    "<code>calculated_total</code> vs <code>stated_total</code>",
+    "Self-check"
+   ]
+  ],
+  "rule": "Hooks normalise fixed formats at the boundary; tools compute values from real sources. Leave to the model only what code can't decide."
+ },
+ {
+  "ref": "m6:m6-s1-04",
+  "mock": 6,
+  "title": "A hook exists but the policy is still broken: what does the hook actually check?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Limit broken by <b>several small calls</b> without any rejection",
+    "Hook checks per call, policy is per total",
+    "Hook sums the running total, blocks and escalates"
+   ],
+   [
+    "Agent <b>retries the same call</b> after a rejection",
+    "Error gives no category or retry signal",
+    "Structured error: <code>errorCategory</code>, <code>isRetryable: false</code>"
+   ],
+   [
+    "Hard rule written only in the prompt",
+    "Prompt compliance is probabilistic",
+    "Move the rule into a hook"
+   ],
+   [
+    "Borderline judgment about when to hand off",
+    "Unclear decision boundary",
+    "Explicit criteria + a few examples"
+   ],
+   [
+    "One tool doing two different jobs",
+    "Tool design",
+    "Split into purpose-specific tools"
+   ]
+  ],
+  "rule": "A hook enforces only what it checks. If the policy is about a total, the hook must check the total."
+ },
+ {
+  "ref": "m6:m6-s3-06",
+  "mock": 6,
+  "title": "Messy tool data: where can you fix it?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Messy formats from a server <b>you run</b>",
+    "Server output",
+    "Fix the server's response format"
+   ],
+   [
+    "Messy formats from a server <b>you don't control</b>",
+    "Nothing on your side cleans it",
+    "<code>PostToolUse</code> hook normalizes results before the model sees them"
+   ],
+   [
+    "Tool results bloated with irrelevant fields",
+    "Too much context",
+    "Trim results to the relevant fields"
+   ],
+   [
+    "An action must be blocked every time",
+    "Prompt rules are probabilistic",
+    "Hook that intercepts the outgoing call"
+   ],
+   [
+    "Readers misread old vs new figures",
+    "Missing dates in the output",
+    "Show publication dates with claims"
+   ]
+  ],
+  "rule": "Fix data where you control it. For tool results you don't own, normalize them in a PostToolUse hook before the model sees them."
+ },
+ {
+  "ref": "m7:m7-s1-04",
+  "mock": 7,
+  "title": "Sensitive or messy tool data? Ask where to change it",
+  "head": [
+   "Situation",
+   "Right mechanism",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Model <b>must never</b> use a field; server can't change",
+    "<code>PostToolUse</code> hook masks it",
+    "Deterministic, no server change"
+   ],
+   [
+    "Model <b>should usually</b> phrase things a certain way",
+    "Prompt rule + example",
+    "Probabilistic is fine"
+   ],
+   [
+    "You own the tool and the field isn't needed",
+    "Stop returning it from the tool",
+    "Fix at the source"
+   ],
+   [
+    "Results arrive in mixed formats (dates, codes)",
+    "<code>PostToolUse</code> hook normalises",
+    "Model reasons on one format"
+   ],
+   [
+    "An action must be blocked (refund over limit)",
+    "<code>PreToolUse</code> hook denies the call",
+    "Intercepts outgoing calls"
+   ]
+  ],
+  "rule": "Must never use the data? Strip it from the tool result with a PostToolUse hook, before the model reads it."
+ },
+ {
+  "ref": "m7:m7-s4-09",
+  "mock": 7,
+  "title": "Which control acts at the right moment?",
+  "head": [
+   "Goal",
+   "Mechanism",
+   "When it acts"
+  ],
+  "rows": [
+   [
+    "Action must never happen",
+    "Hook intercepting the outgoing call",
+    "Before execution"
+   ],
+   [
+    "Clean or normalize results",
+    "PostToolUse hook",
+    "After execution"
+   ],
+   [
+    "Encourage good behaviour",
+    "System prompt + examples",
+    "Probabilistic"
+   ],
+   [
+    "Agent never needs the tool",
+    "Remove it from allowedTools",
+    "Tool not offered"
+   ],
+   [
+    "Catch subtle errors in output",
+    "Independent review",
+    "After generation"
+   ]
+  ],
+  "rule": "To stop an action, intercept the outgoing call. PostToolUse is for results."
+ }
+]

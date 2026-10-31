@@ -1,0 +1,230 @@
+[
+ {
+  "ref": "m4:s5-07",
+  "mock": 4,
+  "title": "Batch or real-time? Ask who is waiting and whether tools loop",
+  "head": [
+   "Workload",
+   "Right interface",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Overnight report read next morning",
+    "Message Batches",
+    "Latency-tolerant, 50% cheaper"
+   ],
+   [
+    "Weekly audit",
+    "Message Batches",
+    "Latency-tolerant"
+   ],
+   [
+    "Required pre-merge check",
+    "Synchronous requests",
+    "Blocking, no batch latency guarantee"
+   ],
+   [
+    "Advisory review nobody waits on",
+    "Message Batches",
+    "Nothing is blocked"
+   ],
+   [
+    "Needs a multi-turn tool loop",
+    "Synchronous, or pre-fetch tool data",
+    "Batch has no tool loop per request"
+   ]
+  ],
+  "rule": "Batch saves 50% but promises nothing about time. Use it for work nobody is blocked on."
+ },
+ {
+  "ref": "m4:s5-08",
+  "mock": 4,
+  "title": "Batch request stops at tool_use: what can you do?",
+  "head": [
+   "Situation",
+   "Right move",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Tool data predictable and available beforehand",
+    "Pre-fetch it into each batch request",
+    "Keeps the 50% saving"
+   ],
+   [
+    "Model must decide what to look up as it goes",
+    "Synchronous requests with a tool loop",
+    "Batch has no multi-turn tool calling"
+   ],
+   [
+    "Some batch items failed",
+    "Resubmit only those by <code>custom_id</code>",
+    "No need to redo the batch"
+   ],
+   [
+    "Output cut off mid-answer (<code>max_tokens</code>)",
+    "Raise <code>max_tokens</code>",
+    "Length, not tools"
+   ],
+   [
+    "Model answers in text instead of calling a tool",
+    "<code>tool_choice</code> \"any\" or forced",
+    "Guarantees a call"
+   ]
+  ],
+  "rule": "Batch requests can't run tool loops. If the tool data is predictable, fetch it first and keep the discount."
+ },
+ {
+  "ref": "m5:s5q-s5-06",
+  "mock": 5,
+  "title": "Batch results: what links each result back to its input?",
+  "head": [
+   "Situation",
+   "Right mechanism",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Results to match to inputs",
+    "<code>custom_id</code> per request",
+    "Order not guaranteed"
+   ],
+   [
+    "Some requests failed",
+    "Resubmit only those, by <code>custom_id</code>",
+    "Keeps the 50% saving"
+   ],
+   [
+    "Job blocks a merge",
+    "Real-time calls, not batch",
+    "Batch has no latency promise"
+   ],
+   [
+    "Each item needs several tool calls",
+    "Not batch",
+    "No multi-turn tool calling"
+   ],
+   [
+    "Overnight, cost-sensitive, single pass",
+    "Message Batches API",
+    "50% cheaper, up to 24h"
+   ]
+  ],
+  "rule": "Batch results come back in any order. Give each request a <code>custom_id</code>, match on it, and resubmit only failed IDs."
+ },
+ {
+  "ref": "m6:m6-s5-08",
+  "mock": 6,
+  "title": "Batch or real-time? Ask who waits, and for how long",
+  "head": [
+   "Situation",
+   "Right choice",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Blocking pre-merge check",
+    "Real-time",
+    "A merge waits on it"
+   ],
+   [
+    "Non-blocking, read the next day (overnight report, weekly audit)",
+    "Batch, matched by <code>custom_id</code>",
+    "50% cheaper; latency doesn't matter"
+   ],
+   [
+    "Non-blocking but a person must act within a deadline",
+    "Real-time",
+    "Batch has no latency SLA"
+   ],
+   [
+    "Needs multi-turn tool calling in one request",
+    "Real-time",
+    "Batch doesn't support it"
+   ],
+   [
+    "Some requests in a batch failed",
+    "Resubmit only those by <code>custom_id</code>",
+    "No need to rerun all"
+   ]
+  ],
+  "rule": "Batch only work that nobody waits on by a deadline. Non-blocking is not the same as latency-tolerant."
+ },
+ {
+  "ref": "m7:m7-s5-08",
+  "mock": 7,
+  "title": "Cutting cost: which levers keep the output complete?",
+  "head": [
+   "Lever",
+   "When it fits",
+   "Watch out for"
+  ],
+  "rows": [
+   [
+    "Message Batches API",
+    "Nobody waits on results (overnight, weekly)",
+    "No latency SLA; no multi-turn tools"
+   ],
+   [
+    "Trim input to the fields the task uses",
+    "Requests carry content the task ignores",
+    "Don't drop what's used"
+   ],
+   [
+    "Skip unchanged items",
+    "Old results stay valid",
+    "Breaks full-coverage requirements"
+   ],
+   [
+    "Pack many items per request",
+    "Rarely",
+    "Attention dilution, contradictions"
+   ],
+   [
+    "Real-time requests",
+    "Someone waits (pre-merge)",
+    "Full price"
+   ]
+  ],
+  "rule": "Batch what nobody waits for; trim what the task doesn't read. Don't skip work a requirement says to cover."
+ },
+ {
+  "ref": "m7:m7-s6-05",
+  "mock": 7,
+  "title": "Big extraction job: batch or real-time?",
+  "head": [
+   "Situation",
+   "Right approach",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Single-call requests, deadline days away",
+    "Message Batches API + <code>custom_id</code>",
+    "50% cheaper"
+   ],
+   [
+    "Results needed within hours",
+    "Parallel real-time (e.g. parallel subagents)",
+    "Batch has no latency SLA"
+   ],
+   [
+    "Each document needs multi-turn tool calls",
+    "Real-time",
+    "Batch can't do multi-turn tools"
+   ],
+   [
+    "Some batch requests failed",
+    "Resubmit by <code>custom_id</code>",
+    "Only the failures"
+   ],
+   [
+    "Live traffic must keep flowing",
+    "Keep it separate from the backfill",
+    "Don't compete with users"
+   ]
+  ],
+  "rule": "Not urgent, single-call, large volume → Message Batches API with custom_id."
+ }
+]

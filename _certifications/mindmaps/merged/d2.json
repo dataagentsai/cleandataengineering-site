@@ -1,0 +1,880 @@
+{
+ "domain": 2,
+ "objectives": [
+  {
+   "obj": "2.1",
+   "maps": [
+    {
+     "for": "Claude picks the wrong tool: which lever to pull first",
+     "ask": "Is the tool description the problem, or is something else steering the choice?",
+     "when": "Claude keeps calling the wrong tool, or keeps mixing up two similar tools.",
+     "head": [
+      "What you observe",
+      "Where the fault is",
+      "Fix"
+     ],
+     "rows": [
+      [
+       "Wrong tool picked across many phrasings, and the descriptions are <b>one-liners</b>",
+       "Thin or overlapping tool descriptions",
+       "<b>Rewrite the descriptions</b>: purpose, inputs, an example, when to use it, when not to, and when to use the sibling tool instead"
+      ],
+      [
+       "Descriptions are already good, but the misroutes <b>always follow certain words</b>",
+       "Wording in the system prompt (or in examples) that ties those words to a tool",
+       "Find and rewrite that wording in terms of the customer's goal"
+      ],
+      [
+       "Descriptions are detailed, but a few ambiguous edge cases still go wrong",
+       "Ambiguous cases",
+       "Add 2 to 4 targeted, contrasting examples"
+      ],
+      [
+       "Descriptions are good, but one tool does several different jobs",
+       "Tool design",
+       "Split or rename it into purpose-specific tools (after the description fix, not first)"
+      ],
+      [
+       "Wrong pick, but the server is <b>third-party</b>",
+       "Descriptions you cannot edit",
+       "Project guidance in CLAUDE.md that steers the choice"
+      ],
+      [
+       "The agent answers in text when it must call a tool",
+       "Tool choice",
+       "<code>tool_choice: \"any\"</code> or a forced tool"
+      ],
+      [
+       "A call must never happen without a condition, or tools must run in a fixed order",
+       "Instructions cannot guarantee it",
+       "A hook or prerequisite gate in code, or a forced <code>tool_choice</code>"
+      ],
+      [
+       "Too many tools on one agent",
+       "Tool distribution",
+       "Give each agent the 4 to 5 tools its role needs"
+      ],
+      [
+       "Results need cleaning before the model sees them",
+       "Raw tool output",
+       "<code>PostToolUse</code> hook"
+      ]
+     ],
+     "rule": "Descriptions are the main way Claude picks a tool, but not the only one. If you own the tool, fix a vague description first (when to use, when not to, inputs); if the descriptions are already good and misroutes follow certain words, look for those words in the system prompt.",
+     "from": [
+      "m4:s1-08",
+      "m5:s5q-s1-02",
+      "m6:m6-s1-05",
+      "m6:m6-s3-07",
+      "m6:m6-s4-04"
+     ]
+    },
+    {
+     "for": "A tool is called with bad inputs: description, examples or a split",
+     "ask": "What was the model actually told about this tool and its inputs?",
+     "when": "The right tool is called, but with wrong inputs or a misused catch-all parameter.",
+     "head": [
+      "What you observe",
+      "Where the fault is",
+      "Fix"
+     ],
+     "rows": [
+      [
+       "Wrong inputs, and the description is <b>one line</b>",
+       "Description",
+       "Add the input format, examples, edge cases and boundaries"
+      ],
+      [
+       "The description is full, but behaviour is <b>still inconsistent</b>",
+       "Needs demonstration",
+       "A few targeted examples"
+      ],
+      [
+       "Good description, but a catch-all parameter is still misused, or one generic tool does several jobs",
+       "Tool design",
+       "Split into purpose-specific tools with typed inputs"
+      ],
+      [
+       "Two tools have overlapping descriptions",
+       "Boundaries",
+       "State when to use each"
+      ],
+      [
+       "Bad input reaches the tool, it fails vaguely, and the agent can't recover",
+       "Error response",
+       "Structured validation error: category, retryable, message"
+      ],
+      [
+       "A valid empty result is confused with a failure",
+       "Error meaning",
+       "Distinguish an access failure from \"no results\""
+      ],
+      [
+       "Results arrive in mixed formats",
+       "Result shape",
+       "<code>PostToolUse</code> hook to normalise"
+      ]
+     ],
+     "rule": "A minimal description leads to bad calls, so first add input format, examples, edge cases and boundaries. When a good description still does not stop misuse of a catch-all input, split the tool into purpose-specific tools with defined inputs.",
+     "from": [
+      "m5:s5q-s1-10",
+      "m7:m7-s1-06"
+     ]
+    }
+   ]
+  },
+  {
+   "obj": "2.2",
+   "maps": [
+    {
+     "for": "What error to return for each kind of tool failure",
+     "ask": "What does the agent need to know about this failure to recover from it?",
+     "when": "A tool fails and the agent retries hopeless calls, gives up on recoverable ones, or can't explain what happened.",
+     "head": [
+      "Kind of failure",
+      "What to return",
+      "What the agent does next"
+     ],
+     "rows": [
+      [
+       "Transient: a timeout or brief outage that passes on a retry",
+       "Retry with backoff inside the tool first; if it still fails, <code>isError</code> with a transient category, retryable true",
+       "Retries, or tells the customer to wait"
+      ],
+      [
+       "Business rule or policy says no (over the refund limit, past the cut-off, card closed)",
+       "<code>isError</code>, business category, <code>isRetryable: false</code>, and a customer-friendly reason",
+       "Stops, explains, and offers the next option"
+      ],
+      [
+       "Validation: bad input such as a wrong ID format",
+       "Validation category, saying what was wrong and the expected format",
+       "Fixes the input and retries"
+      ],
+      [
+       "Not allowed for this user",
+       "Permission category",
+       "Escalates or explains"
+      ],
+      [
+       "The lookup worked but found nothing",
+       "Success with an empty result, not an error",
+       "Reports that nothing was found"
+      ],
+      [
+       "Every failure says \"Operation failed\", or two failure kinds return the same message",
+       "<b><code>errorCategory</code> + <code>isRetryable</code></b> + a short description",
+       "Can choose the right response instead of guessing"
+      ],
+      [
+       "Raw error codes arrive in mixed formats",
+       "Normalise them in a <code>PostToolUse</code> hook",
+       "Reads one consistent shape"
+      ],
+      [
+       "A rule the agent <b>can check in advance</b>",
+       "Put it in the tool description",
+       "Avoids the failing call altogether"
+      ],
+      [
+       "A subagent can't recover locally",
+       "Pass the error up with partial results",
+       "The coordinator decides"
+      ]
+     ],
+     "rule": "Return the error's category and whether a retry can help; a uniform \"failed\" leaves the agent guessing. If two failures need different responses, they need different categories, and a business-rule failure should be marked not retryable with a sentence the agent can tell the customer.",
+     "from": [
+      "m4:s1-02",
+      "m6:m6-s1-06",
+      "m7:m7-s1-07",
+      "m7:m7-s4-02"
+     ]
+    },
+    {
+     "for": "Telling \"found nothing\" apart from \"could not look\"",
+     "ask": "Did the tool look and find nothing, or could it not look at all?",
+     "when": "A search or lookup returns nothing, and an outage might be hiding behind the empty answer.",
+     "head": [
+      "Situation",
+      "Right response",
+      "Why"
+     ],
+     "rows": [
+      [
+       "Genuinely nothing found",
+       "A valid empty result (<code>[]</code>)",
+       "It is a real answer"
+      ],
+      [
+       "The store is unreachable for minutes or longer, so an <b>outage looks like 'no results'</b>",
+       "<code>isError</code> with a category, transient and retryable",
+       "The caller can hold or retry later instead of trusting a false \"nothing there\""
+      ],
+      [
+       "Brief, intermittent blips of a few seconds",
+       "Retry locally with backoff, then return an error",
+       "Recovers without bothering the caller"
+      ],
+      [
+       "Bad input from the caller",
+       "Validation error, not retryable",
+       "Retrying won't help"
+      ],
+      [
+       "Policy forbids the action",
+       "Business error, not retryable, with an explanation",
+       "It needs a different path"
+      ],
+      [
+       "Every failure says 'Operation failed'",
+       "Structured categories: transient, validation, business, permission",
+       "The caller can tell failures apart"
+      ],
+      [
+       "A subagent fails and the whole run stops",
+       "Return partial results and error context to the coordinator",
+       "Avoids stopping everything for one failure"
+      ],
+      [
+       "Claims lose their sources",
+       "Carry claim-source metadata through synthesis",
+       "Keeps provenance"
+      ]
+     ],
+     "rule": "Never let 'could not look' share a return value with 'looked and found nothing'. Return a structured, retryable error for outages and keep the empty result for a real no-match.",
+     "from": [
+      "m4:s6-08",
+      "m6:m6-s3-08"
+     ]
+    },
+    {
+     "for": "What a failing subagent sends back to the coordinator",
+     "ask": "Can this failure be fixed locally, and if not, what does the coordinator need in order to decide?",
+     "when": "A subagent's tool call failed and you must decide what to retry and what to report upward.",
+     "head": [
+      "What happened",
+      "Local action",
+      "What to return"
+     ],
+     "rows": [
+      [
+       "Transient fault (timeout, 503)",
+       "Retry with backoff",
+       "If it still fails: a structured error plus partial results"
+      ],
+      [
+       "Permission or access denied",
+       "Don't retry",
+       "Category, affected items, partial results and alternatives"
+      ],
+      [
+       "Bad input (validation)",
+       "Fix the input and retry",
+       "Only if it can't be fixed: the validation detail"
+      ],
+      [
+       "The search succeeded and found nothing",
+       "Nothing to recover",
+       "A valid empty result, clearly not an error"
+      ],
+      [
+       "Any failure",
+       "Never hide it or substitute something silently",
+       "A generic 'failed' and a fake success both block recovery"
+      ]
+     ],
+     "rule": "Retry only what can recover. Otherwise return structured error context with partial results and alternatives, and let the coordinator decide.",
+     "from": [
+      "m4:s3-07"
+     ]
+    }
+   ]
+  },
+  {
+   "obj": "2.3",
+   "maps": [
+    {
+     "for": "Which tool_choice setting to use",
+     "ask": "What may Claude still choose: text or a tool, which tool, or nothing at all?",
+     "when": "Claude replies in text when a tool call is needed, or a required first step sometimes doesn't run.",
+     "head": [
+      "What you need",
+      "Setting",
+      "Why"
+     ],
+     "rows": [
+      [
+       "Text or a tool call; the model decides freely",
+       "<code>\"auto\"</code>",
+       "The default; it may return text"
+      ],
+      [
+       "Some tool call instead of plain text; several tools are valid and Claude chooses well",
+       "<code>\"any\"</code>",
+       "Bans text but keeps the choice of tool"
+      ],
+      [
+       "One specific tool must run first, every time",
+       "Forced <code>{\"type\":\"tool\",\"name\":…}</code> on that first request, then back to <code>auto</code>",
+       "Removes the choice too; guaranteed"
+      ],
+      [
+       "Structured output from one schema",
+       "A forced extraction tool",
+       "Schema-compliant output"
+      ],
+      [
+       "The tool input must match the schema",
+       "Strict schema",
+       "Controls the shape, not whether a call happens"
+      ],
+      [
+       "Certain tools only after a prerequisite has returned",
+       "A hook or prerequisite gate in code",
+       "Guaranteed across turns, in code"
+      ],
+      [
+       "An instruction to call a tool first",
+       "Prompt guidance",
+       "Probabilistic: fine as guidance, not as a guarantee"
+      ],
+      [
+       "Claude calls the <b>wrong</b> tool, or confuses two similar tools at random",
+       "Not a tool_choice problem: expand the descriptions with inputs, examples and boundaries",
+       "It is a selection problem; descriptions help picking but can't promise order"
+      ],
+      [
+       "Recover after a bad call",
+       "A structured <code>isError</code> result",
+       "Recovery, not prevention"
+      ],
+      [
+       "Results arrive in mixed formats",
+       "A <code>PostToolUse</code> hook to normalise",
+       "Different sources, one shape"
+      ]
+     ],
+     "rule": "\"any\" guarantees some tool call, not which one. To make one exact tool run first, force it by name on that request; descriptions improve picking but cannot promise order.",
+     "from": [
+      "m5:s5q-s1-07",
+      "m5:s5q-s6-05",
+      "m7:m7-s1-05",
+      "m7:m7-s3-07",
+      "m7:m7-s4-04"
+     ]
+    },
+    {
+     "for": "Too many tools, or the wrong tools, on one agent",
+     "ask": "Is the agent confused among the right tools, or holding tools it shouldn't have?",
+     "when": "Tool selection gets worse as tools are added, or an agent keeps using tools outside its role.",
+     "head": [
+      "What you observe",
+      "Where the fault is",
+      "Fix"
+     ],
+     "rows": [
+      [
+       "Misroutes <b>spread evenly</b> and started as the tool count grew",
+       "Too many tools on one agent",
+       "Keep the frequent tools on the front-line agent and <b>move rare tools to a specialist</b>"
+      ],
+      [
+       "Many off-role tools, and the descriptions are already good",
+       "Tool distribution",
+       "Scope the <code>AgentDefinition</code>'s tool list to the role"
+      ],
+      [
+       "Misroutes <b>cluster between look-alike pairs</b>, or a few tools with one-line descriptions get confused",
+       "Overlapping or thin descriptions",
+       "Expand the descriptions: inputs, examples, boundaries"
+      ],
+      [
+       "A rare tool is called when it shouldn't be",
+       "Missing control",
+       "A hook to block it, if it must stay"
+      ],
+      [
+       "A subagent often needs one quick lookup from another role",
+       "Strict scoping is too tight",
+       "One limited cross-role tool"
+      ],
+      [
+       "A generic tool does many jobs",
+       "Tool design",
+       "Split into purpose-specific tools"
+      ],
+      [
+       "Many exploratory calls just to learn what exists",
+       "No catalogue",
+       "An MCP resource"
+      ]
+     ],
+     "rule": "Too many tools on one agent degrades selection. Descriptions fix confused picks among the right tools; scoping fixes an agent holding the wrong tools.",
+     "from": [
+      "m4:s1-07",
+      "m7:m7-s3-08"
+     ]
+    },
+    {
+     "for": "A subagent needs help from outside its role",
+     "ask": "What kind of outside help is it: a frequent simple check, or rare open-ended work?",
+     "when": "A subagent keeps reaching for capabilities that belong to another role in the middle of a task.",
+     "head": [
+      "Situation",
+      "Right mechanism",
+      "Why"
+     ],
+     "rows": [
+      [
+       "Frequent, simple, uniform lookups, such as <b>quick checks</b> of one fact",
+       "A narrow cross-role tool such as <code>verify_fact</code>",
+       "Removes round trips without giving broad access"
+      ],
+      [
+       "The needed facts are known before the subagent starts",
+       "Pass them explicitly in its prompt",
+       "No tool or round trip needed"
+      ],
+      [
+       "Rare, complex questions needing several sources",
+       "Route them via the coordinator",
+       "It can delegate and sees all the results"
+      ],
+      [
+       "The next step depends on other subagents' findings",
+       "The coordinator decides",
+       "Only it sees everything"
+      ],
+      [
+       "<b>Open-ended research</b> mid-task, because off-role tools are available",
+       "Remove them from the <code>AgentDefinition</code>; the subagent reports gaps",
+       "Off-role tools get used and misused"
+      ],
+      [
+       "Too many tools, and it picks the wrong one",
+       "Cut to the 4 to 5 tools the role needs",
+       "Tool overload"
+      ],
+      [
+       "Material it retrieved itself lacks sources",
+       "Claim-source mapping, if retrieval is in its role",
+       "Provenance"
+      ],
+      [
+       "It ignores a written rule",
+       "Make the boundary structural",
+       "Prompts are probabilistic"
+      ]
+     ],
+     "rule": "Scope tools to the role and route real gaps back through the coordinator, then add one narrow cross-role tool for the frequent, simple need. Complex cases stay with the coordinator.",
+     "from": [
+      "m4:s3-04",
+      "m5:s5q-s3-06"
+     ]
+    },
+    {
+     "for": "Controlling a risky tool: remove it, gate it, or guide it",
+     "ask": "Is this action forbidden, allowed with approval, allowed under a limit, or just a preference?",
+     "when": "An agent has a tool that could do harm, and you must decide how hard to control it.",
+     "head": [
+      "What you observe",
+      "Where the fault is",
+      "Fix"
+     ],
+     "rows": [
+      [
+       "The action is <b>not allowed</b> from the agent at all",
+       "Access",
+       "Deny or remove the tool; keep the rest"
+      ],
+      [
+       "The action is allowed <b>with human approval</b>",
+       "Gate",
+       "A <code>PreToolUse</code> hook that asks or blocks"
+      ],
+      [
+       "The action is allowed under a <b>threshold</b>, such as an amount",
+       "Business rule",
+       "A hook that blocks above it and redirects"
+      ],
+      [
+       "A preference, not a hard rule",
+       "Guidance",
+       "A CLAUDE.md or prompt instruction"
+      ],
+      [
+       "The agent misuses tools outside its role",
+       "Tool distribution",
+       "Scope tools per role"
+      ]
+     ],
+     "rule": "Not allowed from the agent: remove the tool. Allowed with approval: a hook. A preference: an instruction.",
+     "from": [
+      "m5:s5q-s4-08"
+     ]
+    }
+   ]
+  },
+  {
+   "obj": "2.4",
+   "maps": [
+    {
+     "for": "Reuse a community MCP server, describe conventions, or build your own",
+     "ask": "Does something already exist for this system, and is the gap capability or just context?",
+     "when": "You need to connect Claude to an outside system and must decide what to use or build.",
+     "head": [
+      "Situation",
+      "Right choice",
+      "Why"
+     ],
+     "rows": [
+      [
+       "A standard system with maintained community servers",
+       "Use a community MCP server",
+       "Already built and maintained"
+      ],
+      [
+       "Team-specific fields and conventions",
+       "Describe them in CLAUDE.md",
+       "Conventions are context, not capability"
+      ],
+      [
+       "A proprietary system with no equivalent",
+       "Build a custom MCP server",
+       "Nothing to reuse"
+      ],
+      [
+       "The agent must change things (comment, transition)",
+       "MCP tools",
+       "Actions need tools"
+      ],
+      [
+       "The agent must browse a catalogue",
+       "MCP resources",
+       "Content to read"
+      ]
+     ],
+     "rule": "Prefer community MCP servers for standard integrations, put team conventions in CLAUDE.md, and build a custom server only when nothing exists.",
+     "from": [
+      "m4:s4-10"
+     ]
+    },
+    {
+     "for": "Where an MCP server's configuration lives",
+     "ask": "Who needs this server, and how do they get it without a secret being committed?",
+     "when": "You are adding an MCP server and must choose between the project file and your user file.",
+     "head": [
+      "Situation",
+      "Where it goes",
+      "Why"
+     ],
+     "rows": [
+      [
+       "The whole team (and CI) needs it from first clone",
+       "Project <code>.mcp.json</code>, committed",
+       "Version control shares it with every clone"
+      ],
+      [
+       "The shared server needs a secret",
+       "<code>${VAR}</code> expansion in <code>.mcp.json</code>; each person sets the variable in their environment",
+       "The file is committed; the value is not"
+      ],
+      [
+       "A token written into a committed file",
+       "Nowhere",
+       "Use expansion instead"
+      ],
+      [
+       "One person, a <b>personal or experimental</b> server",
+       "User-level <code>~/.claude.json</code>",
+       "Private, not in git, and keeps trials out of everyone's tool list"
+      ],
+      [
+       "One person, across many repositories",
+       "User-level <code>~/.claude.json</code>",
+       "Configured once for all repositories"
+      ],
+      [
+       "Only one machine (such as the CI runner) uses it",
+       "User-level <code>~/.claude.json</code>, secret injected at runtime",
+       "Personal scope is enough; nothing to share"
+      ],
+      [
+       "An audit needs per-person actions",
+       "Per-person tokens, not a shared one",
+       "Identity"
+      ],
+      [
+       "Instructions on how to use a server",
+       "CLAUDE.md",
+       "Not configuration; no servers are registered there"
+      ],
+      [
+       "A standard integration such as Jira",
+       "A community MCP server",
+       "Don't build what already exists"
+      ],
+      [
+       "The agent prefers Grep over a better MCP tool",
+       "Improve the MCP tool's description",
+       "Selection follows descriptions"
+      ]
+     ],
+     "rule": "Shared servers go in the project's committed .mcp.json with secrets as ${VAR}, never as values; personal or experimental servers go in ~/.claude.json.",
+     "from": [
+      "m4:s4-03",
+      "m5:s5q-s4-02",
+      "m6:m6-s4-02",
+      "m6:m6-s5-01"
+     ]
+    },
+    {
+     "for": "A better MCP tool is ignored or missing",
+     "ask": "Is the MCP tool missing from Claude's list, or listed but losing to a built-in?",
+     "when": "Claude uses a built-in such as Grep, or says it has no such tool, when a better MCP tool should be doing the job.",
+     "head": [
+      "What you observe",
+      "Where the fault is",
+      "Fix"
+     ],
+     "rows": [
+      [
+       "Claude says it has <b>no such tool</b>; the server was added mid-session",
+       "Not yet discovered",
+       "Restart so it connects"
+      ],
+      [
+       "The tools are <b>listed</b>, but Claude picks a built-in; the MCP description is thin or vague",
+       "The description doesn't distinguish the tool",
+       "Rewrite it: capabilities, inputs, sample queries, and when to prefer it over the built-in"
+      ],
+      [
+       "The description is already full, and the built-in is still chosen",
+       "Context elsewhere",
+       "Add a project instruction"
+      ],
+      [
+       "You can't edit a third-party tool's description",
+       "Description out of reach",
+       "Guidance in CLAUDE.md"
+      ],
+      [
+       "The competing tool has <b>no legitimate use</b> for this agent",
+       "Tool distribution",
+       "Remove it from the agent's tools"
+      ],
+      [
+       "A tool must never be used here",
+       "Permissions",
+       "Deny it in settings"
+      ],
+      [
+       "Several similar tools are confused with each other",
+       "Generic, overlapping tools",
+       "Clarify boundaries, or rename and split into purpose-specific tools"
+      ],
+      [
+       "Misroutes follow specific words in requests",
+       "System-prompt wording",
+       "Rewrite that wording"
+      ],
+      [
+       "The agent probes to learn what exists",
+       "No catalogue",
+       "An MCP resource"
+      ],
+      [
+       "The server fails for one person only",
+       "Their environment or token",
+       "Check the exported variable"
+      ]
+     ],
+     "rule": "A tool missing after a mid-session config change means reconnect; a tool present but ignored means fix its description first, saying what it does that the built-in can't, before removing the alternatives.",
+     "from": [
+      "m4:s4-04",
+      "m5:s5q-s3-10",
+      "m5:s5q-s4-03",
+      "m7:m7-s5-05"
+     ]
+    },
+    {
+     "for": "Too many exploratory calls: what the agent is missing",
+     "ask": "Is the agent calling tools to find out what exists, or because a tool is unclear?",
+     "when": "The agent makes many tool calls, probing around before it does any real work.",
+     "head": [
+      "What you observe",
+      "What's missing",
+      "Fix"
+     ],
+     "rows": [
+      [
+       "<b>Exploratory</b> calls to learn what exists: a catalogue, hierarchy or schema",
+       "A content catalogue",
+       "Expose it as an MCP <b>resource</b>: readable content the server keeps current"
+      ],
+      [
+       "The structure is small and rarely changes",
+       "A one-time statement of it",
+       "Describe it in the system prompt"
+      ],
+      [
+       "The agent must find specific items by query",
+       "A search tool with a clear description",
+       "That is an action, so it needs a tool"
+      ],
+      [
+       "Calls are <b>badly formed</b> or irrelevant, or the wrong tool is picked among similar ones",
+       "A clear description",
+       "Expand the description: inputs, examples, edge cases, boundaries"
+      ],
+      [
+       "One generic tool does several jobs",
+       "Purpose-specific tools",
+       "Split and rename"
+      ],
+      [
+       "Each call returns huge payloads that fill the context",
+       "Trimmed results",
+       "Trim to the relevant fields in a <code>PostToolUse</code> hook"
+      ],
+      [
+       "Verbose discovery floods the main conversation",
+       "Isolation",
+       "An Explore subagent that returns a summary"
+      ],
+      [
+       "Built-in Grep is preferred over a better MCP tool",
+       "A strong MCP tool description",
+       "Say what the MCP tool does better"
+      ]
+     ],
+     "rule": "If an agent spends tool calls learning what exists, publish that as an MCP resource: resources show content, tools act or fetch. Badly formed calls and wrong picks mean fixing descriptions.",
+     "from": [
+      "m4:s3-09",
+      "m6:m6-s1-07",
+      "m6:m6-s4-03",
+      "m7:m7-s5-04"
+     ]
+    }
+   ]
+  },
+  {
+   "obj": "2.5",
+   "maps": [
+    {
+     "for": "Which built-in tool to find and explore code",
+     "ask": "Are you matching names, searching contents, reading a file, or only after a conclusion?",
+     "when": "You need to locate files or understand code and must pick between Glob, Grep, Read and an Explore subagent.",
+     "head": [
+      "What you need",
+      "Tool or approach",
+      "Why, or what to watch out for"
+     ],
+     "rows": [
+      [
+       "Files whose names or paths match a pattern (for example all tests)",
+       "Glob",
+       "Matches paths only, never contents; fast when naming is consistent"
+      ],
+      [
+       "Every file that contains a text or name",
+       "Grep",
+       "Searches contents, so it works when names are unreliable; only as good as the text marker"
+      ],
+      [
+       "What a file says",
+       "Read",
+       "Read selectively, not everything"
+      ],
+      [
+       "Who calls a function, or how a value flows from an entry point, when you will fix it here",
+       "Grep for the entry point or references, then Read along the calls and imports",
+       "Incremental, one file at a time, not read-all-upfront"
+      ],
+      [
+       "A broad survey where only the <b>conclusion</b> is wanted, or context is tight",
+       "An Explore subagent",
+       "Returns a summary and keeps noise out of the main context"
+      ],
+      [
+       "A long session losing earlier findings",
+       "A scratchpad file of key findings",
+       "Context degrades over time"
+      ],
+      [
+       "Change one unique snippet",
+       "Edit",
+       "A targeted change by unique match"
+      ]
+     ],
+     "rule": "Glob matches file names and paths; Grep searches inside files. Start from the entry point and Read outward, and delegate to Explore only when you want the conclusion, not the trail.",
+     "from": [
+      "m4:s4-01",
+      "m5:s5q-s4-01",
+      "m6:m6-s4-01",
+      "m7:m7-s4-01"
+     ]
+    },
+    {
+     "for": "Changing a file: Edit, replace_all, or Read and Write",
+     "ask": "Is the text you want to change unique in the file?",
+     "when": "You need to change a file, or an Edit just failed.",
+     "head": [
+      "Situation",
+      "Tool",
+      "Why"
+     ],
+     "rows": [
+      [
+       "Small change, and the text is <b>unique</b> in the file",
+       "Edit",
+       "Targeted change; the rest is untouched"
+      ],
+      [
+       "Match not unique, but neighbouring lines differ",
+       "Edit with <code>old_string</code> widened by nearby lines",
+       "The anchor was too short"
+      ],
+      [
+       "Match not unique, and the copies are identical for many lines everywhere",
+       "Read the file, then Write it back changed",
+       "No unique anchor exists, so Edit can't target it"
+      ],
+      [
+       "Every occurrence should change",
+       "Edit with <code>replace_all</code>",
+       "The intent is all copies"
+      ],
+      [
+       "Text not found at all",
+       "Re-read the file, then edit",
+       "The file changed since it was read"
+      ],
+      [
+       "A brand-new file, or a full rewrite",
+       "Write",
+       "Write replaces the whole file"
+      ],
+      [
+       "You don't know where the text is",
+       "Grep for content, then Read",
+       "That is locating, not editing"
+      ],
+      [
+       "The change belongs in the source of generated code",
+       "Edit the generator, if every output should change",
+       "You were in the wrong file"
+      ]
+     ],
+     "rule": "Edit needs a unique text match. If the match is ambiguous, widen it to something unique; only when nothing is unique, Read the file and Write it back.",
+     "from": [
+      "m4:s4-02",
+      "m5:s5q-s4-04",
+      "m6:m6-s5-02",
+      "m7:m7-s4-03"
+     ]
+    }
+   ]
+  }
+ ]
+}

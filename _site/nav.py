@@ -42,6 +42,7 @@ SECTIONS = [
             ("AI engineering", "/certifications/#ai"),
             ("Data engineering", "/certifications/#data"),
             ("Claude Certified Architect", "/certifications/claude-certified-architect/CCA-F/"),
+            ("CCA-F mind maps", "/certifications/cca-f-mind-maps/"),
             ("Claude Architect, Professional", "/certifications/claude-certified-architect/CCAR-P/CCAR-P_Study_Guide.html"),
             ("Microsoft AI-103", "/certifications/azure-ai-engineer/"),
         ]),

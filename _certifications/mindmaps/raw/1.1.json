@@ -1,0 +1,334 @@
+[
+ {
+  "ref": "m4:s1-09",
+  "mock": 4,
+  "title": "Agent forgets what it did? Check what the loop appends",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Repeats calls, claims calls it never made",
+    "Assistant <b>tool_use</b> turn not appended",
+    "Append it, then the paired <b>tool_result</b>"
+   ],
+   [
+    "Right calls, wrong details from results",
+    "Results reworded or trimmed badly",
+    "Return structured results"
+   ],
+   [
+    "Forgets facts only in long chats",
+    "Lost in the middle",
+    "Case-facts block, trim results"
+   ],
+   [
+    "Loop ends too early or late",
+    "Termination check",
+    "Use <code>stop_reason</code>, not text"
+   ],
+   [
+    "Loop never ends",
+    "No real stop signal",
+    "<code>end_turn</code>, not an arbitrary cap"
+   ]
+  ],
+  "rule": "The history must hold each tool_use turn and its matching tool_result. Drop either and the model loses track of what it has done."
+ },
+ {
+  "ref": "m5:s5q-s1-01",
+  "mock": 5,
+  "title": "The loop stops at the wrong time: what is it reading?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Stops while a tool request is still pending",
+    "Completion guessed from reply text",
+    "Continue on <code>stop_reason: \"tool_use\"</code>"
+   ],
+   [
+    "Long, progressing tickets cut off at N steps",
+    "Iteration cap used as the main stop",
+    "Stop on <code>end_turn</code>; keep the cap as a runaway guard"
+   ],
+   [
+    "Agent repeats the <b>same</b> lookup until the cap",
+    "Tool results not appended to history",
+    "Append each tool result before the next request"
+   ],
+   [
+    "Agent spins on a broken tool",
+    "No runaway protection",
+    "Generous cap plus structured error handling"
+   ],
+   [
+    "Steps fixed before any result is seen",
+    "Pre-set tool sequence",
+    "Let the model choose the next step from results"
+   ]
+  ],
+  "rule": "Continue while stop_reason is tool_use and finish on end_turn. Reply text and step counts are not completion signals."
+ },
+ {
+  "ref": "m5:s5q-s1-09",
+  "mock": 5,
+  "title": "Fixed sequence or model-driven loop?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Path known in advance, same steps every time",
+    "Predictable work",
+    "Fixed sequence (prompt chaining)"
+   ],
+   [
+    "Next step depends on what a tool returned",
+    "Adaptive work",
+    "Model-driven loop"
+   ],
+   [
+    "Several concerns in one message",
+    "Multi-concern request",
+    "Decompose, investigate each, answer all"
+   ],
+   [
+    "Workload mixes both kinds",
+    "Mixed",
+    "Route known paths to sequences, the rest to the loop"
+   ],
+   [
+    "Fixed tree shows no gain on any category",
+    "No benefit from scripting",
+    "Keep the loop everywhere"
+   ]
+  ],
+  "rule": "Use fixed sequences where the path is known in advance and the model-driven loop where the next step depends on what was found."
+ },
+ {
+  "ref": "m5:s5q-s4-07",
+  "mock": 5,
+  "title": "Claude talks about stale or wrong code: why?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Precise but <b>out of date</b> after an outside edit",
+    "Old tool result in the history",
+    "Tell Claude, or read the file again"
+   ],
+   [
+    "Vague, inconsistent, 'typical patterns', <b>long session</b>",
+    "Context degradation",
+    "Scratchpad notes, /compact, or a fresh session"
+   ],
+   [
+    "Resuming a session after files changed",
+    "Stale results across sessions",
+    "Say what changed, or start fresh with a summary"
+   ],
+   [
+    "Context filling with huge tool outputs",
+    "Verbose results",
+    "Trim outputs to the relevant fields"
+   ],
+   [
+    "Middle of a long input ignored",
+    "Lost in the middle",
+    "Key facts at start or end, with headers"
+   ]
+  ],
+  "rule": "A tool result is a snapshot in the conversation. If the file changes outside the session, say so or read it again."
+ },
+ {
+  "ref": "m7:m7-s1-01",
+  "mock": 7,
+  "title": "Loop misbehaving? Ask what signal it is reading",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Loop stops when the reply <b>contains text</b>; tool requests are dropped",
+    "Termination judged from content",
+    "Branch on <code>stop_reason</code>"
+   ],
+   [
+    "Claude replies in <b>text with no tool request</b> when a call is required",
+    "Tool choice",
+    "<code>tool_choice: \"any\"</code> or a forced tool"
+   ],
+   [
+    "Claude repeats calls or forgets what a tool returned",
+    "Results not added to history",
+    "Send <code>tool_result</code> blocks with matching ids"
+   ],
+   [
+    "Loop ends on phrases like “anything else?”",
+    "Parsing natural language",
+    "Branch on <code>stop_reason</code>"
+   ],
+   [
+    "Loop stops mid-task after a fixed number of rounds",
+    "Iteration cap used as the stop",
+    "Cap only as a safety net; stop on <code>end_turn</code>"
+   ]
+  ],
+  "rule": "One response can hold text and a tool call. Let stop_reason decide: tool_use → run and continue; end_turn → stop."
+ },
+ {
+  "ref": "m7:m7-s3-01",
+  "mock": 7,
+  "title": "The loop misbehaves: which signal is it reading?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Run ends while tool calls are still pending",
+    "Loop reads text, not stop_reason",
+    "Continue on <code>tool_use</code>, stop on <code>end_turn</code>"
+   ],
+   [
+    "Claude replies in prose when a tool call was needed",
+    "Tool choice left at auto",
+    "<code>tool_choice: \"any\"</code> or a forced tool"
+   ],
+   [
+    "Claude repeats calls it already made",
+    "Tool results not appended to history",
+    "Append each result before the next request"
+   ],
+   [
+    "Loop stops at a magic phrase or a turn cap",
+    "Natural-language or arbitrary stop rule",
+    "Use stop_reason as the primary stop"
+   ]
+  ],
+  "rule": "Continue on tool_use, stop on end_turn. Never decide \"done\" from what the text says."
+ },
+ {
+  "ref": "m7:m7-s3-06",
+  "mock": 7,
+  "title": "The agent forgets what it did: what is missing?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Repeats calls in a short run",
+    "Loop drops earlier turns",
+    "Append each tool result to the messages list"
+   ],
+   [
+    "Loses findings in a long run near context limits",
+    "History too large to keep",
+    "Scratchpad file or subagent delegation"
+   ],
+   [
+    "Exact amounts or dates blur over a long chat",
+    "Progressive summarization",
+    "Case-facts block"
+   ],
+   [
+    "Picks the wrong tool",
+    "Weak descriptions",
+    "Expand tool descriptions"
+   ]
+  ],
+  "rule": "The model knows only what you send. Append every tool result to the conversation."
+ },
+ {
+  "ref": "m7:m7-s4-10",
+  "mock": 7,
+  "title": "Fixed sequence or model-driven loop?",
+  "head": [
+   "Situation",
+   "Design",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Next step depends on what was just found",
+    "Model-driven loop on stop_reason",
+    "Claude chooses each call"
+   ],
+   [
+    "Same known steps every time",
+    "Fixed sequence / prompt chain",
+    "Predictable, auditable"
+   ],
+   [
+    "Many lookups just to learn what exists",
+    "MCP resource catalog",
+    "Fewer exploratory calls"
+   ],
+   [
+    "Need to understand a flow",
+    "Grep entry points, then Read along calls",
+    "Incremental, not read-all"
+   ]
+  ],
+  "rule": "When each step depends on the last result, let the model choose the tool calls, and loop until stop_reason is end_turn."
+ },
+ {
+  "ref": "m7:m7-s6-06",
+  "mock": 7,
+  "title": "When does an agent loop end?",
+  "head": [
+   "Signal",
+   "Use it?",
+   "Why"
+  ],
+  "rows": [
+   [
+    "<code>stop_reason == \"tool_use\"</code>",
+    "Yes: run tools, continue",
+    "API says a tool is requested"
+   ],
+   [
+    "<code>stop_reason == \"end_turn\"</code>",
+    "Yes: stop",
+    "API says the turn is complete"
+   ],
+   [
+    "Phrase in the reply text",
+    "No",
+    "Text can say done while a tool is pending"
+   ],
+   [
+    "Structured done flag",
+    "No, not as the main stop",
+    "Still model content"
+   ],
+   [
+    "Iteration cap",
+    "Only as a safety net",
+    "Arbitrary; cuts runs short"
+   ],
+   [
+    "Fixed tool sequence",
+    "No",
+    "Ignores model-driven decisions"
+   ]
+  ],
+  "rule": "Continue on tool_use, stop on end_turn. Never let reply text or a cap be the main stop."
+ }
+]

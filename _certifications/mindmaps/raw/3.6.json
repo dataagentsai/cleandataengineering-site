@@ -1,0 +1,344 @@
+[
+ {
+  "ref": "m4:s5-01",
+  "mock": 4,
+  "title": "CI step misbehaving? Which part of the invocation is wrong?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Step hangs until the job limit",
+    "Session is interactive",
+    "Run with <code>-p</code> / <code>--print</code>"
+   ],
+   [
+    "Step finishes, but prose is hard to parse",
+    "Output shape",
+    "<code>--output-format json</code> + <code>--json-schema</code>"
+   ],
+   [
+    "Review ignores repo conventions",
+    "Missing project context",
+    "Committed <code>CLAUDE.md</code>"
+   ],
+   [
+    "Review misses flaws in code it just wrote",
+    "Same-session self-review",
+    "Separate, independent invocation"
+   ],
+   [
+    "Step needs no tool loop and can wait hours",
+    "Interface choice",
+    "Message Batches API"
+   ]
+  ],
+  "rule": "A step that hangs is an invocation problem, not an output problem. Use <code>-p</code> first; add output-format flags only once the step actually finishes."
+ },
+ {
+  "ref": "m4:s5-02",
+  "mock": 4,
+  "title": "Output is hard to use: who reads it, and what shape do they need?",
+  "head": [
+   "Situation",
+   "Right mechanism",
+   "Why"
+  ],
+  "rows": [
+   [
+    "A script consumes the findings",
+    "<code>--output-format json</code> + <code>--json-schema</code>",
+    "Fields, not text to parse"
+   ],
+   [
+    "People read it; layout and detail vary",
+    "2–4 few-shot examples of the format",
+    "Examples fix format consistency"
+   ],
+   [
+    "JSON is valid but a value is wrong",
+    "Validate in code, retry with the specific error",
+    "Schemas stop syntax errors only"
+   ],
+   [
+    "Large PR, uneven depth",
+    "Per-file passes + integration pass",
+    "Attention dilution"
+   ],
+   [
+    "Step never finishes in CI",
+    "<code>-p</code> print mode",
+    "Interactive session waits"
+   ]
+  ],
+  "rule": "Prose is for people; schemas are for programs. When a script is the consumer, declare the output schema instead of parsing text."
+ },
+ {
+  "ref": "m4:s5-03",
+  "mock": 4,
+  "title": "Who needs these instructions, and how do they get them?",
+  "head": [
+   "Who needs it",
+   "Right home",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Every session in the repo, CI and laptops",
+    "Project <code>CLAUDE.md</code> (+ <code>@import</code>)",
+    "Committed, always loaded"
+   ],
+   [
+    "One CI job only",
+    "Job prompt / <code>--append-system-prompt</code>",
+    "Scoped to that run"
+   ],
+   [
+    "One developer's preferences",
+    "<code>~/.claude/CLAUDE.md</code>",
+    "Personal, not shared"
+   ],
+   [
+    "Only files matching a pattern",
+    "<code>.claude/rules/</code> with <code>paths:</code>",
+    "Loads when relevant"
+   ],
+   [
+    "A task run on demand",
+    "Skill in <code>.claude/skills/</code>",
+    "Invoked, not always loaded"
+   ]
+  ],
+  "rule": "Ask who needs the rule. Everyone working in the repository means project <code>CLAUDE.md</code>; one job means that job's prompt."
+ },
+ {
+  "ref": "m4:s5-04",
+  "mock": 4,
+  "title": "Review is missing things: is it the reviewer, the criteria, or the size?",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Misses flaws only in code the same session wrote",
+    "Self-review in shared context",
+    "Independent review instance"
+   ],
+   [
+    "Independent reviewer misses one kind of flaw",
+    "Missing criterion",
+    "Explicit criteria + examples"
+   ],
+   [
+    "Large PR, uneven depth, contradictions",
+    "Attention dilution",
+    "Per-file passes + integration pass"
+   ],
+   [
+    "Many false positives in a vague category",
+    "Vague instruction",
+    "Categorical, testable criteria"
+   ],
+   [
+    "Severity swings on borderline cases",
+    "Instructions alone inconsistent",
+    "Few-shot examples with reasoning"
+   ]
+  ],
+  "rule": "If a reviewer misses problems only in code it wrote, separate the reviewer. Add criteria once the reviewer is independent."
+ },
+ {
+  "ref": "m5:s5q-s5-03",
+  "mock": 5,
+  "title": "Wrong output shape: constrain it, or repair it afterwards?",
+  "head": [
+   "Situation",
+   "Right mechanism",
+   "Why"
+  ],
+  "rows": [
+   [
+    "CLI run, consumer needs a fixed shape",
+    "<code>--output-format json</code> + <code>--json-schema</code>",
+    "Shape set at generation"
+   ],
+   [
+    "API call, must always return one shape",
+    "Tool with JSON schema, forced <code>tool_choice</code>",
+    "Turn must be that tool call"
+   ],
+   [
+    "Shape is right but values fail checks, time is available",
+    "Retry with the validation errors appended",
+    "Model can correct with feedback"
+   ],
+   [
+    "Value absent from the source",
+    "Nullable field, route to a person",
+    "Retries can't find what isn't there"
+   ],
+   [
+    "Need loud failure when a contract changes",
+    "Contract test",
+    "Detects, doesn't prevent"
+   ]
+  ],
+  "rule": "<code>--output-format json</code> gives valid JSON; <code>--json-schema</code> gives your JSON. Constrain at generation when a consumer has a fixed contract."
+ },
+ {
+  "ref": "m5:s5q-s5-04",
+  "mock": 5,
+  "title": "CI run behaves differently from local: read where it stops",
+  "head": [
+   "What you observe",
+   "Where the fault is",
+   "Fix"
+  ],
+  "rows": [
+   [
+    "Job <b>hangs</b> waiting for input",
+    "Not in non-interactive mode",
+    "Run with <code>-p</code> / <code>--print</code>"
+   ],
+   [
+    "Ends fast, empty, no error, right after a tool request",
+    "Tool not permitted, nobody to approve",
+    "Allow the needed tools for the CI run"
+   ],
+   [
+    "Search runs, but flags differ from local",
+    "Criteria in personal <code>~/.claude/CLAUDE.md</code>",
+    "Move them into project CLAUDE.md"
+   ],
+   [
+    "Output not machine-parseable",
+    "Unconstrained output",
+    "<code>--output-format json</code> + <code>--json-schema</code>"
+   ],
+   [
+    "MCP tools missing in CI only",
+    "Server set in user config",
+    "Project <code>.mcp.json</code>"
+   ]
+  ],
+  "rule": "Non-interactive runs cannot approve anything. Fast, empty, error-free output right after a tool request means the tool wasn't allowed."
+ },
+ {
+  "ref": "m5:s5q-s5-08",
+  "mock": 5,
+  "title": "Several CI jobs, one config: which job needs what?",
+  "head": [
+   "Job type",
+   "Right setting",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Blocking pre-merge check",
+    "Real-time, tight turn limit",
+    "Developers are waiting"
+   ],
+   [
+    "Overnight, single pass per file",
+    "Message Batches API",
+    "50% cheaper, no deadline"
+   ],
+   [
+    "Overnight, multi-step tool investigation",
+    "Real-time calls, generous turn limit",
+    "Batch can't run tool loops"
+   ],
+   [
+    "On-demand generation",
+    "Its own moderate settings",
+    "Tolerates minutes"
+   ],
+   [
+    "All jobs on one wrapper",
+    "Separate invocations per job",
+    "Opposite needs"
+   ]
+  ],
+  "rule": "Configure latency-bound, on-demand and cost-bound jobs separately. Use batch only for single-pass work; it can't run tool loops."
+ },
+ {
+  "ref": "m7:m7-s2-06",
+  "mock": 7,
+  "title": "Claude in a script? Ask who reads the output",
+  "head": [
+   "Need",
+   "Mechanism",
+   "Why"
+  ],
+  "rows": [
+   [
+    "Run without waiting for input",
+    "<code>-p</code> / <code>--print</code>",
+    "Non-interactive"
+   ],
+   [
+    "Output a <b>program</b> parses",
+    "<code>--output-format json</code>",
+    "Machine-readable"
+   ],
+   [
+    "Specific <b>named fields</b>",
+    "<code>--json-schema</code>",
+    "Fixes the structure"
+   ],
+   [
+    "Output a <b>person</b> reads, consistent style",
+    "Format example in the prompt",
+    "Good enough for humans"
+   ],
+   [
+    "Findings posted as PR comments",
+    "JSON + schema, then the script posts",
+    "Structured findings"
+   ]
+  ],
+  "rule": "A program reads it → --output-format json plus --json-schema."
+ },
+ {
+  "ref": "m7:m7-s5-03",
+  "mock": 7,
+  "title": "Who reads the output, and through which interface?",
+  "head": [
+   "Situation",
+   "Right mechanism",
+   "Why"
+  ],
+  "rows": [
+   [
+    "CI script reads findings from <code>claude -p</code>",
+    "<code>--output-format json</code> + <code>--json-schema</code>",
+    "Machine-parseable, schema-shaped"
+   ],
+   [
+    "Your own app calls the Messages API",
+    "<code>tool_use</code> with a schema, forced via <code>tool_choice</code>",
+    "Most reliable structured output on the API"
+   ],
+   [
+    "People read the review, layout varies",
+    "Few-shot examples of the format",
+    "Consistency, not a contract"
+   ],
+   [
+    "Job hangs waiting for input",
+    "<code>-p</code> / <code>--print</code>",
+    "Non-interactive mode"
+   ],
+   [
+    "Output parses but a value is wrong",
+    "Validate and retry with specific errors",
+    "Schemas stop syntax errors, not semantic ones"
+   ]
+  ],
+  "rule": "In CI, code reads Claude Code's output through -p with --output-format json and --json-schema."
+ }
+]
