@@ -34,6 +34,8 @@ PLANNED = [
      "Inversion of control, ports and adapters, strategy, chain of responsibility for guards, decorators for retries, and contract tests per port."),
     ("The autonomous agent tech stack, one concern at a time", "ai", "builders", "explainer",
      "A complete map of the tools for each concern: loop, models, tools, memory, context, guardrails, security, human in the loop, tracing, evals, durability and cost."),
+    ("Building agents on a moving ship: what has settled, what is still open, and how not to get stuck", "ai", "builders", "decision",
+     "Which parts of the agent stack are adopted and here to stay, which are still in flux, and how to keep your agent tool-agnostic with ports, adapters and contract tests."),
     ("Choosing your agent loop: LangGraph vs OpenAI Agents SDK vs Claude Agent SDK vs plain code", "ai", "builders", "decision",
      "A comparison of orchestration and loop frameworks, with a 'pick this when' table."),
     ("DBOS vs Temporal: durable agents without the drama", "ai", "builders", "decision",
