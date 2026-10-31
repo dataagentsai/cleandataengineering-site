@@ -323,7 +323,81 @@ def drawing_layer_test():
                   "The layer test. Most medallion mistakes are a step sitting one box too far left or right.")
 
 
-DRAWINGS = {"kitchen": drawing_kitchen, "spine-readers": drawing_spine_readers, "quarantine": drawing_quarantine,
+def _guards():
+    sys.path.insert(0, str(ROOT / "_guides"))
+    import guardrail_data
+    return guardrail_data
+
+
+def drawing_guard_card():
+    b, t, p = kit.box, kit.text, kit.path
+    d = ""
+    tags = [(20, 20, "Priority", "must have", "bxs"), (380, 0, "Where", "before the tool", "bx"), (740, 20, "How", "a rule in code", "bx"),
+            (20, 215, "If it fires", ["refuse the call,", "tell the model why"], "bx"), (380, 245, "Concern", "security", "bx"),
+            (740, 215, "Proven by", ["a test: AAC-0056", "no refund without a request"], "bxs")]
+    for x, y, n, s, k in tags:
+        d += f'<line class="lnd" x1="500" y1="155" x2="{x + 120}" y2="{y + 40}"/>'
+    d += b(345, 105, 310, 100, ["The user actually", "asked for this"], "a refund nobody asked for", "solid")
+    for x, y, n, s, k in tags:
+        d += b(x, y, 240, 82 if y > 100 else 74, n, s, k)
+    return figure(1000, 335, d, "One guardrail in the middle, 'the user actually asked for this', with six labels around it: priority must have, where before the tool, how a rule in code, if it fires refuse the call, concern security, proven by test AAC-0056.",
+                  "Six labels on every guardrail. With them, a list of 57 becomes easy to sort and to plan.")
+
+
+def drawing_guard_how():
+    gd = _guards()
+    from collections import Counter
+    n = Counter(r[4] for r in gd.G)
+    order = ["rule", "classifier", "platform", "judge", "person"]
+    kinds = {"rule": "bx", "classifier": "bxs", "platform": "bx", "judge": "solid", "person": "bxs"}
+    t = kit.text
+    d = t(500, 24, f"how {len(gd.G)} common guardrails decide", "bd", "middle")
+    for i, k in enumerate(order):
+        y = 50 + i * 54
+        w = max(40, n[k] * 16)
+        name, _, cost = gd.HOW[k]
+        d += t(200, y + 28, name, "tx", "end")
+        d += f'<rect class="pf pf-{kinds[k]}" x="{224}" y="{y + 10}" width="{w}" height="30" rx="8"/><rect class="{kinds[k]} ol" x="220" y="{y + 6}" width="{w}" height="30" rx="8"/>'
+        d += t(232 + w, y + 28, f"{n[k]}", "bd") + t(268 + w, y + 28, cost, "sm")
+    return figure(1000, 330, d, "A hand-drawn bar chart. Rule in code: " + ", ".join(f"{gd.HOW[k][0]} {n[k]}" for k in order) + ".",
+                  "Most guardrails are plain code: fast, free, and the same answer every time. LLM judges are the rare exception.")
+
+
+def drawing_guard_where():
+    gd = _guards()
+    from collections import Counter
+    n = Counter(r[2] for r in gd.G)
+    m = Counter(r[2] for r in gd.G if r[3] == "must")
+    b, a, t = kit.box, kit.arrow, kit.text
+    lines = {"door": ["Front", "door"], "pre": ["Before", "the model"], "post": ["After", "the model"], "tool": ["Before", "the tool"],
+             "far": ["Inside", "the tool"], "result": ["After", "the tool"], "run": ["Whole", "run"], "ops": ["Logs and", "platform"]}
+    d = t(500, 22, "where they sit, in the order a turn passes them", "sm", "middle")
+    for i, k in enumerate(gd.WHERE):
+        x = 4 + i * 124
+        kind = "solid" if k == "post" else ("bxs" if k in ("tool", "result") else "bx")
+        d += b(x, 40, 110, 110, lines[k], [f"{n[k]} guardrails", f"{m[k]} must"], kind)
+        if i < 7:
+            d += a(x + 112, 95, x + 122, 95)
+    d += t(500, 182, "the busiest spots: after the model writes, and before a tool acts", "sm", "middle")
+    return figure(1000, 195, d, "Eight boxes in a row: front door, before the model, after the model, before the tool, inside the tool, after the tool, whole run, logs and platform, each with how many guardrails sit there.",
+                  "Guardrails sit all along the turn, not just on the user's message.")
+
+
+def drawing_guard_ladder():
+    b, t, a = kit.box, kit.text, kit.arrow
+    d = b(40, 200, 280, 90, "1 · A rule in code", ["free · exact · about 0 ms"], "bx")
+    d += b(360, 130, 280, 160, "2 · A small classifier", ["cheap · fuzzy · 10 to 100 ms", "", "for meaning a pattern", "can't catch"], "bxs")
+    d += b(680, 50, 280, 240, "3 · An LLM judge", ["costly · slow · about 1 s", "", "only for nuance:", "is this claim supported?", "is this tone right?"], "solid")
+    d += a(322, 230, 358, 200, "only if", lx=340, ly=196)
+    d += a(642, 160, 678, 130, "only if", lx=660, ly=126)
+    d += t(40, 40, ["reach for the cheapest", "step that can do the job"], "bd")
+    return figure(1000, 300, d, "Three stairs going up. A rule in code: free, exact, about 0 ms. A small classifier: cheap, fuzzy, 10 to 100 ms. An LLM judge: costly and slow, only for nuance.",
+                  "Climb only when the step below can't do the job. Most guardrails never leave the first stair.")
+
+
+DRAWINGS = {"guard-card": drawing_guard_card, "guard-how": drawing_guard_how, "guard-where": drawing_guard_where,
+            "guard-ladder": drawing_guard_ladder,
+            "kitchen": drawing_kitchen, "spine-readers": drawing_spine_readers, "quarantine": drawing_quarantine,
             "layer-test": drawing_layer_test,
             "planted-note": drawing_planted_note, "horse-road": drawing_horse_road, "ten-ninety": drawing_ten_ninety,
             "agent-loop": drawing_agent_loop, "four-checks": drawing_four_checks, "build-order": drawing_build_order}
