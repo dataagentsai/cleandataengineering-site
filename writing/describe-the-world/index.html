@@ -1,0 +1,271 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Describe the world, not the test · Clean Data Engineering</title>
+<meta name="description" content="Writing hundreds of test scripts for an agent doesn&#x27;t scale, because every new rule or fault means editing scripts by hand. Instead, write down the agent&#x27;s world once: its users, systems and data, rules, faults, approvers and time. Scenarios are then generated from that description, including combinations nobody would have thought to script. This post shows what a good world description holds, with a small example, and says honestly what AgentTwin&#x27;s format does today."><link rel="canonical" href="https://cleandataengineering.ai/writing/describe-the-world/">
+<meta property="og:title" content="Describe the world, not the test"><meta property="og:description" content="Writing hundreds of test scripts for an agent doesn&#x27;t scale, because every new rule or fault means editing scripts by hand. Instead, write down the agent&#x27;s world once: its users, systems and data, rules, faults, approvers and time. Scenarios are then generated from that description, including combinations nobody would have thought to script. This post shows what a good world description holds, with a small example, and says honestly what AgentTwin&#x27;s format does today."><meta property="og:url" content="https://cleandataengineering.ai/writing/describe-the-world/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>Describe the world, not the test</h1>
+  </div>
+  <div class="summary">Writing hundreds of test scripts for an agent doesn't scale, because every new rule or fault means editing scripts by hand. Instead, write down the agent's world once: its users, systems and data, rules, faults, approvers and time. Scenarios are then generated from that description, including combinations nobody would have thought to script. This post shows what a good world description holds, with a small example, and says honestly what AgentTwin's format does today.</div>
+<p>A team builds a support agent for a lending library. They write a test for each thing that can happen: renew a book, renew a late book, ask about someone else's book, the system times out. Soon there are, say, 200 scripts.</p>
+<p>Then the library changes the renewal limit from 7 days late to 14. Someone has to find every script that assumed 7. Next month the team learns that the system sometimes drops a reply after doing the work. Someone has to work out which of the 200 scripts could meet a dropped reply, and write new ones. Nobody remembers them all.</p>
+<p>The fix is to change what you write. Don't write the tests. Write down the agent's <strong>world</strong> once, and let the tests come from it. This is how the world format in AgentTwin works, and this post explains it. If you're new to AgentTwin, start with <a href="/writing/agenttwin-flight-simulator/">what it is</a>.</p>
+<h2>A map, not a list of directions</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 360" role="img" aria-label="Left: a cartoon map of a small town with Asha&#x27;s house, a library, a bank, an approver&#x27;s office, a storm cloud and a clock. Right: a paper list of directions for one trip: leave Asha&#x27;s house, turn left at the bank, ask for The Hobbit, expect renewed, with a note that it assumes no storm, no closed road and no clerk on leave."><text class="sm" x="500" y="26" text-anchor="middle">a map answers every route; a list of directions answers one</text><rect class="pf pf-solid" x="35" y="55" width="460" height="260" rx="18"/><rect class="hz" x="30" y="50" width="460" height="260" rx="18" fill-opacity="0"/><path class="lnc" fill="none" d="M40,180 Q200,160 300,185 T480,175"/><path class="lnc" fill="none" d="M250,60 Q240,150 265,300"/><rect class="hz" x="70" y="116" width="44" height="34" rx="2"/><path class="hz" d="M66,116 L92.0,96 L118,116 Z"/><text class="sm" x="92" y="168" text-anchor="middle">Asha</text><rect class="hz" x="330" y="110" width="70" height="40" rx="2"/><path class="hz" d="M326,110 L365.0,90 L404,110 Z"/><text class="sm" x="365" y="168" text-anchor="middle">library</text><rect class="hz" x="90" y="239" width="60" height="36" rx="2"/><path class="hz" d="M86,239 L120.0,219 L154,239 Z"/><text class="sm" x="120" y="295" text-anchor="middle">bank</text><rect class="hz" x="370" y="246" width="50" height="34" rx="2"/><path class="hz" d="M366,246 L395.0,226 L424,246 Z"/><text class="sm" x="395" y="298" text-anchor="middle">approver</text><path class="hz" d="M150,110 Q138,92 160,88 Q166,66 190,72 Q206,60 216,84 Q236,86 228,110 Z"/><polyline class="lnc" fill="none" points="186,112 178,128 190,128 182,144"/><circle class="hz" cx="440" cy="85" r="18"/><line class="ln" x1="440" y1="85" x2="440" y2="72"/><line class="ln" x1="440" y1="85" x2="450" y2="90"/><text class="lbl" x="260" y="345" text-anchor="middle">THE WORLD, DRAWN ONCE</text><path class="hz" d="M600,55 L930,55 L930,300 Q900,316 870,300 Q840,286 810,300 Q780,316 750,300 Q720,286 690,300 Q660,316 630,300 L600,300 Z"/><text class="tx" x="620" y="92" text-anchor="start">1. leave Asha&#x27;s house</text><text class="tx" x="620" y="122" text-anchor="start">2. turn left at the bank</text><text class="tx" x="620" y="152" text-anchor="start">3. ask for The Hobbit</text><text class="tx" x="620" y="182" text-anchor="start">4. expect: renewed</text><text class="tx" x="620" y="212" text-anchor="start"></text><text class="sm" x="620" y="242" text-anchor="start">(no storm, no closed road,</text><text class="sm" x="620" y="272" text-anchor="start"> no clerk on leave)</text><text class="lbl" x="765" y="345" text-anchor="middle">A SCRIPT: ONE ROUTE</text><text class="bd" x="545" y="185" text-anchor="middle">vs</text></svg><figcaption>A world description is the map. A test script is one list of directions through it, written for a day when nothing goes wrong.</figcaption></figure>
+<p>A test script is a list of directions. "Leave Asha's house, turn left at the bank, ask for The Hobbit, expect it renewed." It works for one trip, on a day when nothing goes wrong.</p>
+<p>A world description is the map. It shows the houses, the roads, the library, the bank, and also the storm that can roll in and the clerk who might be on leave. From a map you can plan any trip, including ones nobody planned before. When a new road opens, you change the map once and every route can use it.</p>
+<h2>What a world description holds</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 415" role="img" aria-label="A central box labelled world description, with six parts feeding it. On the left: users (who they are, what they want, how they act), systems and data (the tools and the rows at the start), and rules (what may change and what is owed, cited from the spec). On the right: faults (slow, lost reply, stale read, outage), approvers (yes, no, never, or yes twice) and time (steps between turns, events at set hours)."><text class="sm" x="500" y="26" text-anchor="middle">write each part once; every scenario reads from the same description</text><rect class="pf pf-bx" x="24" y="54" width="268" height="88" rx="12"/><rect class="bx ol" x="20" y="50" width="270" height="90" rx="12"/><text class="tt" x="155.0" y="82.0" text-anchor="middle">Users</text><text class="sm" x="155.0" y="106.0" text-anchor="middle">who they are, what</text><text class="sm" x="155.0" y="125.0" text-anchor="middle">they want, how they act</text><line class="ln" x1="292" y1="95" x2="388" y2="145" marker-end="url(#ar)"/><rect class="pf pf-bx" x="24" y="169" width="268" height="88" rx="12"/><rect class="bx ol" x="20" y="165" width="270" height="90" rx="12"/><text class="tt" x="155.0" y="197.0" text-anchor="middle">Systems + data</text><text class="sm" x="155.0" y="221.0" text-anchor="middle">the tools, and the</text><text class="sm" x="155.0" y="240.0" text-anchor="middle">rows they hold at the start</text><line class="ln" x1="292" y1="210" x2="388" y2="175" marker-end="url(#ar)"/><rect class="pf pf-bx" x="24" y="284" width="268" height="88" rx="12"/><rect class="bx ol" x="20" y="280" width="270" height="90" rx="12"/><text class="tt" x="155.0" y="312.0" text-anchor="middle">Rules</text><text class="sm" x="155.0" y="336.0" text-anchor="middle">what may change, and</text><text class="sm" x="155.0" y="355.0" text-anchor="middle">what is owed; cited</text><line class="ln" x1="292" y1="325" x2="388" y2="205" marker-end="url(#ar)"/><rect class="bxm ol" x="710" y="50" width="270" height="90" rx="12"/><text class="tt" x="845.0" y="82.0" text-anchor="middle">Faults</text><text class="sm" x="845.0" y="106.0" text-anchor="middle">slow, lost reply,</text><text class="sm" x="845.0" y="125.0" text-anchor="middle">stale read, outage</text><line class="ln" x1="708" y1="95" x2="612" y2="145" marker-end="url(#ar)"/><rect class="bxm ol" x="710" y="165" width="270" height="90" rx="12"/><text class="tt" x="845.0" y="197.0" text-anchor="middle">Approvers</text><text class="sm" x="845.0" y="221.0" text-anchor="middle">yes, no, never,</text><text class="sm" x="845.0" y="240.0" text-anchor="middle">or yes twice</text><line class="ln" x1="708" y1="210" x2="612" y2="175" marker-end="url(#ar)"/><rect class="bxm ol" x="710" y="280" width="270" height="90" rx="12"/><text class="tt" x="845.0" y="312.0" text-anchor="middle">Time</text><text class="sm" x="845.0" y="336.0" text-anchor="middle">steps between turns;</text><text class="sm" x="845.0" y="355.0" text-anchor="middle">events at set hours</text><line class="ln" x1="708" y1="325" x2="612" y2="205" marker-end="url(#ar)"/><rect class="pf pf-solid" x="394" y="119" width="218" height="118" rx="12"/><rect class="solid ol" x="390" y="115" width="220" height="120" rx="12"/><text class="tt inv" x="500.0" y="162.0" text-anchor="middle">World description</text><text class="inv sm2" x="500.0" y="186.0" text-anchor="middle">a few small files,</text><text class="inv sm2" x="500.0" y="205.0" text-anchor="middle">read by everything</text><text class="sm" x="500" y="400" text-anchor="middle">rules live in the agent&#x27;s own spec; the world cites it and never restates it</text></svg><figcaption>Six parts of a world. Write each one once, and every scenario draws on all of them.</figcaption></figure>
+<p>A good world description has six parts.</p>
+<ol><li><strong>Users.</strong> Who talks to the agent and what they want. Asha wants to renew a book. Just as important is <em>how</em> they behave, because agents fail on behaviour, not mood. AgentTwin keeps a small catalogue of these behaviours, called <strong>personas</strong>: <code>plain</code>, <code>forgets-the-identifier</code>, <code>impatient</code>, <code>two-things-at-once</code>, <code>second-language</code> and <code>does-not-believe-it</code>.</li><li><strong>Systems and their data.</strong> The tools the agent can call, and the rows those systems hold at the start: two members and three loans. Each row is there to test a rule: one loan inside the renewal limit, one outside it, one that belongs to someone else.</li><li><strong>Rules.</strong> What may change and when, and what is <em>owed</em>: if Asha asks and the rule allows it, a renewal must happen. The rules come from the agent's own spec, which is the written list of its tools and the rule behind each one. The world points to that spec and is not allowed to restate it.</li><li><strong>Faults.</strong> Things that go wrong that are nobody's fault: a slow system, a lost reply, a stale read, the model provider being down.</li><li><strong>Approvers.</strong> The people who must say yes to risky actions. They can say yes, say no, never answer, or say yes twice.</li><li><strong>Time.</strong> How much time passes between turns, and events that happen at set hours whoever is talking, such as an overnight job that marks loans returned.</li></ol>
+<p>The rule in part 3 matters more than it looks. Before AgentTwin had it, the return window of its shop agent lived in the world file, and a second world was made by copying the first. The copies drifted apart. When each rule is written down once, there is nothing to drift from.</p>
+<h2>A small example</h2>
+<p>Here is a trimmed world for the library agent. It is a sketch, cut down to show the shape, but the field names are the real ones from the format, which is called AWD (Agent World Description).</p>
+<pre><code># A sketch, trimmed. The renewal rule is NOT here: it lives in the agent's spec.
+apiVersion: awd/v0
+name: library
+seed: 7
+spec: {aoas: library-agent, version: 0.1.0, path: library.aoas.yaml}
+fidelity:
+  faithful_about:
+    - loan.status, and how many days late each loan is
+  not_faithful_about:
+    - book descriptions, fines and opening hours
+  verified_against: null      # not yet checked against a real system
+systems:
+  loans:
+    projects: loan_system
+    resolution: mock
+    presents:
+      renew:
+        description: Renew a loan. Open loans only, at most 7 days late.
+        refusal: a loan {late} days late cannot be renewed
+records:
+  member:
+    - {id: M-1, name: Asha}
+    - {id: M-2, name: Ravi}
+  loan:
+    - {id: L-1, member: M-1, book: The Hobbit, status: open, late: 2}
+    - {id: L-2, member: M-1, book: Dune, status: open, late: 9}
+    - {id: L-3, member: M-2, book: Emma, status: open, late: 0}
+calendar:
+  - id: overnight-sync-marks-emma-returned
+    at: 10h
+    by: loans
+    entity: loan
+    where: [{field: id, equals: [L-3]}]
+    sets: {status: returned}
+    record_only: true          # the record changes; the book did not come back</code></pre>
+<p>A few things are worth noticing.</p>
+<ul><li><strong><code>fidelity</code></strong> says what the world is accurate about and, more usefully, what it isn't. A test about renewals needs loan status exactly right. It doesn't need real book blurbs.</li><li><strong><code>resolution</code></strong> says how each system is played: <code>mock</code>, <code>replay</code>, <code>real</code> or <code>shadow</code>. Shadow means calling the real system and the stand-in side by side and comparing them.</li><li><strong><code>record_only</code></strong> is how you make a record lie. The system says Emma is back; she isn't. An agent that repeats the record as fact fails. One that says "the system shows it as returned" passes.</li></ul>
+<p>The faults, the approver's behaviour and the persona are chosen in each scenario from the fixed lists above, for example <code>perturbations: [{kind: lost_reply, tool: renew}]</code> and <code>approver: {decides: never}</code>.</p>
+<h2>From one world to many scenarios</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 395" role="img" aria-label="On the left a world box feeds a generator drawn as a small machine with a hopper and a crank. The generator varies the edges of each rule and pairs of everything. Arrows fan out to five scenario cards: renew 7 days late, renew 8 days late, someone else&#x27;s loan, approver never answers, and a highlighted one combining a customer who forgets the number, a loan already returned and a lost reply, labelled nobody scripted this."><text class="sm" x="500" y="26" text-anchor="middle">the generator reads the world and asks what to vary</text><rect class="pf pf-solid" x="19" y="139" width="188" height="98" rx="12"/><rect class="solid ol" x="15" y="135" width="190" height="100" rx="12"/><text class="tt inv" x="110.0" y="172.0" text-anchor="middle">World</text><text class="inv sm2" x="110.0" y="196.0" text-anchor="middle">users, systems,</text><text class="inv sm2" x="110.0" y="215.0" text-anchor="middle">rules, faults, time</text><line class="ln" x1="207" y1="185" x2="263" y2="185" marker-end="url(#ar)"/><path class="hz" d="M300,85 L400,85 L380,120 L320,120 Z"/><rect class="pf pf-bxs" x="269" y="129" width="168" height="118" rx="12"/><rect class="bxs ol" x="265" y="125" width="170" height="120" rx="12"/><text class="tt" x="350.0" y="172.0" text-anchor="middle">Generator</text><text class="sm" x="350.0" y="196.0" text-anchor="middle">edges of each rule,</text><text class="sm" x="350.0" y="215.0" text-anchor="middle">pairs of everything</text><circle class="hz" cx="350" cy="268" r="14"/><line class="lnc" x1="350" y1="268" x2="376" y2="282"/><rect class="pf pf-bx" x="559" y="49" width="288" height="50" rx="12"/><rect class="bx ol" x="555" y="45" width="290" height="52" rx="12"/><text class="tt" x="700.0" y="67.5" text-anchor="middle">Renew 7 days late</text><text class="sm" x="700.0" y="91.5" text-anchor="middle">the last allowed day</text><line class="ln" x1="437" y1="185" x2="551" y2="71.0" marker-end="url(#ar)"/><rect class="pf pf-bx" x="559" y="113" width="288" height="50" rx="12"/><rect class="bx ol" x="555" y="109" width="290" height="52" rx="12"/><text class="tt" x="700.0" y="131.5" text-anchor="middle">Renew 8 days late</text><text class="sm" x="700.0" y="155.5" text-anchor="middle">one past the limit</text><line class="ln" x1="437" y1="185" x2="551" y2="135.0" marker-end="url(#ar)"/><rect class="pf pf-bx" x="559" y="177" width="288" height="50" rx="12"/><rect class="bx ol" x="555" y="173" width="290" height="52" rx="12"/><text class="tt" x="700.0" y="195.5" text-anchor="middle">Someone else&#x27;s loan</text><text class="sm" x="700.0" y="219.5" text-anchor="middle">must stay private</text><line class="ln" x1="437" y1="185" x2="551" y2="199.0" marker-end="url(#ar)"/><rect class="pf pf-bx" x="559" y="241" width="288" height="50" rx="12"/><rect class="bx ol" x="555" y="237" width="290" height="52" rx="12"/><text class="tt" x="700.0" y="259.5" text-anchor="middle">Approver never answers</text><text class="sm" x="700.0" y="283.5" text-anchor="middle">request must expire</text><line class="ln" x1="437" y1="185" x2="551" y2="263.0" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="559" y="309" width="288" height="70" rx="12"/><rect class="bxs ol" x="555" y="305" width="290" height="72" rx="12"/><text class="tt" x="700.0" y="328.0" text-anchor="middle">Forgets the number</text><text class="sm" x="700.0" y="352.0" text-anchor="middle">+ loan already returned</text><text class="sm" x="700.0" y="371.0" text-anchor="middle">+ the reply is lost</text><line class="ln" x1="437" y1="185" x2="551" y2="341.0" marker-end="url(#ar)"/><text class="bd" x="860" y="345" text-anchor="start">nobody</text><text class="bd" x="860" y="365" text-anchor="start">scripted this</text></svg><figcaption>One world, many scenarios. The edges come from the rules, and the odd combinations come from pairing every dimension with every other.</figcaption></figure>
+<p>Once the world is written down, scenarios can be generated from it. AgentTwin does this in three ways today.</p>
+<ol><li><strong>The edges of each rule.</strong> A rule like "at most 7 days late" carries its own boundaries. The <code>scaffold</code> command reads the spec and writes rows at every state, at each limit and one past it, so 7 and 8 days late, plus a starter scenario for each tool and each refusal. Run against the shop agent's own spec, it wrote 17 scenarios, and all 17 passed.</li><li><strong>Pairs of everything.</strong> The <code>coverage</code> command treats four things as dimensions: what the customer wants, what state their record is in, which persona they are, and which fault happens. It checks that every value of one has met every value of the others in at least one scenario. <code>scaffold --pairwise</code> then writes skeletons for the pairs nobody has. This is where you find a customer who forgets their loan number, asking about a loan that is already returned, while the reply gets lost. Nobody writes that test by hand.</li><li><strong>Attacks.</strong> A <code>generate</code> block in a scenario turns one planted-instruction test into many cases, drawn from open-source attack libraries, each judged by what changed in the world.</li></ol>
+<p>The skeletons are honest drafts. They name the right tools, records and edges, and leave the customer's exact words as <code>TODO</code> for a person to fill in. The world knows what to vary. It doesn't know how Asha talks.</p>
+<h2>Change the world, not 200 scripts</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 410" role="img" aria-label="Top row, with a world description: add one new kind of fault to the list of faults; a coverage check finds the pairs no scenario covers yet; new scenario skeletons are written, one per missing pair, and a person fills in the words. No existing scenario was edited. Bottom row, with scripts: a stack of 200 scripts; someone must remember which scripts could meet the new fault and edit them; most never do, and the gap stays hidden."><text class="lbl" x="30" y="34" text-anchor="start">WITH A WORLD DESCRIPTION</text><rect class="pf pf-bxs" x="24" y="59" width="228" height="93" rx="12"/><rect class="bxs ol" x="20" y="55" width="230" height="95" rx="12"/><text class="tt" x="135.0" y="89.5" text-anchor="middle">Add one fault</text><text class="sm" x="135.0" y="113.5" text-anchor="middle">a new kind joins</text><text class="sm" x="135.0" y="132.5" text-anchor="middle">the list of faults</text><line class="ln" x1="252" y1="102" x2="318" y2="102" marker-end="url(#ar)"/><rect class="pf pf-bx" x="324" y="59" width="248" height="93" rx="12"/><rect class="bx ol" x="320" y="55" width="250" height="95" rx="12"/><text class="tt" x="445.0" y="89.5" text-anchor="middle">Coverage check</text><text class="sm" x="445.0" y="113.5" text-anchor="middle">finds the pairs no</text><text class="sm" x="445.0" y="132.5" text-anchor="middle">scenario covers yet</text><line class="ln" x1="572" y1="102" x2="638" y2="102" marker-end="url(#ar)"/><rect class="pf pf-solid" x="644" y="59" width="228" height="93" rx="12"/><rect class="solid ol" x="640" y="55" width="230" height="95" rx="12"/><text class="tt inv" x="755.0" y="89.5" text-anchor="middle">New skeletons</text><text class="inv sm2" x="755.0" y="113.5" text-anchor="middle">one per missing pair;</text><text class="inv sm2" x="755.0" y="132.5" text-anchor="middle">you fill in the words</text><circle class="hz" cx="925" cy="70" r="12"/><line class="lnc" x1="925" y1="82" x2="925" y2="112"/><line class="lnc" x1="925" y1="112" x2="915" y2="132"/><line class="lnc" x1="925" y1="112" x2="935" y2="132"/><text class="bd" x="500" y="185" text-anchor="middle">no existing scenario was edited</text><line class="lnd" x1="20" y1="215" x2="980" y2="215"/><text class="lbl" x="30" y="255" text-anchor="start">WITH SCRIPTS</text><rect class="hz" x="40" y="275" width="110" height="80" rx="4"/><rect class="hz" x="52" y="283" width="110" height="80" rx="4"/><rect class="hz" x="64" y="291" width="110" height="80" rx="4"/><rect class="hz" x="76" y="299" width="110" height="80" rx="4"/><text class="sm" x="130" y="395" text-anchor="middle">200 scripts</text><line class="ln" x1="200" y1="320" x2="288" y2="320" marker-end="url(#ar)"/><rect class="bxm ol" x="290" y="275" width="330" height="95" rx="12"/><text class="tt" x="455.0" y="309.5" text-anchor="middle">Someone must remember</text><text class="sm" x="455.0" y="333.5" text-anchor="middle">which scripts could meet</text><text class="sm" x="455.0" y="352.5" text-anchor="middle">the new fault, and edit them</text><line class="ln" x1="622" y1="322" x2="688" y2="322" marker-end="url(#ar)"/><rect class="bxm ol" x="690" y="275" width="220" height="95" rx="12"/><text class="tt" x="800.0" y="319.0" text-anchor="middle">Most never do</text><text class="sm" x="800.0" y="343.0" text-anchor="middle">the gap stays hidden</text></svg><figcaption>Change the world, and the missing scenarios show up on their own. Change a pile of scripts, and you rely on someone's memory.</figcaption></figure>
+<p>This is why a world scales better than a pile of scripts. Scripts grow by multiplication: every new fault times every existing situation is a new script someone has to imagine. A world grows by addition: you add the fault once, and the coverage check lists the pairs that are now missing.</p>
+<p>The same goes for rules. Change the renewal limit in the spec from 7 to 14, and the generated edges move to 14 and 15 without anyone editing a test record. A second shop, with slightly different rules, is a small file that extends the first spec instead of a copy of everything. AgentTwin's electronics version of its shop agent is 70 lines; the earlier copy was 131.</p>
+<p>The world also refuses nonsense. The loader rejects a row that breaks a stated rule, such as a returned book that is still overdue. When those checks arrived, the shop agent's set of fixed test cases went from 29 to 26: three of them described situations that could never happen.</p>
+<h2>What is built, and what is not</h2>
+<p><strong>Built.</strong> The world format and a loader that refuses impossible data. Rows, systems, fidelity and the calendar in the world file. Scaffold, coverage and pairwise skeletons. Generated attacks. Personas, faults (slow, lost reply, stale read, provider down and a few more), approvers that grant, refuse, never answer or grant twice, and time that moves between turns.</p>
+<p><strong>Not built, or not yet in the world file.</strong> Personas and fault kinds are fixed lists in AgentTwin's code, chosen per scenario; you can't yet declare a new one in a world file. Shadow mode is designed but not built, so every world today honestly says <code>verified_against: null</code>. And a world is small and clean: real data with volume, skew and odd old rows is out of reach. The <code>not_faithful_about</code> list is how a world admits that, not a fix for it.</p>
+<h2>What goes wrong</h2>
+<ol><li><strong>Restating the rules in the world.</strong> Then you have two copies of the return window, and one day they disagree. Point to the spec instead.</li><li><strong>Rows in the middle of each rule.</strong> A loan 3 days late tells you little. 7 and 8 tell you whether the limit is right.</li><li><strong>Pretending the world is perfect.</strong> A world with an empty <code>not_faithful_about</code> list is claiming more than it can know.</li><li><strong>Trusting skeletons as tests.</strong> A generated skeleton with <code>TODO</code> words proves nothing until someone writes how the customer speaks and runs it.</li><li><strong>Faults that land at random.</strong> A fault on a different call each run gives failures nobody can reproduce. AgentTwin puts each fault on a named call, such as the first call to <code>renew</code>.</li></ol>
+<h2>Five questions to check your own testing</h2>
+<ol><li>If a rule changed tomorrow, how many test files would you have to edit?</li><li>Is each rule written down in exactly one place your tests read from?</li><li>Do your test records sit exactly on each limit and one past it?</li><li>Can you list which pairs of situation and fault your tests have never tried?</li><li>Does your test setup say, in writing, what it is <em>not</em> accurate about?</li></ol>
+<p>For how these scenarios play out against a real agent, see <a href="/writing/agent-met-real-customer/">what happened when one met a real customer</a>.</p>
+<p>Write the map once, and let the routes come from it.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agenttwin/">AgentTwin, explained, with a step-through simulator</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

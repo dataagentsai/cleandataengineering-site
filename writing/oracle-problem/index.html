@@ -1,0 +1,239 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Who checks the checker? The oracle problem in agent simulation · Clean Data Engineering</title>
+<meta name="description" content="In testing, the &quot;oracle&quot; is whatever decides pass or fail, and for an agent in an open conversation there is no free one. A simulation should decide with code that reads what changed in the world first, then rules on actions, then what was owed but never done, and only last an LLM judge that has been checked against people. Then test the checkers themselves by planting known bugs and seeing which ones they miss."><link rel="canonical" href="https://cleandataengineering.ai/writing/oracle-problem/">
+<meta property="og:title" content="Who checks the checker? The oracle problem in agent simulation"><meta property="og:description" content="In testing, the &quot;oracle&quot; is whatever decides pass or fail, and for an agent in an open conversation there is no free one. A simulation should decide with code that reads what changed in the world first, then rules on actions, then what was owed but never done, and only last an LLM judge that has been checked against people. Then test the checkers themselves by planting known bugs and seeing which ones they miss."><meta property="og:url" content="https://cleandataengineering.ai/writing/oracle-problem/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · AI Engineering · Builders · 8 min read · 2026-10-31</p>
+    <h1>Who checks the checker? The oracle problem in agent simulation</h1>
+  </div>
+  <div class="summary">In testing, the "oracle" is whatever decides pass or fail, and for an agent in an open conversation there is no free one. A simulation should decide with code that reads what changed in the world first, then rules on actions, then what was owed but never done, and only last an LLM judge that has been checked against people. Then test the checkers themselves by planting known bugs and seeing which ones they miss.</div>
+<p>Priya sends back a kurta and asks the shop's support agent for her ₹2,400. The agent replies, <em>"Your refund is on its way."</em> Your test suite runs that conversation and prints a green tick.</p>
+<p>Here is the uncomfortable question: what decided the tick was green? Somebody, or something, had to know what the right outcome was. If that something is wrong, every green tick after it is wrong too, and nothing will tell you.</p>
+<p>Testers have a name for that something. They call it the <strong>oracle</strong>. This post is about the oracle for agent tests: why it is hard, the order of checks that makes it mostly easy, and how to check the checker.</p>
+<h2>The oracle problem in plain words</h2>
+<p>Every test has two halves. One does something, such as playing a conversation. The other decides whether what happened was right. That second half is the oracle.</p>
+<p>For a lot of software, the oracle is cheap. If you test a calculator, maths tells you the answer. You can compare with a trusted library, or check rules that must always hold, such as <em>a + b equals b + a</em>. The <a href="/learn/agenttwin/">AgentTwin guide</a> calls this "maths gives an oracle for free".</p>
+<p>An agent has no free oracle. Whether "refund this order" was right depends on the shop's rules, the order's state, who is asking and what was promised. A model can write ten thousand conversations in a minute. It can't tell you which outcome is correct unless the rules are written down.</p>
+<p>That is the oracle problem: generating tests is easy, knowing the right answer is hard.</p>
+<h2>The calculator problem: don't let it mark its own paper</h2>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 325" role="img" aria-label="A cartoon exam. On the left a student marks their own paper with a big tick and 10 out of 10, saying &#x27;all correct!&#x27;: the agent&#x27;s own model reads the agent&#x27;s chat and says fine. On the right a teacher holds an answer key: the written rules and the world&#x27;s state say what is right."><text class="sm" x="500" y="22" text-anchor="middle">an answer sheet is only worth something if someone else holds the key</text><circle class="hz" cx="150" cy="70" r="14"/><line class="lnc" x1="150" y1="84" x2="150" y2="122"/><line class="lnc" x1="150" y1="122" x2="138" y2="146"/><line class="lnc" x1="150" y1="122" x2="162" y2="146"/><line class="lnc" x1="150" y1="100" x2="200" y2="118"/><rect class="hz" x="110" y="146" width="300" height="14" rx="3"/><rect class="hz" x="215" y="72" width="150" height="72" rx="4"/><line class="ln" x1="228" y1="88" x2="290" y2="88"/><line class="ln" x1="228" y1="102" x2="290" y2="102"/><line class="ln" x1="228" y1="116" x2="290" y2="116"/><line class="ln" x1="228" y1="130" x2="290" y2="130"/><path class="lnc" fill="none" d="M305,98 L316.7,111.0 L338.8,83.7"/><text class="bd" x="332" y="136" text-anchor="middle">10/10</text><path class="hz" d="M40,30 L160,30 L160,50 L118,50 L128,58 L104,50 L40,50 Z"/><text class="sm" x="100" y="45" text-anchor="middle">all correct!</text><rect class="bxm ol" x="60" y="190" width="360" height="90" rx="12"/><text class="tt" x="240.0" y="222.0" text-anchor="middle">Marks its own paper</text><text class="sm" x="240.0" y="246.0" text-anchor="middle">the agent&#x27;s own model reads</text><text class="sm" x="240.0" y="265.0" text-anchor="middle">the agent&#x27;s chat and says &#x27;fine&#x27;</text><text class="bd" x="500" y="130" text-anchor="middle">vs</text><circle class="hz" cx="650" cy="70" r="14"/><line class="lnc" x1="650" y1="84" x2="650" y2="122"/><line class="lnc" x1="650" y1="122" x2="638" y2="146"/><line class="lnc" x1="650" y1="122" x2="662" y2="146"/><line class="lnc" x1="650" y1="100" x2="700" y2="112"/><rect class="pf pf-bxs" x="706" y="76" width="150" height="72" rx="4"/><rect class="hz" x="702" y="72" width="150" height="72" rx="4" fill-opacity="0"/><text class="lbl" x="777" y="100" text-anchor="middle">ANSWER KEY</text><line class="ln" x1="722" y1="114" x2="832" y2="114"/><line class="ln" x1="722" y1="126" x2="832" y2="126"/><rect class="pf pf-bxs" x="564" y="194" width="378" height="88" rx="12"/><rect class="bxs ol" x="560" y="190" width="380" height="90" rx="12"/><text class="tt" x="750.0" y="222.0" text-anchor="middle">Marks against a key</text><text class="sm" x="750.0" y="246.0" text-anchor="middle">the written rules and the world&#x27;s</text><text class="sm" x="750.0" y="265.0" text-anchor="middle">state say what is right</text><text class="bd" x="500" y="312" text-anchor="middle">the thing under test never grades itself</text></svg><figcaption>The calculator problem as an exam. A student who marks their own paper always passes.</figcaption></figure>
+<p>There is a tempting shortcut. Generate tests by running the code and recording what it does today. Every test passes, and coverage looks perfect. But those tests have recorded the bugs as the right answers. You used the calculator to check the calculator.</p>
+<p>Agents have their own version of this. The agent's model writes a reply, and then the same model, or a close cousin, reads the chat and decides whether it went well. The reply sounds confident and polite, so the grade comes back high. Models are known to prefer their own writing, which is why the <a href="https://github.com/dataagentsai/ai-assurance-catalog">AI Assurance Catalog</a> lists self-preference among the judge biases you must probe (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0085.yaml">AAC-0085</a>).</p>
+<p>The rule is simple: <strong>the thing under test never grades itself.</strong> The answer key has to come from outside it. For an agent, the answer key is the written spec (its rules and promises) applied to the state of the systems it touched.</p>
+<h2>How a simulation decides pass or fail</h2>
+<p>In a simulation, as described in <a href="/writing/agenttwin-flight-simulator/">the flight-simulator post</a>, the agent is real and the world around it is pretend: the customer, the order system, the payment system. Because you own that pretend world, you can look inside it after every run. That changes the oracle problem a lot.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 290" role="img" aria-label="Four checkers in order, left to right. 1, world state: what changed in the systems? 2, action rules: was every write asked for and allowed? 3, owed versus done: required or promised, but never done? 4, an LLM judge, drawn dashed: only what code can&#x27;t see, and checked first. An arrow underneath runs from free, instant and repeatable to costly and sometimes confidently wrong."><text class="sm" x="500" y="22" text-anchor="middle">ask the cheap, exact questions first; call a model only for what is left</text><circle class="nm" cx="32" cy="62" r="14"/><text class="nmt" x="32" y="68" text-anchor="middle">1</text><rect class="pf pf-bx" x="14" y="84" width="223" height="108" rx="12"/><rect class="bx ol" x="10" y="80" width="225" height="110" rx="12"/><text class="tt" x="122.5" y="122.0" text-anchor="middle">World state</text><text class="sm" x="122.5" y="146.0" text-anchor="middle">what changed in</text><text class="sm" x="122.5" y="165.0" text-anchor="middle">the systems?</text><line class="ln" x1="237" y1="135" x2="258" y2="135" marker-end="url(#ar)"/><circle class="nm" cx="282" cy="62" r="14"/><text class="nmt" x="282" y="68" text-anchor="middle">2</text><rect class="pf pf-bx" x="264" y="84" width="223" height="108" rx="12"/><rect class="bx ol" x="260" y="80" width="225" height="110" rx="12"/><text class="tt" x="372.5" y="122.0" text-anchor="middle">Action rules</text><text class="sm" x="372.5" y="146.0" text-anchor="middle">was every write</text><text class="sm" x="372.5" y="165.0" text-anchor="middle">asked for, allowed?</text><line class="ln" x1="487" y1="135" x2="508" y2="135" marker-end="url(#ar)"/><circle class="nm" cx="532" cy="62" r="14"/><text class="nmt" x="532" y="68" text-anchor="middle">3</text><rect class="pf pf-bx" x="514" y="84" width="223" height="108" rx="12"/><rect class="bx ol" x="510" y="80" width="225" height="110" rx="12"/><text class="tt" x="622.5" y="122.0" text-anchor="middle">Owed vs done</text><text class="sm" x="622.5" y="146.0" text-anchor="middle">required or promised,</text><text class="sm" x="622.5" y="165.0" text-anchor="middle">but never done?</text><line class="ln" x1="737" y1="135" x2="758" y2="135" marker-end="url(#ar)"/><circle class="nm" cx="782" cy="62" r="14"/><text class="nmt" x="782" y="68" text-anchor="middle">4</text><rect class="bxm ol" x="760" y="80" width="225" height="110" rx="12"/><text class="tt" x="872.5" y="122.0" text-anchor="middle">LLM judge</text><text class="sm" x="872.5" y="146.0" text-anchor="middle">only what code can&#x27;t</text><text class="sm" x="872.5" y="165.0" text-anchor="middle">see; checked first</text><line class="lnc" x1="40" y1="240" x2="950" y2="240"/><path class="lnc" fill="none" d="M935,230 L952,240 L935,250"/><text class="sm" x="40" y="272" text-anchor="start">free, instant, same answer every time</text><text class="sm" x="950" y="272" text-anchor="end">costs per call, can be confidently wrong</text></svg><figcaption>The order of checkers. Most failures are caught before a model is ever asked.</figcaption></figure>
+<p>Ask four questions, in this order:</p>
+<ol><li><strong>What changed in the world?</strong> Read the systems, not the chat. Is Priya's order now marked refunded? Did exactly one payment of ₹2,400 go out? This is a plain comparison of rows before and after.</li><li><strong>Was every action allowed and asked for?</strong> Each write to a system is checked against a rule. Did Priya ask for this refund? Is it her order? Is the return within the window? An action nobody asked for fails, however polite the reply.</li><li><strong>Was anything owed but never done?</strong> This is the sneaky one. The spec says "a refund is owed once the return is received". If the return was received and no refund exists, the run fails, even though nothing bad <em>happened</em>.</li><li><strong>Only then, an LLM judge.</strong> An <strong>LLM judge</strong> is a second model asked to grade something. Use it for what code can't check, such as "was the tone right for an upset customer?", and only after it has been checked against people (more below).</li></ol>
+<p>Why does question 3 need its own checker? As the AgentTwin code puts it, a missed action "leaves no evidence". The world didn't change, so the first check sees nothing wrong. No rule was broken, so the second sees nothing wrong. Only a checker that knows what the run <em>owed</em> can see the hole. And it must work out what was owed from the opening state, because a refund that was done removes itself from the "still owed" list.</p>
+<p>The same thinking covers the agent's words. If the agent says "your refund is on its way" and the world shows no refund, that is a false claim about its own actions. The catalog makes this an obligation of its own: a claimed action must be supported by that action's result, and a refusal or error is not a success (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0110.yaml">AAC-0110</a>). Code can check this by comparing the claim with the row.</p>
+<h2>When you do need a judge, check it against people</h2>
+<p>Some questions really do need judgement. "Did it answer what she actually asked?" "Was it kind without promising anything?" For those, an LLM judge is fine, but it has to earn its place.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 385" role="img" aria-label="Six cases in rows. Two columns of verdicts: what people said and what the LLM judge said, then whether they agree. They agree on five; on &#x27;polite, but dodged it&#x27; people said fail and the judge said pass. A note says a judge that always says pass would agree on 4 of 6 for free, so use a statistic that removes lucky agreement."><text class="lbl" x="150" y="28" text-anchor="middle">CASE</text><text class="lbl" x="400" y="28" text-anchor="middle">PEOPLE SAY</text><text class="lbl" x="600" y="28" text-anchor="middle">JUDGE SAYS</text><text class="lbl" x="800" y="28" text-anchor="middle">AGREE?</text><text class="tx" x="150" y="75" text-anchor="middle">tone with an upset buyer</text><rect class="pf pf-bxs" x="362" y="56" width="76" height="28" rx="12"/><rect class="hz" x="360" y="54" width="76" height="28" rx="12" fill-opacity="0"/><text class="tx" x="398" y="74" text-anchor="middle">pass</text><rect class="pf pf-bxs" x="562" y="56" width="76" height="28" rx="12"/><rect class="hz" x="560" y="54" width="76" height="28" rx="12" fill-opacity="0"/><text class="tx" x="598" y="74" text-anchor="middle">pass</text><path class="lnc" fill="none" d="M788,70 L795.2,78.0 L808.8,61.2"/><text class="tx" x="150" y="117" text-anchor="middle">apology, no promise</text><rect class="pf pf-bx" x="362" y="98" width="76" height="28" rx="12"/><rect class="hz" x="360" y="96" width="76" height="28" rx="12" fill-opacity="0"/><text class="tx" x="398" y="116" text-anchor="middle">fail</text><rect class="pf pf-bx" x="562" y="98" width="76" height="28" rx="12"/><rect class="hz" x="560" y="96" width="76" height="28" rx="12" fill-opacity="0"/><text class="tx" x="598" y="116" text-anchor="middle">fail</text><path class="lnc" fill="none" d="M788,112 L795.2,120.0 L808.8,103.2"/><text class="tx" x="150" y="159" text-anchor="middle">long but correct answer</text><rect class="pf pf-bxs" x="362" y="140" width="76" height="28" rx="12"/><rect class="hz" x="360" y="138" width="76" height="28" rx="12" fill-opacity="0"/><text class="tx" x="398" y="158" text-anchor="middle">pass</text><rect class="pf pf-bxs" x="562" y="140" width="76" height="28" rx="12"/><rect class="hz" x="560" y="138" width="76" height="28" rx="12" fill-opacity="0"/><text class="tx" x="598" y="158" text-anchor="middle">pass</text><path class="lnc" fill="none" d="M788,154 L795.2,162.0 L808.8,145.2"/><text class="tx" x="150" y="201" text-anchor="middle">polite, but dodged it</text><rect class="pf pf-bx" x="362" y="182" width="76" height="28" rx="12"/><rect class="hz" x="360" y="180" width="76" height="28" rx="12" fill-opacity="0"/><text class="tx" x="398" y="200" text-anchor="middle">fail</text><rect class="pf pf-bxs" x="562" y="182" width="76" height="28" rx="12"/><rect class="hz" x="560" y="180" width="76" height="28" rx="12" fill-opacity="0"/><text class="tx" x="598" y="200" text-anchor="middle">pass</text><line class="lnc" x1="790" y1="188.0" x2="806.0" y2="204.0"/><line class="lnc" x1="806.0" y1="188.0" x2="790" y2="204.0"/><text class="tx" x="150" y="243" text-anchor="middle">short and right</text><rect class="pf pf-bxs" x="362" y="224" width="76" height="28" rx="12"/><rect class="hz" x="360" y="222" width="76" height="28" rx="12" fill-opacity="0"/><text class="tx" x="398" y="242" text-anchor="middle">pass</text><rect class="pf pf-bxs" x="562" y="224" width="76" height="28" rx="12"/><rect class="hz" x="560" y="222" width="76" height="28" rx="12" fill-opacity="0"/><text class="tx" x="598" y="242" text-anchor="middle">pass</text><path class="lnc" fill="none" d="M788,238 L795.2,246.0 L808.8,229.2"/><text class="tx" x="150" y="285" text-anchor="middle">asked one good question</text><rect class="pf pf-bxs" x="362" y="266" width="76" height="28" rx="12"/><rect class="hz" x="360" y="264" width="76" height="28" rx="12" fill-opacity="0"/><text class="tx" x="398" y="284" text-anchor="middle">pass</text><rect class="pf pf-bxs" x="562" y="266" width="76" height="28" rx="12"/><rect class="hz" x="560" y="264" width="76" height="28" rx="12" fill-opacity="0"/><text class="tx" x="598" y="284" text-anchor="middle">pass</text><path class="lnc" fill="none" d="M788,280 L795.2,288.0 L808.8,271.2"/><text class="bd" x="500" y="342" text-anchor="middle">5 of 6 agree, but a judge that always says &#x27;pass&#x27; would get 4 of 6 for free</text><text class="sm" x="500" y="368" text-anchor="middle">so score it with a statistic that removes lucky agreement, and look hard at every cross</text></svg><figcaption>A judge checked against people. Agreement is measured, and the disagreements are the lesson.</figcaption></figure>
+<p>Take a set of cases, have people label each one pass or fail, and run the judge on the same set. Then compare. The catalog asks for three things before a judge may block a release:</p>
+<ol><li><strong>Agreement with human labels, measured properly</strong> (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0084.yaml">AAC-0084</a>). Not raw accuracy. In the picture, a judge that always says "pass" would agree four times out of six by luck. Use a statistic that removes lucky agreement, such as Cohen's kappa, which compares the agreement you got with what chance alone would give.</li><li><strong>Known biases probed</strong> (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0085.yaml">AAC-0085</a>). Swap the order of two answers, pad one with extra words, change the formatting, and see if the verdict moves. It shouldn't.</li><li><strong>Stable verdicts</strong> (<a href="https://github.com/dataagentsai/ai-assurance-catalog/blob/main/catalog/AAC-0086.yaml">AAC-0086</a>). Score the same case several times, and again with the instructions reworded but meaning the same. An unstable judge can't gate anything.</li></ol>
+<p>Until a judge passes all three, let it report, not block. The <a href="/writing/offline-evals/">offline evals post</a> shows where this fits in a release gate.</p>
+<p>Look hardest at the crosses. The one row where people said fail and the judge said pass tells you more than the five ticks.</p>
+<h2>How to know your checker is right: plant a bug</h2>
+<p>You now have checkers you trust. How would you know if one of them was blind? The old software answer is <strong>mutation testing</strong>: break the code on purpose, in a small known way, and see whether any test notices. Each broken copy is called a <strong>mutant</strong>.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 360" role="img" aria-label="A small beetle stands for a planted bug. The agent, as built plus one bug, is copied into three mutants: one with the own-order check removed, one with 7 days loosened to 8, one with the guard against repeating a write dropped. Every test runs against each. The first two are caught because a test went red. The third is missed, which means a test is missing."><text class="sm" x="500" y="20" text-anchor="middle">break the agent on purpose, then see whether any test goes red</text><ellipse class="hz" cx="105" cy="78" rx="24" ry="15"/><circle class="hz" cx="134" cy="78" r="8"/><line class="ln" x1="105" y1="63" x2="105" y2="93"/><line class="ln" x1="92" y1="64" x2="88" y2="52"/><line class="ln" x1="92" y1="92" x2="88" y2="104"/><line class="ln" x1="105" y1="64" x2="101" y2="52"/><line class="ln" x1="105" y1="92" x2="101" y2="104"/><line class="ln" x1="118" y1="64" x2="114" y2="52"/><line class="ln" x1="118" y1="92" x2="114" y2="104"/><text class="sm" x="105" y="125" text-anchor="middle">a planted bug</text><rect class="pf pf-solid" x="24" y="144" width="168" height="88" rx="12"/><rect class="solid ol" x="20" y="140" width="170" height="90" rx="12"/><text class="tt inv" x="105.0" y="181.5" text-anchor="middle">The agent</text><text class="inv sm2" x="105.0" y="205.5" text-anchor="middle">as built, plus one bug</text><line class="ln" x1="192" y1="185" x2="258" y2="82" marker-end="url(#ar)"/><rect class="pf pf-bx" x="264" y="49" width="288" height="73" rx="12"/><rect class="bx ol" x="260" y="45" width="290" height="75" rx="12"/><text class="tt" x="405.0" y="79.0" text-anchor="middle">Mutant 1</text><text class="sm" x="405.0" y="103.0" text-anchor="middle">the own-order check removed</text><line class="ln" x1="552" y1="82" x2="628" y2="82" marker-end="url(#ar)"/><path class="lnc" fill="none" d="M645,82 L654.9,93.0 L673.6,69.9"/><text class="tx" x="690" y="88" text-anchor="start">caught: a test went red</text><line class="ln" x1="192" y1="185" x2="258" y2="182" marker-end="url(#ar)"/><rect class="pf pf-bx" x="264" y="149" width="288" height="73" rx="12"/><rect class="bx ol" x="260" y="145" width="290" height="75" rx="12"/><text class="tt" x="405.0" y="179.0" text-anchor="middle">Mutant 2</text><text class="sm" x="405.0" y="203.0" text-anchor="middle">7 days loosened to 8</text><line class="ln" x1="552" y1="182" x2="628" y2="182" marker-end="url(#ar)"/><path class="lnc" fill="none" d="M645,182 L654.9,193.0 L673.6,169.9"/><text class="tx" x="690" y="188" text-anchor="start">caught: a test went red</text><line class="ln" x1="192" y1="185" x2="258" y2="282" marker-end="url(#ar)"/><rect class="pf pf-bx" x="264" y="249" width="288" height="73" rx="12"/><rect class="bx ol" x="260" y="245" width="290" height="75" rx="12"/><text class="tt" x="405.0" y="279.0" text-anchor="middle">Mutant 3</text><text class="sm" x="405.0" y="303.0" text-anchor="middle">the repeat guard dropped</text><line class="ln" x1="552" y1="282" x2="628" y2="282" marker-end="url(#ar)"/><line class="lnc" x1="645" y1="271.0" x2="667.0" y2="293.0"/><line class="lnc" x1="667.0" y1="271.0" x2="645" y2="293.0"/><text class="bd" x="690" y="288" text-anchor="start">missed: a test is missing</text><text class="sm" x="500" y="345" text-anchor="middle">a bug that no test notices becomes a named gap to fill</text></svg><figcaption>Mutation testing. Seed known faults, and a checker that misses one has a gap with a name.</figcaption></figure>
+<p>The AgentTwin guide lists the kind of mutants worth planting in an agent:</p>
+<ul><li>remove a check, such as "is this the customer's own order?"</li><li>loosen a limit, such as a 7-day return window that now allows 8</li><li>drop the repeat guard (often called an idempotency key), so the same message sent twice pays twice</li></ul>
+<p>Run the whole suite against each mutant. If a test goes red, the mutant is "caught" and that checker works. If every test stays green, you have found a missing test, and it has a name: "nobody checks the 8th day". Python has tools such as mutmut for this.</p>
+<p>To be honest about where this stands: in AgentTwin, mutation testing is listed as "to build, first". What exists today is a different cross-check. AgentTwin's verdicts were compared with τ²-bench's own verdicts (τ²-bench is a published agent benchmark) on 2,472 recorded runs, and every disagreement has a stated cause. Comparing two independent oracles is another way to catch a blind one.</p>
+<h2>Mistakes that make checkers lie</h2>
+<ol><li><strong>Checking words instead of the world.</strong> AgentTwin hit this itself. A test that the reply "never says <em>has been refunded</em>" failed on <em>"Nothing has been refunded yet"</em>, which was exactly the right sentence. Its own notes now say to compare the claim with the row instead.</li><li><strong>Passing questions for free.</strong> If a customer only asks "where is my order?", nothing changes in the world, so a check that only looks for wrong changes always passes. The AgentTwin notes call this a "false pass": the suite reports success because it can't see. Questions need a truth check that compares the answer with the record.</li><li><strong>Asking the final state what was owed.</strong> Once a refund is done, it is no longer owed. Work out obligations from the starting state, then check what was done.</li><li><strong>The agent's team owns the yardstick.</strong> If the agent's team can edit its own tests, it can make them easy. Keep the answer key somewhere the team under test can't change.</li><li><strong>A judge where an <code>if</code> would do.</strong> "Is the refund ₹2,400 or less?" is not a question for a model.</li><li><strong>Never planting a bug.</strong> A suite that has never caught a known fault hasn't proved it can catch any.</li></ol>
+<h2>Six questions to check your own checkers</h2>
+<ol><li>For each test, can you say in one sentence what decides pass or fail, and where its right answer comes from?</li><li>Does anything grade the agent using the agent's own model?</li><li>Do your checks read what changed in the systems before they read the reply?</li><li>Can a run fail because something owed was never done, even when nothing changed?</li><li>Has every LLM judge been scored against human labels, probed for bias and rerun for stability before it is allowed to block?</li><li>When did you last break the agent on purpose, and which tests noticed?</li></ol>
+<p>A green tick is only as honest as whatever decided it was green, so test that too.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/learn/agenttwin/">AgentTwin explained, including how it helps the tester not miss</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
