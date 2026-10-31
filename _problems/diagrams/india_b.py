@@ -34,10 +34,11 @@ def d_groundwater():
     # sky and ground line
     d += '<line class="ln" x1="20" y1="110" x2="980" y2="110"/>'
     # a few small rain drops on the left: a little goes in
-    for i, (x, y) in enumerate([(70, 30), (100, 52), (130, 28), (160, 50)]):
-        d += f'<path class="pf pf-bx" d="M{x},{y} Q{x - 6},{y + 12} {x},{y + 16} Q{x + 6},{y + 12} {x},{y} Z"/>'
-        d += f'<path class="ln" d="M{x},{y} Q{x - 6},{y + 12} {x},{y + 16} Q{x + 6},{y + 12} {x},{y} Z"/>'
-    d += t(115, 92, "rain", "sm", "middle")
+    d += '<path class="hz" d="M60,40 Q56,18 80,20 Q90,4 112,12 Q130,4 142,20 Q166,20 162,40 Z"/>'
+    for x, y in [(78, 52), (104, 62), (130, 52), (152, 64)]:
+        d += f'<path class="pf pf-bx" d="M{x},{y} Q{x - 8},{y + 16} {x},{y + 22} Q{x + 8},{y + 16} {x},{y} Z"/>'
+        d += f'<path class="ln" d="M{x},{y} Q{x - 8},{y + 16} {x},{y + 22} Q{x + 8},{y + 16} {x},{y} Z"/>'
+    d += t(190, 72, "rain", "sm")
     d += a(115, 120, 115, 168)
     d += t(130, 150, "a little in", "bd")
     # the aquifer: water body, old level dashed, new lower level
@@ -55,19 +56,21 @@ def d_groundwater():
     d += t(px, 92, "pump", "sm", "middle")
     d += f'<path class="hz" d="M{px + 34},78 L{px + 80},78 L{px + 80},92 L{px + 34},92"/>'
     # water gushing out to a field
-    d += f'<path class="lnc" d="M{px + 82},86 Q{px + 112},90 {px + 120},104"/>'
-    d += t(px + 130, 54, "a lot out", "bd")
-    d += t(px + 130, 74, "fields, towns", "sm")
-    d += a(px, 250, px, 210)
+    d += f'<path class="lnc" d="M{px + 82},86 Q{px + 108},88 {px + 116},104"/><path class="lnc" d="M{px + 82},92 Q{px + 98},96 {px + 100},106"/>'
+    d += t(px + 46, 40, "a lot out", "bd")
+    d += t(px + 46, 60, "for fields, towns", "sm")
+    d += a(px + 24, 290, px + 24, 150)
+    d += t(px + 36, 290, "pulled up from deep", "sm")
     # crops
-    for i in range(4):
-        x = 720 + i * 26
+    for i in range(3):
+        x = 700 + i * 26
         d += f'<path class="ln" d="M{x},110 L{x},88 M{x},98 Q{x - 10},90 {x - 12},84 M{x},94 Q{x + 10},86 {x + 12},80"/>'
     # measuring: a clipboard with only a few ticks
-    d += '<rect class="hz" x="830" y="16" width="140" height="80" rx="8"/>'
-    d += t(900, 40, "well readings", "sm", "middle")
-    d += "".join(f'<line class="ln" x1="{846 + j * 9}" y1="56" x2="{846 + j * 9}" y2="80"/>' for j in range(12))
-    d += "".join(f'<circle class="hk" cx="{846 + j * 9}" cy="68" r="4"/>' for j in (1, 6, 10))
+    d += '<rect class="hz" x="840" y="8" width="140" height="70" rx="8"/>'
+    d += t(910, 30, "well readings", "sm", "middle")
+    d += "".join(f'<line class="ln" x1="{856 + j * 10}" y1="42" x2="{856 + j * 10}" y2="66"/>' for j in range(12))
+    d += "".join(f'<circle class="hk" cx="{856 + j * 10}" cy="54" r="4"/>' for j in (1, 6, 10))
+    d += t(984, 98, "measured a few times a year", "sm", "end")
     return figure(1000, 320, d,
                   "A cross-section of the ground. A little rain soaks in on the left. A pump on a tube well pulls a lot of water up from deep below for fields and towns. The water table has dropped from a dashed line years ago to a lower line now. A clipboard shows well readings taken only a few times a year.",
                   "More water is pumped out than rain puts back, so the water table keeps falling, and wells are measured only a few times a year.")
@@ -126,15 +129,14 @@ def d_solar_grid():
     d += t(130, 295, "solar farm", "sm", "middle")
     d += a(232, 225, 290, 200)
     # the day's chart: forecast vs what actually came
-    d += '<line class="ln" x1="300" y1="290" x2="740" y2="290"/><line class="ln" x1="300" y1="290" x2="300" y2="40"/>'
+    d += '<line class="ln" x1="300" y1="290" x2="740" y2="290"/><line class="ln" x1="300" y1="290" x2="300" y2="42"/>'
     d += t(520, 312, "one day: morning to evening", "sm", "middle")
-    d += t(310, 40, "power", "sm")
+    d += t(296, 30, "power", "sm", "middle")
     d += '<path class="lnd" d="M320,285 Q520,20 720,285"/>'
-    d += t(612, 92, "forecast", "sm")
+    d += '<line class="lnd" x1="320" y1="62" x2="360" y2="62"/>' + t(368, 67, "forecast", "sm")
+    d += '<line class="lnc" x1="320" y1="88" x2="360" y2="88"/>' + t(368, 93, "what came: dips as clouds pass", "sm")
     d += ('<path class="lnc" d="M320,285 Q380,180 420,150 L440,215 L465,120 L490,230 L515,140 L540,240 '
           'L565,130 L590,205 Q650,200 720,285"/>')
-    d += t(470, 270, "what came:", "sm", "middle")
-    d += t(470, 288, "clouds pass", "sm", "middle")
     # the distributor pays for the gap
     d += _person(830, 40, "up")
     d += t(830, 140, "the distributor", "bd", "middle")
@@ -165,10 +167,10 @@ def d_rural_doctor():
     d += t(410, 186, "a long queue", "bd", "middle")
     d += a(300, 230, 272, 230)
     # what a triage helper would have to cope with
-    d += kit.box(600, 20, 380, 70, "A triage helper must...", "", "solid")
-    d += kit.box(600, 105, 380, 55, "work with little data", "no tests, no records", "bx")
-    d += kit.box(600, 172, 380, 55, "speak the local language", "Hindi and more", "bx")
-    d += kit.box(600, 239, 380, 60, "be safe", "when unsure, send to a hospital", "bxs")
+    d += kit.box(600, 18, 380, 56, "A triage helper must...", "", "solid")
+    d += kit.box(600, 88, 380, 62, "work with little data", "no tests, no records", "bx")
+    d += kit.box(600, 165, 380, 62, "speak the local language", "Hindi and more", "bx")
+    d += kit.box(600, 242, 380, 62, "be safe", "when unsure, send to a hospital", "bxs")
     return figure(1000, 320, d,
                   "A primary health centre with one doctor at a desk and a long queue of six people outside. On the right, what a triage helper must do: work with little data, speak the local language, and be safe by sending people to a hospital when unsure.",
                   "One doctor, or none, faces a long queue, and any helper tool has to work with little data, in local languages, and safely.")
@@ -180,9 +182,10 @@ def d_court_backlog():
     t, a = kit.text, kit.arrow
     d = ""
     # the judge's bench
+    d += _person(190, 92)
     d += '<rect class="hz" x="60" y="160" width="260" height="120" rx="6"/>'
     d += '<rect class="pf pf-solid" x="64" y="164" width="252" height="20"/>'
-    d += _person(190, 86)
+    d += '<path class="hz" d="M248,150 L282,136 L288,146 L254,160 Z"/>'
     d += t(190, 236, "the court", "bd", "middle")
     # tower of files on the bench and beside it
     for i in range(9):
@@ -190,19 +193,19 @@ def d_court_backlog():
         off = (i % 3 - 1) * 5
         d += f'<rect class="hz" x="{350 + off}" y="{y}" width="120" height="20" rx="3"/>'
         d += f'<line class="ln" x1="{362 + off}" y1="{y + 10}" x2="{400 + off}" y2="{y + 10}"/>'
-    d += t(410, 56, "pending", "bd", "middle")
-    d += t(410, 76, "about 50 million cases", "sm", "middle")
+    d += t(410, 34, "pending", "bd", "middle")
+    d += t(410, 56, "about 50 million cases", "sm", "middle")
     # the adjournment loop: a file comes up, gets a new date, goes back
     d += kit.box(560, 40, 200, 74, "Case called", "today's list", "bx")
     d += a(762, 77, 800, 77)
     d += kit.box(802, 40, 188, 74, "\"Next date\"", "adjourned", "bxs")
-    d += kit.path("M896,116 Q896,200 760,205 Q620,205 620,118", "ln")
-    d += t(760, 196, "back in the pile", "sm", "middle")
+    d += a(478, 110, 556, 80)
+    d += kit.path("M896,116 Q896,215 480,200", "ln")
+    d += t(730, 232, "a new date: back in the pile", "sm", "middle")
     # why it gets adjourned
-    d += t(560, 250, "why it slips:", "lbl")
-    d += t(560, 276, "scheduling clashes · missing papers · adjournments", "sm")
-    d += a(552, 200, 478, 200)
-    return figure(1000, 300, d,
+    d += t(560, 270, "why it slips:", "lbl")
+    d += t(560, 294, "scheduling clashes · missing papers · adjournments", "sm")
+    return figure(1000, 310, d,
                   "A judge at a bench beside a tall stack of files labelled about 50 million pending cases. A loop: a case is called on today's list, is given a next date and adjourned, and goes back in the pile. Below: it slips because of scheduling clashes, missing papers and adjournments.",
                   "A case comes up, gets a new date, and goes back on the pile, so about 50 million cases wait.")
 
@@ -283,49 +286,56 @@ def d_informal_jobs():
 def d_indian_traffic():
     t = kit.text
     d = ""
-    # a road with no lane markings, edges only
-    d += '<path class="ln" d="M20,120 Q500,110 980,120"/><path class="ln" d="M20,300 Q500,310 980,300"/>'
+    # a road with no lane markings: edges only, the top edge broken where the thought bubble sits
+    d += '<path class="ln" d="M20,150 L70,150 M150,150 Q560,140 980,150"/><path class="ln" d="M20,310 Q500,320 980,310"/>'
     # self-driving car on the left with a camera
-    d += '<path class="hz" d="M40,250 L40,218 Q50,196 80,194 L150,194 Q176,196 190,218 L196,250 Z"/>'
-    d += '<circle class="hz" cx="72" cy="254" r="12"/><circle class="hz" cx="166" cy="254" r="12"/>'
-    d += '<rect class="hk" x="106" y="182" width="22" height="12" rx="3"/>'
-    d += '<path class="lnd" d="M128,188 L300,150 M128,188 L300,240" />'
+    d += '<path class="hz" d="M40,270 L40,238 Q50,216 80,214 L150,214 Q176,216 190,238 L196,270 Z"/>'
+    d += '<circle class="hz" cx="72" cy="274" r="12"/><circle class="hz" cx="166" cy="274" r="12"/>'
+    d += '<rect class="hk" x="106" y="202" width="22" height="12" rx="3"/>'
+    d += '<path class="lnd" d="M128,208 L310,180 M128,208 L310,270"/>'
     # thought bubble: what it learned
-    d += '<rect class="bxs" x="30" y="16" width="250" height="78" rx="18"/>'
-    d += '<circle class="bxs" cx="100" cy="112" r="9"/><circle class="bxs" cx="112" cy="134" r="6"/>'
-    d += t(155, 44, "learned on US roads:", "sm", "middle")
-    d += t(155, 66, "neat lanes, cars,", "sm", "middle")
-    d += t(155, 86, "rules followed", "sm", "middle")
+    d += '<rect class="bxs" x="20" y="10" width="260" height="96" rx="18"/>'
+    d += '<circle class="bxs" cx="104" cy="128" r="9"/><circle class="bxs" cx="112" cy="160" r="6"/><circle class="bxs" cx="116" cy="184" r="4"/>'
+    d += t(150, 38, "learned on US roads:", "sm", "middle")
+    d += t(150, 60, "neat lanes, cars,", "sm", "middle")
+    d += t(150, 82, "rules followed", "sm", "middle")
     # auto-rickshaw
-    ax, ay = 340, 170
+    ax, ay = 340, 200
     d += f'<path class="hz" d="M{ax},{ay + 60} L{ax},{ay + 20} Q{ax + 4},{ay} {ax + 40},{ay} L{ax + 90},{ay} L{ax + 96},{ay + 60} Z"/>'
     d += f'<path class="pf pf-bxs" d="M{ax + 4},{ay + 20} Q{ax + 8},{ay + 4} {ax + 40},{ay + 4} L{ax + 88},{ay + 4} L{ax + 90},{ay + 20} Z"/>'
     d += f'<circle class="hz" cx="{ax + 20}" cy="{ay + 64}" r="10"/><circle class="hz" cx="{ax + 80}" cy="{ay + 64}" r="10"/>'
     d += t(ax + 48, ay + 46, "auto", "sm", "middle")
     # a cow, standing in the road
-    cx, cy = 520, 200
+    cx, cy = 540, 236
     d += f'<ellipse class="hz" cx="{cx}" cy="{cy}" rx="44" ry="22"/>'
     d += f'<ellipse class="hz" cx="{cx + 56}" cy="{cy - 14}" rx="16" ry="11"/>'
     d += f'<path class="ln" d="M{cx + 50},{cy - 24} L{cx + 46},{cy - 34} M{cx + 62},{cy - 24} L{cx + 66},{cy - 34}"/>'
     d += "".join(f'<line class="lnc" x1="{cx + dx}" y1="{cy + 18}" x2="{cx + dx}" y2="{cy + 46}"/>' for dx in (-30, -14, 16, 30))
     d += f'<path class="ln" d="M{cx - 44},{cy - 4} Q{cx - 60},{cy + 6} {cx - 56},{cy + 22}"/>'
+    d += t(cx - 8, cy + 6, "cow", "sm", "middle")
     # a hand cart with a person pushing
-    d += '<rect class="hz" x="660" y="220" width="90" height="30" rx="4"/>'
-    d += '<circle class="hz" cx="680" cy="262" r="12"/><circle class="hz" cx="730" cy="262" r="12"/>'
-    d += '<line class="lnc" x1="750" y1="226" x2="776" y2="212"/>'
-    d += _person(790, 178)
-    d += t(706, 212, "cart", "sm", "middle")
-    # a motorbike weaving the wrong way
-    d += '<circle class="hz" cx="880" cy="182" r="11"/><circle class="hz" cx="940" cy="182" r="11"/>'
-    d += '<path class="hz" d="M880,182 L900,160 L930,160 L940,182"/>'
-    d += _person(912, 100)
-    d += kit.path("M960,150 Q920,140 880,146", "lnd")
+    d += '<rect class="hz" x="670" y="244" width="90" height="30" rx="4"/>'
+    d += '<circle class="hz" cx="690" cy="286" r="12"/><circle class="hz" cx="740" cy="286" r="12"/>'
+    d += t(715, 265, "cart", "sm", "middle")
+    d += '<line class="lnc" x1="760" y1="250" x2="788" y2="236"/>'
+    d += _person(800, 214)
+    # a motorbike coming the wrong way, rider seated
+    bx = 880
+    d += f'<circle class="hz" cx="{bx}" cy="280" r="13"/><circle class="hz" cx="{bx + 62}" cy="280" r="13"/>'
+    d += f'<path class="hz" d="M{bx},280 L{bx + 18},252 L{bx + 50},252 L{bx + 62},280"/>'
+    d += f'<line class="lnc" x1="{bx + 6}" y1="252" x2="{bx + 2}" y2="240"/>'
+    d += f'<circle class="hz" cx="{bx + 34}" cy="198" r="12"/>'
+    d += f'<line class="lnc" x1="{bx + 34}" y1="210" x2="{bx + 36}" y2="246"/>'
+    d += f'<line class="lnc" x1="{bx + 34}" y1="220" x2="{bx + 6}" y2="240"/>'
+    d += f'<line class="lnc" x1="{bx + 36}" y1="246" x2="{bx + 22}" y2="266"/>'
+    d += kit.path(f"M{bx + 70},172 Q{bx + 30},164 {bx - 10},172", "lnd")
+    d += t(bx + 30, 160, "wrong way", "sm", "middle")
     # question marks over what the car sees
-    for x, y in [(386, 150), (520, 150), (706, 196), (912, 92)]:
-        d += t(x, y - 8, "?", "tt", "middle")
-    d += t(640, 140, "no lanes, mixed traffic, loose rules", "bd", "middle")
-    return figure(1000, 320, d,
-                  "A road with no lane markings. On the left a self-driving car whose thought bubble says it learned on US roads with neat lanes, cars and rules followed. Ahead of it, each with a question mark: an auto-rickshaw, a cow standing in the road, a hand cart pushed by a person, and a motorbike weaving the wrong way.",
+    for x, y in [(388, 192), (596, 196), (715, 236)]:
+        d += t(x, y, "?", "tt", "middle")
+    d += t(500, 345, "no lanes, mixed traffic, rules followed loosely", "bd", "middle")
+    return figure(1000, 360, d,
+                  "A road with no lane markings. On the left a self-driving car whose thought bubble says it learned on US roads with neat lanes, cars and rules followed. Ahead of it, with question marks: an auto-rickshaw, a cow standing in the road, a hand cart pushed by a person, and a motorbike coming the wrong way.",
                   "A self-driving model trained on neat Western roads meets no lanes, autos, cows and carts, and stops recognising what it sees.")
 
 

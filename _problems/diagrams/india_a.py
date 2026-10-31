@@ -66,12 +66,12 @@ def d_token_tax():
     # Hindi row
     d += t(20, 186, "Hindi", "bd")
     d += t(140, 162, "\"आप कैसे हैं?\"", "sm")
-    frags = ["आ", "प", "क", "ै", "स", "े", "ह", "ै", "ं", "?", "·", "·"]
+    frags = ["आ", "प", "क", "ै", "स", "े", "ह", "ै", "ं", "?"]
     for i, w in enumerate(frags):
         x = 140 + i * 44
         d += f'<rect class="pf pf-bxs" x="{x + 3}" y="{172 + 3}" width="38" height="32" rx="7"/><rect class="hz" x="{x}" y="172" width="38" height="32" rx="7" style="fill:none"/>'
         d += t(x + 19, 194, w, "tx", "middle")
-    d += t(140, 228, "say 12 pieces, many of them broken bits of letters", "sm")
+    d += t(140, 228, "say 10 pieces, many of them broken bits of letters", "sm")
     # the bill: coin stacks
     d += '<line class="lnd" x1="700" y1="50" x2="700" y2="240"/>'
     d += t(850, 40, "what you pay", "bd", "middle")
@@ -89,7 +89,7 @@ def d_token_tax():
         d += f'<path class="ln" d="M{bx},{266} L{bx + 50},{266} L{bx + 44},{318} L{bx + 6},{318} Z" style="fill:none"/>'
         d += t(bx + 64, 298, lab, "tx")
     return figure(1000, 330, d,
-                  "The English question How are you is cut into about 4 pieces; the same Hindi question is cut into about 12 broken pieces. "
+                  "The English question How are you is cut into about 4 pieces; the same Hindi question is cut into about 10 broken pieces. "
                   "One coin pays for English; a stack of coins, about 3 to 8 times more, pays for Hindi. Below, a full bucket of English text and a nearly empty bucket of clean Hinglish text.",
                   "The tokenizer cuts Indian scripts into many more pieces than English, so the same sentence costs about 3 to 8 times more, and there is little clean data to make the answers good.")
 
@@ -180,13 +180,13 @@ def d_phone():
     # budget phone, centre, with a model too big for it
     d += '<rect class="hz" x="340" y="20" width="160" height="285" rx="20"/><rect class="hz" x="352" y="42" width="136" height="238" rx="6"/>'
     d += kit.box(300, 120, 240, 76, "AI model", "1–3B parameters", "solid")
-    d += '<path class="hz" d="M405,20 L420,4 L470,4 L470,30 L440,30 Z"/>'
-    d += t(448, 22, "₹10,000", "lbl", "middle")
+    d += '<line class="ln" x1="488" y1="34" x2="512" y2="38"/><path class="hz" d="M512,38 L526,24 L600,24 L600,52 L526,52 Z"/>'
+    d += t(563, 43, "₹10,000", "lbl", "middle")
     d += t(420, 240, "offline, in Hindi", "sm", "middle")
     d += t(240, 70, ["most Indian", "phones are", "this one"], "sm", "middle")
     d += kit.path("M270,90 Q300,90 334,70", "lnd")
     # three limits
-    d += '<line class="lnd" x1="590" y1="30" x2="590" y2="300"/>'
+    d += '<line class="lnd" x1="612" y1="70" x2="612" y2="300"/>'
     # memory chip
     d += '<rect class="hz" x="630" y="40" width="50" height="40" rx="4"/><rect class="zr" x="640" y="50" width="30" height="20" rx="2"/>'
     for i in range(4):
@@ -219,12 +219,11 @@ def d_address():
     # the map
     d += '<rect class="hz" x="535" y="15" width="445" height="295" rx="10"/>'
     d += '<path class="ln" d="M535,170 Q700,150 980,180" style="fill:none"/><path class="ln" d="M720,15 Q700,160 740,310" style="fill:none"/>'
-    d += '<path class="lnd" d="M535,90 L720,95" style="fill:none"/><path class="lnd" d="M740,250 L980,240" style="fill:none"/>'
     # two temples, two wells: which one?
     d += _temple(600, 150) + _well(660, 150)
-    d += _temple(850, 290) + _well(920, 290)
-    d += t(625, 60, ["a temple", "and a well"], "sm", "middle")
-    d += t(880, 205, ["another temple,", "another well"], "sm", "middle")
+    d += _temple(800, 290) + _well(860, 290)
+    d += t(630, 42, ["a temple", "and a well"], "sm", "middle")
+    d += t(892, 238, ["another", "temple,", "another", "well"], "sm")
     # the real door, with a dashed 100 m circle
     d += _house(830, 140, 28)
     d += '<circle class="lnd" cx="844" cy="125" r="42" style="fill:none"/>'
@@ -252,7 +251,7 @@ def d_scam():
     d += b(15, 110, 160, 100, "Scammer", ["a short clip of", "the son's voice"], "bxm")
     d += a(177, 160, 212, 160)
     d += b(215, 110, 160, 100, "Voice cloner", ["speaks Hindi in", "the son's voice"], "solid")
-    d += a(377, 160, 412, 160, "the call")
+    d += a(377, 160, 412, 160)
     # the filter, a sieve with a big hole
     d += b(415, 100, 190, 120, "Scam filter", ["trained mostly", "on English"], "bxs")
     d += t(510, 250, "lets it through ✓", "sm", "middle")
@@ -286,23 +285,23 @@ def d_monsoon():
             d += f'<rect class="hz" x="{gx + c * cw}" y="{gy + r * ch}" width="{cw}" height="{ch}"/>'
             if (r, c) != (0, 1):
                 d += t(gx + c * cw + cw / 2, gy + r * ch + ch / 2 + 6, "\"light rain\"", "sm", "middle")
-    d += t(30, 108, "a global model: one forecast for each big square", "sm")
+    d += t(30, 338, "a global model: one forecast for each big square", "sm")
     # the downpour on one district
-    d += _cloud(315, 50, 0.75, "pf pf-solid")
-    d += _cloud(315, 50, 0.75, "ln")
+    d += _cloud(355, 50, 0.75, "pf pf-solid")
+    d += _cloud(355, 50, 0.75, "ln")
     for i in range(7):
-        x = 270 + i * 14
-        d += f'<line class="ln" x1="{x}" y1="72" x2="{x - 8}" y2="{150}"/>'
-    d += t(gx + cw + 8, gy + ch - 10, "\"light rain\"", "sm")
+        x = 318 + i * 13
+        d += f'<line class="ln" x1="{x}" y1="72" x2="{x - 8}" y2="{140}"/>'
+    d += t(gx + cw + 8, gy + ch - 8, "\"light rain\"", "sm")
     # the flooded village under it
-    d += '<path class="zr" d="M240,190 Q300,176 380,190 L380,212 L240,212 Z" style="opacity:.7"/>'
-    d += _house(262, 186, 22) + _house(300, 182, 22) + _house(338, 186, 22)
-    d += t(460, 40, ["a downpour on", "one district"], "sm")
+    d += '<path class="zr" d="M298,192 Q350,178 406,192 L406,213 L298,213 Z" style="opacity:.7"/>'
+    d += _house(310, 188, 22) + _house(342, 184, 22) + _house(374, 188, 22)
+    d += t(462, 46, ["a downpour on", "one district"], "sm")
     # right side
     d += b(640, 35, 340, 105, "What a district needs", ["heavy rain, here,", "a few hours ahead"], "solid")
     d += b(640, 165, 340, 105, "What it gets", ["good big-picture forecasts;", "floods hit with little warning"], "bxs")
     d += t(810, 300, "as in Assam and Kerala", "sm", "middle")
-    return figure(1000, 315, d,
+    return figure(1000, 350, d,
                   "A grid of big forecast squares, each saying light rain. A dark cloud pours on one district inside one square, and its houses stand in floodwater. "
                   "Beside it: a district needs heavy-rain warnings a few hours ahead, but gets big-picture forecasts and floods with little warning.",
                   "Global AI weather models see the big picture, but the rain that floods one district a few hours from now falls inside a single square.")
@@ -330,10 +329,11 @@ def d_farms():
         d += f'<line class="lnc" x1="{fx + i * 120}" y1="{fy}" x2="{fx + i * 120}" y2="{fy + fh}" style="stroke-dasharray:8 6"/>'
     for j in range(3):
         d += f'<line class="lnc" x1="{fx}" y1="{fy + j * 120}" x2="{fx + fw}" y2="{fy + j * 120}" style="stroke-dasharray:8 6"/>'
+    d += f'<rect class="lnc" x="{fx + 240}" y="{fy}" width="120" height="120" style="fill:none;stroke-width:5"/>'
     d += t(30, 36, "small plots, with the satellite's 10-metre pixels drawn on top", "sm")
     d += t(210, 316, "one pixel covers several farmers' plots", "sm", "middle")
     # what one pixel says
-    d += a(392, 110, 452, 110)
+    d += a(394, 110, 452, 110)
     d += b(455, 50, 230, 120, "One pixel, one colour", ["rice + wheat + bare soil", "blended together"], "bxs")
     d += t(570, 200, ["which plot is", "stressed? no idea"], "sm", "middle")
     # ground truth

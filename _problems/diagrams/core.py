@@ -50,6 +50,10 @@ def _bubble(x, y, w, h, lines, tx, ty, cls="tx", kind="hz"):
     return s
 
 
+def _card(x, y, w, label, cls="bx"):
+    return f'<rect class="{cls}" x="{x}" y="{y}" width="{w}" height="40" rx="10"/>' + kit.text(x + w / 2, y + 26, label, "tx", "middle")
+
+
 def _cross(cx, cy, r=12):
     return (f'<line class="lnc" x1="{cx - r}" y1="{cy - r}" x2="{cx + r}" y2="{cy + r}"/>'
             f'<line class="lnc" x1="{cx + r}" y1="{cy - r}" x2="{cx - r}" y2="{cy + r}"/>')
@@ -92,8 +96,8 @@ def d_reasoning():
     # river
     d += '<rect class="zg" x="0" y="0" width="0" height="0"/>'
     d += '<path class="bx" style="stroke:none" d="M90,190 L910,190 L910,262 L90,262 Z"/>'
-    for y in (204, 226, 248):
-        d += f'<path class="ln" style="stroke:#7aa6cf" d="M110,{y} q20,-7 40,0 t40,0 t40,0"/><path class="ln" style="stroke:#7aa6cf" d="M560,{y} q20,-7 40,0 t40,0 t40,0"/>'
+    for y in (200, 254):
+        d += f'<path class="ln" style="stroke:#7aa6cf" d="M100,{y} q20,-6 40,0' + ' t40,0' * 19 + '"/>'
     d += _person(45, 140)
     d += t(45, 245, "start", "sm", "middle")
     # flag on the far bank
@@ -170,7 +174,7 @@ def d_continual():
     d += kit.box(300, 252, 400, 56, "Today's fix", "retrain from scratch, or bolt on retrieval", "bxm")
     return figure(1000, 320, d,
                   "A full bookshelf stands for the model's weights. A yellow book of new facts is pushed in from the left; on the right, old books, the model's old skills, fall off the shelf. Below, today's fix: retrain from scratch, or bolt on retrieval.",
-                  "Updating the weights on new facts damages old skills, so today a model learns nothing after it ships without a full retrain.")
+                  "Teaching a shipped model new facts by updating its weights knocks old skills off the shelf.")
 
 
 # ---------- 5. long context ----------
@@ -186,13 +190,13 @@ def d_long_context():
         x = 40 + i * 40
         d += f'<rect class="hz" x="{x}" y="196" width="36" height="46" rx="3"/>'
         d += f'<line class="ln" x1="{x + 7}" y1="{208}" x2="{x + 29}" y2="{208}"/><line class="ln" x1="{x + 7}" y1="{220}" x2="{x + 25}" y2="{220}"/>'
-    facts = [(318, "A"), (498, "B"), (678, "C")]
+    facts = [(338, "A"), (498, "B"), (658, "C")]
     for x, lab in facts:
         d += f'<rect class="bxs" x="{x - 18}" y="196" width="36" height="46" rx="3"/>' + t(x, 226, lab, "bd", "middle")
     d += t(80, 270, "start: noticed", "sm", "middle") + t(920, 270, "end: noticed", "sm", "middle")
     d += t(170, 132, "the middle sags", "sm", "middle")
     # combining
-    d += '<path class="lnd" d="M318,246 Q408,300 498,246"/><path class="lnd" d="M498,246 Q588,300 678,246"/>'
+    d += '<path class="lnd" d="M338,246 Q418,296 498,246"/><path class="lnd" d="M498,246 Q578,296 658,246"/>'
     d += t(498, 312, "the answer needs A + B + C together: missed", "tx", "middle")
     return figure(1000, 330, d,
                   "A long strip of pages stands for a million-token context. Above it, a curve of how well the model notices facts is high at the start and end and sags in the middle. Three facts, A, B and C, sit in the middle, and the answer needs all three together, which the model misses.",
@@ -211,22 +215,21 @@ def d_memory():
     events = [(80, "\"I live in Pune\""), (248, "\"I'm vegetarian\""), (584, "\"I moved to Delhi\"")]
     for x, s in events:
         d += f'<line class="lnd" x1="{x}" y1="56" x2="{x}" y2="76"/>'
-        d += kit.box(x - 78, 76, 156, 40, s, "", "bx")
+        d += _card(x - 78, 76, 156, s, "bx")
     # memory drawer
     d += '<rect class="hz" x="40" y="160" width="440" height="140" rx="10"/>'
-    d += t(260, 186, "THE ASSISTANT'S MEMORY", "lbl", "middle")
-    d += kit.box(58, 200, 130, 40, "lives in Pune", "", "bxs")
-    d += kit.box(198, 200, 140, 40, "lives in Delhi", "", "bxs")
+    d += t(60, 290, "THE ASSISTANT'S MEMORY", "lbl")
+    d += _card(58, 200, 130, "lives in Pune", "bxs") + _card(198, 200, 140, "lives in Delhi", "bxs")
     d += t(268, 266, "both kept: which one is true now?", "sm", "middle")
-    d += kit.box(350, 200, 112, 40, "health note", "", "bxm")
+    d += _card(350, 200, 112, "health note", "bxm")
     d += t(406, 290, "may leak", "sm", "middle")
     d += kit.path("M190,121 Q160,140 126,196", "lnd") + kit.path("M584,121 Q500,160 300,196", "lnd")
     # June question
-    d += _person(905, 170)
-    d += _bubble(700, 140, 170, 60, "\"A gym near home?\"", 890, 178)
-    d += _robot(560, 162, "smile")
-    d += _bubble(620, 222, 230, 56, "\"Here are gyms in Pune!\"", 600, 250, "tx", "bxs")
-    d += _cross(870, 250, 10)
+    d += _person(950, 170)
+    d += _bubble(745, 140, 175, 56, "\"A gym near home?\"", 934, 178)
+    d += _robot(580, 168, "smile")
+    d += _bubble(650, 226, 230, 56, "\"Here are gyms in Pune!\"", 628, 248, "tx", "bxs")
+    d += _cross(905, 254, 10)
     return figure(1000, 315, d,
                   "A six-month timeline: in January the user says 'I live in Pune', in February 'I'm vegetarian', in April 'I moved to Delhi'. The assistant's memory keeps both 'lives in Pune' and 'lives in Delhi', plus a health note that may leak. In June the user asks for a gym near home and the assistant suggests gyms in Pune.",
                   "Memories go stale, contradict each other and can leak private details, and nobody has settled what an assistant should remember, update or forget.")
@@ -256,8 +259,8 @@ def d_video():
     d += t(445, 168, "?", "bd")
     d += _bubble(480, 170, 320, 60, ["\"Which came first:", "the call or the car leaving?\""], 440, 210)
     d += t(640, 268, "across the hour, the order of events gets lost", "tx", "middle")
-    d += kit.box(820, 170, 160, 60, "car, door, call?", "", "bxs") + _cross(960, 176, 9)
-    return figure(1000, 285, d,
+    d += _card(820, 180, 160, "car, door, call", "bxs") + _cross(900, 250, 10)
+    return figure(1000, 300, d,
                   "A film strip runs from 0 to 60 minutes, with a door opening early, a phone call in the middle and a car leaving near the end. On one short clip the model correctly says 'a man opens a door'. Asked which came first across the hour, the puzzled model jumbles the order: car, door, call.",
                   "Models describe a short clip well, but lose track of who did what, and in which order, across an hour of video.")
 
@@ -289,9 +292,7 @@ def d_synthetic():
         d += t(cx, 266, lab, "tx", "middle")
         if i < 3:
             d += kit.arrow(cx + 92, 165, cx + 108, 165)
-    d += kit.path("M400,84 Q600,20 800,84", "lnd")
-    d += kit.path("M600,84 Q700,40 800,84", "lnd", end=False)
-    d += t(600, 36, "each model trains on the last one's writing", "sm", "middle")
+    d += t(600, 70, "each model trains on the last one's writing", "sm", "middle")
     d += t(800, 290, "fewer kinds of answer: rare things vanish", "sm", "middle")
     return figure(1000, 305, d,
                   "A jar of good public text is nearly empty. Next to it, four frames show the spread of what a model writes: wide for human text, then narrower for generation 1, 2 and 3, as each model trains on the last one's writing, until rare things vanish.",
@@ -309,7 +310,7 @@ def d_evaluation():
     for j in range(4):
         d += f'<line class="ln" x1="34" y1="{106 + j * 22}" x2="102" y2="{106 + j * 22}"/>' + _tick(120, 104 + j * 22)
     d += t(80, 236, "questions + answers", "sm", "middle")
-    d += kit.arrow(146, 135, 196, 135, "posted online", lx=171, ly=120)
+    d += kit.arrow(146, 135, 196, 135) + t(171, 160, ["posted", "online"], "sm", "middle")
     # training pile
     for j in range(6):
         d += f'<rect class="{"bxs" if j == 2 else "hz"}" x="{205 + (j % 2) * 8}" y="{186 - j * 22}" width="120" height="20" rx="3"/>'
@@ -326,8 +327,7 @@ def d_evaluation():
         x = 585 + i * 95
         d += f'<rect class="{["bx", "solid", "bxs", "bx"][i]}" x="{x}" y="{200 - h}" width="60" height="{h}" rx="4"/>'
         d += t(x + 30, 222, f"model {'ABCD'[i]}", "sm", "middle")
-    d += t(760, 256, "so which one is best for my task?", "tx", "middle")
-    d += t(915, 256, "?", "bd")
+    d += t(760, 256, "so which one is best for my task?", "bd", "middle")
     return figure(1000, 280, d,
                   "Left: a test sheet with its answers is posted online, lands in a pile of training data, and the model scores 98% because it has seen the answers. Right: a scoreboard where four models all sit at the maximum, leaving the question: which one is best for my task?",
                   "Benchmarks leak into training data and saturate within months, so scores stop telling you which model is better for your task.")
@@ -350,19 +350,19 @@ def d_world():
     d += '<line class="lnd" x1="500" y1="30" x2="500" y2="290"/>'
     d += t(760, 26, "NEVER SEEN: TAKE ONE OUT FIRST", "lbl", "middle")
     d += '<line class="ln" x1="540" y1="170" x2="980" y2="170"/>'
-    xs = [580, 640, None, 760, 820, 880]
+    xs = [570, 625, None, 790, 850, 910]
     for i, x in enumerate(xs):
         if x is None:
-            d += '<rect class="bxm" x="700" y="100" width="16" height="70" rx="2"/>'
-            d += _cross(708, 135, 12)
+            d += '<rect class="bxm" x="725" y="100" width="16" height="70" rx="2"/>'
+            d += _cross(733, 135, 12)
         else:
             d += _domino(x, 170, 62 if i < 2 else 0)
-    d += t(780, 204, "really: two fall, four stay up", "tx", "middle")
+    d += t(780, 204, "really: two fall, three stay up", "tx", "middle")
     d += _robot(570, 196, "smile")
-    d += _bubble(640, 236, 200, 48, "\"All six fall!\"", 610, 250, "bd", "bxs")
+    d += _bubble(640, 236, 200, 48, "\"They all fall!\"", 610, 250, "bd", "bxs")
     d += _cross(870, 260, 11)
     return figure(1000, 330, d,
-                  "Left: a row of dominoes, pushed, all fall, a pattern seen in training a thousand times. Right: the same row with the third domino taken out, which was never seen. In reality two fall and four stay up, but the model predicts 'All six fall!'.",
+                  "Left: a row of dominoes, pushed, all fall, a pattern seen in training a thousand times. Right: the same row with the third domino taken out, which was never seen. In reality two fall and three stay up, but the model predicts 'They all fall!'.",
                   "Models learn patterns, not how the world works, so they fail on \"what would happen if\" questions they never saw in training.")
 
 
@@ -372,7 +372,7 @@ def _grid(x, y, n, cell, hi=None):
     s = ""
     for r in range(n):
         for c in range(n):
-            s += f'<rect class="{"bxs" if c <= r else "hz"}" x="{x + c * cell}" y="{y + r * cell}" width="{cell}" height="{cell}" style="stroke-width:1"/>'
+            s += f'<rect class="bxs" x="{x + c * cell}" y="{y + r * cell}" width="{cell}" height="{cell}" style="stroke-width:1"/>'
     return s
 
 
@@ -391,17 +391,14 @@ def d_architectures():
     d += '<line class="ln" x1="590" y1="190" x2="970" y2="190"/>'
     for i in range(7):
         x = 598 + i * 54
-        if 3 <= i <= 3:
-            continue
-        d += f'<rect class="bx" x="{x}" y="166" width="40" height="22" rx="4"/>'
-    d += '<rect class="solid" x="745" y="70" width="80" height="80" rx="6"/>'
+        d += f'<rect class="{"bxs" if i == 3 else "bx"}" x="{x}" y="166" width="40" height="22" rx="4"/>'
+    d += '<rect class="solid" x="745" y="50" width="80" height="80" rx="6"/>'
     for j in range(4):
-        d += f'<line class="ln" x1="757" y1="{88 + j * 15}" x2="813" y2="{88 + j * 15}"/>'
-    d += kit.arrow(785, 164, 785, 154)
-    d += t(860, 96, ["one fixed-size", "running note"], "sm")
+        d += f'<line class="ln" x1="757" y1="{68 + j * 15}" x2="813" y2="{68 + j * 15}"/>'
+    d += kit.arrow(785, 162, 785, 136)
+    d += t(840, 80, ["one fixed-size", "running note"], "sm")
     d += t(780, 230, "cost grows in a straight line: cheaper", "tx", "middle")
-    d += t(780, 258, "but not yet clearly as good", "tx", "middle")
-    d += t(780, 284, "?", "bd", "middle")
+    d += t(780, 260, "but not yet clearly as good?", "bd", "middle")
     return figure(1000, 300, d,
                   "Left: grids of checks for a transformer: 4 words need 16 checks, 8 words 64, 16 words 256, so doubling the length quadruples the work. Right: an alternative model reads words past one fixed-size running note, so cost grows in a straight line; it is cheaper but not yet clearly as good.",
                   "Transformer cost grows with the square of the context length. Cheaper designs exist, but nobody has shown they are as good.")
@@ -422,12 +419,10 @@ def d_less_data():
     for j in range(15):
         d += f'<rect class="{"bx" if j % 2 else "hz"}" x="{640 + (j % 3) * 4}" y="{272 - j * 17}" width="120" height="15" rx="3"/>'
     d += '<path class="lnd" d="M640,12 L640,26 M764,12 L764,26"/>'
-    d += t(702, 8, "", "sm")
     d += t(800, 60, ["a model:", "over 10 trillion words"], "tx")
     d += t(800, 112, "(this tower would go", "sm") + t(800, 132, "far off the page)", "sm")
-    d += kit.path("M240,240 Q400,150 520,200", "lnd")
-    d += t(370, 140, "same language, about", "sm", "middle") + t(370, 160, "100,000 times the reading", "sm", "middle")
-    d += kit.box(250, 222, 260, 52, "How does a child do it?", "", "bxm")
+    d += t(370, 120, "same language, about", "sm", "middle") + t(370, 140, "100,000 times the reading", "sm", "middle")
+    d += kit.box(250, 180, 240, 56, "How does a child do it?", "", "bxm")
     return figure(1000, 300, d,
                   "A child stands by a small stack of books, about 100 million words. A robot stands by a tower of books, over 10 trillion words, that would go far off the page: about 100,000 times the reading for the same language. Nobody knows how a child does it.",
                   "A child learns language from about 100 million words; models need over 10 trillion, and nobody knows how to close most of that gap.")

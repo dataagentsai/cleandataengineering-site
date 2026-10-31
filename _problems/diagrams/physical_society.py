@@ -378,7 +378,7 @@ def d_fact_check():
     d += kit.path("M880,205 Q890,228 900,244", "lnd")
     return figure(1000, 290, d,
                   "On a timeline, one phone with a false claim spreads it to many phones within minutes. A wide yellow gap follows. A fact-checker with a ticked report arrives only after hours or days.",
-                  "False claims spread in minutes, and fact-checks take hours or days, so most people see the rumour long before the correction.")
+                  "False claims spread in minutes, and fact-checks take hours or days, so many people see the rumour long before the correction.")
 
 
 DRAWINGS = {

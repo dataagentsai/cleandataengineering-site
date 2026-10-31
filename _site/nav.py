@@ -47,6 +47,7 @@ SECTIONS = [
     ]),
     ("Build with us", [
         ("Join a project", "/projects/", []),
+        ("Hard problems", "/problems/", []),
         ("Open specifications", "/research/", [
             ("AI Assurance Catalog", "https://dataagentsai.github.io/ai-assurance-catalog/"),
             ("AI Harness Catalog", "https://dataagentsai.github.io/ai-harness-catalog/"),

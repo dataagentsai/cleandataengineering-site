@@ -1,0 +1,259 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shrinking models below 4 bits without losing quality · Clean Data Engineering</title>
+<meta name="description" content="Shrinking models below 4 bits without losing quality: why it is still unsolved, an 8-week experiment one person can run, and whether a solo builder can make progress."><link rel="canonical" href="https://cleandataengineering.ai/problems/shrinking-models-below-4-bits-without-losing/">
+<meta property="og:title" content="Shrinking models below 4 bits without losing quality"><meta property="og:description" content="Shrinking models below 4 bits without losing quality: why it is still unsolved, an 8-week experiment one person can run, and whether a solo builder can make progress."><meta property="og:url" content="https://cleandataengineering.ai/problems/shrinking-models-below-4-bits-without-losing/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:19px; color:var(--ink-soft); }
+  .vd { display:inline-block; font:13px var(--sans); border:1.3px solid var(--ink); border-radius:20px; padding:1px 11px; margin:0 6px 4px 0; white-space:nowrap; }
+  .vd-strong { background:var(--mint-wash); font-weight:700; } .vd-possible { background:var(--butter-wash); } .vd-follow { background:#fff; color:var(--muted); }
+  .grp { font:13px var(--sans); color:var(--muted); }
+  .pcards { display:grid; grid-template-columns:repeat(auto-fill,minmax(270px,1fr)); gap:12px; margin:10px 0 26px; }
+  .pcard { display:block; border:var(--line); border-radius:var(--wob); padding:12px 15px; background:#fff; text-decoration:none; color:var(--ink); }
+  .pcard:hover { background:var(--peri-wash); }
+  .pcard b { display:block; font-size:16px; line-height:1.3; margin-bottom:5px; }
+  .pcard span.w { display:block; font:13.5px var(--sans); color:var(--muted); margin-top:6px; line-height:1.4; }
+  section.pg h2 { margin-top:30px; }
+  .block { border:var(--line); border-radius:var(--wob); padding:14px 20px; margin:16px 0; background:#fff; }
+  .block h2 { margin:0 0 6px; font-size:24px; } .block p { margin:0; }
+  .b-why { background:var(--rose-wash); } .b-exp { background:var(--peri-wash); } .b-vd { background:var(--butter-wash); }
+  .solo { font-family:var(--sans); font-size:14.5px; } .solo li { margin:4px 0; }
+  .pn { display:flex; justify-content:space-between; gap:10px; margin:30px 0 10px; font-family:var(--sans); font-size:14.5px; flex-wrap:wrap; }
+  .pn a { border:var(--line); border-radius:var(--wob); padding:6px 14px; text-decoration:none; max-width:48%; }
+  .pn small { display:block; color:var(--faint); font-size:11.5px; letter-spacing:.06em; text-transform:uppercase; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:1180px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:1179px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Learn</h4><ul><li><a href="/paths/">Find your path</a></li><li><a href="/concepts/">Key concepts</a></li><li><details><summary><a href="/learn/">Courses</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li></ul></details></li><li><details><summary><a href="/simulators/">Simulators</a></summary><ul><li><a href="/learn/agent-harness-sim/">Agent Harness Simulator</a></li><li><a href="/learn/data-platform-sim/">DataTwin Studio</a></li><li><a href="/learn/data-platform-sim/problems/">Problem Lab</a></li><li><a href="/learn/data-platform-sim/performance/">Performance stories</a></li></ul></details></li><li><details><summary><a href="/certifications/">Certifications</a></summary><ul><li><a href="/certifications/#ai">AI engineering</a></li><li><a href="/certifications/#data">Data engineering</a></li><li><a href="/certifications/claude-certified-architect/CCA-F/">Claude Certified Architect</a></li><li><a href="/certifications/claude-certified-architect/CCAR-P/CCAR-P_Study_Guide.html">Claude Architect, Professional</a></li><li><a href="/certifications/azure-ai-engineer/">Microsoft AI-103</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li></ul><h4>Build with us</h4><ul><li><a href="/projects/">Join a project</a></li><li><a href="/problems/">Hard problems</a></li><li><details><summary><a href="/research/">Open specifications</a></summary><ul><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">AgentTwin, explained</a></li><li><a href="/learn/datatwin/">DataTwin, explained</a></li><li><a href="/lab/">The AgentTwin Lab</a></li></ul></details></li><li><details><summary><a href="/assets/">Open-source assets</a></summary><ul><li><a href="https://github.com/dataagentsai/reference-agent">Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Eval Harness Framework</a></li><li><a href="https://github.com/dataagentsai/claims-fnol-azure">Claims assistant on Azure</a></li></ul></details></li><li><a href="/about/#join">Write or teach</a></li></ul><h4>For leaders</h4><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/papers/">Technical papers</a></li><li><a href="/writing/">Blog</a></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/problems/">Hard problems</a> › <a href="/problems/#edge">Edge AI and serving cost</a></p>
+<div class="hero" style="padding-top:26px"><p class="grp">Edge AI and serving cost: AI on small devices and cheaper answers</p>
+<h1>Shrinking models below 4 bits without losing quality</h1>
+<p><span class="vd vd-strong">Solo: strong</span><span class="grp">One person can run a real test of this in about 8 weeks.</span></p></div>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 315" role="img" aria-label="Four panels show the same wavy curve of model weights. At 16 bits it is smooth and quality is fine. At 4 bits it is 16 small steps and nearly as good. At 2 bits it is 4 coarse steps and at ternary only minus one, zero and plus one; quality drops sharply."><text class="sm" x="500" y="24" text-anchor="middle">the same weights, stored with fewer and fewer steps</text><rect class="hz" x="12" y="60" width="228" height="140" rx="12"/><text class="bd" x="126.0" y="52" text-anchor="middle">16 bits</text><path class="lnd" d="M26.0,130.0 L27.7,125.9 L29.3,121.9 L31.0,117.9 L32.7,113.9 L34.3,110.1 L36.0,106.4 L37.7,102.8 L39.3,99.4 L41.0,96.2 L42.7,93.2 L44.3,90.5 L46.0,87.9 L47.7,85.7 L49.3,83.7 L51.0,82.0 L52.7,80.5 L54.3,79.4 L56.0,78.6 L57.7,78.2 L59.3,78.0 L61.0,78.2 L62.7,78.6 L64.3,79.4 L66.0,80.5 L67.7,82.0 L69.3,83.7 L71.0,85.7 L72.7,87.9 L74.3,90.5 L76.0,93.2 L77.7,96.2 L79.3,99.4 L81.0,102.8 L82.7,106.4 L84.3,110.1 L86.0,113.9 L87.7,117.9 L89.3,121.9 L91.0,125.9 L92.7,130.0 L94.3,134.1 L96.0,138.1 L97.7,142.1 L99.3,146.1 L101.0,149.9 L102.7,153.6 L104.3,157.2 L106.0,160.6 L107.7,163.8 L109.3,166.8 L111.0,169.5 L112.7,172.1 L114.3,174.3 L116.0,176.3 L117.7,178.0 L119.3,179.5 L121.0,180.6 L122.7,181.4 L124.3,181.8 L126.0,182.0 L127.7,181.8 L129.3,181.4 L131.0,180.6 L132.7,179.5 L134.3,178.0 L136.0,176.3 L137.7,174.3 L139.3,172.1 L141.0,169.5 L142.7,166.8 L144.3,163.8 L146.0,160.6 L147.7,157.2 L149.3,153.6 L151.0,149.9 L152.7,146.1 L154.3,142.1 L156.0,138.1 L157.7,134.1 L159.3,130.0 L161.0,125.9 L162.7,121.9 L164.3,117.9 L166.0,113.9 L167.7,110.1 L169.3,106.4 L171.0,102.8 L172.7,99.4 L174.3,96.2 L176.0,93.2 L177.7,90.5 L179.3,87.9 L181.0,85.7 L182.7,83.7 L184.3,82.0 L186.0,80.5 L187.7,79.4 L189.3,78.6 L191.0,78.2 L192.7,78.0 L194.3,78.2 L196.0,78.6 L197.7,79.4 L199.3,80.5 L201.0,82.0 L202.7,83.7 L204.3,85.7 L206.0,87.9 L207.7,90.5 L209.3,93.2 L211.0,96.2 L212.7,99.4 L214.3,102.8 L216.0,106.4 L217.7,110.1 L219.3,113.9 L221.0,117.9 L222.7,121.9 L224.3,125.9 L226.0,130.0"/><path class="lnc" d="M26.0,130.0 L27.7,125.9 L29.3,121.9 L31.0,117.9 L32.7,113.9 L34.3,110.1 L36.0,106.4 L37.7,102.8 L39.3,99.4 L41.0,96.2 L42.7,93.2 L44.3,90.5 L46.0,87.9 L47.7,85.7 L49.3,83.7 L51.0,82.0 L52.7,80.5 L54.3,79.4 L56.0,78.6 L57.7,78.2 L59.3,78.0 L61.0,78.2 L62.7,78.6 L64.3,79.4 L66.0,80.5 L67.7,82.0 L69.3,83.7 L71.0,85.7 L72.7,87.9 L74.3,90.5 L76.0,93.2 L77.7,96.2 L79.3,99.4 L81.0,102.8 L82.7,106.4 L84.3,110.1 L86.0,113.9 L87.7,117.9 L89.3,121.9 L91.0,125.9 L92.7,130.0 L94.3,134.1 L96.0,138.1 L97.7,142.1 L99.3,146.1 L101.0,149.9 L102.7,153.6 L104.3,157.2 L106.0,160.6 L107.7,163.8 L109.3,166.8 L111.0,169.5 L112.7,172.1 L114.3,174.3 L116.0,176.3 L117.7,178.0 L119.3,179.5 L121.0,180.6 L122.7,181.4 L124.3,181.8 L126.0,182.0 L127.7,181.8 L129.3,181.4 L131.0,180.6 L132.7,179.5 L134.3,178.0 L136.0,176.3 L137.7,174.3 L139.3,172.1 L141.0,169.5 L142.7,166.8 L144.3,163.8 L146.0,160.6 L147.7,157.2 L149.3,153.6 L151.0,149.9 L152.7,146.1 L154.3,142.1 L156.0,138.1 L157.7,134.1 L159.3,130.0 L161.0,125.9 L162.7,121.9 L164.3,117.9 L166.0,113.9 L167.7,110.1 L169.3,106.4 L171.0,102.8 L172.7,99.4 L174.3,96.2 L176.0,93.2 L177.7,90.5 L179.3,87.9 L181.0,85.7 L182.7,83.7 L184.3,82.0 L186.0,80.5 L187.7,79.4 L189.3,78.6 L191.0,78.2 L192.7,78.0 L194.3,78.2 L196.0,78.6 L197.7,79.4 L199.3,80.5 L201.0,82.0 L202.7,83.7 L204.3,85.7 L206.0,87.9 L207.7,90.5 L209.3,93.2 L211.0,96.2 L212.7,99.4 L214.3,102.8 L216.0,106.4 L217.7,110.1 L219.3,113.9 L221.0,117.9 L222.7,121.9 L224.3,125.9 L226.0,130.0"/><text class="sm" x="126.0" y="224" text-anchor="middle">smooth</text><rect class="zg" x="46" y="236" width="160" height="32" rx="16"/><text class="tx" x="126.0" y="258" text-anchor="middle">fine</text><rect class="hz" x="259" y="60" width="228" height="140" rx="12"/><text class="bd" x="373.0" y="52" text-anchor="middle">4 bits</text><path class="lnd" d="M273.0,130.0 L274.7,125.9 L276.3,121.9 L278.0,117.9 L279.7,113.9 L281.3,110.1 L283.0,106.4 L284.7,102.8 L286.3,99.4 L288.0,96.2 L289.7,93.2 L291.3,90.5 L293.0,87.9 L294.7,85.7 L296.3,83.7 L298.0,82.0 L299.7,80.5 L301.3,79.4 L303.0,78.6 L304.7,78.2 L306.3,78.0 L308.0,78.2 L309.7,78.6 L311.3,79.4 L313.0,80.5 L314.7,82.0 L316.3,83.7 L318.0,85.7 L319.7,87.9 L321.3,90.5 L323.0,93.2 L324.7,96.2 L326.3,99.4 L328.0,102.8 L329.7,106.4 L331.3,110.1 L333.0,113.9 L334.7,117.9 L336.3,121.9 L338.0,125.9 L339.7,130.0 L341.3,134.1 L343.0,138.1 L344.7,142.1 L346.3,146.1 L348.0,149.9 L349.7,153.6 L351.3,157.2 L353.0,160.6 L354.7,163.8 L356.3,166.8 L358.0,169.5 L359.7,172.1 L361.3,174.3 L363.0,176.3 L364.7,178.0 L366.3,179.5 L368.0,180.6 L369.7,181.4 L371.3,181.8 L373.0,182.0 L374.7,181.8 L376.3,181.4 L378.0,180.6 L379.7,179.5 L381.3,178.0 L383.0,176.3 L384.7,174.3 L386.3,172.1 L388.0,169.5 L389.7,166.8 L391.3,163.8 L393.0,160.6 L394.7,157.2 L396.3,153.6 L398.0,149.9 L399.7,146.1 L401.3,142.1 L403.0,138.1 L404.7,134.1 L406.3,130.0 L408.0,125.9 L409.7,121.9 L411.3,117.9 L413.0,113.9 L414.7,110.1 L416.3,106.4 L418.0,102.8 L419.7,99.4 L421.3,96.2 L423.0,93.2 L424.7,90.5 L426.3,87.9 L428.0,85.7 L429.7,83.7 L431.3,82.0 L433.0,80.5 L434.7,79.4 L436.3,78.6 L438.0,78.2 L439.7,78.0 L441.3,78.2 L443.0,78.6 L444.7,79.4 L446.3,80.5 L448.0,82.0 L449.7,83.7 L451.3,85.7 L453.0,87.9 L454.7,90.5 L456.3,93.2 L458.0,96.2 L459.7,99.4 L461.3,102.8 L463.0,106.4 L464.7,110.1 L466.3,113.9 L468.0,117.9 L469.7,121.9 L471.3,125.9 L473.0,130.0"/><path class="lnc" d="M273.0,126.5 L276.3,126.5 L276.3,119.6 L279.7,119.6 L279.7,112.7 L283.0,112.7 L283.0,105.7 L286.3,105.7 L286.3,98.8 L289.7,98.8 L289.7,91.9 L293.0,91.9 L293.0,84.9 L299.7,84.9 L299.7,78.0 L314.7,78.0 L314.7,84.9 L321.3,84.9 L321.3,91.9 L324.7,91.9 L324.7,98.8 L328.0,98.8 L328.0,105.7 L331.3,105.7 L331.3,112.7 L334.7,112.7 L334.7,119.6 L338.0,119.6 L338.0,126.5 L341.3,126.5 L341.3,133.5 L343.0,133.5 L343.0,140.4 L346.3,140.4 L346.3,147.3 L349.7,147.3 L349.7,154.3 L353.0,154.3 L353.0,161.2 L356.3,161.2 L356.3,168.1 L359.7,168.1 L359.7,175.1 L366.3,175.1 L366.3,182.0 L381.3,182.0 L381.3,175.1 L388.0,175.1 L388.0,168.1 L391.3,168.1 L391.3,161.2 L394.7,161.2 L394.7,154.3 L398.0,154.3 L398.0,147.3 L401.3,147.3 L401.3,140.4 L404.7,140.4 L404.7,133.5 L408.0,133.5 L408.0,126.5 L409.7,126.5 L409.7,119.6 L413.0,119.6 L413.0,112.7 L416.3,112.7 L416.3,105.7 L419.7,105.7 L419.7,98.8 L423.0,98.8 L423.0,91.9 L426.3,91.9 L426.3,84.9 L433.0,84.9 L433.0,78.0 L448.0,78.0 L448.0,84.9 L454.7,84.9 L454.7,91.9 L458.0,91.9 L458.0,98.8 L461.3,98.8 L461.3,105.7 L464.7,105.7 L464.7,112.7 L468.0,112.7 L468.0,119.6 L471.3,119.6 L471.3,126.5 L473.0,126.5"/><text class="sm" x="373.0" y="224" text-anchor="middle">16 steps</text><rect class="zg" x="293" y="236" width="160" height="32" rx="16"/><text class="tx" x="373.0" y="258" text-anchor="middle">nearly as good</text><rect class="hz" x="506" y="60" width="228" height="140" rx="12"/><text class="bd" x="620.0" y="52" text-anchor="middle">2 bits</text><path class="lnd" d="M520.0,130.0 L521.7,125.9 L523.3,121.9 L525.0,117.9 L526.7,113.9 L528.3,110.1 L530.0,106.4 L531.7,102.8 L533.3,99.4 L535.0,96.2 L536.7,93.2 L538.3,90.5 L540.0,87.9 L541.7,85.7 L543.3,83.7 L545.0,82.0 L546.7,80.5 L548.3,79.4 L550.0,78.6 L551.7,78.2 L553.3,78.0 L555.0,78.2 L556.7,78.6 L558.3,79.4 L560.0,80.5 L561.7,82.0 L563.3,83.7 L565.0,85.7 L566.7,87.9 L568.3,90.5 L570.0,93.2 L571.7,96.2 L573.3,99.4 L575.0,102.8 L576.7,106.4 L578.3,110.1 L580.0,113.9 L581.7,117.9 L583.3,121.9 L585.0,125.9 L586.7,130.0 L588.3,134.1 L590.0,138.1 L591.7,142.1 L593.3,146.1 L595.0,149.9 L596.7,153.6 L598.3,157.2 L600.0,160.6 L601.7,163.8 L603.3,166.8 L605.0,169.5 L606.7,172.1 L608.3,174.3 L610.0,176.3 L611.7,178.0 L613.3,179.5 L615.0,180.6 L616.7,181.4 L618.3,181.8 L620.0,182.0 L621.7,181.8 L623.3,181.4 L625.0,180.6 L626.7,179.5 L628.3,178.0 L630.0,176.3 L631.7,174.3 L633.3,172.1 L635.0,169.5 L636.7,166.8 L638.3,163.8 L640.0,160.6 L641.7,157.2 L643.3,153.6 L645.0,149.9 L646.7,146.1 L648.3,142.1 L650.0,138.1 L651.7,134.1 L653.3,130.0 L655.0,125.9 L656.7,121.9 L658.3,117.9 L660.0,113.9 L661.7,110.1 L663.3,106.4 L665.0,102.8 L666.7,99.4 L668.3,96.2 L670.0,93.2 L671.7,90.5 L673.3,87.9 L675.0,85.7 L676.7,83.7 L678.3,82.0 L680.0,80.5 L681.7,79.4 L683.3,78.6 L685.0,78.2 L686.7,78.0 L688.3,78.2 L690.0,78.6 L691.7,79.4 L693.3,80.5 L695.0,82.0 L696.7,83.7 L698.3,85.7 L700.0,87.9 L701.7,90.5 L703.3,93.2 L705.0,96.2 L706.7,99.4 L708.3,102.8 L710.0,106.4 L711.7,110.1 L713.3,113.9 L715.0,117.9 L716.7,121.9 L718.3,125.9 L720.0,130.0"/><path class="lnc" d="M520.0,112.7 L536.7,112.7 L536.7,78.0 L571.7,78.0 L571.7,112.7 L588.3,112.7 L588.3,147.3 L603.3,147.3 L603.3,182.0 L638.3,182.0 L638.3,147.3 L655.0,147.3 L655.0,112.7 L670.0,112.7 L670.0,78.0 L705.0,78.0 L705.0,112.7 L720.0,112.7"/><text class="sm" x="620.0" y="224" text-anchor="middle">4 steps</text><rect class="zr" x="540" y="236" width="160" height="32" rx="16"/><text class="tx" x="620.0" y="258" text-anchor="middle">drops sharply</text><rect class="hz" x="753" y="60" width="228" height="140" rx="12"/><text class="bd" x="867.0" y="52" text-anchor="middle">ternary</text><path class="lnd" d="M767.0,130.0 L768.7,125.9 L770.3,121.9 L772.0,117.9 L773.7,113.9 L775.3,110.1 L777.0,106.4 L778.7,102.8 L780.3,99.4 L782.0,96.2 L783.7,93.2 L785.3,90.5 L787.0,87.9 L788.7,85.7 L790.3,83.7 L792.0,82.0 L793.7,80.5 L795.3,79.4 L797.0,78.6 L798.7,78.2 L800.3,78.0 L802.0,78.2 L803.7,78.6 L805.3,79.4 L807.0,80.5 L808.7,82.0 L810.3,83.7 L812.0,85.7 L813.7,87.9 L815.3,90.5 L817.0,93.2 L818.7,96.2 L820.3,99.4 L822.0,102.8 L823.7,106.4 L825.3,110.1 L827.0,113.9 L828.7,117.9 L830.3,121.9 L832.0,125.9 L833.7,130.0 L835.3,134.1 L837.0,138.1 L838.7,142.1 L840.3,146.1 L842.0,149.9 L843.7,153.6 L845.3,157.2 L847.0,160.6 L848.7,163.8 L850.3,166.8 L852.0,169.5 L853.7,172.1 L855.3,174.3 L857.0,176.3 L858.7,178.0 L860.3,179.5 L862.0,180.6 L863.7,181.4 L865.3,181.8 L867.0,182.0 L868.7,181.8 L870.3,181.4 L872.0,180.6 L873.7,179.5 L875.3,178.0 L877.0,176.3 L878.7,174.3 L880.3,172.1 L882.0,169.5 L883.7,166.8 L885.3,163.8 L887.0,160.6 L888.7,157.2 L890.3,153.6 L892.0,149.9 L893.7,146.1 L895.3,142.1 L897.0,138.1 L898.7,134.1 L900.3,130.0 L902.0,125.9 L903.7,121.9 L905.3,117.9 L907.0,113.9 L908.7,110.1 L910.3,106.4 L912.0,102.8 L913.7,99.4 L915.3,96.2 L917.0,93.2 L918.7,90.5 L920.3,87.9 L922.0,85.7 L923.7,83.7 L925.3,82.0 L927.0,80.5 L928.7,79.4 L930.3,78.6 L932.0,78.2 L933.7,78.0 L935.3,78.2 L937.0,78.6 L938.7,79.4 L940.3,80.5 L942.0,82.0 L943.7,83.7 L945.3,85.7 L947.0,87.9 L948.7,90.5 L950.3,93.2 L952.0,96.2 L953.7,99.4 L955.3,102.8 L957.0,106.4 L958.7,110.1 L960.3,113.9 L962.0,117.9 L963.7,121.9 L965.3,125.9 L967.0,130.0"/><path class="lnc" d="M767.0,130.0 L778.7,130.0 L778.7,78.0 L823.7,78.0 L823.7,130.0 L845.3,130.0 L845.3,182.0 L890.3,182.0 L890.3,130.0 L912.0,130.0 L912.0,78.0 L957.0,78.0 L957.0,130.0 L967.0,130.0"/><text class="sm" x="867.0" y="224" text-anchor="middle">only −1, 0, +1</text><rect class="zr" x="787" y="236" width="160" height="32" rx="16"/><text class="tx" x="867.0" y="258" text-anchor="middle">drops sharply</text><text class="sm" x="500" y="300" text-anchor="middle">reasoning and non-English text are the first to break</text></svg><figcaption>Shrinking a model works down to about 4 bits. Below that the weights become a few crude steps, and quality falls off a cliff.</figcaption></figure>
+<div class="block b-why"><h2>Why it is still open</h2><p>At 2 bits or &quot;ternary&quot; weights (−1, 0, +1), quality usually drops sharply, especially for reasoning and non-English text.</p></div>
+<div class="block b-exp"><h2>An experiment one person can run in 8 weeks</h2><p>Quantize 3 open models to 4, 3 and 2 bits with 3 methods. Measure the quality loss per task type.</p></div>
+<div class="block b-vd"><h2>Verdict: Solo: strong</h2><p>Runs on one GPU and fills a measurement gap.</p></div>
+<h2 style="margin-top:28px">The solo test behind the verdict</h2>
+<ol class="solo">
+<li><b>Can it be measured?</b> There is a number that shows you did better, such as an error rate, a catch rate or a cost per answer.</li>
+<li><b>Is it cheap to try?</b> It runs on a laptop, free open models and open data, or under about ₹50,000 of rented GPU time.</li>
+<li><b>Is there a public yardstick?</b> A benchmark or dataset others use, so your result can be compared and believed.</li>
+<li><b>Would a small win get noticed?</b> A lab, a funder or a customer would care about a 10% improvement, not only a full solution.</li>
+</ol><p class="solo">Four yeses means <b>Solo: strong</b>. Two or three means <b>Solo: possible</b>. Fewer means <b>Follow, don't build</b>.</p>
+<div class="pn"><span></span><a href="/problems/the-memory-cost-of-long-conversations-the/" style="text-align:right"><small>Next</small>The memory cost of long conversations (the KV cache)</a></div>
+<p class="grp"><a href="/problems/">All 79 hard problems</a> · Working on this, or know of a result we missed? <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Learn</b><a href="/paths/">Find your path</a><a href="/concepts/">Key concepts</a><a href="/learn/">Courses</a><a href="/simulators/">Simulators</a><a href="/certifications/">Certifications</a><a href="/mindset/">Worried about AI?</a></div><div><b>Build with us</b><a href="/projects/">Join a project</a><a href="/problems/">Hard problems</a><a href="/research/">Open specifications</a><a href="/assets/">Open-source assets</a><a href="/about/#join">Write or teach</a></div><div><b>For leaders</b><a href="/leaders/">The one-minute version</a><a href="/leaders/#questions">Questions leaders ask</a><a href="/papers/">Technical papers</a><a href="/writing/">Blog</a></div><div><b>About</b><a href="/about/">About this site</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
