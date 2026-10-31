@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rust or Python for agents? Probably both · Clean Data Engineering</title>
+<meta name="description" content="Python wins for the thinking parts of an agent: orchestration, prompts, evals and fast iteration, with the whole AI library ecosystem behind it. Rust wins for the heavy lifting: sandboxes, gateways on the hot path, and tools shipped as one small binary. The model call usually dominates latency, so Rust helps only where the model is not involved."><link rel="canonical" href="https://cleandataengineering.ai/writing/rust-or-python/">
+<meta property="og:title" content="Rust or Python for agents? Probably both"><meta property="og:description" content="Python wins for the thinking parts of an agent: orchestration, prompts, evals and fast iteration, with the whole AI library ecosystem behind it. Rust wins for the heavy lifting: sandboxes, gateways on the hot path, and tools shipped as one small binary. The model call usually dominates latency, so Rust helps only where the model is not involved."><meta property="og:url" content="https://cleandataengineering.ai/writing/rust-or-python/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Decision · AI Engineering · Builders · 7 min read · 2026-10-31</p>
+    <h1>Rust or Python for agents? Probably both</h1>
+  </div>
+  <div class="summary">Python wins for the thinking parts of an agent: orchestration, prompts, evals and fast iteration, with the whole AI library ecosystem behind it. Rust wins for the heavy lifting: sandboxes, gateways on the hot path, and tools shipped as one small binary. The model call usually dominates latency, so Rust helps only where the model is not involved.</div>
+<p>Every few weeks the same argument starts in an agent team. One engineer says Python is slow and the agent should be rewritten in Rust. Another says nobody on the team knows Rust and the agent works fine. Both are partly right, which is why the argument never ends.</p>
+<p>The way out is to stop asking it about the whole agent. An agent is not one program. As we argued in <a href="/writing/model-is-ten-percent/">the model is 10%</a>, most of it is ordinary software: a loop, some tools, checks, traces, a sandbox, maybe a gateway. Each of those parts has its own answer.</p>
+<p>For most teams, the answer comes out the same way: <strong>Python for the thinking, Rust for the heavy lifting.</strong></p>
+<h2>The brain and the arm</h2>
+<p><strong>Rust</strong> is a systems programming language. It compiles to a fast native program, like C does, but the compiler refuses code that could misuse memory. <strong>Python</strong> is the language most AI work is already written in: slower to run, much faster to write and change.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 370" role="img" aria-label="A cartoon brain labelled Python, the thinking: orchestration, prompts, evals and notebooks. A strong arm lifting a dumbbell labelled Rust, the heavy lifting: sandbox, gateway and parser. Arrows between them: the brain sends what to do next, the arm sends back the result."><text class="sm" x="500" y="24" text-anchor="middle">the brain decides and changes its mind; the arm lifts the same heavy thing all day</text><path class="hz" d="M150,150 Q130,100 180,85 Q200,55 245,70 Q280,50 310,80 Q355,80 350,125 Q375,160 335,180 Q320,210 275,200 Q245,220 215,200 Q170,210 160,180 Q130,175 150,150 Z"/><path class="ln" d="M190,110 Q215,95 235,115" fill="none"/><path class="ln" d="M255,95 Q285,105 300,130" fill="none"/><path class="ln" d="M185,160 Q215,140 245,165" fill="none"/><path class="ln" d="M265,160 Q295,150 320,170" fill="none"/><text class="lbl" x="250" y="240" text-anchor="middle">PYTHON</text><rect class="pf pf-bx" x="114" y="269" width="278" height="88" rx="12"/><rect class="bx ol" x="110" y="265" width="280" height="90" rx="12"/><text class="tt" x="250.0" y="297.0" text-anchor="middle">The thinking</text><text class="sm" x="250.0" y="321.0" text-anchor="middle">orchestration, prompts,</text><text class="sm" x="250.0" y="340.0" text-anchor="middle">evals, notebooks</text><path class="hz" d="M610,212 Q660,180 705,208 Q745,200 765,160 L778,112 Q797,88 816,104 L812,168 Q802,238 740,246 L610,246 Z"/><path class="ln" d="M712,214 Q738,196 758,204" fill="none"/><line class="lnc" x1="745" y1="92" x2="855" y2="92"/><rect class="pf pf-solid" x="734" y="66" width="22" height="52" rx="4"/><rect class="hz" x="730" y="64" width="22" height="52" rx="4"/><rect class="pf pf-solid" x="852" y="66" width="22" height="52" rx="4"/><rect class="hz" x="848" y="64" width="22" height="52" rx="4"/><text class="lbl" x="750" y="262" text-anchor="middle">RUST</text><rect class="pf pf-bxs" x="614" y="279" width="278" height="78" rx="12"/><rect class="bxs ol" x="610" y="275" width="280" height="80" rx="12"/><text class="tt" x="750.0" y="311.5" text-anchor="middle">The heavy lifting</text><text class="sm" x="750.0" y="335.5" text-anchor="middle">sandbox, gateway, parser</text><line class="ln" x1="390" y1="115" x2="585" y2="115" marker-end="url(#ar)"/><text class="sm" x="487.5" y="105" text-anchor="middle">what to do next</text><line class="ln" x1="585" y1="165" x2="390" y2="165" marker-end="url(#ar)"/><text class="sm" x="487.5" y="155" text-anchor="middle">the result</text></svg><figcaption>Python for the thinking, Rust for the heavy lifting. Most agents need both.</figcaption></figure>
+<p>Think of the brain and the arm. The brain decides what to do next, changes its mind often, and talks to many other people. The arm lifts the same heavy thing thousands of times a day, and must never slip. You would not ask your arm to plan the week, and you would not lift the sofa with your head.</p>
+<h2>Where Python wins</h2>
+<p>Python is the brain of the agent, for five plain reasons.</p>
+<ol><li><strong>The AI library ecosystem.</strong> The model providers' official software development kits, the eval libraries, the data tools and the vector store clients all arrive in Python first, and often only there.</li><li><strong>Evals and notebooks.</strong> An eval is a test of how well the agent does its job. Most eval work happens in a notebook: load a hundred conversations, score them, look at the bad ones, change the prompt, run again. That loop lives in Python.</li><li><strong>Fast iteration.</strong> Prompts, tool descriptions and orchestration logic change every week. In Python a change is one edit and one run, with no compile step.</li><li><strong>Most agent frameworks.</strong> The popular agent frameworks are Python first, with TypeScript next. Rust options exist but are young.</li><li><strong>The team you can hire.</strong> In Bengaluru or Pune you can hire ten good Python engineers this month. Finding one who has shipped Rust in production takes longer.</li></ol>
+<h2>Where Rust wins</h2>
+<p>Rust is the arm. It earns its place in the parts that run all the time, touch untrusted input, or must be shipped to someone else's machine.</p>
+<ol><li><strong>Sandboxes and code-execution runtimes.</strong> When an agent writes code and runs it, the runner must hold that code in a cage it cannot get out of. Firecracker, the small virtual machine behind AWS Lambda, is written in Rust, and so is Wasmtime, a popular WebAssembly runtime.</li><li><strong>Gateways and proxies on the hot path.</strong> The <strong>hot path</strong> is code that every single request passes through. A gateway that checks keys, counts tokens and routes calls for every agent in the company runs on it.</li><li><strong>Tool runtimes and CLIs shipped as one small binary.</strong> A Rust program compiles to one file. Your user downloads it and runs it, with no Python version to install and no virtual environment to break.</li><li><strong>Speed and low memory.</strong> A Rust service often handles the same traffic with a fraction of the memory and far less waiting, which matters when you pay for every container.</li><li><strong>Memory safety without a garbage collector.</strong> A <strong>garbage collector</strong> is the part of a language that cleans up unused memory while the program runs, and it can pause the program to do so. Rust has none, yet the compiler still prevents the classic memory bugs that make C code unsafe. For a sandbox, that is the whole point.</li></ol>
+<h2>One agent, two languages</h2>
+<p>Put a real agent on the page and colour each part by language.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 455" role="img" aria-label="One agent split by language. On the left in Python: the orchestration loop, the prompts and tool list, and the evals. On the right in Rust: the gateway every call passes through, the code sandbox that runs code the model wrote, and a parser for big files. The loop sends every model call through the gateway to the model, which sits outside both as someone else&#x27;s server and is the slow part."><rect class="bxm ol" x="380" y="30" width="240" height="90" rx="12"/><text class="tt" x="500.0" y="62.0" text-anchor="middle">The model</text><text class="sm" x="500.0" y="86.0" text-anchor="middle">someone else&#x27;s server,</text><text class="sm" x="500.0" y="105.0" text-anchor="middle">the slow part</text><text class="lbl" x="170" y="140" text-anchor="middle">PYTHON: THE THINKING</text><text class="lbl" x="830" y="140" text-anchor="middle">RUST: THE HEAVY LIFTING</text><rect class="pf pf-bx" x="34" y="159" width="278" height="78" rx="12"/><rect class="bx ol" x="30" y="155" width="280" height="80" rx="12"/><text class="tt" x="170.0" y="191.5" text-anchor="middle">Orchestration loop</text><text class="sm" x="170.0" y="215.5" text-anchor="middle">picks the next step</text><rect class="pf pf-bx" x="34" y="254" width="278" height="78" rx="12"/><rect class="bx ol" x="30" y="250" width="280" height="80" rx="12"/><text class="tt" x="170.0" y="286.5" text-anchor="middle">Prompts and tool list</text><text class="sm" x="170.0" y="310.5" text-anchor="middle">change every week</text><rect class="pf pf-bx" x="34" y="349" width="278" height="78" rx="12"/><rect class="bx ol" x="30" y="345" width="280" height="80" rx="12"/><text class="tt" x="170.0" y="381.5" text-anchor="middle">Evals</text><text class="sm" x="170.0" y="405.5" text-anchor="middle">notebooks and scores</text><rect class="pf pf-bxs" x="694" y="159" width="278" height="78" rx="12"/><rect class="bxs ol" x="690" y="155" width="280" height="80" rx="12"/><text class="tt" x="830.0" y="191.5" text-anchor="middle">Gateway</text><text class="sm" x="830.0" y="215.5" text-anchor="middle">every call passes through</text><rect class="pf pf-bxs" x="694" y="254" width="278" height="78" rx="12"/><rect class="bxs ol" x="690" y="250" width="280" height="80" rx="12"/><text class="tt" x="830.0" y="286.5" text-anchor="middle">Code sandbox</text><text class="sm" x="830.0" y="310.5" text-anchor="middle">runs code the model wrote</text><rect class="pf pf-bxs" x="694" y="349" width="278" height="78" rx="12"/><rect class="bxs ol" x="690" y="345" width="280" height="80" rx="12"/><text class="tt" x="830.0" y="381.5" text-anchor="middle">File parser</text><text class="sm" x="830.0" y="405.5" text-anchor="middle">chews through big files</text><line class="ln" x1="312" y1="190" x2="686" y2="190" marker-end="url(#ar)"/><text class="sm" x="499.0" y="180" text-anchor="middle">every model call</text><line class="ln" x1="312" y1="215" x2="686" y2="280" marker-end="url(#ar)"/><text class="sm" x="470" y="228" text-anchor="middle">run this code</text><line class="ln" x1="705" y1="153" x2="622" y2="105" marker-end="url(#ar)"/><text class="sm" x="500" y="440" text-anchor="middle">say a turn takes 3 seconds: about 2.9 of them are the model</text></svg><figcaption>One agent, two languages. The parts that change often stay in Python; the parts every request passes through go to Rust.</figcaption></figure>
+<p>The orchestration loop, the prompts and the evals stay in Python, because they change every week and need the AI libraries. The sandbox, the gateway and the parser for big files go to Rust, because they run on every request, touch untrusted input, or chew through a lot of bytes.</p>
+<p>Notice the model sits outside both. It is somebody else's server, and it is almost always the slowest thing in the picture. Say a turn takes 3 seconds: around 2.9 of those are the model thinking. Rewriting the Python loop in Rust might save a few milliseconds out of the remaining hundred. The user will not notice. <strong>Rust helps where the model is not involved.</strong></p>
+<h2>You already use Rust from Python</h2>
+<p>If you write Python today, you are very likely already running Rust without knowing it.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 350" role="img" aria-label="A wooden crate stamped Rust inside, with five labels tied to it: uv installs packages, Ruff lints and formats, Pydantic core validates data, Polars DataFrames, and Hugging Face tokenizers."><text class="sm" x="500" y="24" text-anchor="middle">a Python face on the outside, a Rust engine on the inside</text><rect class="pf pf-bxs" x="305" y="85" width="390" height="250" rx="6"/><rect class="hz" x="300" y="80" width="390" height="250" rx="6"/><line class="ln" x1="300" y1="142" x2="690" y2="142"/><line class="ln" x1="300" y1="205" x2="690" y2="205"/><line class="ln" x1="300" y1="268" x2="690" y2="268"/><line class="lnc" x1="305" y1="325" x2="685" y2="85"/><rect class="hz" x="390" y="180" width="210" height="50" rx="4"/><text class="lbl" x="495" y="211" text-anchor="middle">RUST INSIDE</text><circle class="hz" cx="495" cy="62" r="16"/><circle class="hk" cx="495" cy="62" r="5"/><rect class="hk" x="492" y="39" width="6" height="6"/><rect class="hk" x="492" y="79" width="6" height="6"/><rect class="hk" x="472" y="59" width="6" height="6"/><rect class="hk" x="512" y="59" width="6" height="6"/><rect class="hk" x="506" y="73" width="6" height="6"/><rect class="hk" x="478" y="45" width="6" height="6"/><rect class="hk" x="506" y="45" width="6" height="6"/><rect class="hk" x="478" y="73" width="6" height="6"/><rect class="pf pf-bx" x="34" y="84" width="208" height="62" rx="12"/><rect class="bx ol" x="30" y="80" width="210" height="64" rx="12"/><text class="tt" x="135.0" y="108.5" text-anchor="middle">uv</text><text class="sm" x="135.0" y="132.5" text-anchor="middle">installs packages</text><line class="ln" x1="242" y1="112" x2="298" y2="112"/><circle class="hz" cx="248" cy="112" r="5"/><rect class="pf pf-bx" x="34" y="174" width="208" height="62" rx="12"/><rect class="bx ol" x="30" y="170" width="210" height="64" rx="12"/><text class="tt" x="135.0" y="198.5" text-anchor="middle">Ruff</text><text class="sm" x="135.0" y="222.5" text-anchor="middle">lints and formats</text><line class="ln" x1="242" y1="202" x2="298" y2="202"/><circle class="hz" cx="248" cy="202" r="5"/><rect class="pf pf-bx" x="34" y="264" width="208" height="62" rx="12"/><rect class="bx ol" x="30" y="260" width="210" height="64" rx="12"/><text class="tt" x="135.0" y="288.5" text-anchor="middle">Pydantic core</text><text class="sm" x="135.0" y="312.5" text-anchor="middle">validates data</text><line class="ln" x1="242" y1="292" x2="298" y2="292"/><circle class="hz" cx="248" cy="292" r="5"/><rect class="pf pf-bx" x="764" y="129" width="208" height="62" rx="12"/><rect class="bx ol" x="760" y="125" width="210" height="64" rx="12"/><text class="tt" x="865.0" y="153.5" text-anchor="middle">Polars</text><text class="sm" x="865.0" y="177.5" text-anchor="middle">DataFrames</text><line class="ln" x1="692" y1="157" x2="758" y2="157"/><circle class="hz" cx="752" cy="157" r="5"/><rect class="pf pf-bx" x="764" y="219" width="208" height="62" rx="12"/><rect class="bx ol" x="760" y="215" width="210" height="64" rx="12"/><text class="tt" x="865.0" y="243.5" text-anchor="middle">tokenizers</text><text class="sm" x="865.0" y="267.5" text-anchor="middle">Hugging Face</text><line class="ln" x1="692" y1="247" x2="758" y2="247"/><circle class="hz" cx="752" cy="247" r="5"/></svg><figcaption>Python tools you already use that are Rust inside.</figcaption></figure>
+<ul><li><strong>uv</strong>, the fast Python package installer, is written in Rust.</li><li><strong>Ruff</strong>, the linter and formatter, is written in Rust.</li><li><strong>Pydantic</strong> version 2 does its validation in <code>pydantic-core</code>, which is Rust.</li><li><strong>Polars</strong>, the DataFrame library, is Rust inside.</li><li><strong>Hugging Face tokenizers</strong>, which split text into tokens, is Rust inside.</li></ul>
+<p>Every one of them has a Python face and a Rust engine. That is the split this post recommends, already proven by tools millions of people install every day.</p>
+<h2>How the two meet</h2>
+<p>There are three common ways to join a Python brain to a Rust arm.</p>
+<ol><li><strong>PyO3 bindings.</strong> PyO3 is a Rust library that lets you write a Python module in Rust. You <code>import</code> it like any other package. This is how Polars and <code>pydantic-core</code> work. Use it for a fast function called many times inside one process, such as a parser.</li><li><strong>A separate service over HTTP or gRPC.</strong> The Rust part runs as its own small server, and Python calls it over the network. <strong>gRPC</strong> is a way of calling functions on another server with a strict, typed contract. Use this for a gateway or a sandbox, which should live in their own process anyway.</li><li><strong>MCP.</strong> The Model Context Protocol is a standard way for an agent to find and call tools. A tool server written in Rust looks exactly like one written in Python to the agent. We covered it in <a href="/writing/mcp-here-to-stay/">MCP is here to stay</a>.</li></ol>
+<p>All three are the same idea as a port and adapter: the Python side codes to an interface and does not care what language sits behind it. So you can start with a Python sandbox runner today and swap in a Rust one later, without touching the loop.</p>
+<h2>Three questions for each part</h2>
+<p>When someone proposes Rust for a part of the agent, ask three questions in order.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 400" role="img" aria-label="A decision picture with three questions. One: is it on the hot path, where every request waits and it isn&#x27;t the model? Two: does it take untrusted input such as code the model wrote, uploads or web pages? If both are no, keep it in Python. If either is yes, three: does the team know Rust? If yes, write it in Rust. If no, adopt a ready-made Rust tool."><text class="sm" x="500" y="24" text-anchor="middle">ask for each part of the agent, not for the whole agent</text><rect class="pf pf-bxs" x="24" y="64" width="268" height="93" rx="12"/><rect class="bxs ol" x="20" y="60" width="270" height="95" rx="12"/><text class="tt" x="155.0" y="94.5" text-anchor="middle">Hot path?</text><text class="sm" x="155.0" y="118.5" text-anchor="middle">every request waits on it,</text><text class="sm" x="155.0" y="137.5" text-anchor="middle">and it isn&#x27;t the model</text><circle class="nm" cx="26" cy="60" r="14"/><text class="nmt" x="26" y="66" text-anchor="middle">1</text><rect class="pf pf-bxs" x="364" y="64" width="268" height="93" rx="12"/><rect class="bxs ol" x="360" y="60" width="270" height="95" rx="12"/><text class="tt" x="495.0" y="94.5" text-anchor="middle">Untrusted input?</text><text class="sm" x="495.0" y="118.5" text-anchor="middle">code the model wrote,</text><text class="sm" x="495.0" y="137.5" text-anchor="middle">uploads, web pages</text><circle class="nm" cx="366" cy="60" r="14"/><text class="nmt" x="366" y="66" text-anchor="middle">2</text><rect class="pf pf-bx" x="704" y="74" width="278" height="73" rx="12"/><rect class="bx ol" x="700" y="70" width="280" height="75" rx="12"/><text class="tt" x="840.0" y="104.0" text-anchor="middle">Keep it in Python</text><text class="sm" x="840.0" y="128.0" text-anchor="middle">most parts land here</text><line class="ln" x1="292" y1="107" x2="356" y2="107" marker-end="url(#ar)"/><text class="sm" x="324.0" y="98" text-anchor="middle">no</text><line class="ln" x1="632" y1="107" x2="696" y2="107" marker-end="url(#ar)"/><text class="sm" x="664.0" y="98" text-anchor="middle">no</text><rect class="pf pf-bxs" x="364" y="259" width="268" height="93" rx="12"/><rect class="bxs ol" x="360" y="255" width="270" height="95" rx="12"/><text class="tt" x="495.0" y="289.5" text-anchor="middle">Team knows Rust?</text><text class="sm" x="495.0" y="313.5" text-anchor="middle">or will learn it, and fix</text><text class="sm" x="495.0" y="332.5" text-anchor="middle">it at 2 in the morning</text><circle class="nm" cx="366" cy="255" r="14"/><text class="nmt" x="366" y="261" text-anchor="middle">3</text><line class="ln" x1="155" y1="157" x2="356" y2="285" marker-end="url(#ar)"/><text class="sm" x="240" y="232" text-anchor="middle">yes</text><line class="ln" x1="495" y1="157" x2="495" y2="251" marker-end="url(#ar)"/><text class="sm" x="512" y="208" text-anchor="start">yes</text><rect class="pf pf-solid" x="704" y="229" width="278" height="68" rx="12"/><rect class="solid ol" x="700" y="225" width="280" height="70" rx="12"/><text class="tt inv" x="840.0" y="256.5" text-anchor="middle">Write it in Rust</text><text class="inv sm2" x="840.0" y="280.5" text-anchor="middle">sandbox, gateway, parser</text><rect class="bxm ol" x="700" y="315" width="280" height="70" rx="12"/><text class="tt" x="840.0" y="346.5" text-anchor="middle">Adopt a Rust tool</text><text class="sm" x="840.0" y="370.5" text-anchor="middle">don&#x27;t write your own</text><line class="ln" x1="632" y1="285" x2="696" y2="262" marker-end="url(#ar)"/><text class="sm" x="664.0" y="262" text-anchor="middle">yes</text><line class="ln" x1="632" y1="322" x2="696" y2="345" marker-end="url(#ar)"/><text class="sm" x="664.0" y="322" text-anchor="middle">no</text></svg><figcaption>Three questions per part. Most parts end up in Python; a few earn Rust.</figcaption></figure>
+<ol><li><strong>Is it on the hot path, away from the model?</strong> If every request waits on it, and the model is not the slow part, speed matters. If it waits on the model anyway, it does not.</li><li><strong>Does it run untrusted code or input?</strong> Code the model wrote, files a stranger uploaded, a page fetched from the web. Here memory safety is worth a lot.</li><li><strong>Does the team know Rust, or will it learn?</strong> If the answer is no, use a ready-made Rust tool rather than writing your own.</li></ol>
+<p>A part that gets "no" to the first two stays in Python. A part that gets "yes" to either, and "yes" to the third, is a good candidate for Rust.</p>
+<h2>What goes wrong</h2>
+<p><strong>Rewriting the whole agent in Rust for speed.</strong> The model call is the slow part. Months later the agent is no faster, the prompts are harder to change, and the eval notebooks no longer talk to the agent code.</p>
+<p><strong>Python in a latency-critical proxy.</strong> The opposite mistake. A gateway every agent in the company goes through, written as a quick Python script, becomes the thing that falls over on the busiest day. This is a good place for a ready-made proxy, or Rust.</p>
+<p><strong>Writing your own sandbox in either language.</strong> A cage for untrusted code is hard to build safely. Adopt a proven one before you write one.</p>
+<p><strong>Choosing by hype.</strong> "Rust is fast" and "Python is what AI uses" are both slogans. Measure where the time actually goes, with a trace of one real turn, before you choose.</p>
+<h2>Five questions to check your own agent</h2>
+<ol><li>In a trace of one turn, how much time is the model, and how much is your code?</li><li>Which parts run on every request, and which run once a day?</li><li>Where does untrusted code or input enter, and what holds it?</li><li>Is each Rust or Python part behind an interface, so you could swap the language later?</li><li>Who on the team would fix the Rust part at 2 a.m.?</li></ol>
+<p>Let Python do the thinking, let Rust do the lifting, and let a trace, not a slogan, tell you which is which.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/writing/model-is-ten-percent/">the model is 10%, the harness is the other 90%</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
