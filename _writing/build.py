@@ -603,6 +603,11 @@ def main():
     if a in home:
         home = home[: home.index(a) + len(a)] + "\n" + home_block(live) + "      " + home[home.index(b):]
         (ROOT / "index.html").write_text(home)
+    a, b = "<!-- latest:start -->", "<!-- latest:end -->"  # one-line latest post on the home's first screen
+    if a in home and live:
+        top = live[0]
+        home = home[: home.index(a) + len(a)] + f'<a href="/writing/{top["slug"]}/">{E(top["title"])}</a>' + home[home.index(b):]
+        (ROOT / "index.html").write_text(home)
     print(f"{len(live)} published, {len(posts) - len(live)} draft")
 
 

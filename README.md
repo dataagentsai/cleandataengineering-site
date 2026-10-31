@@ -29,13 +29,17 @@ key ideas on the platform pages. Drawings for concept pages are in `_paths/diagr
 
 `_sim/record_batch.py` records a real run on local Spark + Delta (run with `env -u SPARK_HOME ~/CostIntelligence1/.venv/bin/python _sim/record_batch.py`) into `_sim/data/batch.json`; `python3 _sim/build.py` writes the studio page with the data embedded. Re-record only when the scene changes.
 
-## Menu, footer and hubs
+## Menu, left panel, footer and hubs
 
-The site menu and footer live in `_site/nav.py` (Learn · Simulators · Projects · Research · Writing · About, with
-dropdowns on desktop). `python3 _site/nav.py` writes them into every page that carries the site menu; generators copy
-them from the home page, so run it after any build that touches hand-made pages. `python3 _site/hubs.py` writes the
-hub pages `/simulators/`, `/research/` and `/about/`. The home page's first screen is the four-door loop (see it, run
-it, build it, prove it); its styles are in the `home-css` block, which `_site/theme.py` leaves alone.
+`_site/nav.py` holds the top bar (Certifications, Blog, Find my path, Talk to us), the left panel and the footer.
+The panel is grouped by purpose: Learn · Build with us · For leaders · For business. It is fixed and scrolls on its
+own on wide screens, and opens from a Menu button below 1180px. `python3 _site/nav.py` writes them into every page
+that carries the site menu; generators copy them from the home page, so run it after any build that touches
+hand-made pages. `python3 _site/hubs.py` writes the hub pages: /simulators/, /research/ (Open specifications),
+/assets/, /leaders/ (the one-minute version + questions leaders ask), /business/ (reviews, cohorts, adopt, sponsor),
+/papers/ (citable releases) and /about/. The home page's first screen is four lanes (Learn, Build with us, For
+leaders, For business) plus a counts line; its styles are in the `home-css` block, which `_site/theme.py` leaves
+alone. The counts are hand-written; the latest post on the counts line is filled by `_writing/build.py`.
 
 ## SEO
 

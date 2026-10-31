@@ -154,9 +154,9 @@ def main():
         if "family=Patrick+Hand" not in s:
             s = s.replace("<style>", FONTS + "\n<style>", 1)
         a, b = "<!-- hero-art:start -->", "<!-- hero-art:end -->"
-        if rel == "index.html" and a in s:  # the 31 Oct home (the four-door loop) has no cartoon
+        if rel == "index.html" and a in s:  # the 31 Oct home (four lanes) has no cartoon
             s = s[: s.index(a) + len(a)] + hero_art() + s[s.index(b):]
-        if rel == "index.html" and 'class="loop"' not in s:
+        if rel == "index.html" and 'class="lanes"' not in s:
             for sec, art in (("learn", "learn"), ("projects", "projects"), ("standards", "standards"),
                              ("research", "research"), ("writing", "writing"), ("about", "about")):
                 tag = f'<section id="{sec}">'

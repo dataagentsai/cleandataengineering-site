@@ -1,89 +1,166 @@
-"""The site menu and footer, in one place.
+"""The site's top bar, left panel and footer, in one place.
 
     python3 _site/nav.py
 
-Writes HEADER and FOOTER into every site page that carries the site menu (a <header> with
-class="brand"), starting with the home page. Generators copy the header and footer from the
-home page (_writing/build.py site_parts), so a rebuild keeps them. The menu's CSS sits inside
-the header block on purpose: anything that copies the header copies its look too.
+Writes the header (top bar + left panel) and footer into every site page that carries the site
+menu (a <header> with class="brand"), starting with the home page. Generators copy the header and
+footer from the home page (_writing/build.py site_parts), so a rebuild keeps them. The CSS and the
+small script sit inside the header block on purpose: anything that copies the header copies them.
 
-Menu (31 Oct 2026), following the home page's loop:
-  Learn (see it) · Simulators (run it) · Projects (build it) · Research (prove it) · Writing · About
-Desktop: hovering or focusing a menu item opens a short list of what is inside.
-Phone: the lists are hidden; each item opens its hub page.
+Layout (31 Oct 2026), agreed with the owner: a left panel on every page, grouped by purpose
+(Learn · Build with us · For leaders · For business), fixed and scrolling on its own on wide
+screens, opened from a Menu button below 1180px. The page's own link is marked and its group
+opened. The top bar keeps the name, Blog, Find my path and Talk to us.
 """
 import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-MENU = [
-    ("Learn", "/learn/", [
-        ("Paths", "/paths/", "6 roles × 5 clouds, beginner to advanced"),
-        ("Key concepts", "/concepts/", "84 ideas that are the same on every cloud"),
-        ("Courses", "/learn/", "hand-drawn, every box opens the next level"),
-        ("The AI Universe", "/learn/ai-universe/", "the map before the trek"),
-        ("Certifications", "/certifications/", "Claude Architect, Azure AI-103"),
-        ("The lion mindset", "/mindset/", "for anyone worried about AI"),
+# (group, [(name, href, [(child, href), ...]), ...])
+SECTIONS = [
+    ("Learn", [
+        ("Find your path", "/paths/", []),
+        ("Key concepts", "/concepts/", []),
+        ("Courses", "/learn/", [
+            ("The AI Universe", "/learn/ai-universe/"),
+            ("Agent Harness", "/learn/agent-harness/"),
+            ("Eval Harness", "/learn/eval-harness/"),
+            ("Data platform architecture", "/learn/data-platform-architecture/"),
+            ("Medallion architecture", "/learn/medallion-architecture/"),
+            ("Agent guardrails", "/learn/agent-guardrails/"),
+        ]),
+        ("Simulators", "/simulators/", [
+            ("Agent Harness Simulator", "/learn/agent-harness-sim/"),
+            ("DataTwin Studio", "/learn/data-platform-sim/"),
+            ("Problem Lab", "/learn/data-platform-sim/problems/"),
+            ("Performance stories", "/learn/data-platform-sim/performance/"),
+        ]),
+        ("Certification prep", "/certifications/", [
+            ("Claude Certified Architect", "/certifications/claude-certified-architect/CCA-F/"),
+            ("Claude Architect, Professional", "/certifications/claude-certified-architect/CCAR-P/"),
+            ("Microsoft AI-103", "/certifications/azure-ai-engineer/"),
+        ]),
+        ("Worried about AI?", "/mindset/", []),
     ]),
-    ("Simulators", "/simulators/", [
-        ("Agent Harness Simulator", "/learn/agent-harness-sim/", "send a message, watch every step"),
-        ("DataTwin Studio", "/learn/data-platform-sim/", "one real Spark batch, end to end"),
-        ("Problem Lab", "/learn/data-platform-sim/problems/", "19 data problems, broken and fixed"),
-        ("Performance stories", "/learn/data-platform-sim/performance/", "slow job, clue, fix, measured"),
-        ("All simulators", "/simulators/", ""),
+    ("Build with us", [
+        ("Join a project", "/projects/", []),
+        ("Open specifications", "/research/", [
+            ("AI Assurance Catalog", "https://dataagentsai.github.io/ai-assurance-catalog/"),
+            ("AI Harness Catalog", "https://dataagentsai.github.io/ai-harness-catalog/"),
+            ("AgentTwin, explained", "/learn/agenttwin/"),
+            ("DataTwin, explained", "/learn/datatwin/"),
+            ("The AgentTwin Lab", "/lab/"),
+        ]),
+        ("Open-source assets", "/assets/", [
+            ("Reference Agent", "https://github.com/dataagentsai/reference-agent"),
+            ("AgentTwin library", "https://github.com/dataagentsai/agenttwin"),
+            ("Eval Harness Framework", "https://github.com/dataagentsai/eval-harness-framework"),
+            ("Claims assistant on Azure", "https://github.com/dataagentsai/claims-fnol-azure"),
+        ]),
+        ("Write or teach", "/about/#join", []),
     ]),
-    ("Projects", "/projects/", []),
-    ("Research", "/research/", [
-        ("Overview", "/research/", "open standards for agents and data"),
-        ("AgentTwin, explained", "/learn/agenttwin/", "test an agent in a simulated world"),
-        ("DataTwin, explained", "/learn/datatwin/", "test a data platform the same way"),
-        ("The AgentTwin Lab", "/lab/", "30 simulated days, results so far"),
+    ("For leaders", [
+        ("The one-minute version", "/leaders/", []),
+        ("Questions leaders ask", "/leaders/#questions", []),
+        ("Technical papers", "/papers/", []),
+        ("Blog", "/writing/", []),
     ]),
-    ("Writing", "/writing/", []),
-    ("About", "/about/", []),
+    ("For business", [
+        ("Work with us", "/business/", []),
+        ("Readiness reviews", "/business/#reviews", []),
+        ("Team cohorts", "/business/#cohorts", []),
+        ("Adopt the specs and code", "/business/#adopt", []),
+        ("Sponsor the work", "/business/#sponsor", []),
+        ("About", "/about/", []),
+    ]),
 ]
 
-NAV_CSS = """<style>
-  .sitenav { display:flex; align-items:center; gap:4px 6px; flex-wrap:wrap; }
-  .sitenav .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
-  .sitenav .dd { position:relative; }
-  .sitenav .dd > a { display:inline-block; font-size:15px; color:var(--ink-soft); text-decoration:none; padding:6px 9px; border-radius:999px; }
-  .sitenav .dd > a:hover, .sitenav .dd:focus-within > a { background:var(--butter-wash); color:var(--ink); }
-  .sitenav .dd.has > a::after { content:" ▾"; font-size:11px; color:var(--faint); }
-  .sitenav .menu { display:none; position:absolute; top:100%; left:-8px; z-index:50; min-width:300px; padding:8px; margin:0;
-    background:#fff; border:1.5px solid var(--ink); border-radius:14px; box-shadow:4px 4px 0 var(--ink); list-style:none; }
-  .sitenav .dd:hover .menu, .sitenav .dd:focus-within .menu { display:block; }
-  .sitenav .menu a { display:block; padding:6px 10px; border-radius:10px; text-decoration:none; color:var(--ink); font-size:15px; line-height:1.3; }
-  .sitenav .menu a:hover, .sitenav .menu a:focus { background:var(--peri-wash); }
-  .sitenav .menu small { display:block; font-size:12.5px; color:var(--muted); }
-  .sitenav .go { display:none; } body.home .sitenav .go { display:inline-block; }
-  .sitenav .go { font-size:14px; font-weight:700; color:#fff; background:var(--ink); border:1.5px solid var(--ink); border-radius:999px; padding:5px 14px; text-decoration:none; margin-left:6px; }
-  @media (max-width:760px) { .sitenav .brand { width:100%; } .sitenav .menu, .sitenav .dd:hover .menu, .sitenav .dd:focus-within .menu { display:none; }
-    .sitenav .dd.has > a::after { content:""; } .sitenav .dd > a { padding:4px 7px 4px 0; font-size:13.5px; } .sitenav { gap:0 2px; } .sitenav .go, body.home .sitenav .go { display:none; } }
+CSS = """<style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:1180px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:1179px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
 </style>"""
+
+JS = """<script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>"""
+
+
+def panel():
+    out = ['<aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button>',
+           '<a class="sbrand" href="/">Clean Data Engineering</a>']
+    for g, items in SECTIONS:
+        out.append(f"<h4>{g}</h4><ul>")
+        for name, href, kids in items:
+            if kids:
+                ks = "".join(f'<li><a href="{h}">{n}</a></li>' for n, h in kids)
+                out.append(f'<li><details><summary><a href="{href}">{name}</a></summary><ul>{ks}</ul></details></li>')
+            else:
+                out.append(f'<li><a href="{href}">{name}</a></li>')
+        out.append("</ul>")
+    out.append("</aside>")
+    return "".join(out)
 
 
 def header():
-    items = []
-    for name, href, sub in MENU:
-        if sub:
-            links = "".join(f'<li><a href="{h}">{n}{f"<small>{d}</small>" if d else ""}</a></li>' for n, h, d in sub)
-            items.append(f'<div class="dd has"><a href="{href}">{name}</a><ul class="menu">{links}</ul></div>')
-        else:
-            items.append(f'<div class="dd"><a href="{href}">{name}</a></div>')
-    return ("<header>\n  <div class=\"wrap\">\n    " + NAV_CSS + "\n    <nav class=\"sitenav\" aria-label=\"Site\">\n"
-            "      <a class=\"brand\" href=\"/\">Clean Data Engineering</a>\n      " + "\n      ".join(items) +
-            "\n      <a class=\"go\" href=\"/paths/\">Find my path</a>\n    </nav>\n  </div>\n</header>")
+    return ("<header>\n  <div class=\"wrap\">\n    " + CSS + "\n"
+            "    <nav class=\"topbar\" aria-label=\"Site\"><button class=\"menubtn\" id=\"menubtn\" aria-label=\"Open menu\">☰ Menu</button>"
+            "<a class=\"brand\" href=\"/\">Clean Data Engineering</a>"
+            "<a class=\"lnk\" href=\"/certifications/\">Certifications</a><a class=\"lnk\" href=\"/writing/\">Blog</a><a class=\"act\" href=\"/paths/\">Find my path</a>"
+            "<a class=\"act dark\" href=\"/business/\">Talk to us</a></nav>\n"
+            "    " + panel() + "<div class=\"scrim\" id=\"scrim\"></div>\n    " + JS + "\n  </div>\n</header>")
 
 
 def footer():
     cols = []
-    for name, href, sub in MENU:
-        links = "".join(f'<a href="{h}">{n}</a>' for n, h, _ in sub if n not in ("Overview", "All simulators")) or f'<a href="{href}">{name}</a>'
-        cols.append(f'<div><b><a href="{href}">{name}</a></b>{links if sub else ""}</div>')
-    return ("<footer>\n  <div class=\"wrap\">\n    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px 20px;margin-bottom:18px}"
-            ".fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b a{color:var(--ink);text-decoration:none}</style>\n"
+    for g, items in SECTIONS:
+        links = "".join(f'<a href="{h}">{n}</a>' for n, h, _ in items)
+        cols.append(f"<div><b>{g}</b>{links}</div>")
+    return ("<footer>\n  <div class=\"wrap\">\n    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}"
+            ".fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>\n"
             "    <div class=\"fcols\">" + "".join(cols) + "</div>\n"
             "    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;\n"
             "    <a href=\"https://github.com/dataagentsai\">GitHub</a> &middot;\n"
@@ -108,7 +185,7 @@ def main():
         if t != s:
             p.write_text(t)
             n += 1
-    print("menu and footer written to", n, "pages")
+    print("top bar, left panel and footer written to", n, "pages")
 
 
 if __name__ == "__main__":
