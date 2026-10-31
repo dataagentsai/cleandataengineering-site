@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>What repeats is broken · Clean Data Engineering</title>
+<meta name="description" content="Every pipeline sees the same data more than once: retries, queues that deliver twice, files sent again, backfills and tired re-runs. A pipeline is idempotent when processing the same input twice gives the same result as processing it once. This post shows, with numbers from real recorded runs, how a naive pipeline doubles revenue and the six patterns that make repeats safe."><link rel="canonical" href="https://cleandataengineering.ai/writing/what-repeats-is-broken/">
+<meta property="og:title" content="What repeats is broken"><meta property="og:description" content="Every pipeline sees the same data more than once: retries, queues that deliver twice, files sent again, backfills and tired re-runs. A pipeline is idempotent when processing the same input twice gives the same result as processing it once. This post shows, with numbers from real recorded runs, how a naive pipeline doubles revenue and the six patterns that make repeats safe."><meta property="og:url" content="https://cleandataengineering.ai/writing/what-repeats-is-broken/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"><style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}.drawing svg rect,.drawing svg line,.drawing svg path,.drawing svg polyline,.drawing svg circle,.drawing svg ellipse{filter:url(#rough)}
+.drawing svg text{font-family:var(--hand)}
+.drawing .bx{fill:#EAF3FB;stroke:var(--ink);stroke-width:2}
+.drawing .bxm{fill:#FFFFFF;stroke:var(--ink);stroke-width:2;stroke-dasharray:7 5}
+.drawing .bxs{fill:#FFF3C9;stroke:var(--ink);stroke-width:2}
+.drawing .solid{fill:#E4D9F6;stroke:var(--ink);stroke-width:2.4}
+.drawing .ol{fill:transparent}
+.drawing .pf{stroke:none;opacity:.95} .pf-bx{fill:#D3E6F7} .pf-bxs{fill:#FFE59A} .pf-solid{fill:#D5C6F1} .pf-hatch{fill:#F6CFC8}
+.drawing .hatch{fill:url(#hatch);stroke:var(--ink);stroke-width:1.8}
+.drawing .zg{fill:#DCF1D2;stroke:none}.zy{fill:#FBF1BE;stroke:none}.zr{fill:#F7CFCA;stroke:none}
+.drawing .hz{fill:#fff;stroke:var(--ink);stroke-width:2.2;stroke-linejoin:round;stroke-linecap:round}
+.drawing .hk{fill:var(--ink);stroke:var(--ink);stroke-width:1.5}
+.drawing .tx{fill:var(--ink);font-size:17px}
+.drawing .tt{fill:var(--ink);font-size:20px}
+.drawing .sm{fill:var(--muted);font-size:15px}
+.drawing .lb{paint-order:stroke;stroke:#fff;stroke-width:5px;stroke-linejoin:round}
+.drawing .sm2{font-size:15px}
+.drawing .bd{fill:var(--ink);font-size:18px}
+.drawing .lbl{fill:var(--muted);font-size:15px;letter-spacing:.06em}
+.drawing .inv{fill:var(--ink)}
+.drawing .ln{stroke:var(--ink);stroke-width:1.8;fill:none}
+.drawing .lnd{stroke:var(--ink);stroke-width:1.8;fill:none;stroke-dasharray:6 5}
+.drawing .lnc{stroke:var(--ink);stroke-width:3;fill:none;stroke-linecap:round}
+.drawing .nm{fill:var(--paper);stroke:var(--ink);stroke-width:2}
+.drawing .nmt{fill:var(--ink);font-size:16px}
+.drawing .tag{fill:var(--paper);stroke:var(--ink);stroke-width:1.5;stroke-dasharray:3 3}
+.drawing .tagt{fill:var(--ink);font-size:13.5px}</style></head><body>
+<header>
+  <div class="wrap">
+    <nav>
+      <a class="brand" href="/">Clean Data Engineering</a>
+      <a class="n" href="/paths/">Paths</a>
+      <a class="n" href="/concepts/">Concepts</a>
+      <a class="n" href="/learn/">Learn</a>
+      <a class="n" href="/projects/">Projects</a>
+      <a class="n" href="/#research">Research</a>
+      <a class="n" href="/writing/">Writing</a>
+      <a class="n" href="/#about">About</a>
+    </nav>
+  </div>
+</header>
+<main class="wrap">
+<article>
+  <div class="hero" style="padding-top:48px">
+    <p class="post-meta"><a href="/writing/">Writing</a> · Explainer · Data Engineering · Builders · 7 min read · 2026-10-31</p>
+    <h1>What repeats is broken</h1>
+  </div>
+  <div class="summary">Every pipeline sees the same data more than once: retries, queues that deliver twice, files sent again, backfills and tired re-runs. A pipeline is idempotent when processing the same input twice gives the same result as processing it once. This post shows, with numbers from real recorded runs, how a naive pipeline doubles revenue and the six patterns that make repeats safe.</div>
+<p>An accountant receives an invoice for ₹40,000 and pays it. Next morning the same invoice arrives again, photocopied by someone who wasn't sure the first one went through. A careful accountant checks the invoice number and files the copy. A rushed one pays twice.</p>
+<p>Data pipelines get photocopied invoices every day. The question is never <em>whether</em> the same data will arrive twice. It is whether your pipeline is the careful accountant or the rushed one.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 290" role="img" aria-label="A photocopier prints the same ₹40,000 invoice twice. One accountant pays both and ₹80,000 goes out. A careful accountant checks the invoice number, files the copy, and only ₹40,000 goes out."><rect class="hz" x="40" y="120" width="170" height="120" rx="8"/><rect class="hz" x="55" y="98" width="140" height="24" rx="4"/><rect class="pf pf-bx" x="65" y="140" width="60" height="30" rx="4"/><circle class="hz" cx="160" cy="155" r="10"/><circle class="hz" cx="185" cy="155" r="6"/><rect class="hz" x="210" y="190" width="40" height="10" rx="2"/><line class="ln" x1="55" y1="215" x2="195" y2="215"/><text class="sm" x="125" y="270" text-anchor="middle">the same invoice, printed twice</text><g transform="rotate(-8 282 137)"><rect class="hz" x="255" y="105" width="54" height="64" rx="3"/><text class="sm" x="282" y="122" text-anchor="middle">₹40,000</text><line class="ln" x1="263" y1="131" x2="301" y2="131"/><line class="ln" x1="263" y1="141" x2="295" y2="141"/><line class="ln" x1="263" y1="151" x2="301" y2="151"/></g><g transform="rotate(6 312 182)"><rect class="hz" x="285" y="150" width="54" height="64" rx="3"/><text class="sm" x="312" y="167" text-anchor="middle">₹40,000</text><line class="ln" x1="293" y1="176" x2="331" y2="176"/><line class="ln" x1="293" y1="186" x2="325" y2="186"/><line class="ln" x1="293" y1="196" x2="331" y2="196"/></g><line class="ln" x1="350" y1="150" x2="470" y2="85" marker-end="url(#ar)"/><circle class="bx" cx="500" cy="40" r="13"/><line class="lnc" x1="500" y1="53" x2="500" y2="82"/><line class="lnc" x1="500" y1="82" x2="490" y2="102"/><line class="lnc" x1="500" y1="82" x2="512" y2="102"/><line class="lnc" x1="500" y1="64" x2="520" y2="54"/><line class="lnc" x1="500" y1="64" x2="484" y2="72"/><rect class="bxm ol" x="545" y="35" width="300" height="90" rx="12"/><text class="tt" x="695.0" y="76.5" text-anchor="middle">The rushed accountant</text><text class="sm" x="695.0" y="100.5" text-anchor="middle">pays ₹40,000, then pays again</text><rect class="zr" x="860" y="55" width="120" height="50" rx="8"/><text class="bd" x="920" y="86" text-anchor="middle">₹80,000 out</text><line class="ln" x1="350" y1="195" x2="470" y2="245" marker-end="url(#ar)"/><circle class="bx" cx="500" cy="190" r="13"/><line class="lnc" x1="500" y1="203" x2="500" y2="232"/><line class="lnc" x1="500" y1="232" x2="490" y2="252"/><line class="lnc" x1="500" y1="232" x2="512" y2="252"/><line class="lnc" x1="500" y1="214" x2="520" y2="204"/><line class="lnc" x1="500" y1="214" x2="484" y2="222"/><rect class="pf pf-bxs" x="549" y="189" width="298" height="88" rx="12"/><rect class="bxs ol" x="545" y="185" width="300" height="90" rx="12"/><text class="tt" x="695.0" y="217.0" text-anchor="middle">The careful accountant</text><text class="sm" x="695.0" y="241.0" text-anchor="middle">checks the invoice number,</text><text class="sm" x="695.0" y="260.0" text-anchor="middle">files the copy</text><rect class="zg" x="860" y="205" width="120" height="50" rx="8"/><text class="bd" x="920" y="236" text-anchor="middle">₹40,000 out</text></svg><figcaption>Repeats are normal. What matters is whether the receiver checks before it acts.</figcaption></figure>
+<h2>What idempotent means</h2>
+<p>An operation is <strong>idempotent</strong> when doing it twice has the same effect as doing it once. Pressing a lift button five times still calls one lift. Setting a thermostat to 22 degrees twice still leaves it at 22. Adding ₹40,000 to a balance twice does not.</p>
+<p>For a pipeline the rule is simple: <strong>the same input, processed twice, must give the same tables as processing it once.</strong></p>
+<h2>Everything repeats</h2>
+<p>A repeat is not a rare accident. It is built into how data moves.</p>
+<ol><li><strong>Retries after failure.</strong> A job times out after it has actually finished, and the scheduler runs it again.</li><li><strong>At-least-once delivery.</strong> Most queues and event streams promise that every message arrives <em>at least</em> once. The other half of that promise is that some arrive twice.</li><li><strong>The same file sent again.</strong> The sender's network drops, so it sends the file again to be safe.</li><li><strong>Backfills.</strong> A bug is fixed, and last week has to be rebuilt over data that is already there.</li><li><strong>A re-run by a tired engineer.</strong> It's 2 a.m., the dashboard looks stale, and someone presses "run" one more time.</li></ol>
+<p>None of these is a bug in the sender. Each is normal. A pipeline that breaks on a repeat is broken; it just hasn't been found out yet.</p>
+<h2>The same file, sent twice</h2>
+<p>Our DataTwin Studio records a real Spark and Delta Lake run of exactly this story. A clothing shop's orders file, batch <code>b-0912</code>, goes through landing, bronze, silver and gold. Then a network timeout makes the sender deliver the same batch a second time. The run is done twice: once with our pipeline, once with a naive one.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 310" role="img" aria-label="Batch b-0912 is sent twice. In the naive pipeline bronze appends 6 rows again, silver inserts order 1001 a second time, and the dashboard says ₹2,500. In our pipeline the run log check sees the batch was already loaded, MERGE on order_id changes 0 rows, and the dashboard still says ₹1,250."><path class="hz" d="M12,95 L52,95 L66,109 L66,159 L12,159 Z"/><path class="ln" d="M52,95 L52,109 L66,109"/><text class="sm" x="39" y="137" text-anchor="middle">b-0912</text><path class="hz" d="M72,135 L112,135 L126,149 L126,199 L72,199 Z"/><path class="ln" d="M112,135 L112,149 L126,149"/><text class="sm" x="99" y="177" text-anchor="middle">b-0912</text><text class="sm" x="80" y="225" text-anchor="middle">the same file,</text><text class="sm" x="80" y="245" text-anchor="middle">sent twice</text><text class="lbl" x="560" y="22" text-anchor="middle">naive pipeline</text><text class="lbl" x="560" y="192" text-anchor="middle">our pipeline</text><line class="ln" x1="118" y1="128" x2="150" y2="80" marker-end="url(#ar)"/><rect class="bxm ol" x="152" y="35" width="225" height="90" rx="12"/><text class="tt" x="264.5" y="76.5" text-anchor="middle">Bronze</text><text class="sm" x="264.5" y="100.5" text-anchor="middle">appends 6 rows again</text><line class="ln" x1="379" y1="80" x2="405" y2="80" marker-end="url(#ar)"/><rect class="bxm ol" x="407" y="35" width="225" height="90" rx="12"/><text class="tt" x="519.5" y="67.0" text-anchor="middle">Silver</text><text class="sm" x="519.5" y="91.0" text-anchor="middle">INSERT: order 1001</text><text class="sm" x="519.5" y="110.0" text-anchor="middle">now twice</text><line class="ln" x1="634" y1="80" x2="660" y2="80" marker-end="url(#ar)"/><rect class="zr" x="662" y="35" width="320" height="90" rx="10"/><text class="bd" x="822" y="72" text-anchor="middle">dashboard: ₹2,500</text><text class="sm" x="822" y="98" text-anchor="middle">every job said success</text><line class="ln" x1="130" y1="205" x2="150" y2="250" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="156" y="209" width="223" height="88" rx="12"/><rect class="bxs ol" x="152" y="205" width="225" height="90" rx="12"/><text class="tt" x="264.5" y="237.0" text-anchor="middle">Run log check</text><text class="sm" x="264.5" y="261.0" text-anchor="middle">b-0912 already loaded:</text><text class="sm" x="264.5" y="280.0" text-anchor="middle">add nothing</text><line class="ln" x1="379" y1="250" x2="405" y2="250" marker-end="url(#ar)"/><rect class="pf pf-solid" x="411" y="209" width="223" height="88" rx="12"/><rect class="solid ol" x="407" y="205" width="225" height="90" rx="12"/><text class="tt inv" x="519.5" y="237.0" text-anchor="middle">Silver</text><text class="inv sm2" x="519.5" y="261.0" text-anchor="middle">MERGE on order_id:</text><text class="inv sm2" x="519.5" y="280.0" text-anchor="middle">0 rows changed</text><line class="ln" x1="634" y1="250" x2="660" y2="250" marker-end="url(#ar)"/><rect class="zg" x="662" y="205" width="320" height="90" rx="10"/><text class="bd" x="822" y="242" text-anchor="middle">dashboard: ₹1,250</text><text class="sm" x="822" y="268" text-anchor="middle">the same as the first run</text></svg><figcaption>Recorded in the DataTwin Studio (Spark 3.5.1, Delta Lake 3.2.0): the same file twice doubles the naive pipeline's revenue and leaves ours unchanged.</figcaption></figure>
+<p>These are the recorded numbers.</p>
+<ul><li><strong>First run, both pipelines:</strong> the revenue tile says ₹1,250 for 27 October.</li><li><strong>Same file again, naive pipeline:</strong> bronze appends the batch again (6 more rows), silver inserts order 1001 a second time, and the dashboard says <strong>₹2,500</strong>. Every job reported success.</li><li><strong>Same file again, our pipeline:</strong> the loader looks in its run log, sees that batch <code>b-0912</code> already succeeded, and adds nothing. Even when silver is run again on purpose, a MERGE on the order id finds the same row and changes nothing. The dashboard still says <strong>₹1,250</strong>.</li></ul>
+<p>The naive pipeline didn't crash; it believed every row it was given. Watch both versions step by step in <a href="/learn/data-platform-sim/">the DataTwin Studio</a>.</p>
+<h2>The toolbox</h2>
+<p>There is no single trick. There is a small toolbox, and each tool guards a different door.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 320" role="img" aria-label="A toolbox holding six tools: a batch ledger, MERGE on keys, partition overwrite, dedupe in silver, watermark moved after commit, and idempotency keys."><path class="hz" d="M420,62 L420,28 Q420,18 432,18 L568,18 Q580,18 580,28 L580,62"/><rect class="hz" x="15" y="60" width="970" height="250" rx="14"/><line class="ln" x1="15" y1="90" x2="985" y2="90"/><rect class="pf pf-bxs" x="44" y="109" width="288" height="83" rx="12"/><rect class="bxs ol" x="40" y="105" width="290" height="85" rx="12"/><text class="tt" x="185.0" y="134.5" text-anchor="middle">Batch ledger</text><text class="sm" x="185.0" y="158.5" text-anchor="middle">was this batch loaded?</text><text class="sm" x="185.0" y="177.5" text-anchor="middle">then skip it</text><rect class="pf pf-solid" x="359" y="109" width="288" height="83" rx="12"/><rect class="solid ol" x="355" y="105" width="290" height="85" rx="12"/><text class="tt inv" x="500.0" y="134.5" text-anchor="middle">MERGE on keys</text><text class="inv sm2" x="500.0" y="158.5" text-anchor="middle">one row per order,</text><text class="inv sm2" x="500.0" y="177.5" text-anchor="middle">however often it runs</text><rect class="pf pf-bx" x="674" y="109" width="288" height="83" rx="12"/><rect class="bx ol" x="670" y="105" width="290" height="85" rx="12"/><text class="tt" x="815.0" y="134.5" text-anchor="middle">Partition overwrite</text><text class="sm" x="815.0" y="158.5" text-anchor="middle">replace exactly</text><text class="sm" x="815.0" y="177.5" text-anchor="middle">the day you load</text><rect class="pf pf-bx" x="44" y="209" width="288" height="83" rx="12"/><rect class="bx ol" x="40" y="205" width="290" height="85" rx="12"/><text class="tt" x="185.0" y="234.5" text-anchor="middle">Dedupe in silver</text><text class="sm" x="185.0" y="258.5" text-anchor="middle">one row per key,</text><text class="sm" x="185.0" y="277.5" text-anchor="middle">latest event wins</text><rect class="pf pf-bxs" x="359" y="209" width="288" height="83" rx="12"/><rect class="bxs ol" x="355" y="205" width="290" height="85" rx="12"/><text class="tt" x="500.0" y="234.5" text-anchor="middle">Watermark after commit</text><text class="sm" x="500.0" y="258.5" text-anchor="middle">move the bookmark</text><text class="sm" x="500.0" y="277.5" text-anchor="middle">only once data is in</text><rect class="pf pf-bx" x="674" y="209" width="288" height="83" rx="12"/><rect class="bx ol" x="670" y="205" width="290" height="85" rx="12"/><text class="tt" x="815.0" y="234.5" text-anchor="middle">Idempotency keys</text><text class="sm" x="815.0" y="258.5" text-anchor="middle">the other system</text><text class="sm" x="815.0" y="277.5" text-anchor="middle">ignores a repeat</text></svg><figcaption>Six small tools, each guarding a different door. Most pipelines need three or four of them.</figcaption></figure>
+<ol><li><strong>Batch ids and a ledger of what was loaded.</strong> Every delivery gets an id, and a run log table records which ids have been loaded. Before loading, check the ledger. This is the cheapest guard: in the recorded run, no Spark job ran at all for the repeat. It is the heart of <a href="/writing/metadata-driven-ingestion/">one metadata-driven ingestion framework</a>.</li><li><strong>MERGE on business keys, not append.</strong> A business key is the thing that makes a row one real thing, such as an order id. MERGE says "update the row with this key if it exists, insert it if not". Run it twice and you still have one row per order.</li><li><strong>Overwrite exactly the partition you load.</strong> A daily job takes the date as a parameter and atomically replaces that one day. On Delta Lake this is <code>replaceWhere</code>. In the recorded Problem Lab, a re-run of an appending job turned 27 October from ₹849 into ₹1,698. Replacing just that day made it ₹849 again, however many times it ran, and the other 26 days were never touched.</li><li><strong>Deduplicate in silver.</strong> Bronze keeps every row as it arrived, duplicates included. Silver keeps one row per business key, chosen by a clear rule, such as the latest event. That split is what <a href="/writing/medallion-done-right/">medallion done right</a> is about.</li><li><strong>Move the watermark only after the write commits.</strong> A watermark is the bookmark that says "I have loaded everything up to here". More on this in the next section.</li><li><strong>Idempotency keys on writes to other systems.</strong> When a pipeline calls an API, sends an email or posts a payment, send a key with each request, such as the batch id plus the order id. The other side remembers keys it has seen and ignores a repeat.</li></ol>
+<h2>The crash in the middle</h2>
+<p>The hardest repeat is the one you cause yourself. A job writes its data and then dies before it records that it finished.</p>
+<figure class="drawing"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg><svg viewBox="0 0 1000 310" role="img" aria-label="Four steps: read the batch from the watermark, write the data with MERGE in one atomic commit, move the watermark, mark done in the ledger. A lightning bolt marks a crash between writing and moving the watermark. A dashed arrow goes back to step 1: the re-run reads the same batch, and MERGE lands on the same rows."><rect class="pf pf-bx" x="14" y="64" width="198" height="98" rx="12"/><rect class="bx ol" x="10" y="60" width="200" height="100" rx="12"/><text class="tt" x="110.0" y="97.0" text-anchor="middle">Read the batch</text><text class="sm" x="110.0" y="121.0" text-anchor="middle">from the watermark:</text><text class="sm" x="110.0" y="140.0" text-anchor="middle">after 26 Oct</text><circle class="nm" cx="16" cy="66" r="14"/><text class="nmt" x="16" y="72" text-anchor="middle">1</text><line class="ln" x1="212" y1="110" x2="248" y2="110" marker-end="url(#ar)"/><rect class="pf pf-solid" x="254" y="64" width="208" height="98" rx="12"/><rect class="solid ol" x="250" y="60" width="210" height="100" rx="12"/><text class="tt inv" x="355.0" y="97.0" text-anchor="middle">Write the data</text><text class="inv sm2" x="355.0" y="121.0" text-anchor="middle">MERGE, one</text><text class="inv sm2" x="355.0" y="140.0" text-anchor="middle">atomic commit</text><circle class="nm" cx="256" cy="66" r="14"/><text class="nmt" x="256" y="72" text-anchor="middle">2</text><path class="zr" d="M505,40 L478,108 L500,108 L482,170 L530,92 L506,92 L526,40 Z"/><path class="ln" d="M505,40 L478,108 L500,108 L482,170 L530,92 L506,92 L526,40 Z" fill="none"/><text class="bd" x="504" y="192" text-anchor="middle">crash</text><rect class="pf pf-bxs" x="554" y="64" width="208" height="98" rx="12"/><rect class="bxs ol" x="550" y="60" width="210" height="100" rx="12"/><text class="tt" x="655.0" y="97.0" text-anchor="middle">Move the watermark</text><text class="sm" x="655.0" y="121.0" text-anchor="middle">only after step 2</text><text class="sm" x="655.0" y="140.0" text-anchor="middle">has committed</text><circle class="nm" cx="556" cy="66" r="14"/><text class="nmt" x="556" y="72" text-anchor="middle">3</text><line class="ln" x1="762" y1="110" x2="788" y2="110" marker-end="url(#ar)"/><rect class="pf pf-bxs" x="794" y="64" width="198" height="98" rx="12"/><rect class="bxs ol" x="790" y="60" width="200" height="100" rx="12"/><text class="tt" x="890.0" y="97.0" text-anchor="middle">Mark done</text><text class="sm" x="890.0" y="121.0" text-anchor="middle">in the batch</text><text class="sm" x="890.0" y="140.0" text-anchor="middle">ledger</text><circle class="nm" cx="796" cy="66" r="14"/><text class="nmt" x="796" y="72" text-anchor="middle">4</text><line class="lnd" x1="462" y1="110" x2="472" y2="110"/><line class="lnd" x1="536" y1="110" x2="548" y2="110"/><path class="lnd" d="M470,205 Q290,300 110,164" marker-end="url(#ar)"/><text class="sm" x="330" y="272" text-anchor="middle">re-run: the bookmark never moved, so it reads the same batch;</text><text class="sm" x="330" y="292" text-anchor="middle">step 2 again is a MERGE on the same rows, so nothing doubles</text></svg><figcaption>Write first, move the bookmark second. A crash in between costs one repeat, and the repeat is harmless.</figcaption></figure>
+<p>The order of the steps is the whole trick. Write the data first, in one atomic commit. Only then move the watermark and mark the batch done in the ledger. If the job dies between the two, the bookmark still points at the old place, so the re-run picks up the same batch. Because the write is a MERGE or a partition overwrite, doing it again lands on the same rows. Nothing is lost, and nothing doubles.</p>
+<p>Move the watermark first instead, and a crash loses the batch for good.</p>
+<p>The Problem Lab recorded a version of this. A job loaded silver, then the cluster was lost before gold. Re-running everything from the top inserted the batch into silver a second time, and gold showed <strong>₹2,400 instead of ₹1,200</strong>. With every step made safe to repeat and a run log, the re-run skipped silver, built gold, and revenue stayed at ₹1,200 even when it was run twice more.</p>
+<h2>The same idea in agents</h2>
+<p>Agents repeat too. A user taps "send" twice. A chat channel delivers the same message twice. A tool call times out, and the agent loop retries it, though the first call may have worked. If that tool issues a refund, the customer is refunded twice.</p>
+<p>The fix is the same toolbox in different clothes: give every message and every tool call an id, record it before the action runs, and return the first answer to a repeat. The ledger table in <a href="/writing/just-use-postgres/">just use Postgres</a> is exactly this.</p>
+<h2>Mistakes we see</h2>
+<ul><li><strong>Adding DISTINCT and calling it fixed.</strong> In the recorded Problem Lab, an event stream delivered one event twice and an order had a second event when it was paid. True revenue was ₹2,790; the dashboard said ₹4,770. DISTINCT removes only rows identical in every column, and these weren't, so revenue stayed at ₹4,770. Deduplicate on the business key instead.</li><li><strong>Reloading everything to make re-runs safe.</strong> It works, but in the Problem Lab it rewrote all 81 rows of all 27 days to change 3, and that cost grows every day. Replace only the partition you load.</li><li><strong>Reading "today" from the clock inside the job.</strong> Then the job can only ever build today, and a backfill means editing code. Pass the date in as a parameter.</li><li><strong>Thinking MERGE is free.</strong> The recorded run shows a MERGE that changed nothing still rewrote a file. It is safe for the data, not free. Compare a row hash first and skip unchanged rows.</li><li><strong>Fixing the past by hand.</strong> In the Problem Lab, a bug dropped ₹5,390 of revenue over five days. Scaling gold by a factor in production got 23 of 27 days right. A backfill, which is just the same safe job run for each day in a loop, got all 27 right.</li></ul>
+<h2>The replay test</h2>
+<p>Here is one check that catches most of the above. In your test environment, or in CI on every change:</p>
+<ol><li>Load a small, fixed set of input files.</li><li>Snapshot every table: row counts, sums of the money columns, and a hash of the rows.</li><li>Load the <strong>same</strong> files again, then run each job once more on top.</li><li>Snapshot again and compare. Any difference fails the build.</li></ol>
+<p>For bonus points, kill the job halfway through one run and check that the re-run still matches.</p>
+<h2>Five questions to check your own pipelines</h2>
+<ol><li>If yesterday's file arrived again right now, what would your revenue tile say?</li><li>Which of your loads append, and what stops them appending the same rows twice?</li><li>Does each job take its date as a parameter, so a backfill is the same job in a loop?</li><li>Does your watermark move before or after the write commits?</li><li>When a job calls another system, does it send a key that system can use to spot a repeat?</li></ol>
+<p>The data will arrive twice. Make sure your numbers don't.</p>
+  <div class="deeper"><p><strong>Go deeper:</strong> <a href="/concepts/idempotency/">idempotency, the key concept, with where it lives on each platform</a></p><p style="color:var(--faint)">Questions or disagreements: <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a></p></div>
+</article>
+</main>
+<footer>
+  <div class="wrap">
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="/paths/">Paths</a> &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
