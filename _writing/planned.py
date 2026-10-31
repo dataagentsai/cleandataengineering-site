@@ -32,6 +32,8 @@ PLANNED = [
      "The right agent harness architecture: loop, tools, memory, context, guards and evals in one picture."),
     ("Swap anything, break nothing: software design patterns for agent harnesses", "ai", "builders", "explainer",
      "Inversion of control, ports and adapters, strategy, chain of responsibility for guards, decorators for retries, and contract tests per port."),
+    ("The autonomous agent tech stack, one concern at a time", "ai", "builders", "explainer",
+     "A complete map of the tools for each concern: loop, models, tools, memory, context, guardrails, security, human in the loop, tracing, evals, durability and cost."),
     ("Choosing your agent loop: LangGraph vs OpenAI Agents SDK vs Claude Agent SDK vs plain code", "ai", "builders", "decision",
      "A comparison of orchestration and loop frameworks, with a 'pick this when' table."),
     ("DBOS vs Temporal: durable agents without the drama", "ai", "builders", "decision",
