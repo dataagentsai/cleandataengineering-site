@@ -157,7 +157,93 @@ def drawing_planted_note():
                   "The real run on Azure, 14 October 2026: three model calls, $0.00087, nothing paid.")
 
 
-DRAWINGS = {"planted-note": drawing_planted_note}
+def drawing_horse_road():
+    import pages_horse as ph
+    t = kit.text
+    d = ph.road()
+    d += t(14, 52, "RED · NEVER", "lbl") + t(14, 76, "pay money nobody approved · show someone else's data", "tx")
+    d += t(14, 110, "YELLOW · CAREFUL", "lbl") + t(14, 134, "a change nobody clearly asked for: ask the person first", "tx")
+    d += t(14, 401, "YELLOW · CAREFUL", "lbl") + t(14, 422, "going round in circles: stop and hand over", "tx")
+    d += t(14, 462, "RED · NEVER", "lbl") + t(14, 486, "obey orders hidden inside a document", "tx")
+    d += t(985, 375, "GREEN · the job done properly", "bd", "end")
+    g = '<line class="ln" x1="370" y1="236" x2="652" y2="240"/><line class="ln" x1="370" y1="256" x2="650" y2="256"/>'
+    g += '<rect class="bx" x="240" y="205" width="130" height="66" rx="10"/>' + t(305, 244, "the cart", "tx", "middle")
+    g += '<circle class="bx" cx="292" cy="286" r="32"/><line class="ln" x1="292" y1="254" x2="292" y2="318"/><line class="ln" x1="260" y1="286" x2="324" y2="286"/>'
+    g += '<circle class="bx" cx="335" cy="168" r="14"/><line class="lnc" x1="335" y1="182" x2="335" y2="206"/><line class="lnc" x1="335" y1="192" x2="362" y2="190"/>'
+    g += ph.horse() + '<path class="lnc" d="M752,198 Q620,140 364,190"/>'
+    d += f'<g transform="translate(0,28)">{g}</g>'
+    d += t(560, 168, "reins: the checks", "bd", "middle")
+    d += t(800, 258, ["blinkers: it only", "sees allowed tools"], "sm")
+    d += t(220, 205, ["driver: your code", "and its rules"], "sm", "end")
+    d += t(250, 362, "cart: state and memory", "sm", "end")
+    d += t(800, 305, ["the horse: the model.", "strong and fast, but it", "doesn't know the road"], "sm")
+    return figure(1000, 510, d, "A horse in harness pulls a cart along a road. The middle is green, both sides are yellow, the outer edges are red. A driver holds the reins.",
+                  "The model is the horse. Everything else in the picture is the harness, and its one job is to keep the horse on the green path.")
+
+
+def drawing_ten_ninety():
+    b, t = kit.box, kit.text
+    parts = [(60, 20, "Context", "what it sees", "bx"), (415, 20, "Tools", "what it may touch", "bx"),
+             (770, 20, "Checks", "pull it back", "bxs"), (60, 180, "State & memory", "what happened so far", "bx"),
+             (770, 180, "Durable steps", "survives a crash", "bx"), (60, 340, "Human approval", "a person says yes", "bxs"),
+             (300, 340, "Traces", "every step written down", "bx"), (535, 340, "Evals", "a driving test", "bx"),
+             (770, 340, "Cost meter", "a budget per task", "bxs")]
+    d = "".join(f'<line class="lnd" x1="500" y1="215" x2="{x + 85}" y2="{y + 35}"/>' for x, y, *_ in parts)
+    d += "".join(b(x, y, 170, 70, n, s, k) for x, y, n, s, k in parts)
+    d += b(395, 172, 210, 86, "The model", "10% · picks the next step", "solid")
+    d += t(500, 450, "everything around the model is the harness: the other 90%", "bd", "middle")
+    return figure(1000, 465, d, "The model sits in the middle as one small box. Nine boxes around it make up the harness: context, tools, checks, state and memory, durable steps, human approval, traces, evals and a cost meter.",
+                  "The nine jobs of a harness. None of them needs a smarter model; all of them are ordinary software.")
+
+
+def drawing_agent_loop():
+    b, a, t, n, p = kit.box, kit.arrow, kit.text, kit.num, kit.path
+    steps = [(10, "A person asks", "\"where is my order?\"", "bxm"), (210, "The harness", "builds the context", "bx"),
+             (410, "The model", "picks the next step", "solid"), (610, "The harness", "checks, then calls", "bxs"),
+             (810, "The tool", "answers with data", "bx")]
+    d = ""
+    for i, (x, title, sub, k) in enumerate(steps):
+        d += b(x, 100, 180, 96, title, sub, k) + n(x + 12, 100, i + 1)
+        if i < 4:
+            d += a(x + 182, 148, x + 208, 148)
+    d += p("M900,198 Q700,300 500,198") + t(700, 292, "the result goes back to the model, marked as data", "sm", "middle")
+    d += p("M500,98 Q300,10 100,98") + t(300, 34, "done? check the answer, then reply", "sm", "middle")
+    return figure(1000, 305, d, "Five boxes in a row: a person asks, the harness builds the context, the model picks the next step, the harness checks and calls a tool, the tool answers. The result loops back to the model; when the model is done, the answer is checked and sent back to the person.",
+                  "One turn of an agent. The model appears once in the row; the harness appears twice and does all the touching.")
+
+
+def drawing_four_checks():
+    b, a, t = kit.box, kit.arrow, kit.text
+    row = [("Message", "", "bxm", 100), (["before", "the model"], "allowed in?", "bxs", 105),
+           ("Model", "", "solid", 100), (["after", "the model"], "safe to act?", "bxs", 105),
+           (["before", "the tool"], "did they ask?", "bxs", 105), ("Tool", "", "bx", 100),
+           (["after", "the tool"], "fence the result", "bxs", 105), ("Reply", "", "bxm", 100)]
+    d, x = "", 4
+    for i, (title, sub, k, w) in enumerate(row):
+        d += b(x, 30, w, 100, title, sub, k)
+        if i < len(row) - 1:
+            d += a(x + w + 2, 80, x + w + 21, 80)
+        x += w + 23
+    d += t(500, 172, "a refund of ₹40,000: the model can ask for it, but the check before the tool sees nobody asked, so it never runs", "sm", "middle")
+    return figure(1000, 190, d, "A row: message, a check before the model, the model, a check after the model, a check before the tool, the tool, a check after the tool, the reply.",
+                  "Four places a check can sit. The same rule can be enforced at more than one of them.")
+
+
+def drawing_build_order():
+    b, t = kit.box, kit.text
+    d = b(40, 210, 280, 80, "Day 1", "the loop, three tools, a trace", "bx")
+    d += b(340, 130, 280, 160, "Week 1", ["checks, state and memory,", "a cost budget"], "bxs")
+    d += b(640, 50, 320, 240, "Month 1", ["evals before every release,", "human approval,", "steps that survive a crash"], "bx")
+    d += ('<circle class="bx" cx="130" cy="160" r="13"/><line class="lnc" x1="130" y1="173" x2="130" y2="192"/>'
+          '<line class="lnc" x1="130" y1="192" x2="120" y2="208"/><line class="lnc" x1="130" y1="192" x2="142" y2="208"/>'
+          '<line class="lnc" x1="130" y1="180" x2="150" y2="168"/><line class="lnc" x1="130" y1="180" x2="114" y2="186"/>')
+    d += t(500, 20, "climb one step at a time; each step still works on its own", "sm", "middle")
+    return figure(1000, 300, d, "Three stairs going up. Day 1: the loop, three tools, a trace. Week 1: checks, state and memory, a cost budget. Month 1: evals before every release, human approval, steps that survive a crash. A small person stands on the first stair.",
+                  "Build the harness in this order. You can stop on any stair and still have something that works.")
+
+
+DRAWINGS = {"planted-note": drawing_planted_note, "horse-road": drawing_horse_road, "ten-ninety": drawing_ten_ninety,
+            "agent-loop": drawing_agent_loop, "four-checks": drawing_four_checks, "build-order": drawing_build_order}
 
 
 # ------------------------------------------------------------------ pages
@@ -201,7 +287,8 @@ def kit_css():
     if kit is None:
         return ""
     keep = [ln for ln in kit.CSS.splitlines() if ln.startswith((".bx", ".bxm", ".bxs", ".solid", ".tx", ".tt", ".sm", ".inv",
-                                                                   ".ln", ".lnd", ".lnc", ".tag", ".nm", ".hatch", "figure svg rect", "svg text", ".lb"))]
+                                                                   ".ln", ".lnd", ".lnc", ".tag", ".nm", ".hatch", "figure svg rect", "svg text", ".lb",
+                                                                   ".pf", ".ol", ".zg", ".hz", ".hk", ".bd"))]
     return ('<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap">'
             '<style>.drawing{--ink:#222;--paper:#fff;--soft:#F3F3F1;--fill:#ECECEA;--muted:#5E5E5E;--hand:"Patrick Hand","Comic Sans MS",cursive}'
             + "\n".join(".drawing " + ln.replace(",", ",.drawing ") if not ln.startswith("figure") else ln.replace("figure svg", ".drawing svg") for ln in keep)
