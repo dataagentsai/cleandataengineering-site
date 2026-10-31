@@ -36,7 +36,7 @@ The panel is grouped by purpose: Learn · Build with us · For leaders · About.
 own on wide screens, and opens from a Menu button below 1180px. `python3 _site/nav.py` writes them into every page
 that carries the site menu; generators copy them from the home page, so run it after any build that touches
 hand-made pages. `python3 _site/hubs.py` writes the hub pages: /simulators/, /research/ (Open specifications),
-/assets/, /leaders/ (the one-minute version + questions leaders ask, for business and technology leaders), /sponsor/,
+/assets/, /leaders/ (the one-minute version + questions leaders ask, for business and technology leaders),
 /papers/ (citable releases) and /about/. The home page's first screen is three lanes (Learn, Build with us, For
 leaders) plus a counts line; its styles are in the `home-css` block, which `_site/theme.py` leaves
 alone. The counts are hand-written; the latest post on the counts line is filled by `_writing/build.py`.

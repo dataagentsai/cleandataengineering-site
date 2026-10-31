@@ -278,22 +278,6 @@ def leaders():
     return "leaders", wb.page("For leaders: the one-minute version", desc, f"{SITE}/leaders/", body, CSS + LEAD_CSS)
 
 
-# ---------------------------------------------------------------- sponsor
-def sponsor():
-    body = crumbs("Sponsor the work") + """
-<p class="eyebrow" style="margin-top:22px">About</p>
-<h1>Sponsor the work</h1>
-<p class="lede">Everything here is free, with no ads and no sign-up, and it stays that way. Sponsors make more of it possible: a new specification, a new simulator, or free learning for people starting out or between jobs.</p>
-<ul>
-<li><b>What a sponsorship can fund:</b> a specification, a simulator or course, or free cohorts for learners.</li>
-<li><b>What it can't buy:</b> any say in what a specification says. That is why the specifications name no product.</li>
-<li><b>Thanks:</b> sponsors are named on the page they funded, if they wish.</li>
-</ul>
-<p>Write to <a href="mailto:basant@cleandataengineering.ai?subject=Sponsorship">basant@cleandataengineering.ai</a>.</p>"""
-    desc = "Sponsor Clean Data Engineering: fund open specifications, simulators and free learning. Sponsors are thanked by name and never steer the specifications."
-    return "sponsor", wb.page("Sponsor the work", desc, f"{SITE}/sponsor/", body, CSS)
-
-
 # ---------------------------------------------------------------- papers
 RELEASES = [
     ("AI Assurance Catalog: test obligations for AI applications, by architecture archetype", "0.17.1", "14 Oct 2026", "10.5281/zenodo.23366151", "ai-assurance-catalog"),
@@ -326,7 +310,7 @@ def papers():
 
 
 def main():
-    for fn in (simulators, research, about, assets, leaders, sponsor, papers):
+    for fn in (simulators, research, about, assets, leaders, papers):
         slug, html = fn()
         out = ROOT / slug
         out.mkdir(exist_ok=True)

@@ -68,7 +68,6 @@ SECTIONS = [
     ]),
     ("About", [
         ("About this site", "/about/", []),
-        ("Sponsor the work", "/sponsor/", []),
     ]),
 ]
 
