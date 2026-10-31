@@ -30,6 +30,8 @@ PLANNED = [
     # ---- AI Engineering (autonomous agents)
     ("The model is 10%. The harness is the other 90%.", "ai", "builders", "explainer",
      "The right agent harness architecture: loop, tools, memory, context, guards and evals in one picture."),
+    ("Swap anything, break nothing: software design patterns for agent harnesses", "ai", "builders", "explainer",
+     "Inversion of control, ports and adapters, strategy, chain of responsibility for guards, decorators for retries, and contract tests per port."),
     ("Choosing your agent loop: LangGraph vs OpenAI Agents SDK vs Claude Agent SDK vs plain code", "ai", "builders", "decision",
      "A comparison of orchestration and loop frameworks, with a 'pick this when' table."),
     ("DBOS vs Temporal: durable agents without the drama", "ai", "builders", "decision",
