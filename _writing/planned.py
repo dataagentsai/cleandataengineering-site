@@ -68,6 +68,10 @@ PLANNED = [
     ("Why we wrote our own agent loop", "ai", "builders", "decision", ""),
     ("The horse and the harness", "ai", "leaders", "leader-brief", ""),
 
+    # ---- LLM Engineering
+    ("There is no best model, only the best model for this step", "llm", "builders", "decision",
+     "How to pick models for a vertical agent: test on your own tasks, weigh accuracy against cost and speed, open vs closed, where data may go, and a model per step."),
+
     # ---- Cost
     ("What one conversation costs: under a tenth of a cent", "cost", "leaders", "leader-brief", ""),
 
