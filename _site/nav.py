@@ -56,7 +56,9 @@ SECTIONS = [
             ("CCA-F mind maps", "/certifications/cca-f-mind-maps/"),
             ("Claude Architect, Professional", "/certifications/claude-certified-architect/CCAR-P/CCAR-P_Study_Guide.html"),
         ]),
-        ("Databricks", "/certifications/#databricks", []),
+        ("Databricks", "/certifications/#databricks", [
+            ("Gen AI Engineer free prep", "/certifications/databricks-genai-engineer/"),
+        ]),
         ("Microsoft", "/certifications/#microsoft", [
             ("AI-103 free prep", "/certifications/azure-ai-engineer/"),
         ]),

@@ -37,6 +37,12 @@ SOURCES = [
         "folders": ["."],
         "pages": "https://basantchoudhary.github.io/AzureAIEngineer/",
     },
+    {
+        "slug": "databricks-genai-engineer",
+        "repo": HOME / "DatabricksGenAIEngineer",
+        "folders": ["."],
+        "pages": "https://basantchoudhary.github.io/DatabricksGenAIEngineer/",
+    },
 ]
 
 SKIP_FILES = {"publish_traps.sh", "link_plain.py", "build_plain_mocks.py"}
