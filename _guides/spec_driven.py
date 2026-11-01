@@ -286,7 +286,7 @@ def fig_story():
 # ---------------------------------------------------------------- 6. the flywheel, with evidence
 def fig_flywheel():
     n = 6
-    cx, cy, r = 220, 195, 128
+    cx, cy, r = 262, 200, 150
     b = f'<circle cx="{cx}" cy="{cy}" r="{r}" fill="{WASH["peri"]}" stroke="none"/>'
     for a0, a1 in [(-75, -15), (15, 75), (105, 165), (195, 255)]:
         p0 = (cx + r * math.cos(math.radians(a0)), cy + r * math.sin(math.radians(a0)))
@@ -297,9 +297,9 @@ def fig_flywheel():
     for x, y, s, w in nodes:
         b += f'<rect x="{x - w / 2}" y="{y - 20}" width="{w}" height="40" rx="12" fill="#fff" class="o" style="stroke-width:1.6"/>'
         b += t(x, y + 6, s, 15, bold=True)
-    b += t(cx, cy - 4, "The harness", 21, hand=True) + t(cx, cy + 20, "bundle grows", 21, hand=True)
+    b += t(cx, cy - 4, "The harness", 20, hand=True) + t(cx, cy + 20, "bundle grows", 20, hand=True)
     # bar chart
-    x0, base = 520, 330
+    x0, base = 540, 330
     b += t(700, 46, "Gaps found when the agent was rebuilt", 17, hand=True) + t(700, 66, "from the specs alone", 17, hand=True)
     b += f'<line x1="{x0}" y1="{base}" x2="880" y2="{base}" class="t" style="stroke-width:1.8"/>'
     for k, (run, gaps, fill, note) in enumerate([("Run 3", 28, I.PAL["coral"], ""), ("Run 4", 24, I.PAL["yellow"], "6 repeats"),

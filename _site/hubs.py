@@ -260,6 +260,9 @@ QUESTIONS = [
     ("How do we get our team ready?",
      "Free paths for six roles on every major cloud, from beginner to advanced. Point each person at their role and cloud.",
      [("Find a path", "/paths/"), ("Data engineer to AI engineer", "/writing/data-engineer-to-ai-engineer/"), ("The AI engineer roadmap", "/writing/ai-engineer-roadmap/")]),
+    ("How do we build many agents without starting from zero each time?",
+     "A small centre of excellence writes the specs and builds the shared assets once. Every agent is then built, tested, released and run from them, and each one makes them stronger.",
+     [("Spec-driven development", "/leaders/spec-driven/")]),
 ]
 
 

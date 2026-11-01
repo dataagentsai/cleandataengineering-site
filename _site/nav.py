@@ -100,6 +100,7 @@ SECTIONS = [
     ]),
     ("For leaders", [
         ("The one-minute version", "/leaders/", []),
+        ("Spec-driven development", "/leaders/spec-driven/", []),
         ("Questions leaders ask", "/leaders/#questions", []),
         ("Technical papers", "/papers/", []),
         ("Blog", "/writing/", []),
