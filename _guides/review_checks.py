@@ -125,7 +125,7 @@ def main():
         bind = (f'<div class="bind"><b>On {E(b[0])}</b>{E(b[1].get("do", ""))}'
                 + (f'<br><i>Check it:</i> {E(b[1]["verify"])}' if b[1].get("verify") else "")
                 + (f'<br><i>Trap:</i> {E(b[1]["traps"])}' if b[1].get("traps") else "") + "</div>") if b else ""
-        kind = c.get("binding") and "tech" or c["kind"]
+        kind = "binding" if c.get("binding") else c.get("pack", c["kind"])
         rows = [("Question", E(c["question"])), ("Why it matters", E(c["why"])),
                 ("Applies to", f"{E(names(a.get('kind'), v['kinds']))} · components: {E(names(comps, v['components']))} · patterns: {E(names(a.get('patterns'), v['patterns']))}"),
                 ("Owner", E(rname(c["owner"])) + (f" · also {E(', '.join(rname(r) for r in c.get('also') or []))}" if c.get("also") else "")),
@@ -149,36 +149,43 @@ def main():
                 f'<div class="rev"><button data-m="keep">Keep</button><button data-m="change">Change</button><button data-m="drop">Drop</button>'
                 f'<textarea placeholder="Your note: what to change, or why to drop"></textarea></div></div></details>')
 
-    def section(kind, title, lede):
-        cs = [c for c in cat["checks"] if c["kind"] == kind]
-        out = f'<h2 class="grp" id="{kind}">{title} ({len(cs)})</h2><p>{lede}</p>'
-        for con in v["concerns"][kind]:
+    PACK_TEXT = {
+        "ba": ("Business analysis", "What the business needs, in terms that can be tested against data: requirements, definitions and metrics, data requirements, scope, acceptance."),
+        "pm": ("Project management", "How the work runs: plan and dependencies, risks, decisions, budget, stakeholders, communication, governance, go-live and benefits."),
+        "tech": ("Technical", "Whether it will work: the things that make numbers wrong, loads fail or go-lives slip, plus the effort estimate and technical handover."),
+    }
+
+    def section(pack):
+        cs = [c for c in cat["checks"] if c.get("pack") == pack]
+        title, lede = PACK_TEXT.get(pack, (pack, ""))
+        out = f'<h2 class="grp" id="{pack}">{title} ({len(cs)})</h2><p>{lede}</p>'
+        order = list(v["concerns"]["delivery"]) + list(v["concerns"]["technical"]) if pack != "tech" else list(v["concerns"]["technical"]) + list(v["concerns"]["delivery"])
+        for con in order:
             group = [c for c in cs if c["concern"] == con]
             if group:
-                out += f'<h3 class="con" id="c-{con}">{E(concerns[con])} ({len(group)})</h3>' + "".join(card(c) for c in group)
+                out += f'<h3 class="con" id="c-{pack}-{con}">{E(concerns[con])} ({len(group)})</h3>' + "".join(card(c) for c in group)
         return out
 
     tech_only = [c for b in binds.values() for c in b["checks"]]
-    jump = "".join(f'<div><a href="#c-{con}">{E(concerns[con])}</a> <span>{sum(1 for c in cat["checks"] if c["concern"] == con)}</span></div>'
-                   for kind in ("technical", "delivery") for con in v["concerns"][kind])
+    packs = [p for p in v.get("packs", {}) if any(c.get("pack") == p for c in cat["checks"])]
+    jump = "".join(f'<div><a href="#{p}"><b>{PACK_TEXT[p][0]}</b></a> <span>{sum(1 for c in cat["checks"] if c.get("pack") == p)}</span></div>' for p in packs)
     sel = lambda name, label, opts: (f'<select name="{name}" aria-label="{label}"><option value="">{label}: all</option>'
                                      + "".join(f'<option value="{k}">{E(t)}</option>' for k, t in opts) + "</select>")
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/technical-anchor/">The technical anchor</a> › <a href="/learn/technical-anchor/project-review/">Project review</a> › The checks</p>
 <p class="eyebrow" style="margin-top:22px">Project review · the catalog</p>
 <h1>The checks: all {len(cat['checks']) + len(tech_only)}, by category</h1>
-<p class="lede">These are the questions the <a href="/learn/technical-anchor/project-review/">project review skill</a> asks of a data project's documents: {sum(1 for c in cat['checks'] if c['kind'] == 'technical')} technical, {sum(1 for c in cat['checks'] if c['kind'] == 'delivery')} about delivery, and {len(tech_only)} that only apply on Databricks. Open a check to see why it matters, when it applies, what good evidence looks like, by which stage it is due, and the cheapest test that could prove a team wrong.</p>
+<p class="lede">These are the questions the <a href="/learn/technical-anchor/project-review/">project review skills</a> ask of a data project's documents, in three packs, one per discipline: {", ".join(f"{sum(1 for c in cat['checks'] if c.get('pack') == p)} {PACK_TEXT[p][0].lower()}" for p in packs)}, plus {len(tech_only)} that only apply on Databricks. Each pack is also a skill on its own, and the full review checks the seams between them. Open a check to see why it matters, when it applies, what good evidence looks like, by which stage it is due, and the cheapest test that could prove a team wrong.</p>
 <p><b>To review them:</b> mark each check <b>Keep</b>, <b>Change</b> or <b>Drop</b> and add a note. Your marks stay in this browser. When you're done, <b>Copy my review</b> puts them on your clipboard as plain text to send back. The checks come from <a href="{REPO}">the repository</a>, so this page always matches the skill.</p>
-<div class="jump">{jump}<div><a href="#tech">Databricks only</a> <span>{len(tech_only)}</span></div></div>
+<div class="jump">{jump}<div><a href="#databricks"><b>Databricks only</b></a> <span>{len(tech_only)}</span></div></div>
 <div class="filters"><input id="f-q" type="search" placeholder="Search checks: duplicates, estimate, history…" aria-label="Search checks">
-{sel("kind", "Type", [("technical", "Technical"), ("delivery", "Delivery"), ("tech", "Databricks only")])}
+{sel("kind", "Pack", [(p, PACK_TEXT[p][0]) for p in packs] + [("binding", "Databricks only")])}
 {sel("owner", "Owner", [(k, r["name"]) for k, r in roles.items()])}
 {sel("severity", "Severity", [("high", "High"), ("medium", "Medium"), ("low", "Low")])}
 {sel("component", "Component", [(k, k) for k in v["components"]])}
 {sel("mark", "My review", [("none", "not reviewed yet"), ("keep", "keep"), ("change", "change"), ("drop", "drop")])}
 <span class="count" id="f-count"></span></div>
-{section("technical", "Technical checks", "What has to be true of the data and the platform: the things that make numbers wrong, loads fail or go-lives slip.")}
-{section("delivery", "Delivery checks", "Why projects fail for reasons that have nothing to do with code: estimates, requirements, scope, planning, stakeholders, communication and handover. Each one says how the gap shows up in documents.")}
-<h2 class="grp" id="tech">Databricks only ({len(tech_only)})</h2><p>Checks that only make sense on Databricks. Every common check above that works differently on Databricks also has an "On Databricks" box. {E(binds.get('databricks', {}).get('version_note') or '')}</p>
+{"".join(section(p) for p in packs)}
+<h2 class="grp" id="databricks">Databricks only ({len(tech_only)})</h2><p>Checks that only make sense on Databricks. Every common check above that works differently on Databricks also has an "On Databricks" box. {E(binds.get('databricks', {}).get('version_note') or '')}</p>
 {"".join(card(c) for c in tech_only)}
 <div class="revbar"><span id="rv-count"></span><button id="rv-copy">Copy my review</button><button class="ghost" id="rv-open">Open or close all shown</button><button class="ghost" id="rv-clear">Clear</button></div>
 {JS}"""

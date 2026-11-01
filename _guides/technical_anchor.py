@@ -515,8 +515,9 @@ def discovery_page():
 REPO = "https://github.com/dataagentsai/data-project-review"
 
 REVIEW_CONCERNS = [
-    ("Technical (81 checks)", "duplicates and reruns, first load and history load, late and corrected data, deletes, history over time, schema change, data quality, reconciliation, performance, cost, personal data, environments and access, release and git, orchestration and recovery, operations, testing, design, serving and consumers"),
-    ("Delivery (48 checks)", "estimation, requirements, in scope and out of scope, project management, stakeholders, communication, handover"),
+    ("Business analysis (43 checks)", "the current process and the number the business trusts today, data requirements (sources, grain, history, freshness, late data), metric definitions, business rules, data ownership, consumers, policy needs, scope, acceptance and user testing"),
+    ("Project management (64 checks)", "plan and dependencies, budget and spend, resourcing, vendors and source teams, governance and stage gates, risks and decisions, stakeholders, communication, history load and cut-over on the plan, go-live readiness, benefits"),
+    ("Technical (91 checks)", "duplicates and reruns, first load and history load, late and corrected data, deletes, history over time, schema change, data quality, reconciliation, performance, cost, personal data, environments, release and git, orchestration, operations, testing, design, serving, the effort estimate"),
     ("Databricks (12 checks + 57 how-tos)", "how each common check is done on Databricks, its traps, and Databricks-only checks such as Unity Catalog ownership, compute policies, Auto Loader schema evolution and safe job repairs"),
 ]
 
@@ -566,7 +567,7 @@ def review_page():
 
 <section id="why"><p class="q">Why would a team need this?</p><h2>Why it exists</h2>
 <p>Data projects rarely fail because a developer couldn't write the code. They fail because something nobody owned slipped through: a file that arrives twice, a history load nobody estimated, a definition of revenue nobody signed, a plan that assumed source access in week one when approval takes six weeks. These failures are the same on every project, even though every project is different. So they can be written down once as a checklist, and a reviewer can look for them in any project's documents.</p>
-<p>This skill is that reviewer. It is the <a href="/learn/technical-anchor/">technical anchor's</a> habit of looking at the whole picture, and the <a href="/learn/technical-anchor/discovery/">fail-fast thinking of discovery</a>, packaged so any team can run it on their own documents at any stage.</p></section>
+<p>This skill is that reviewer. It comes as four skills: one each for business analysis, project management and technical work, which a BA, PM or engineer can run alone, and one full review that runs all three and checks the seams between them, where most projects fail. It is the <a href="/learn/technical-anchor/">technical anchor's</a> habit of looking at the whole picture, and the <a href="/learn/technical-anchor/discovery/">fail-fast thinking of discovery</a>, packaged so any team can run it on their own documents at any stage.</p></section>
 
 <section id="how"><p class="q">How does it work without knowing my project?</p><h2>How it works</h2>
 <figure class="diagram">{rsvg}<figcaption>{E(rcap)}</figcaption></figure>
@@ -580,7 +581,7 @@ def review_page():
 <section id="checks"><p class="q">What does it look for?</p><h2>What it checks</h2>
 <div class="tw"><table class="t"><tr><th>Group</th><th>Covers</th></tr>{rows(REVIEW_CONCERNS)}</table></div>
 <p><a class="btn" href="/learn/technical-anchor/project-review/checks/">See every check, by category →</a></p>
-<p>Every check has an owner role (technical anchor, architect, business analyst, project manager, test lead, release, operations, security and others), so the report shows each person their part. Ten templates help fill what is missing: discovery document, estimate, scope, risk log, decision record, test strategy, release and cut-over, stakeholder map, status report, and how to run a pre-mortem.</p></section>
+<p>Every check lives in the pack of the discipline that maintains it, and has an owner role (technical anchor, architect, business analyst, project manager, developer, test lead, release, operations, security and others), so the report shows each person their part. Ten templates help fill what is missing: discovery document, estimate, scope, risk log, decision record, test strategy, release and cut-over, stakeholder map, status report, and how to run a pre-mortem.</p></section>
 
 <section id="out"><p class="q">What do I get back?</p><h2>What you get back</h2>
 <p>One report, with the most important part first: a <b>fail-fast plan</b> (each risk with the cheapest test now and the result that would change the plan), a <b>pre-mortem</b> (the most likely ways this project fails, from the evidence), the places where your <b>documents disagree</b>, the <b>15 most serious gaps</b>, then everything else by concern and by role, and what you are doing well. Three rows from a real test run:</p>
@@ -589,8 +590,8 @@ def review_page():
 
 <section id="use"><p class="q">How do I run it?</p><h2>How to use it</h2>
 <ul>
-<li><b>Claude Code:</b> clone the repository into <code>~/.claude/skills/data-project-review/</code> (or your project's <code>.claude/skills/</code>), then ask: <i>"Review our project documents in ./docs with the data-project-review skill."</i></li>
-<li><b>claude.ai:</b> upload the folder as a skill, then attach your documents and ask the same.</li>
+<li><b>Claude Code:</b> install the plugin with <code>/plugin marketplace add dataagentsai/data-project-review</code> then <code>/plugin install data-project-review@data-project-review</code>, and ask: <i>"Review our project documents in ./docs with data-project-review"</i>, or <i>data-review-ba</i>, <i>-pm</i> or <i>-tech</i> for one discipline.</li>
+<li><b>claude.ai:</b> upload one of the skill zips built by <code>scripts/package.py</code>, then attach your documents and ask the same.</li>
 <li><b>Your documents</b> can be Markdown, Word or PDF. If you don't write a short project profile, Claude drafts one from your documents and asks only what they don't say, usually the stage you are in.</li>
 </ul>
 <p>Review documents, not people: the report says "not mentioned" when a document is silent, which is a question to ask, not a verdict.</p></section>
@@ -604,7 +605,7 @@ def review_page():
 <section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
 <p><b>The thinking behind it:</b> <a href="/learn/technical-anchor/">the technical anchor</a> and <a href="/learn/technical-anchor/discovery/">discovery, step by step</a>. <b>The data problems it checks for, recorded on real Spark and Delta:</b> <a href="/learn/data-platform-sim/problems/">the Problem Lab</a>.</p></section>"""
     ld = [{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "data-project-review",
-           "description": "An open-source Claude skill that reviews a data engineering project's documents and says what is missing at its lifecycle stage, technical and delivery, with a fail-fast plan.",
+           "description": "Open-source Claude skills that review a data engineering project's documents and says what is missing at its lifecycle stage, technical and delivery, with a fail-fast plan.",
            "codeRepository": REPO, "license": "https://www.apache.org/licenses/LICENSE-2.0", "url": url,
            "author": {"@type": "Person", "name": "Basant Choudhary", "url": f"{SITE}/#about"}},
           {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [

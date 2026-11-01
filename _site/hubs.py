@@ -205,7 +205,7 @@ def assets():
         ]) + group(
         "data", "For data platforms", "Start-from-here code for data engineering.", [
             card("Data project review", "/learn/technical-anchor/project-review/", "a Claude skill",
-                 "Give Claude your project documents: it says what is missing at your stage, technical and delivery, where your documents disagree, and the cheapest test to run this week. 129 checks, any technology.",
+                 "Give Claude your project documents: it says what is missing at your stage, technical and delivery, where your documents disagree, and the cheapest test to run this week. 210 checks across business analysis, project management and technical work, any technology.",
                  [("How it works", "/learn/technical-anchor/project-review/"), ("GitHub", "https://github.com/dataagentsai/data-project-review")], rose),
             card("Ecom simple data platform", "https://github.com/basantchoudhary/ecomsimpledataplatformusingdatabricks", "a medallion on Databricks",
                  "A small shop's data platform, bronze to gold on Databricks, used as the first project in the data engineering training.",
