@@ -382,8 +382,27 @@ def add_jsonld(rels):
     return n
 
 
+# GoatCounter (chosen 1 Nov 2026): no cookies, no consent banner. Dashboard at
+# https://cleandataengineering.goatcounter.com. Added here because this script runs last on every publish.
+ANALYTICS = ('<script data-goatcounter="https://cleandataengineering.goatcounter.com/count" '
+             'async src="//gc.zgo.at/count.js"></script>')
+
+
+def add_analytics(rels):
+    n = 0
+    for rel in rels:
+        p = ROOT / rel
+        s = p.read_text()
+        if "gc.zgo.at/count.js" in s or "</head>" not in s or 'http-equiv="refresh"' in s:
+            continue
+        p.write_text(s.replace("</head>", ANALYTICS + "\n</head>", 1))
+        n += 1
+    return n
+
+
 def main():
     rels = list(pages())
+    print(f"analytics added to {add_analytics(rels)} pages")
     print(f"filled description/canonical on {fill_gaps(rels)} pages")
     print(f"search titles/descriptions on {apply_titles(rels)} pages")
     print(f"social card tags on {add_social(rels)} pages")
