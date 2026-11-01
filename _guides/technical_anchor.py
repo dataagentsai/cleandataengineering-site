@@ -579,6 +579,7 @@ def review_page():
 
 <section id="checks"><p class="q">What does it look for?</p><h2>What it checks</h2>
 <div class="tw"><table class="t"><tr><th>Group</th><th>Covers</th></tr>{rows(REVIEW_CONCERNS)}</table></div>
+<p><a class="btn" href="/learn/technical-anchor/project-review/checks/">See every check, by category →</a></p>
 <p>Every check has an owner role (technical anchor, architect, business analyst, project manager, test lead, release, operations, security and others), so the report shows each person their part. Ten templates help fill what is missing: discovery document, estimate, scope, risk log, decision record, test strategy, release and cut-over, stakeholder map, status report, and how to run a pre-mortem.</p></section>
 
 <section id="out"><p class="q">What do I get back?</p><h2>What you get back</h2>

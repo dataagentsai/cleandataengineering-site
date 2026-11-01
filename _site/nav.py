@@ -40,6 +40,7 @@ SECTIONS = [
             ("The technical anchor", "/learn/technical-anchor/"),
             ("Technical anchor: discovery", "/learn/technical-anchor/discovery/"),
             ("Technical anchor: project review", "/learn/technical-anchor/project-review/"),
+            ("Project review: the checks", "/learn/technical-anchor/project-review/checks/"),
             ("Agent guardrails", "/learn/agent-guardrails/"),
         ]),
         ("Simulators", "/simulators/", [
