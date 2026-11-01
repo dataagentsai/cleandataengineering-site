@@ -15,7 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SITE = "https://cleandataengineering.ai"
-SKIP = ("preview", "_", ".")
+SKIP = ("preview", "_", ".", "google")  # google*.html = Search Console verification file, served as is
 
 sys.path.insert(0, str(ROOT / "_paths"))
 from data import DISCIPLINES, LEVELS, PLATFORMS  # noqa: E402
