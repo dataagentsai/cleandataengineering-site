@@ -17,10 +17,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
+import sys
+sys.path.insert(0, str(ROOT / "_paths"))
+from data import DISCIPLINES, PLATFORMS  # noqa: E402
+
+# One entry per role path (1 Nov 2026, the owner asked to show the roles in Learn), each opening to its platforms.
+ROLES = [(d["name"], f"/paths/{d['id']}/", [(PLATFORMS[p], f"/paths/{d['id']}/{p}/") for p in d["platforms"]])
+         for d in DISCIPLINES]
+
 # (group, [(name, href, [(child, href), ...]), ...])
 SECTIONS = [
     ("Learn", [
         ("Find your path", "/paths/", []),
+        *ROLES,
         ("Key concepts", "/concepts/", []),
         ("Courses", "/learn/", [
             ("The AI Universe", "/learn/ai-universe/"),

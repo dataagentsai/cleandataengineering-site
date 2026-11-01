@@ -5,7 +5,7 @@ posting on someone's behalf.
 
 ## Before posting
 
-- [ ] Fix the AgentTwin README status line: it still says 0.13.0, but 0.14.0 was released 29 Oct.
+- [x] Fix the AgentTwin README status line (done 1 Nov: 0.14.0, 433 tests).
 - [ ] Check that a fresh clone runs: `uv run --extra dev pytest` and `uv run python -m agenttwin run --help`.
 - [ ] Analytics live on the site (GoatCounter), so you can see what the post brings.
 - [ ] Pick a time: Tuesday to Thursday, 8–10 am US Eastern (6:30–8:30 pm India time).
@@ -56,7 +56,7 @@ posting on someone's behalf.
 > domain is only partly covered because the format can't describe a customer acting on their
 > own phone.
 >
-> It's Apache 2.0, plain Python, and the test suite runs in about 10 seconds. I'd love to hear
+> It's Apache 2.0, plain Python, and its own test suite (433 tests) runs in about a minute. I'd love to hear
 > how you test agents today, and where this would break for you.
 
 ## Answers to have ready

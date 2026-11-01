@@ -191,7 +191,7 @@ def assets():
                  "A customer-support agent for a clothing shop: one module per harness layer, tested against AgentTwin worlds, passing all four gates. Copy the shape for your own agent.",
                  [("GitHub", "https://github.com/dataagentsai/reference-agent"), ("Project page", "/projects/reference-agent/"), ("How it works", "/learn/agent-harness/")], peri),
             card("AgentTwin", "https://github.com/dataagentsai/agenttwin", "a Python library",
-                 "Test any MCP agent in a simulated world: customers, systems, faults and time, judged by what changed. 397 tests; checked against 2,472 τ²-bench runs.",
+                 "Test any MCP agent in a simulated world: customers, systems, faults and time, judged by what changed. 433 tests; checked against 2,472 τ²-bench runs.",
                  [("GitHub", "https://github.com/dataagentsai/agenttwin"), ("Explained", "/learn/agenttwin/"), ("Project page", "/projects/agenttwin/")], peri),
             card("Eval Harness Framework", "https://github.com/dataagentsai/eval-harness-framework", "a Python framework",
                  "Rebuild each conversation from the agent's own traces and check it against rules written in plain YAML, mixing eval SDKs behind one interface.",

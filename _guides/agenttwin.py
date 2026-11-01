@@ -462,7 +462,7 @@ SIMPLE_VS_BIG = [
 ]
 
 BUILT = [
-    ("World format (AWD), schema and loader that refuses bad worlds", "ok", "v0.13.0, 13 Oct 2026; 397 passing tests"),
+    ("World format (AWD), schema and loader that refuses bad worlds", "ok", "v0.14.0, 29 Oct 2026; 433 passing tests"),
     ("Stand-ins served as an MCP tool server, enforcing the spec's rules", "ok", "the core of AgentTwin"),
     ("Scripted, state-machine and model-played customers", "ok", "model-played via LangWatch Scenario, an optional extra"),
     ("Approver and human desk, acting between turns", "ok", "grant, refuse, never answer, grant twice"),
