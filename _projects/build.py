@@ -37,6 +37,12 @@ FDE_READY = {"claims-fnol-azure", "reference-agent", "eval-harness-framework", "
 EMAIL = "basant@cleandataengineering.ai"
 
 CSS = """<style>
+  .startrow { display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin:18px 0 6px; padding:10px 14px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); font-size:14.5px; }
+  .startrow b { font-family:var(--hand); font-weight:400; font-size:20px; margin-right:4px; }
+  .startrow button { font:inherit; font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:3px 12px; background:#fff; color:var(--ink); cursor:pointer; }
+  .startrow button.on { background:var(--ink); color:#fff; }
+  .startrow .startmsg { font-size:13.5px; color:var(--muted); }
+  .pill.lv-crawl { background:var(--mint-wash); } .pill.lv-walk { background:var(--peri-wash); } .pill.lv-run { background:var(--rose-wash); }
   .cards { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; margin-top:18px; }
   .card { background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:16px 20px; font-family:var(--sans); display:flex; flex-direction:column; text-decoration:none; color:inherit; transition:transform .15s; }
   .card:hover { transform:rotate(-.4deg) translateY(-2px); }
@@ -210,6 +216,23 @@ OWN_SECTION = {
 }
 
 
+# A project's level = the lowest path level (Crawl, Walk, Run) that lists it (1 Nov 2026).
+# Projects on no path get a level here by hand.
+LEVEL_BY_HAND = {"agent-harness-course": "crawl", "aac": "walk", "ahc": "walk"}
+LEVEL_NAMES = {"crawl": "Beginner-friendly", "walk": "Intermediate", "run": "Advanced"}
+
+
+def project_level(pid):
+    import sys
+    sys.path.insert(0, str(ROOT / "_paths"))
+    from data import DISCIPLINES
+    found = {k for d in DISCIPLINES for k in ("crawl", "walk", "run") if pid in d["levels"][k]["projects"]}
+    for k in ("crawl", "walk", "run"):
+        if k in found:
+            return k
+    return LEVEL_BY_HAND.get(pid, "walk")
+
+
 def list_page():
     def chips(name, opts):
         return f'<div class="chips" data-f="{name}"><button class="on" data-v="">All</button>' + "".join(
@@ -222,13 +245,15 @@ def list_page():
         done, total = progress(p)
         bar = f'<div class="bar"><i style="width:{100 * done / total if total else 0:.0f}%"></i></div>' if total else ""
         benefit = p["benefits"][0][1] if p.get("benefits") else ""
-        cards += (f'<a class="card" href="/projects/{p["id"]}/" data-subject="{p["subject"]}" data-status="{p["status"]}" '
+        lv = project_level(p["id"])
+        cards += (f'<a class="card" href="/projects/{p["id"]}/" data-level="{lv}" data-subject="{p["subject"]}" data-status="{p["status"]}" '
                   f'data-group="{p["group"]}" data-practice="{"fde" if p["id"] in FDE_READY else ""}">'
-                  f'<h3>{E(p["title"])}</h3><p>{E(p["one_liner"])}</p><p><em>{E(benefit)}</em></p>{bar}<div class="pills">{pills(p)}</div></a>')
+                  f'<h3>{E(p["title"])}</h3><p>{E(p["one_liner"])}</p><p><em>{E(benefit)}</em></p>{bar}<div class="pills"><span class="pill lv-{lv}">{LEVEL_NAMES[lv]}</span>{pills(p)}</div></a>')
     body = f"""<div class="hero hub-hero"><div><h1>Projects</h1>
 <p class="thesis">Real things to build, each with a page that says why it matters, what it looks like, what it's built with on each cloud, and exactly what needs doing next. Some are under way and you can join; some haven't started and need a lead.</p>
 <p style="font-family:var(--sans);font-size:14px">To join: open a project and use <strong>Join this project</strong>, or pick a good first task from its repository.</p>
 <p style="font-family:var(--sans);font-size:14px">More projects live in their own sections: <a href="/ai-for-cause/">AI for a cause</a> and <a href="/deep-tech/">Deep tech</a>.</p></div><img src="/assets/illustrations/projects.svg" alt="" width="420" height="300"></div>
+<div class="startrow" id="startrow"><b>Where are you starting from?</b> <button data-v="">Any</button><button data-v="crawl">A student or fresher</button><button data-v="walk">Working, but new to this role</button><button data-v="run">Experienced in this role</button><span class="startmsg" id="startmsg"></span></div>
 {chips("status", {k: v.split(" · ")[0] for k, v in STATUS.items()})}{chips("subject", SUBJECTS)}{chips("group", GROUPS)}{chips("practice", {"fde": "Forward-deployed ready"})}
 <div class="cards">{cards}</div>
 <script>
@@ -236,6 +261,14 @@ def list_page():
 var b=e.target.closest('button');if(!b)return;c.querySelectorAll('button').forEach(function(x){{x.classList.toggle('on',x===b)}});
 f[c.dataset.f]=b.dataset.v;document.querySelectorAll('.card').forEach(function(el){{
 var ok=Object.keys(f).every(function(k){{return!f[k]||el.dataset[k]===f[k]}});el.style.display=ok?'':'none'}})}})}})}})();
+(function(){{var row=document.getElementById('startrow'),grid=document.querySelector('.cards'),msg=document.getElementById('startmsg');
+var cards=Array.prototype.slice.call(grid.children),rank={{crawl:0,walk:1,run:2}},from={{fresher:'crawl',switching:'walk',experienced:'run'}};
+function apply(v){{row.querySelectorAll('button').forEach(function(b){{b.classList.toggle('on',b.dataset.v===v)}});
+var c=cards.slice();if(v)c.sort(function(a,b){{return Math.abs(rank[a.dataset.level]-rank[v])-Math.abs(rank[b.dataset.level]-rank[v])}});
+c.forEach(function(el){{grid.appendChild(el)}});msg.textContent=v?'Projects at your level come first; nothing is hidden.':'';}}
+row.addEventListener('click',function(e){{var b=e.target.closest('button');if(!b)return;apply(b.dataset.v);
+try{{var s=JSON.parse(localStorage.getItem('cde-path')||'{{}}');var k=Object.keys(from).filter(function(x){{return from[x]===b.dataset.v}})[0];if(k){{s.e=k}}else{{delete s.e}};localStorage.setItem('cde-path',JSON.stringify(s))}}catch(x){{}}}});
+var q=new URLSearchParams(location.search).get('start'),v='';if(from[q])v=from[q];else{{try{{var s=JSON.parse(localStorage.getItem('cde-path')||'null');if(s&&from[s.e])v=from[s.e]}}catch(x){{}}}}apply(v);}})();
 </script>"""
     return wb.page("Projects", "Real projects to build or join: purpose, benefits, architecture, tech stack per cloud, and what needs doing.",
                    f"{wb.SITE}/projects/", body, CSS)
