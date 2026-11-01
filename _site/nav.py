@@ -38,6 +38,7 @@ SECTIONS = [
             ("Data platform architecture", "/learn/data-platform-architecture/"),
             ("Medallion architecture", "/learn/medallion-architecture/"),
             ("The technical anchor", "/learn/technical-anchor/"),
+            ("Technical anchor: discovery", "/learn/technical-anchor/discovery/"),
             ("Agent guardrails", "/learn/agent-guardrails/"),
         ]),
         ("Simulators", "/simulators/", [
