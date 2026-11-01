@@ -181,7 +181,7 @@ def project_page(p):
     started = f" · started {E(p['started'])}" if p.get("started") else ""
     body = f"""<article class="proj">
 <div class="hero" style="padding-top:48px">
-  <p class="post-meta"><a href="/projects/">Projects</a> · {E(GROUPS.get(p['group'], ''))}{started}</p>
+  <p class="post-meta"><a href="{OWN_SECTION.get(p['id'], ('', '/projects/'))[1]}">{OWN_SECTION.get(p['id'], ('Projects',))[0]}</a> · {E(GROUPS.get(p['group'], ''))}{started}</p>
   <h1>{E(p['title'])}</h1>
   <p class="thesis">{E(p['one_liner'])}</p>
   <div class="pills">{pills(p)}</div>
@@ -201,6 +201,15 @@ def project_page(p):
     return wb.page(p["title"], p["one_liner"], f"{wb.SITE}/projects/{p['id']}/", body, wb.kit_css() + CSS)
 
 
+# Projects shown in their own left-panel section instead of the Projects list (1 Nov 2026).
+# Their pages stay at /projects/<id>/; the breadcrumb points to the section.
+OWN_SECTION = {
+    "babu-companion": ("AI for a cause", "/ai-for-cause/"),
+    "hinglish-pretraining-data": ("Deep tech", "/deep-tech/"),
+    "robotics-data-benchmark": ("Deep tech", "/deep-tech/"),
+}
+
+
 def list_page():
     def chips(name, opts):
         return f'<div class="chips" data-f="{name}"><button class="on" data-v="">All</button>' + "".join(
@@ -208,6 +217,8 @@ def list_page():
     order = {"active": 0, "starting": 1, "not-started": 2}
     cards = ""
     for p in sorted(PROJECTS, key=lambda p: (order[p["status"]], p["group"], p["title"])):
+        if p["id"] in OWN_SECTION:
+            continue
         done, total = progress(p)
         bar = f'<div class="bar"><i style="width:{100 * done / total if total else 0:.0f}%"></i></div>' if total else ""
         benefit = p["benefits"][0][1] if p.get("benefits") else ""
@@ -216,7 +227,8 @@ def list_page():
                   f'<h3>{E(p["title"])}</h3><p>{E(p["one_liner"])}</p><p><em>{E(benefit)}</em></p>{bar}<div class="pills">{pills(p)}</div></a>')
     body = f"""<div class="hero hub-hero"><div><h1>Projects</h1>
 <p class="thesis">Real things to build, each with a page that says why it matters, what it looks like, what it's built with on each cloud, and exactly what needs doing next. Some are under way and you can join; some haven't started and need a lead.</p>
-<p style="font-family:var(--sans);font-size:14px">To join: open a project and use <strong>Join this project</strong>, or pick a good first task from its repository.</p></div><img src="/assets/illustrations/projects.svg" alt="" width="420" height="300"></div>
+<p style="font-family:var(--sans);font-size:14px">To join: open a project and use <strong>Join this project</strong>, or pick a good first task from its repository.</p>
+<p style="font-family:var(--sans);font-size:14px">More projects live in their own sections: <a href="/ai-for-cause/">AI for a cause</a> and <a href="/deep-tech/">Deep tech</a>.</p></div><img src="/assets/illustrations/projects.svg" alt="" width="420" height="300"></div>
 {chips("status", {k: v.split(" · ")[0] for k, v in STATUS.items()})}{chips("subject", SUBJECTS)}{chips("group", GROUPS)}{chips("practice", {"fde": "Forward-deployed ready"})}
 <div class="cards">{cards}</div>
 <script>
