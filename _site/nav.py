@@ -39,6 +39,7 @@ SECTIONS = [
             ("Medallion architecture", "/learn/medallion-architecture/"),
             ("The technical anchor", "/learn/technical-anchor/"),
             ("Technical anchor: discovery", "/learn/technical-anchor/discovery/"),
+            ("Technical anchor: project review", "/learn/technical-anchor/project-review/"),
             ("Agent guardrails", "/learn/agent-guardrails/"),
         ]),
         ("Simulators", "/simulators/", [
@@ -92,6 +93,7 @@ SECTIONS = [
             ("AgentTwin library", "https://github.com/dataagentsai/agenttwin"),
             ("Eval Harness Framework", "https://github.com/dataagentsai/eval-harness-framework"),
             ("Claims assistant on Azure", "https://github.com/dataagentsai/claims-fnol-azure"),
+            ("Data project review skill", "/learn/technical-anchor/project-review/"),
         ]),
         ("Write or teach", "/about/#join", []),
     ]),

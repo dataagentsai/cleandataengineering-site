@@ -496,7 +496,7 @@ def discovery_page():
 <ol class="steps">{"".join(f"<li><b>{E(a)}.</b> {E(b)}</li>" for a, b in DISC_PITFALLS)}</ol></section>
 
 <section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
-<p><b>The whole lifecycle:</b> <a href="/learn/technical-anchor/#lifecycle">all ten stages and what the anchor does in each</a>. <b>The thinking habit underneath:</b> <a href="/writing/fail-fast-own-the-result/">fail fast, own the result</a>.</p></section>"""
+<p><b>Check your own project:</b> <a href="/learn/technical-anchor/project-review/">the project review skill</a> runs these checks on your documents. <b>The whole lifecycle:</b> <a href="/learn/technical-anchor/#lifecycle">all ten stages and what the anchor does in each</a>. <b>The thinking habit underneath:</b> <a href="/writing/fail-fast-own-the-result/">fail fast, own the result</a>.</p></section>"""
     ld = [{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Discovery: fail fast for the whole data project",
            "description": "How to run the discovery stage of a data engineering project as the technical anchor: the discovery document section by section, who leads each part, the beliefs to test, reviews, sign-off and common pitfalls.",
            "url": url, "inLanguage": "en", "isAccessibleForFree": True, "dateModified": "2026-11-01",
@@ -509,6 +509,111 @@ def discovery_page():
     head = CSS + "".join(f'<script type="application/ld+json">{json.dumps(x, ensure_ascii=False)}</script>' for x in ld)
     desc = "The discovery stage of a data engineering project: the discovery document section by section, what the technical anchor, project manager and business analyst each own, the beliefs to test, reviews, sign-off and common pitfalls."
     return wb.page("Discovery: fail fast for the whole data project", desc, url, body, head)
+
+
+# ---------------------------------------------------------------- the project review skill (added 2 Nov 2026)
+REPO = "https://github.com/dataagentsai/data-project-review"
+
+REVIEW_CONCERNS = [
+    ("Technical (81 checks)", "duplicates and reruns, first load and history load, late and corrected data, deletes, history over time, schema change, data quality, reconciliation, performance, cost, personal data, environments and access, release and git, orchestration and recovery, operations, testing, design, serving and consumers"),
+    ("Delivery (48 checks)", "estimation, requirements, in scope and out of scope, project management, stakeholders, communication, handover"),
+    ("Databricks (12 checks + 57 how-tos)", "how each common check is done on Databricks, its traps, and Databricks-only checks such as Unity Catalog ownership, compute policies, Auto Loader schema evolution and safe job repairs"),
+]
+
+REVIEW_RESULTS = [
+    ("Planted gaps found", "27 of 27 (19 clearly marked missing or contradicting, 8 marked partly covered or not mentioned)"),
+    ("Gaps hidden by leaving them out", "19 of 19"),
+    ("Gaps only visible when two documents disagree", "4 of 4"),
+    ("Vague wording", "2 of 2"),
+    ("Never mentioned anywhere", "2 of 2"),
+    ("Good work wrongly flagged as a gap", "0 of 5"),
+]
+
+REVIEW_SAMPLE = [
+    ("Revenue on the dashboard won't match the board figure", "Compute last week's revenue both ways and put both next to the finance pack", "Off by more than finance's tolerance: fix the gold model before sprint 4"),
+    ("A resent file doubles a day's online sales", "Drop the same file twice in the development environment and compare totals", "Totals change: replace by day instead of appending"),
+    ("Three years of history has no load plan", "Time one month of history over the real connection", "Scaled up, it doesn't fit the source owner's window: re-scope now"),
+]
+
+
+def d_review():
+    b = box(20, 40, 250, 80, "Your documents", "requirements, architecture,\nestimate, plan, tests…", "white")
+    b += box(20, 150, 250, 80, "Project profile", "kind of work, components,\ntechnology, stage", "peri")
+    b += arrow(272, 80, 368, 135) + arrow(272, 190, 368, 150)
+    b += box(370, 70, 300, 150, "The review", "checks picked for this stage;\nevidence quoted from your files;\ndocuments compared with each other", "butter")
+    b += box(370, 260, 145, 70, "Common checks", "no product names", "mint") + box(525, 260, 145, 70, "Bindings", "one per technology", "rose")
+    b += arrow(442, 258, 470, 222) + arrow(597, 258, 570, 222)
+    b += arrow(672, 145, 760, 145)
+    b += box(762, 40, 340, 80, "Fail-fast plan", "cheapest test now, kill line, owner", "gold")
+    b += box(762, 140, 340, 60, "Pre-mortem and disagreements", "", "white")
+    b += box(762, 220, 340, 60, "Top 15 gaps, then the rest by role", "", "white")
+    return svg(1120, 350, b, "Your documents and a short project profile go into the review. The review picks the checks for your stage from the common checks and your technology's binding, quotes evidence from your files and compares the documents with each other. Out come a fail-fast plan, a pre-mortem, the disagreements between documents, and the gaps by role."), \
+        "The checklist is picked by a script, so the same project always gets the same questions. Claude does the reading, quoting and comparing."
+
+
+def review_page():
+    url = f"{SITE}/learn/technical-anchor/project-review/"
+    rsvg, rcap = d_review()
+    rows = lambda data: "".join("<tr>" + "".join(f"<td>{'<b>' + E(c) + '</b>' if i == 0 else E(c)}</td>" for i, c in enumerate(r)) + "</tr>" for r in data)
+    body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/technical-anchor/">The technical anchor</a> › Project review</p>
+<p class="eyebrow" style="margin-top:22px">The technical anchor · an open-source Claude skill</p>
+<h1>Project review: what is your data project missing?</h1>
+<p class="lede">Give Claude this skill and your project documents. It tells you what is missing <b>at the stage you are in</b>, quotes where your documents answer each question, finds where two documents disagree, and gives you the cheapest test to run this week instead of finding out at go-live. It works for a new data platform or a project on an existing one, from discovery to sign-off, on any technology.</p>
+<p><a class="btn" href="{REPO}">Get it on GitHub →</a> &nbsp; Free and open source: code under Apache 2.0, checks and templates under CC BY 4.0.</p>
+<nav class="toc"><b>On this page</b><ol>
+<li><a href="#why">Why it exists</a></li><li><a href="#how">How it works</a></li><li><a href="#checks">What it checks</a></li>
+<li><a href="#out">What you get back</a></li><li><a href="#use">How to use it</a></li><li><a href="#proof">How we know it works</a></li></ol></nav>
+
+<section id="why"><p class="q">Why would a team need this?</p><h2>Why it exists</h2>
+<p>Data projects rarely fail because a developer couldn't write the code. They fail because something nobody owned slipped through: a file that arrives twice, a history load nobody estimated, a definition of revenue nobody signed, a plan that assumed source access in week one when approval takes six weeks. These failures are the same on every project, even though every project is different. So they can be written down once as a checklist, and a reviewer can look for them in any project's documents.</p>
+<p>This skill is that reviewer. It is the <a href="/learn/technical-anchor/">technical anchor's</a> habit of looking at the whole picture, and the <a href="/learn/technical-anchor/discovery/">fail-fast thinking of discovery</a>, packaged so any team can run it on their own documents at any stage.</p></section>
+
+<section id="how"><p class="q">How does it work without knowing my project?</p><h2>How it works</h2>
+<figure class="diagram">{rsvg}<figcaption>{E(rcap)}</figcaption></figure>
+<ol class="steps">
+<li><b>Three layers keep it generic and still specific.</b> Common checks ask questions every data project faces and never name a product. Each check says when it applies: the kind of work, the components (ingestion, transformation, modelling, serving, orchestration, platform, governance), the patterns (batch, streaming, change data capture, history load) and the lifecycle stage. A <b>binding</b> per technology says how each check is done there, and its traps. Today Databricks; another technology is one more file.</li>
+<li><b>Judged at your stage.</b> Each check says by which of the <a href="/learn/technical-anchor/#lifecycle">ten lifecycle stages</a> a plan, a design, evidence and proof are due. A team in discovery is asked for plans; a team in test is asked for evidence. Anything not yet due shows as "coming up", not as a gap.</li>
+<li><b>Three ways to spot a gap.</b> Signals in the documents (an estimate that is one number with no assumptions, "near real-time" with no number), disagreements between documents (the plan and the risk log give different dates for source access), and silence, which becomes a question rather than an assumption.</li>
+<li><b>Scripts where judgement isn't needed.</b> Picking the checks, scanning for mechanical signals and building the report are done by small scripts, so the same project always gets the same checklist. Claude does the reading, quoting and comparing.</li>
+</ol></section>
+
+<section id="checks"><p class="q">What does it look for?</p><h2>What it checks</h2>
+<div class="tw"><table class="t"><tr><th>Group</th><th>Covers</th></tr>{rows(REVIEW_CONCERNS)}</table></div>
+<p>Every check has an owner role (technical anchor, architect, business analyst, project manager, test lead, release, operations, security and others), so the report shows each person their part. Ten templates help fill what is missing: discovery document, estimate, scope, risk log, decision record, test strategy, release and cut-over, stakeholder map, status report, and how to run a pre-mortem.</p></section>
+
+<section id="out"><p class="q">What do I get back?</p><h2>What you get back</h2>
+<p>One report, with the most important part first: a <b>fail-fast plan</b> (each risk with the cheapest test now and the result that would change the plan), a <b>pre-mortem</b> (the most likely ways this project fails, from the evidence), the places where your <b>documents disagree</b>, the <b>15 most serious gaps</b>, then everything else by concern and by role, and what you are doing well. Three rows from a real test run:</p>
+<div class="tw"><table class="t"><tr><th>Risk</th><th>Cheapest test now</th><th>Result that would change the plan</th></tr>{rows(REVIEW_SAMPLE)}</table></div>
+<p class="note">From the review of the invented sample project described below.</p></section>
+
+<section id="use"><p class="q">How do I run it?</p><h2>How to use it</h2>
+<ul>
+<li><b>Claude Code:</b> clone the repository into <code>~/.claude/skills/data-project-review/</code> (or your project's <code>.claude/skills/</code>), then ask: <i>"Review our project documents in ./docs with the data-project-review skill."</i></li>
+<li><b>claude.ai:</b> upload the folder as a skill, then attach your documents and ask the same.</li>
+<li><b>Your documents</b> can be Markdown, Word or PDF. If you don't write a short project profile, Claude drafts one from your documents and asks only what they don't say, usually the stage you are in.</li>
+</ul>
+<p>Review documents, not people: the report says "not mentioned" when a document is silent, which is a question to ask, not a verdict.</p></section>
+
+<section id="proof"><p class="q">How do we know it finds real gaps?</p><h2>How we know it works</h2>
+<p>We wrote an invented retailer's project, twelve realistic documents, and hid 27 gaps in them, some by leaving things out, some by vague words, some only visible when two documents disagree, and two never mentioned at all. We also put in five things done well. A fresh Claude session reviewed it using only the skill, without seeing the answer key.</p>
+<div class="tw"><table class="t"><tr><th>Measure</th><th>Result</th></tr>{rows(REVIEW_RESULTS)}</table></div>
+<p>It also raised 14 serious gaps we hadn't planted, such as "never re-estimated against actual progress", which read as real holes in the invented documents. After the run we merged three overlapping checks, shortened the report and fixed two detectors. The full results are in the repository. Next: running it on real projects.</p>
+<p><a class="btn" href="{REPO}">Get it on GitHub →</a></p></section>
+
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
+<p><b>The thinking behind it:</b> <a href="/learn/technical-anchor/">the technical anchor</a> and <a href="/learn/technical-anchor/discovery/">discovery, step by step</a>. <b>The data problems it checks for, recorded on real Spark and Delta:</b> <a href="/learn/data-platform-sim/problems/">the Problem Lab</a>.</p></section>"""
+    ld = [{"@context": "https://schema.org", "@type": "SoftwareSourceCode", "name": "data-project-review",
+           "description": "An open-source Claude skill that reviews a data engineering project's documents and says what is missing at its lifecycle stage, technical and delivery, with a fail-fast plan.",
+           "codeRepository": REPO, "license": "https://www.apache.org/licenses/LICENSE-2.0", "url": url,
+           "author": {"@type": "Person", "name": "Basant Choudhary", "url": f"{SITE}/#about"}},
+          {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [
+              {"@type": "ListItem", "position": 1, "name": "Learn", "item": f"{SITE}/learn/"},
+              {"@type": "ListItem", "position": 2, "name": "The technical anchor", "item": URL},
+              {"@type": "ListItem", "position": 3, "name": "Project review", "item": url}]}]
+    head = CSS.replace("</style>", "  .btn { display:inline-block; font-weight:700; font-size:15px; border:1.5px solid var(--ink); border-radius:999px; padding:6px 16px; background:var(--ink); color:#fff !important; text-decoration:none; }\n</style>", 1) \
+        + "".join(f'<script type="application/ld+json">{json.dumps(x, ensure_ascii=False)}</script>' for x in ld)
+    desc = "An open-source Claude skill that reviews a data engineering project's documents and says what is missing at its stage: technical and delivery gaps, disagreements between documents, and a fail-fast plan. Any technology."
+    return wb.page("Project review: what is your data project missing?", desc, url, body, head)
 
 
 # ---------------------------------------------------------------- page
@@ -649,6 +754,7 @@ Review:      weekly</pre>
 <p>The anchor doesn't make every decision or write every line. The anchor makes sure nothing important falls between the people who do.</p></section>
 
 <section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
+<p><b>Check your own project:</b> <a href="/learn/technical-anchor/project-review/">the project review skill</a> reads your documents and says what is missing at your stage.</p>
 <p><b>The thinking habit underneath:</b> <a href="/writing/fail-fast-own-the-result/">fail fast, own the result</a>. <b>The customer-facing cousin of this role:</b> <a href="/writing/forward-deployed-engineer/">what a forward-deployed engineer does</a>.</p>
 <p><b>The system you are anchoring:</b> <a href="/learn/data-platform-architecture/">data platform architecture</a>, <a href="/learn/medallion-architecture/">the medallion</a>, and <a href="/learn/data-platform-sim/problems/">19 data problems, recorded</a>. <b>The path:</b> <a href="/paths/data-engineering/">data engineering, crawl to run</a>.</p></section>"""
     ld = [{"@context": "https://schema.org", "@type": "TechArticle", "headline": "The technical anchor: how to think for a whole data project",
@@ -670,6 +776,8 @@ def main():
     (out / "index.html").write_text(page())
     (out / "discovery").mkdir(exist_ok=True)
     (out / "discovery" / "index.html").write_text(discovery_page())
+    (out / "project-review").mkdir(exist_ok=True)
+    (out / "project-review" / "index.html").write_text(review_page())
     print("technical anchor guide ->", out, "(+ discovery/)")
 
 
