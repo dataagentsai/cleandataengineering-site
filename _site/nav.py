@@ -37,6 +37,7 @@ SECTIONS = [
             ("Eval Harness", "/learn/eval-harness/"),
             ("Data platform architecture", "/learn/data-platform-architecture/"),
             ("Medallion architecture", "/learn/medallion-architecture/"),
+            ("Real-time analytics", "/learn/real-time-analytics/"),
             ("The technical anchor", "/learn/technical-anchor/"),
             ("Technical anchor: discovery", "/learn/technical-anchor/discovery/"),
             ("Technical anchor: project review", "/learn/technical-anchor/project-review/"),

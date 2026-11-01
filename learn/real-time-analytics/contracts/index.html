@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contracts and bindings at every hop · Clean Data Engineering</title>
+<meta name="description" content="The spec at every hop of a streaming pipeline: contract, promises and binding, with Avro, CloudEvents, ODCS and AsyncAPI, plus ordering, delivery,…"><link rel="canonical" href="https://cleandataengineering.ai/learn/real-time-analytics/contracts/">
+<meta property="og:title" content="Contracts and bindings at every hop"><meta property="og:description" content="The spec at every hop of a streaming pipeline: contract, promises and binding, with Avro, CloudEvents, ODCS and AsyncAPI, plus ordering, delivery,…"><meta property="og:url" content="https://cleandataengineering.ai/learn/real-time-analytics/contracts/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .diagram a:hover rect { stroke-width:2.6 } .diagram a { cursor:pointer }
+  .map { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; margin:14px 0; }
+  .map a { display:block; border:var(--line); border-radius:var(--wob); padding:12px 16px; text-decoration:none; color:var(--ink); background:#fff; }
+  .map a:hover { background:var(--butter-wash); } .map b { font-family:var(--hand); font-weight:400; font-size:21px; display:block; } .map span { font-size:14px; color:var(--muted); }
+  .map .n { font-size:12px; color:var(--faint); letter-spacing:.06em; text-transform:uppercase; }
+  .design { border:var(--line); border-radius:var(--wob); padding:14px 18px; margin:16px 0; background:#fff; }
+  .design h3 { margin:0 0 4px; font-size:25px; } .design .one { color:var(--ink-soft); margin:0 0 8px; }
+  .pill { display:inline-block; font-size:12.5px; border:1.5px solid var(--ink); border-radius:999px; padding:1px 10px; margin-right:6px; background:var(--mint-wash); }
+  .pill.drop { background:var(--rose-wash); } .pill.maybe { background:var(--butter-wash); }
+  .warn { border:var(--line); border-radius:var(--wob); padding:10px 16px; background:var(--butter-wash); font-size:15px; }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Contracts and bindings at every hop", "description": "The spec at every hop of a streaming pipeline: contract, promises and binding, with Avro, CloudEvents, ODCS and AsyncAPI, plus ordering, delivery, deletes, late events and replay.", "url": "https://cleandataengineering.ai/learn/real-time-analytics/contracts/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-02", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Learn", "item": "https://cleandataengineering.ai/learn/"}, {"@type": "ListItem", "position": 2, "name": "Real-time analytics", "item": "https://cleandataengineering.ai/learn/real-time-analytics/"}, {"@type": "ListItem", "position": 3, "name": "Contracts and bindings", "item": "https://cleandataengineering.ai/learn/real-time-analytics/contracts/"}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What is AsyncAPI?", "acceptedAnswer": {"@type": "Answer", "text": "An open standard for describing event-driven interfaces: channels (topics), messages and their schemas, and bindings for each protocol, such as Kafka or WebSocket. It is to events what OpenAPI is to REST."}}, {"@type": "Question", "name": "What is the difference between a contract and a binding?", "acceptedAnswer": {"@type": "Answer", "text": "The contract says what an event is: schema, key, meaning. The binding says how it travels on one hop: which topic, how many partitions, which delivery guarantee. Changing technology changes the binding only."}}, {"@type": "Question", "name": "Do I need exactly-once delivery?", "acceptedAnswer": {"@type": "Answer", "text": "Rarely. At-least-once with consumers that upsert by key gives the same result for most analytics. Use exactly-once for money movements and counters that cannot be rebuilt."}}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Learn</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/paths/data-engineering/">Data Engineering</a></summary><ul><li><a href="/paths/data-engineering/aws/">AWS</a></li><li><a href="/paths/data-engineering/azure/">Azure</a></li><li><a href="/paths/data-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/data-engineering/databricks/">Databricks</a></li><li><a href="/paths/data-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/aws/">AWS</a></li><li><a href="/paths/ai-engineering/azure/">Azure</a></li><li><a href="/paths/ai-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/ai-engineering/databricks/">Databricks</a></li><li><a href="/paths/ai-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/aws/">AWS</a></li><li><a href="/paths/llm-engineering/azure/">Azure</a></li><li><a href="/paths/llm-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/llm-engineering/databricks/">Databricks</a></li><li><a href="/paths/llm-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/aws/">AWS</a></li><li><a href="/paths/ml-engineering/azure/">Azure</a></li><li><a href="/paths/ml-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/ml-engineering/databricks/">Databricks</a></li><li><a href="/paths/ml-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/aws/">AWS</a></li><li><a href="/paths/software-engineering/azure/">Azure</a></li><li><a href="/paths/software-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/software-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/paths/forward-deployed/aws/">AWS</a></li><li><a href="/paths/forward-deployed/azure/">Azure</a></li><li><a href="/paths/forward-deployed/gcp/">Google Cloud</a></li><li><a href="/paths/forward-deployed/databricks/">Databricks</a></li></ul></details></li><li><a href="/concepts/">Key concepts</a></li><li><details><summary><a href="/learn/">Courses</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li><li><a href="/learn/technical-anchor/">The technical anchor</a></li><li><a href="/learn/technical-anchor/discovery/">Technical anchor: discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Technical anchor: project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li></ul></details></li><li><details><summary><a href="/simulators/">Simulators</a></summary><ul><li><a href="/learn/llm-api-sim/">Claude API Simulator</a></li><li><a href="/learn/agent-harness-sim/">Agent Harness Simulator</a></li><li><a href="/learn/data-platform-sim/">DataTwin Studio</a></li><li><a href="/learn/data-platform-sim/problems/">Problem Lab</a></li><li><a href="/learn/data-platform-sim/performance/">Performance stories</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li></ul><h4>Certifications</h4><ul><li><a href="/certifications/">All certifications</a></li><li><details><summary><a href="/certifications/#anthropic">Claude (Anthropic)</a></summary><ul><li><a href="/certifications/claude-certified-architect/CCA-F/">Claude Certified Architect</a></li><li><a href="/certifications/cca-f-mind-maps/">CCA-F mind maps</a></li><li><a href="/certifications/claude-certified-architect/CCAR-P/CCAR-P_Study_Guide.html">Claude Architect, Professional</a></li></ul></details></li><li><details><summary><a href="/certifications/#databricks">Databricks</a></summary><ul><li><a href="/certifications/databricks-genai-engineer/">Gen AI Engineer free prep</a></li></ul></details></li><li><details><summary><a href="/certifications/#microsoft">Microsoft</a></summary><ul><li><a href="/certifications/azure-ai-engineer/">AI-103 free prep</a></li></ul></details></li><li><a href="/certifications/#aws">AWS</a></li><li><a href="/certifications/#gcp">Google Cloud</a></li></ul><h4>AI for a cause</h4><ul><li><a href="/ai-for-cause/">All projects</a></li><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul><h4>Deep tech</h4><ul><li><a href="/deep-tech/">All projects</a></li><li><a href="/problems/">Hard problems</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul><h4>Build with us</h4><ul><li><a href="/projects/">Join a project</a></li><li><details><summary><a href="/research/">Open specifications</a></summary><ul><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">AgentTwin, explained</a></li><li><a href="/learn/datatwin/">DataTwin, explained</a></li><li><a href="/lab/">The AgentTwin Lab</a></li></ul></details></li><li><details><summary><a href="/assets/">Open-source assets</a></summary><ul><li><a href="https://github.com/dataagentsai/reference-agent">Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Eval Harness Framework</a></li><li><a href="https://github.com/dataagentsai/claims-fnol-azure">Claims assistant on Azure</a></li><li><a href="/learn/technical-anchor/project-review/">Data project review skill</a></li></ul></details></li><li><a href="/about/#join">Write or teach</a></li></ul><h4>For leaders</h4><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/spec-driven/">Spec-driven development</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/papers/">Technical papers</a></li><li><a href="/writing/">Blog</a></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/real-time-analytics/">Real-time analytics</a> › Contracts and bindings</p>
+<p class="eyebrow" style="margin-top:22px">Real-time analytics · page 8 of 11</p>
+<h1>Contracts and bindings at every hop</h1>
+<p class="lede">The spec at every hop of a streaming pipeline: contract, promises and binding, with Avro, CloudEvents, ODCS and AsyncAPI, plus ordering, delivery, deletes, late events and replay.</p><div class="sib"><a href="/learn/real-time-analytics/">↑ All of real-time analytics</a><a href="/learn/real-time-analytics/basics/">Real time, explained</a><a href="/learn/real-time-analytics/lambda-vs-kappa/">Lambda vs Kappa</a><a href="/learn/real-time-analytics/components/">Components, left to right</a><a href="/learn/real-time-analytics/change-capture/">Change capture tools</a><a href="/learn/real-time-analytics/routes/">Which route?</a><a href="/learn/real-time-analytics/architectures/">Eight designs</a><a href="/learn/real-time-analytics/physical/">Designs on each cloud</a><span>Contracts and bindings</span><a href="/learn/real-time-analytics/push-to-ui/">Push to the screen</a><a href="/learn/real-time-analytics/cost/">What it costs</a><a href="/learn/real-time-analytics/technologies/">Established technologies</a></div>
+<section id="plain"><p class="eyebrow">In plain words</p><h2>One small pattern, repeated</h2>
+<p>Every hop has the same shape: a <b>producer</b>, a <b>topic</b> with a contract, and a <b>consumer</b>. A stream processor consumes one topic and produces another, so the pattern repeats along the line. Each topic gets the same spec, in three parts.</p>
+<figure class="diagram"><svg viewBox="0 0 1000 212" role="img" aria-label="Producer, topic, processor, topic, consumer. Each topic carries a contract and a binding."><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F1F1F"/></marker></defs><rect x="10" y="40" width="130" height="70" rx="14" fill="#FCF2F7" stroke="#1F1F1F" stroke-width="1.6"/><text x="75.0" y="71.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Producer</text><text x="75.0" y="91.0" text-anchor="middle" font-size="14" fill="#555">CDC or app</text><line x1="142" y1="75" x2="176" y2="75" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="178" y="30" width="190" height="90" rx="14" fill="#FFF8E8" stroke="#1F1F1F" stroke-width="1.6"/><text x="273.0" y="71.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Topic 1</text><text x="273.0" y="91.0" text-anchor="middle" font-size="14" fill="#555">contract + binding</text><line x1="370" y1="75" x2="404" y2="75" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="406" y="30" width="190" height="90" rx="14" fill="#F6F2FC" stroke="#1F1F1F" stroke-width="1.6"/><text x="501.0" y="71.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Processor</text><text x="501.0" y="91.0" text-anchor="middle" font-size="14" fill="#555">consumes 1,</text><text x="501.0" y="107.0" text-anchor="middle" font-size="14" fill="#555">produces 2</text><line x1="598" y1="75" x2="632" y2="75" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="634" y="30" width="190" height="90" rx="14" fill="#FFF8E8" stroke="#1F1F1F" stroke-width="1.6"/><text x="729.0" y="71.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Topic 2</text><text x="729.0" y="91.0" text-anchor="middle" font-size="14" fill="#555">contract + binding</text><line x1="826" y1="75" x2="860" y2="75" stroke="#1F1F1F" stroke-width="1.6" marker-end="url(#ah)"/><rect x="862" y="40" width="130" height="70" rx="14" fill="#F0F8F3" stroke="#1F1F1F" stroke-width="1.6"/><text x="927.0" y="71.0" text-anchor="middle" font-size="19" fill="#1F1F1F">Consumer</text><text x="927.0" y="91.0" text-anchor="middle" font-size="14" fill="#555">store, push</text><text x="273" y="150" text-anchor="middle" font-size="13" fill="#555">contract: schema, key,</text><text x="273" y="167" text-anchor="middle" font-size="13" fill="#555">meaning, compatibility</text><text x="729" y="150" text-anchor="middle" font-size="13" fill="#555">binding: Kafka topic,</text><text x="729" y="167" text-anchor="middle" font-size="13" fill="#555">partitions, guarantees</text><text x="500" y="200" text-anchor="middle" font-size="15" fill="#555">the same three-part spec repeats at every hop</text></svg><figcaption>Producer, topic, consumer, and again. The contract says what; the binding says how.</figcaption></figure></section>
+
+<section id="spec"><p class="eyebrow">The spec</p><h2>Three parts per topic</h2>
+<div class="tw"><table class="t"><tr><th>Part</th><th>What it pins down</th><th>Standard to use</th></tr><tr><td><b>Contract (what)</b></td><td>Event schema, the key, what each field means, compatibility rules (usually backward compatible)</td><td>Avro or Protobuf in a schema registry; CloudEvents for the envelope: id, source, type, time</td></tr><tr><td><b>Promises</b></td><td>Owner, freshness target, quality checks, how long events are kept</td><td>ODCS, the Open Data Contract Standard</td></tr><tr><td><b>Binding (how)</b></td><td>The technology for this hop: Kafka topic name, partitions, consumer group, delivery guarantee; or the WebSocket or SSE details for the screen</td><td>AsyncAPI, which has a bindings section for Kafka, WebSocket, MQTT, AMQP and more</td></tr></table></div>
+<p>AsyncAPI fits the idea of coding to an interface. The channel and message are the interface; the bindings block is the adapter. Moving from Kafka to Event Hubs changes the binding, not the contract.</p></section>
+
+<section id="promises"><p class="eyebrow">Every hop</p><h2>Five promises every hop must state</h2>
+<div class="tw"><table class="t"><tr><th>Promise</th><th>What to decide</th></tr><tr><td><b>Ordering</b></td><td>Order is only kept within one partition, so pick the key with care, for example the order id.</td></tr><tr><td><b>Delivery</b></td><td>At least once is the default, so consumers must cope with duplicates: upsert by key, for example ClickHouse ReplacingMergeTree. Use exactly once (Kafka transactions, Flink checkpoints) only where it is truly needed.</td></tr><tr><td><b>Deletes</b></td><td>Change capture sends tombstone events for deletes; the serving store must apply them.</td></tr><tr><td><b>Late events</b></td><td>Watermarks and an allowed lateness in the stream processor say how long to wait.</td></tr><tr><td><b>Replay</b></td><td>How to rebuild: from the log, or from the lakehouse copy, and how to make sure nothing is counted twice.</td></tr></table></div></section>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>What is AsyncAPI?</summary><p>An open standard for describing event-driven interfaces: channels (topics), messages and their schemas, and bindings for each protocol, such as Kafka or WebSocket. It is to events what OpenAPI is to REST.</p></details><details class="faq"><summary>What is the difference between a contract and a binding?</summary><p>The contract says what an event is: schema, key, meaning. The binding says how it travels on one hop: which topic, how many partitions, which delivery guarantee. Changing technology changes the binding only.</p></details><details class="faq"><summary>Do I need exactly-once delivery?</summary><p>Rarely. At-least-once with consumers that upsert by key gives the same result for most analytics. Use exactly-once for money movements and counters that cannot be rebuilt.</p></details></section>
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
+<p><b>Next page:</b> <a href="/learn/real-time-analytics/push-to-ui/">Push to the screen: snapshot first, then small changes</a></p>
+<p><a href="/learn/real-time-analytics/">↑ All of real-time analytics</a> · <a href="/learn/data-platform-architecture/">Data platform architecture</a> · <a href="/concepts/#data-engineering">Key concepts</a></p>
+<div class="sib"><a href="/learn/real-time-analytics/">↑ All of real-time analytics</a><a href="/learn/real-time-analytics/basics/">Real time, explained</a><a href="/learn/real-time-analytics/lambda-vs-kappa/">Lambda vs Kappa</a><a href="/learn/real-time-analytics/components/">Components, left to right</a><a href="/learn/real-time-analytics/change-capture/">Change capture tools</a><a href="/learn/real-time-analytics/routes/">Which route?</a><a href="/learn/real-time-analytics/architectures/">Eight designs</a><a href="/learn/real-time-analytics/physical/">Designs on each cloud</a><span>Contracts and bindings</span><a href="/learn/real-time-analytics/push-to-ui/">Push to the screen</a><a href="/learn/real-time-analytics/cost/">What it costs</a><a href="/learn/real-time-analytics/technologies/">Established technologies</a></div></section>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Learn</b><a href="/paths/">Find your path</a><a href="/paths/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/paths/forward-deployed/">Forward Deployed Engineering</a><a href="/concepts/">Key concepts</a><a href="/learn/">Courses</a><a href="/simulators/">Simulators</a><a href="/mindset/">Worried about AI?</a></div><div><b>Certifications</b><a href="/certifications/">All certifications</a><a href="/certifications/#anthropic">Claude (Anthropic)</a><a href="/certifications/#databricks">Databricks</a><a href="/certifications/#microsoft">Microsoft</a><a href="/certifications/#aws">AWS</a><a href="/certifications/#gcp">Google Cloud</a></div><div><b>AI for a cause</b><a href="/ai-for-cause/">All projects</a><a href="/projects/babu-companion/">Babu, companion for elders</a><a href="/road-safety/">AI for road safety</a><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></div><div><b>Deep tech</b><a href="/deep-tech/">All projects</a><a href="/problems/">Hard problems</a><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></div><div><b>Build with us</b><a href="/projects/">Join a project</a><a href="/research/">Open specifications</a><a href="/assets/">Open-source assets</a><a href="/about/#join">Write or teach</a></div><div><b>For leaders</b><a href="/leaders/">The one-minute version</a><a href="/leaders/spec-driven/">Spec-driven development</a><a href="/leaders/#questions">Questions leaders ask</a><a href="/papers/">Technical papers</a><a href="/writing/">Blog</a></div><div><b>About</b><a href="/about/">About this site</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
