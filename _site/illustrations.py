@@ -314,5 +314,30 @@ SCENES.update({
 })
 
 
+def heart(x, y, s=1.0):
+    return (f'<path d="M{x},{y + 30 * s} C{x - 44 * s},{y + 2 * s} {x - 34 * s},{y - 34 * s} {x - 14 * s},{y - 30 * s} '
+            f'C{x - 4 * s},{y - 28 * s} {x},{y - 18 * s} {x},{y - 12 * s} C{x},{y - 18 * s} {x + 4 * s},{y - 28 * s} {x + 14 * s},{y - 30 * s} '
+            f'C{x + 34 * s},{y - 34 * s} {x + 44 * s},{y + 2 * s} {x},{y + 30 * s} Z" fill="{PAL["coral"]}" class="o"/>')
+
+
+def atom(x, y, r=40):
+    rings = "".join(f'<ellipse cx="{x}" cy="{y}" rx="{r}" ry="{r * .36}" transform="rotate({a} {x} {y})" class="t"/>' for a in (0, 60, 120))
+    return rings + f'<circle cx="{x}" cy="{y}" r="8" fill="{PAL["plum"]}" class="o"/>'
+
+
+# Home page doors (1 Nov 2026): one scene each for AI for a cause and Deep tech.
+SCENES.update({
+    "cause": (420, 300,
+              blob(210, 172, 190, 114, PAL["rose"]) + heart(210, 70, 1.0) +
+              person(140, 300, PAL["green"], PAL["navy"], 1, reach=(210, 210)) +
+              person(285, 300, PAL["lav"], PAL["plum"], 3, reach=(214, 212), face=-1, scale=0.86) + plant(372, 292, 0.8),
+              "Two people hold hands under a heart: AI that helps people."),
+    "deeptech": (420, 300,
+                 blob(210, 170, 190, 118, PAL["lav"]) + board(84, 64, 200, 156, -2, "chart") + atom(60, 58, 32) +
+                 person(330, 300, PAL["teal"], PAL["navy"], 2, reach=(270, 160), face=-1),
+                 "A researcher studies a chart, next to an atom: hard problems, measured."),
+})
+
+
 if __name__ == "__main__":
     main()

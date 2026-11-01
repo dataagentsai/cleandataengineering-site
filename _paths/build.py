@@ -25,6 +25,7 @@ OUT = ROOT / "paths"
 BY_ID = {d["id"]: d for d in DISCIPLINES}
 
 CSS = """<style>
+  .startnote { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:0 0 14px; font-size:15.5px; }
   .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
   .phero { padding:26px 0 6px; } .phero h1 { margin-bottom:10px; } .phero .who { font-size:19px; color:var(--ink-soft); }
   .switch { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; align-items:center; }
@@ -234,6 +235,7 @@ def platform_page(d, plat):
                 f'<p><a href="/projects/">All projects →</a> &nbsp; <a href="/paths/">Another path →</a></p></section>')
     ld = jsonld(course_ld(name, desc, url, [f"{LEVELS[k][0]} ({LEVELS[k][1]})" for k in LEVELS], teaches)) + \
         jsonld(breadcrumb_ld([("Paths", "/paths/"), (d["name"], f"/paths/{d['id']}/"), (PLATFORMS[plat], f"/paths/{d['id']}/{plat}/")]))
+    body.append(start_note(f"/paths/{d['id']}/#concepts"))
     return wb.page(name if len(name) > 34 else name + " · learning path", desc, url, "\n".join(body), CSS + ld)
 
 
@@ -260,20 +262,50 @@ def discipline_page(d):
     ld = jsonld(course_ld(d["name"] + " learning path", desc, url, [f"{LEVELS[k][0]} ({LEVELS[k][1]})" for k in LEVELS],
                           [t[0] for k in LEVELS for t in d["levels"][k]["topics"]])) + \
         jsonld(breadcrumb_ld([("Paths", "/paths/"), (d["name"], f"/paths/{d['id']}/")]))
+    body.append(start_note("#concepts"))
     return wb.page(d["name"] + " learning path", desc, url, "\n".join(body), CSS + ld)
+
+
+# "Where are you starting from?" (1 Nov 2026): the picker sends each kind of visitor to a level on their path.
+# value: (label in the picker, level it lands on, the note shown on arrival)
+STARTS = {
+    "fresher": ("a student or fresher", "crawl",
+                "Starting you at <b>Crawl</b>, because you're a student or fresher. Begin with the {c}: they're the same on every cloud."),
+    "switching": ("working, but new to this role", "walk",
+                  "Starting you at <b>Walk</b>, because you're working but new to this role. Skim the {c} first, and use Crawl above for anything that's new."),
+    "experienced": ("experienced in this role", "run",
+                    "Starting you at <b>Run</b>, because you're experienced in this role. Crawl and Walk are above if you want to check the basics."),
+}
 
 
 def picker(compact=False):
     roles = "".join(f'<option value="{d["id"]}">{E(d["name"])}</option>' for d in DISCIPLINES)
     plats = "".join(f'<option value="{k}">{E(v)}</option>' for k, v in PLATFORMS.items())
+    starts = "".join(f'<option value="{k}">{E(v[0])}</option>' for k, v in STARTS.items())
     supported = json.dumps({d["id"]: d["platforms"] for d in DISCIPLINES})
-    return f"""<form class="picker" onsubmit="return goPath(this)">
+    levels = json.dumps({k: v[1] for k, v in STARTS.items()})
+    return f"""<form class="picker" id="pathpicker" onsubmit="return goPath(this)">
   <label>I am learning <select name="r" aria-label="Role">{roles}</select></label>
   <label>on <select name="p" aria-label="Platform">{plats}</select></label>
+  <label>and I am <select name="e" aria-label="Where you are starting from">{starts}</select></label>
   <button type="submit">Show my path →</button>
 </form>
 <script>
-function goPath(f){{var s={supported};var r=f.r.value,p=f.p.value;location.href='/paths/'+r+'/'+(s[r].indexOf(p)>=0?p+'/':'');return false;}}
+function goPath(f){{var s={supported},l={levels};var r=f.r.value,p=f.p.value,e=f.e.value;
+try{{localStorage.setItem('cde-path',JSON.stringify({{r:r,p:p,e:e}}))}}catch(x){{}}
+location.href='/paths/'+r+'/'+(s[r].indexOf(p)>=0?p+'/':'')+'?start='+e+'#'+l[e];return false;}}
+(function(){{try{{var v=JSON.parse(localStorage.getItem('cde-path')||'null'),f=document.getElementById('pathpicker');
+if(v&&f){{['r','p','e'].forEach(function(k){{if(v[k]&&f[k].querySelector('option[value="'+v[k]+'"]'))f[k].value=v[k];}});}}}}catch(x){{}}}})();
+</script>"""
+
+
+def start_note(concepts_href):
+    """On a path page: if the visitor came from the picker, say why they landed on this level."""
+    msgs = json.dumps({k: (v[1], v[2].replace("{c}", f'<a href="{concepts_href}">key concepts</a>')) for k, v in STARTS.items()})
+    return f"""<script>
+(function(){{var m={msgs},k=new URLSearchParams(location.search).get('start');if(!m[k])return;
+var sec=document.getElementById(m[k][0]);if(!sec)return;var d=document.createElement('p');d.className='startnote';d.innerHTML=m[k][1];
+sec.insertBefore(d,sec.firstChild);}})();
 </script>"""
 
 
@@ -428,7 +460,9 @@ def put(s, name, html_):
 
 def main():
     home = ROOT / "index.html"
-    s = put(put(home.read_text(), "picker", picker()), "paths", home_roles())
+    s = put(home.read_text(), "picker", picker())
+    if "<!-- paths:start -->" in s:  # the role cards left the home page on 1 Nov 2026 (the menu and picker cover them)
+        s = put(s, "paths", home_roles())
     home.write_text(s)
     check_concepts()
     cdir = ROOT / "concepts"
