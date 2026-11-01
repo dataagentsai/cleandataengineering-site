@@ -38,20 +38,36 @@ SECTIONS = [
             ("Problem Lab", "/learn/data-platform-sim/problems/"),
             ("Performance stories", "/learn/data-platform-sim/performance/"),
         ]),
-        ("Certifications", "/certifications/", [
-            ("AI engineering", "/certifications/#ai"),
-            ("Data engineering", "/certifications/#data"),
+        ("Worried about AI?", "/mindset/", []),
+    ]),
+    ("Certifications", [
+        ("All certifications", "/certifications/", []),
+        ("Claude (Anthropic)", "/certifications/#anthropic", [
             ("Claude Certified Architect", "/certifications/claude-certified-architect/CCA-F/"),
             ("CCA-F mind maps", "/certifications/cca-f-mind-maps/"),
             ("Claude Architect, Professional", "/certifications/claude-certified-architect/CCAR-P/CCAR-P_Study_Guide.html"),
-            ("Microsoft AI-103", "/certifications/azure-ai-engineer/"),
         ]),
-        ("Worried about AI?", "/mindset/", []),
+        ("Databricks", "/certifications/#databricks", []),
+        ("Microsoft", "/certifications/#microsoft", [
+            ("AI-103 free prep", "/certifications/azure-ai-engineer/"),
+        ]),
+        ("AWS", "/certifications/#aws", []),
+        ("Google Cloud", "/certifications/#gcp", []),
+    ]),
+    ("AI for a cause", [
+        ("All projects", "/ai-for-cause/", []),
+        ("Babu, companion for elders", "/projects/babu-companion/", []),
+        ("AI for road safety", "/road-safety/", []),
+        ("Raah, guide for blind people", "/ai-for-cause/raah/", []),
+    ]),
+    ("Deep tech", [
+        ("All projects", "/deep-tech/", []),
+        ("Hard problems", "/problems/", []),
+        ("Hinglish pre-training data", "/projects/hinglish-pretraining-data/", []),
+        ("Robot data benchmark", "/projects/robotics-data-benchmark/", []),
     ]),
     ("Build with us", [
         ("Join a project", "/projects/", []),
-        ("Hard problems", "/problems/", []),
-        ("AI for road safety", "/road-safety/", []),
         ("Open specifications", "/research/", [
             ("AI Assurance Catalog", "https://dataagentsai.github.io/ai-assurance-catalog/"),
             ("AI Harness Catalog", "https://dataagentsai.github.io/ai-harness-catalog/"),
