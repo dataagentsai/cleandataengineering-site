@@ -468,8 +468,8 @@ def the_bundle():
         ("2", "Proof material: a sample shop with 101 planted problems, 16 false-alarm traps and a hidden answer key. Ruff alone catches 17 of 101 with no false alarms; the rest is what the next tiers build", "done"),
         ("3", "One runner over eight open-source tools, findings as SARIF on the pull request, block or warn, baseline for existing code. First measured run: 34 of 101 planted problems caught, no false alarms, under 8 seconds", "done"),
         ("4", "Cost rules plugged in (our earlier cost-analysis rules, SparkDoctor after a trial of three young PySpark linters, our own materialized-view and job-config rules). Second measured run: 64 of 101 caught, still no false alarms", "done"),
-        ("5", "What we build: purity report, test-time purity check, empty-table plan check, gap report", "next"),
-        ("6", "A real repo: cut the noise, feed gaps back into the spec", "later"),
+        ("5", "What we build: purity report, test-time purity guard, empty-table plan check, metric view and dbt checks, test drafts, a health page and pull-request summary. Fifth measured run: 88 of 101 caught, still no false alarms", "done"),
+        ("6", "A real repo: cut the noise, feed gaps back into the spec", "next"),
         ("7", "Teach and release: this guide kept current, a Claude skill, CI templates, version 0.1", "alongside"),
         ("8", "Azure binding", "later")])}</section>
 
@@ -516,7 +516,7 @@ def the_bundle():
 <p>Short-lived branches merge into a protected main through pull requests, with the bundle's pull-request job as a required check. Teams pin a version tag of the bundle, so a new rule never breaks them by surprise.</p></section>"""
     qa = [("Do I need SonarQube for a PySpark project?", "No. Ruff, Opengrep, SQLFluff, gitleaks, pip-audit and coverage tools cover the same ground with no server, and SARIF output shows findings on the pull request. SonarQube also has no Spark cost rules."),
           ("What is spec-driven about this bundle?", "The checks are written once, with ids and reasons and no product names. Each platform gets a binding that maps checks to tools, so adding Azure or another platform is a new binding, not new checks."),
-          ("Can I use it today?", "Partly. The runner works today (`shiftleft scan . --stage pr`, or as a pre-commit hook) with the open-source tools; the cost, purity, test-kit and metric checks come in the next tiers. Follow the GitHub repo.")]
+          ("Can I use it today?", "Yes, as a preview: `shiftleft scan . --stage pr`, `shiftleft purity .` and `shiftleft draft-tests .` work today, as does the pre-commit hook. Version 0.1 follows a run on a real repo. Follow the GitHub repo.")]
     return "the-bundle", "The shift-left bundle for PySpark and Databricks: spec, bindings and adapters, check families, tools with verdicts, why not SonarQube, git layout and status.", body, qa
 
 
