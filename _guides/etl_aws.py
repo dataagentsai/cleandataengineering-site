@@ -43,9 +43,65 @@ PRINCIPLES = [
     ("Log before you work, close after you commit.", "A run that cannot write its start row does not start. A run is marked succeeded, and its bookmark moved, only after its data is committed."),
 ]
 
+
+# ------------------------------------------------------------------ sources and ingestion tech
+SOURCES = [
+    ("Databases that change all day", "MES (SQL Server), quality lab LIMS (Oracle), warranty system, plant maintenance", "AWS DMS: full load once, then change data capture (CDC)", "Every insert, update and delete, with an operation flag and commit time", "Parquet files, written continuously", "Picked up every 15 minutes"),
+    ("Small or reference database tables", "Press master, shift calendars, code lists; any database where CDC logging is not allowed", "Our puller: the framework's built connectors (SQL Server, Oracle, PostgreSQL, MySQL) as a Databricks job over JDBC", "Full copy, or rows above a watermark column", "Parquet plus a manifest", "On a schedule, often daily"),
+    ("SAP S/4HANA", "Sales orders, deliveries, stock, procurement, finance", "Amazon AppFlow, SAP OData connector, reading released CDS views and extractors with delta", "Only what changed since the last call; SAP keeps the bookmark", "Parquet plus AppFlow's flow-run event (records read)", "Every 30 minutes in plant hours, full nightly for slow-changing objects"),
+    ("SaaS applications with an AppFlow connector", "CRM (for example Salesforce), IT service desk", "Amazon AppFlow", "Rows changed since the last run", "Parquet plus the flow-run event", "Hourly"),
+    ("APIs without an AppFlow connector", "Dealer management system API, natural-rubber price feed, weather", "Our puller: the framework's built REST connector", "Pages since the last cursor or date", "JSON lines plus a manifest", "On a schedule"),
+    ("Files from partners", "Dealer sell-out, supplier certificates of analysis, logistics partners", "AWS Transfer Family (SFTP) into each partner's own landing folder", "New files", "As received (CSV, Excel, XML), plus a control file where the partner agrees one", "On arrival"),
+    ("Machines and sensors", "Curing presses, mixers, live historian tags", "AWS IoT SiteWise Edge or IoT Core at the plant, into Amazon Kinesis Data Streams", "Events, one per reading", "No files: the Kinesis stream is the landing", "Continuous"),
+    ("Historian history", "Years of past press and mixer data, once", "The historian's own export to S3 through Transfer Family (" + CHECK + " for the historian's tools)", "One-off backfill, then daily if needed", "Parquet or CSV", "Once"),
+    ("Spreadsheets people keep", "Ideal cycle times not in MES, targets, mappings", "YAML in Git first; otherwise an upload to a Unity Catalog volume by the named owner", "A new version of the file", "As uploaded", "On upload"),
+]
+
+NOT_V1 = [
+    ("Lakeflow Connect", "Its managed connectors write straight into tables, skipping landing, the lander's tokenising and our run recorder: a second way in. Revisit per source for SaaS without personal data."),
+    ("Reading SAP tables directly", "Against SAP's licence terms for most customers, and fragile across upgrades. AWS DMS does not read SAP HANA as a source anyway (" + CHECK + ")."),
+    ("Glue jobs as movers", "Glue is a transformation engine; using it to copy adds a second engine to run and pay for."),
+    ("Fivetran, Airbyte and similar", "Not needed for these sources. If the company already pays for one, it can act as a mover by writing to S3 landing, under the same landing contract."),
+    ("Documents and images", "PDF test reports and defect photos need a document pipeline; a later phase."),
+    ("Email attachments", "Partners move to SFTP instead; email is not a reliable or auditable way in."),
+]
+
+PICK_ORDER = [
+    ("Is it machine data?", "Kinesis, through SiteWise or IoT Core."),
+    ("Is it SAP?", "AppFlow with the SAP OData connector. If SAP Datasphere or Business Data Cloud is licensed, the SAP team may choose those instead; the landing contract stays the same."),
+    ("Is it a database with many changes a day, or are deletes needed?", "AWS DMS with change capture."),
+    ("Is it a small table, a reference list, or a database where CDC is not allowed?", "Our puller, full or by watermark."),
+    ("Is it a SaaS application?", "AppFlow if it has a connector; otherwise our puller's REST connector."),
+    ("Is it files from someone outside?", "Transfer Family SFTP, one folder and one login per partner."),
+    ("None of the above?", "Ask how it can become a file in landing. If it cannot, it is a design discussion, not a quick add."),
+]
+
+LANDING_CONTRACT = [
+    ("One place.", "landing/<source>/<dataset>/<batch or date>/, in the landing bucket of the environment. Personal-data sources use the personal-data landing bucket."),
+    ("Never overwrite, never edit.", "A mover only adds files; a re-sent batch gets the same batch id, so it replaces only itself."),
+    ("Complete or invisible.", "A file appears only when it is complete (S3 writes are all-or-nothing; SFTP uploads go to a temporary name first)."),
+    ("Say how many.", "Where the mover can, it states the row count: a manifest from our puller, the flow-run event from AppFlow, a control file from partners who agree one. DMS cannot, so DMS loads are checked against CloudWatch table statistics instead."),
+    ("Say what was deleted.", "DMS marks deletes in its operation column; full copies are compared with the last copy in silver; partners send either full snapshots or a delete file. SAP deletes depend on the extractor (" + CHECK + " per object)."),
+    ("No transforming.", "Movers change the format at most (to Parquet). Every rule about content lives in the lander and after."),
+]
+
+LANDER_MODES = [
+    ("Files (DMS, AppFlow, puller, SFTP, uploads)", "Auto Loader, one stream per dataset, run as availableNow inside the lander job", "Checkpoint per dataset"),
+    ("DMS change files", "As files, keeping DMS's operation flag and commit time as columns; silver applies them in order with AUTO CDC", "Checkpoint per dataset"),
+    ("Kinesis streams", "A streaming table reading Kinesis directly, always on", "Stream checkpoint and Kinesis sequence numbers"),
+]
+
+MOVER_STATUS = [
+    ("AWS DMS", "Configured by Terraform from source_config, generated", "To build (generator); DMS itself is a service"),
+    ("Amazon AppFlow", "Flows generated from source_config, one per object", "To build (generator)"),
+    ("AWS Transfer Family", "One server; a login and folder per partner, from source_config", "To build (generator)"),
+    ("Our puller", "The framework's connectors: discovery and bulk reads for SQL Server, Oracle, PostgreSQL, MySQL, REST and SFTP", "Connectors built; the Databricks job and the manifest to build"),
+    ("SiteWise / IoT Core and Kinesis", "Edge set up per plant with the plant's OT team; streams from Terraform", "To build, with the OT team"),
+]
+
 # ------------------------------------------------------------------ the working parts
 PARTS = [
-    ("1 Mover", "Brings data from a source to S3 landing", "source_config (which mover, schedule)", "Files in landing, plus a manifest per batch (file list, row count, source position)", "AWS DMS, AppFlow, Transfer Family, SiteWise and Kinesis", "Files are named by batch id; a re-sent batch overwrites itself"),
+    ("1 Mover", "Brings data from a source to S3 landing (or Kinesis, for streams)", "source_config (which mover, schedule)", "Files in landing and, where the mover can, a row count (see the landing contract)", "AWS DMS, AppFlow, Transfer Family, SiteWise and Kinesis, or our puller", "Files are named by batch id; a re-sent batch overwrites itself"),
     ("2 Run controller", "Starts the work, in the right order, at the right time", "dataset_view (what is due), schedules and triggers", "master_run_log; the job run", "Lakeflow Jobs, generated from metadata", "A job that starts twice sees no new files and no due datasets; it ends as skipped"),
     ("3 Lander", "Landing to bronze: reads new files, adds ingest columns, tokenises personal data, appends", "dataset_view, the suppression list", "Bronze tables; run_log and step_log rows", "Our PySpark job using Auto Loader, one task per dataset", "Auto Loader's checkpoint remembers every file read; rows carry the run id"),
     ("4 Silver builder", "Bronze to silver: contract check, the eleven steps, quality rules, history", "Bronze, dq_rule, dataset_config", "Silver tables, quarantine tables, the pipeline event log", "A Declarative Pipeline per business domain, generated", "AUTO CDC orders changes by a sequence column, so reprocessing gives the same result"),
@@ -66,12 +122,12 @@ INGEST_COLS = [
 
 # ------------------------------------------------------------------ the run, step by step
 RUN_STEPS = [
-    ("00:00:00  The mover keeps landing files.", "AWS DMS reads the MES database's change log continuously and writes a file of changes to landing/mes/press_event/ every few minutes, with a manifest: file names, row count, last change position."),
+    ("00:00:00  The mover keeps landing files.", "AWS DMS reads the MES database's change log continuously and writes a file of changes to landing/mes/press_event/ every few minutes, each with an operation flag and a commit time. DMS writes no manifest, so its loads are checked against its own table statistics."),
     ("00:15:00  The run controller starts a job run.", "The lander job for MES has a 15-minute schedule and a file-arrival trigger, whichever comes first. Lakeflow gives it a job run id."),
     ("00:15:02  First task: open the master run.", "It writes one master_run_log row (RUNNING), reads dataset_view for every enabled MES dataset, stores the merged settings once in config_snapshot by their fingerprint, and lists which datasets have new files."),
     ("00:15:05  One task per dataset, eight at a time.", "A for-each task runs the lander for each due dataset. Each opens its own run_log row (STARTED) with the master run id, the job's task run id and the window it will load."),
-    ("00:15:06  The lander loads.", "Auto Loader reads only files it has not seen. The lander checks each file against its manifest (row count), tokenises personal columns, drops undeclared ones for personal-data sources, adds the ingest columns and appends to bronze. Each part is a step_log row with rows in and out."),
-    ("00:15:40  The run closes after the commit.", "Only after the Delta commit: run_log becomes SUCCEEDED with rows read, written and rejected, and the source position from the manifest is stored as the watermark, in one database transaction."),
+    ("00:15:06  The lander loads.", "Auto Loader reads only files it has not seen. The lander checks each batch against its row count where the mover gives one, tokenises personal columns, drops undeclared ones for personal-data sources, adds the ingest columns and appends to bronze. Each part is a step_log row with rows in and out."),
+    ("00:15:40  The run closes after the commit.", "Only after the Delta commit: run_log becomes SUCCEEDED with rows read, written and rejected, and the newest commit time it loaded is stored as the watermark, in one database transaction."),
     ("00:15:45  The master run closes.", "SUCCEEDED if every dataset succeeded, PARTIAL if some failed (they get their own error_log rows), FAILED if none did. The next stage does not wait for the slowest dataset; it is started by the bronze tables themselves."),
     ("00:16:00  Bronze changes start silver.", "The silver pipeline for the manufacturing domain has a table-update trigger on its bronze tables, at most once every 15 minutes. A wrapper task opens a run_log row for the pipeline update and stores its update id."),
     ("00:16:05  The silver pipeline runs.", "Contract check, then the eleven bronze-to-silver steps; expectations park bad rows in quarantine; AUTO CDC applies changes and history. The integrator's materialized views refresh incrementally."),
@@ -287,6 +343,10 @@ FAQ = [
 
 
 def page():
+    src_table = table(["Kind of source", "Examples here", "Brought in by", "What changes arrive", "Lands as", "How often"], SOURCES)
+    lmode_table = table(["Landing", "Lander reads it with", "Remembers what it read in"], LANDER_MODES)
+    notv1_table = table(["Not in v1", "Why"], NOT_V1)
+    mstat_table = table(["Mover", "Set up how", "Status"], MOVER_STATUS)
     parts_table = table(["Part", "Does", "Reads", "Writes", "Runs as", "Safe to run twice because"], PARTS)
     cols_table = table(["Layer", "Columns added to every row", "So you can tell"], INGEST_COLS)
     trig_table = table(["Trigger", "Used for", "Starts"], TRIGGERS)
@@ -304,13 +364,30 @@ def page():
 <p class="lede">How the core actually runs: which parts there are, what starts each one, how one load moves from a source system to a metric, the ids and log rows that tie it together, what happens when something breaks, and how we watch it. The concept pages say what each layer does; this page says how it runs.</p>
 <div class="sib"><a href="{AWS}">↑ The platform on AWS + Databricks</a><a href="{BASE}ingestion/">Ingestion</a><a href="{BASE}bronze-to-silver/">Bronze to silver</a><a href="{BASE}gold/">Gold</a><a href="{BASE}metadata-store/">Metadata store</a></div>
 <nav class="toc"><b>On this page</b><ol>
-<li><a href="#rules">Six rules</a></li><li><a href="#map">The runtime map</a></li><li><a href="#parts">The ten working parts</a></li><li><a href="#run">One run, step by step</a></li>
+<li><a href="#rules">Six rules</a></li><li><a href="#sources">Sources and ingestion tech</a></li><li><a href="#map">The runtime map</a></li><li><a href="#parts">The ten working parts</a></li><li><a href="#run">One run, step by step</a></li>
 <li><a href="#jobs">Jobs and triggers</a></li><li><a href="#logs">Ids and log rows</a></li><li><a href="#stream">Streaming</a></li><li><a href="#fail">When something breaks</a></li>
 <li><a href="#rerun">Re-runs, replays and backfills</a></li><li><a href="#obs">Observability: the working parts</a></li><li><a href="#day">A day in the life</a></li><li><a href="#faq">Questions</a></li></ol></nav>
 
 <section id="rules"><p class="eyebrow">Start here</p><h2>Six rules the whole runtime follows</h2>
 <p>Everything below follows from these. If a design choice ever conflicts with one of them, the rule wins.</p>
 {rules(PRINCIPLES)}</section>
+
+<section id="sources"><p class="eyebrow">Sources and ingestion tech</p><h2>What we load, and what brings each one in</h2>
+<p>Nine kinds of source cover a tyre maker: databases that change all day, small reference tables, SAP, SaaS apps, APIs, partner files, machines, historian history, and the spreadsheets people keep. Five technologies bring them in. Four are AWS services (DMS, AppFlow, Transfer Family, Kinesis with SiteWise); the fifth is our own puller, built from the framework's existing connectors. All five deliver to the same landing area, which is why one lander can take it from there.</p>
+{src_table}
+<h3>How to pick, in order</h3>
+<p>For a new source, ask these questions in order and stop at the first yes.</p>
+{rules(PICK_ORDER)}
+<h3>The landing contract: what every mover must deliver</h3>
+<p>The movers differ; what they hand over does not. This contract is what lets the lander treat every source the same way.</p>
+{rules(LANDING_CONTRACT)}
+<h3>How the lander reads each kind of landing</h3>
+{lmode_table}
+<h3>Not in the first version, and why</h3>
+{notv1_table}
+<h3>Where each mover stands</h3>
+{mstat_table}
+</section>
 
 <section id="map"><p class="eyebrow">The runtime map</p><h2>Ten parts, three bands</h2>
 <p>Read the middle row left to right: data moves from source systems to metrics. The band above decides when things run; the band below records everything that ran. Nothing in the middle row starts itself, and nothing runs without being recorded.</p>

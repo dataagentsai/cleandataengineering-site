@@ -216,7 +216,7 @@ def table(head, rows, raw=()):
 
 ASSET_ROWS = [
     ("CostSherlock", "Cost per data product, per pipeline run and per team, from Databricks billing system tables and the AWS Cost and Usage Report, with findings and fixes.", "Ours, on Databricks + AWS", "Separate briefing"),
-    ('<a href="/learn/data-platform-architecture/ingestion/">Common Ingestion Framework</a>', "A new source is a YAML entry, not a new notebook. One lander from landing to bronze, with ingest metadata, replay and watermarks.", "Ours, on Databricks; movers behind a port (DMS, Lakeflow Connect, Auto Loader)", "Built; first end-to-end Databricks run in progress"),
+    ('<a href="/learn/data-platform-architecture/ingestion/">Common Ingestion Framework</a>', "A new source is a YAML entry, not a new notebook. One lander from landing to bronze, with ingest metadata, replay and watermarks.", "Ours, on Databricks; movers behind a port (DMS, AppFlow, Transfer Family, Kinesis, our puller)", "Built; first end-to-end Databricks run in progress"),
     ('<a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a>', "One place where every source, table, rule, owner and budget is declared. Pipelines read it; nobody configures by hand.", "Ours; Aurora PostgreSQL", "Built in the framework (design published); the Aurora deployment is to do"),
     ("Data quality framework", "Rules declared per table, run at every hop, bad rows parked in quarantine, all results in one table.", "Databricks expectations and DQX behind one port; rules from the metadata store", "Partly built: rules from metadata run in silver; 66 assurance rules written"),
     ('<a href="/learn/medallion-architecture/">Medallion template</a>', "Bronze, silver and gold built the same way for every source, with the rules that keep each layer honest.", "Lakeflow Declarative Pipelines", "Built for the first slice"),
@@ -281,7 +281,7 @@ BIND = {
 AWS_VS_DB = [
     ("Plant-floor data collection", "AWS IoT SiteWise, IoT Core, Greengrass", "Auto Loader / streaming tables read what SiteWise lands", "Keep SiteWise at the plant edge: it talks to the machines. Databricks takes the data from S3 or Kinesis for analytics."),
     ("Ingest from SAP", "AppFlow or a partner extractor", "SAP Business Data Cloud connector (" + CHECK + ")", "Use an SAP-certified route (Datasphere or a certified extractor) behind one port; never read SAP tables directly."),
-    ("Ingest from databases (CDC)", "AWS DMS", "Lakeflow Connect", "Keep DMS where it already runs; Lakeflow Connect for new supported sources. Both sit behind one port."),
+    ("Ingest from databases (CDC)", "AWS DMS", "Lakeflow Connect", "DMS for v1, into S3 landing, so every source passes the lander's tokenising and run log. Lakeflow Connect writes straight into tables; revisit per source later."),
     ("Batch and streaming pipelines", "Glue jobs, EMR", "Lakeflow Declarative Pipelines and Jobs", "Pursue Databricks: one engine for batch and streaming, built-in quality rules and lineage."),
     ("Warehouse for BI", "Redshift", "Databricks SQL warehouse", "If Redshift is heavily used, keep it and let it read our tables as Iceberg (UniForm) or through Delta Sharing (" + CHECK + "); new work on Databricks SQL. See the migration plan."),
     ("Ad hoc queries on S3", "Athena", "SQL warehouse", "Keep Athena for small one-off queries; it can read the tables as Iceberg (UniForm)."),
@@ -334,10 +334,11 @@ DB_OPTIONS = [
 ]
 
 MOVERS = [
-    ("SAP S/4HANA (sales, stock, procurement, finance)", "Amazon AppFlow (SAP OData), AWS DMS on the database, or an SAP-certified extractor", "Depends on the SAP licence and setup; agree the route with the SAP team first"),
-    ("MES and quality / LIMS databases", "AWS DMS with change capture, or Lakeflow Connect where it has the connector", "Change capture keeps loads small"),
+    ("SAP S/4HANA (sales, stock, procurement, finance)", "Amazon AppFlow, SAP OData connector, on released CDS views and extractors with delta", "Never SAP tables directly; Datasphere or Business Data Cloud only if already licensed"),
+    ("MES and quality / LIMS databases", "AWS DMS with change capture", "Change capture keeps loads small and brings deletes"),
+    ("Small and reference tables, databases without CDC", "Our puller (the framework's built connectors) as a Databricks job", "Full copy or watermark, into landing like everything else"),
     ("Plant historian and press / mixer sensors", "AWS IoT SiteWise → Kinesis or S3", "The streaming lane: same layers, continuous"),
-    ("Dealer management system, CRM (SaaS)", "Amazon AppFlow or Lakeflow Connect", "Whichever has a supported connector"),
+    ("Dealer management system, CRM (SaaS)", "Amazon AppFlow; our puller's REST connector where AppFlow has none", "Lakeflow Connect is not used in v1"),
     ("Supplier files, raw-material prices", "AWS Transfer Family (SFTP) → S3", "Auto Loader picks the files up"),
 ]
 
@@ -1486,6 +1487,7 @@ def page():
 {C.code(RUNTIME_DDL, "The two runtime tables most people ask about first. The full config schema is on the metadata store page.")}
 
 <h3>Ingestion: movers bring data in, our lander loads it</h3>
+<p>The full list of sources, the five ingestion technologies and the landing contract are on <a href="{BASE}aws-databricks/etl/#sources">The ETL, end to end</a>.</p>
 <p>Ingestion has two steps. A <b>mover</b> brings raw data from the source into an S3 landing folder; which mover is a setting in <code>source_config</code>, so it can change without code. Then <b>one lander</b>, our PySpark job on Databricks using Auto Loader, reads its settings from <code>dataset_view</code>, writes bronze with arrival details, records a <code>run_log</code> row and is safe to run twice. Lakeflow Jobs are generated from the metadata and deployed with Databricks Asset Bundles.</p>
 {mover_table}
 
