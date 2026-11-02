@@ -669,6 +669,33 @@ def cicd_flow():
     return svg(1080, 270, "".join(b), "The release path: pull request checks, deploy to dev with per-hop tests, release tag to pre-prod with real data, DataTwin, parallel run and benchmarks, approval by data owners, then prod, one plant first. Code, config and definitions are deployed together; rollback redeploys the last tag and restores tables.")
 
 
+# ---------------------------------------------------------------- agents (tier T10)
+AGENTS = [
+    ("Triage", "An alert opens an incident", "Collects the evidence: the failed run, the error, recent config and code changes, upstream lineage, CloudWatch for the mover. Writes a diagnosis and the likely cause class into the incident.", "Read only"),
+    ("Fix proposer", "A diagnosed incident with a known cause", "Drafts the fix as a pull request (a widened type, a new rule limit, a watermark reset plan), and proves it in dev by re-running the failed window.", "Pull request + dev"),
+    ("Rule suggester", "A new profile or a full quarantine table", "Explains what changed in plain words and drafts quality rule changes for the steward.", "Pull request"),
+    ("Source onboarder", "A sample file or a database table from a new source", "Drafts the source and dataset YAML, the contract and the first quality rules.", "Pull request"),
+    ("Genie curator", "Thumbs-down answers and failed benchmark questions", "Drafts better instructions, example questions and new benchmark questions for the space owner.", "Pull request"),
+    ("Cost finder", "CostSherlock findings", "Drafts the change behind each finding (a smaller warehouse, a job schedule, a clustering key) with the expected saving.", "Pull request"),
+    ("Documenter", "A table or metric without a description", "Drafts table and column comments and glossary entries from the code, the contract and lineage.", "Pull request"),
+]
+
+AUTONOMY = [
+    ("Read", "ops tables, metadata, lineage, code, profiles", "All agents"),
+    ("Propose", "Open a pull request; comment on an incident", "All agents"),
+    ("Act in dev", "Deploy a branch to dev and re-run a window there", "Fix proposer only"),
+    ("Act in prod", "Change data, config or code in prod", "None. Prod changes only through the normal release path, approved by a person"),
+]
+
+AGENT_RULES = [
+    ("Each agent is its own service principal.", "With read access to prod_ops and the metadata, and no access to prod_restricted or to the token vault: agents see tokens, never personal data."),
+    ("Tools are listed, not open.", "Each agent gets a short list of tools (read a run, read lineage, open a pull request); no general SQL on prod."),
+    ("Every step is logged.", "Prompts, tool calls and outputs go to prod_ops with the incident id, so a reviewer can see why the agent said what it said."),
+    ("Tested before trusted.", "The DataTwin faults are the agents' exam: the triage agent must name the planted cause for each fault before it is switched on, and again after every change."),
+    ("Models stay in the account.", "Databricks-hosted models or Amazon Bedrock in your AWS account."),
+]
+
+
 # ---------------------------------------------------------------- foundation (tier T0)
 FOUNDATION = [
     ("AWS accounts", "One AWS account per environment: dev, pre-prod, prod. All three sit under your AWS Organization and send logs to your central security and log accounts.",
@@ -930,7 +957,7 @@ def ops_board():
 
 
 OPS_SIGNALS = [
-    ("Our runtime schema (Aurora)", "Every run, step, error, quality result and watermark, with the run id", "Read live through Lakehouse Federation, or copied to Delta every 15 minutes"),
+    ("Our runtime schema (Aurora)", "Every run, step, error, quality result and watermark, with the run id", "Copied into prod_ops every 15 minutes (see below)"),
     ("Databricks system tables", "Job and task runs, billing (DBUs and cost), lineage, audit of who read what", "Already in Unity Catalog; joined on the job run id"),
     ("Lakehouse Monitoring / data profiling", "Profiles and drift of key tables: nulls, distinct counts, distributions", "Check current status and name; behind our profiling port"),
     ("Amazon CloudWatch", "Health of AWS movers and the database: DMS lag, AppFlow failures, SiteWise ingestion, Aurora load", "CloudWatch alarms for the AWS side; a daily metrics export joins the ops gold"),
@@ -976,6 +1003,58 @@ SLOS = [
     ("Quality", "Rows passing every rule", "99.5% of rows in silver; zero failures on stop rules"),
     ("Recovery", "Time from failure to data back on time", "Under 2 hours for tier-1 data products"),
 ]
+
+
+OPS_LANDING = [
+    ("Our runtime schema (Aurora)", "A small job reads it through Lakehouse Federation every 15 minutes and MERGEs new rows into prod_ops", "15 minutes",
+     "Dashboards never query Aurora directly, so a busy dashboard can never slow the pipelines that write to it"),
+    ("Databricks system tables", "Read in place; nothing to copy", "Minutes to an hour, table by table (" + CHECK + ")",
+     "Kept by Databricks for a limited time; ops gold keeps 13 months of the summaries we need"),
+    ("Amazon CloudWatch metrics", "A metric stream sends DMS, AppFlow, Kinesis, SiteWise and Aurora metrics through Firehose to S3; Auto Loader reads them into prod_ops", "About 5 minutes",
+     "Only the metrics we name are streamed, so the cost stays small"),
+    ("CloudWatch alarms", "Alarm state changes go through EventBridge to the same S3 path", "Seconds to minutes", "So AWS-side alarms join the same incident list as Databricks alerts"),
+    ("Pipeline event logs (Declarative Pipelines)", "Read from each pipeline's event log: expectation results, flow progress", "Per update", "Expectation results merge into the same quality fact as DQX results"),
+    ("Spark driver and executor logs", "Not loaded. Kept in S3 for 30 days for debugging", "-", "Our framework writes structured events to the runtime tables; free-text logs are for engineers only"),
+]
+
+OPS_MODEL = [
+    ("ops.dim_dataset", "One row per dataset", "Owner, tier, freshness target, volume band, budget, mover id; from the config schema"),
+    ("ops.fct_run", "One row per dataset run", "Our run_log joined to the Databricks job run and its cost: status, timings, rows, cause of failure, cost, config fingerprint"),
+    ("ops.fct_step", "One row per step of a run", "Land, bronze, silver, gold: timings and rows in and out"),
+    ("ops.fct_quality", "One row per rule per run", "DQX results and pipeline expectation results together"),
+    ("ops.fct_freshness", "One row per data product per day", "Promised time, actual time, met or missed, minutes late"),
+    ("ops.fct_mover_health", "One row per mover per 5 minutes", "DMS lag, AppFlow failures, stream delay, Aurora load, from CloudWatch"),
+    ("ops.fct_incident", "One row per incident", "Opened, owner, severity, cause class, acknowledged, resolved, linked runs and alerts, agent diagnosis"),
+    ("ops.fct_access", "One row per read of sensitive data", "From audit system tables and CloudTrail; feeds the quarterly access review"),
+]
+
+INCIDENT_RULES = [
+    ("Alerts open incidents; incidents are what people work.", "Several alerts about one cause (a source down, forty datasets late) group into one incident by source and time window."),
+    ("Every incident has an owner from the metadata.", "The data product's owner and the source's engineer, never a shared mailbox."),
+    ("Close with a cause class.", "Source down, schema change, bad data, our bug, platform, capacity. The trend of causes tells us what to fix next."),
+    ("Tier-1 incidents get a short review.", "What happened, why the tests did not catch it, and the new test or rule that will. Each review adds a DataTwin fault."),
+]
+
+
+def ops_joins():
+    b = []
+    a = b.append
+    boxes = [(20, 30, "runtime.run_log (ours)", ["run_id, dataset_id", "job_run_id"], "#E6F4EC"),
+             (420, 30, "system.lakeflow job runs", ["job_id, run_id", "status, timings"], "#E6EAF7"),
+             (820, 30, "system.billing.usage", ["usage_metadata.job_run_id", "DBUs, cost"], "#E6EAF7"),
+             (20, 200, "config (dataset + source)", ["dataset_id, owner, tier", "mover_id, set per source"], "#F4F4F2"),
+             (420, 200, "CloudWatch (via S3)", ["dimension: task or flow id", "lag, failures"], "#FFF4D9"),
+             (820, 200, "runtime.dq_result + events", ["run_id, rule_id", "passed, rows failed"], "#E6F4EC")]
+    for x, y, t, lines, f in boxes:
+        a(rect(x, y, 300, 86, f) + tx(x + 16, y + 28, t, 15) + "".join(tx(x + 16, y + 52 + k * 19, ln, 12.5, fill="#555") for k, ln in enumerate(lines)))
+    a(arr(320, 73, 420, 73)); a(tx(370, 64, "job_run_id", 11.5, "middle"))
+    a(arr(720, 73, 820, 73)); a(tx(770, 64, "job_run_id", 11.5, "middle"))
+    a(arr(170, 116, 170, 200)); a(tx(180, 162, "dataset_id", 11.5))
+    a(arr(320, 243, 420, 243)); a(tx(370, 234, "mover_id", 11.5, "middle"))
+    a(f'<path d="M320,108 C560,165 700,165 820,232" fill="none" stroke="{INK}" stroke-width="1.5" marker-end="url(#ahx)"/>')
+    a(tx(560, 172, "run_id", 11.5, "middle"))
+    a(tx(560, 320, "Four keys join everything: run_id, job_run_id, dataset_id and the mover id. Our framework writes all four into its own tables.", 13.5, "middle"))
+    return svg(1140, 335, "".join(b), "How the ops tables join: our run_log carries the Databricks job run id, which joins job run system tables and billing usage; dataset_id joins the config, whose mover id joins CloudWatch metrics; run_id joins the quality results.")
 
 
 ORCH = [
@@ -1107,6 +1186,12 @@ def page():
     stage_table = table(["Step", "What runs", "Where", "Takes"], PIPE_STAGES)
     env_table = table(["Environment", "Data", "Who", "Size and cost guard"], ENVS)
     cicd_rules = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(CICD_RULES))
+    landing_table = table(["Signal", "How it reaches prod_ops", "Delay", "Note"], OPS_LANDING)
+    ops_model_table = table(["Table", "One row per", "Holds"], OPS_MODEL)
+    incident_rules = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(INCIDENT_RULES))
+    agents_table = table(["Agent", "Starts when", "Does", "May"], AGENTS)
+    autonomy_table = table(["Level", "Means", "Who"], AUTONOMY)
+    agent_rules = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(AGENT_RULES))
     found_table = table(["Decision", "Our pick", "Why"], FOUNDATION)
     assume_table = table(["Question", "We assume", "If it is different"], ASSUMPTIONS)
     bucket_table = table(["Bucket", "Holds", "Key", "Rules"], BUCKETS, raw=(0,))
@@ -1126,7 +1211,7 @@ def page():
 <div class="sib"><a href="{BASE}">↑ The abstract picture</a><a href="/leaders/spec-driven/data-platform/">Spec-driven development for data</a><a href="/learn/medallion-architecture/">Medallion, drawn right</a></div>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li><li><a href="#foundation">The foundation</a></li><li><a href="#metadata">Metadata and ingestion</a></li><li><a href="#quality">Data quality and profiling</a></li><li><a href="#ops">Observability and alerts</a></li><li><a href="#testing">Testing and data contracts</a></li>
-<li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">Gold, semantic layer and AI/BI</a></li><li><a href="#security">Security and privacy</a></li><li><a href="#cicd">CI/CD and environments</a></li><li><a href="#binding">22 concerns, bound</a></li>
+<li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">Gold, semantic layer and AI/BI</a></li><li><a href="#security">Security and privacy</a></li><li><a href="#cicd">CI/CD and environments</a></li><li><a href="#agents">Agents</a></li><li><a href="#binding">22 concerns, bound</a></li>
 <li><a href="#aws">AWS native or Databricks</a></li><li><a href="#plan">How we would start</a></li><li><a href="#faq">Questions</a></li></ol></nav>
 
 <section id="minute"><p class="eyebrow">The one-minute version</p><h2>Your account, your data, one catalog</h2>
@@ -1183,7 +1268,7 @@ def page():
 <h3>Which database on AWS</h3>
 <p>The metadata store needs keys between tables, fast small reads and writes, safe parallel writes from many jobs, and good JSON for the merged view. That is a relational database, and PostgreSQL fits the design as written.</p>
 {db_table}
-<p><b>Where it sits:</b> in your AWS account, in a private subnet, in the same region as the Databricks workspace (Mumbai for India; Frankfurt or Ireland if EU data needs its own platform). The password lives in AWS Secrets Manager; Databricks classic compute reaches it over the VPC, and serverless compute through a private endpoint. A copy of <code>run_log</code> lands in Delta every day so dashboards and cost reports can join it.</p>
+<p><b>Where it sits:</b> in your AWS account, in a private subnet, in the same region as the Databricks workspace (Mumbai for India; Frankfurt or Ireland if EU data needs its own platform). The password lives in AWS Secrets Manager; Databricks classic compute reaches it over the VPC, and serverless compute through a private endpoint. The runtime tables are copied into Delta every 15 minutes so dashboards and cost reports can join them without touching the database.</p>
 
 <h3>Three schemas in one database</h3>
 <p>One PostgreSQL database per environment, split into three schemas so that permissions are simple: the loader may write only <code>config</code> and <code>audit</code>, pipelines may write only <code>runtime</code>, and dashboards read everything.</p>
@@ -1248,6 +1333,18 @@ def page():
 <h3>Where the signals come from</h3>
 {signals_table}
 
+<h3>How each signal lands</h3>
+<p>Everything lands in one catalog, <code>prod_ops</code>, so one SQL query can join it. The rule: read in place where Databricks already keeps it, copy only what lives outside.</p>
+{landing_table}
+
+<h3>How they join: four keys</h3>
+<p>Signals from three systems only help if they line up. Our framework stamps the same keys everywhere, so a failed run can be followed to its cost, its quality results and the AWS mover that fed it.</p>
+<figure class="diagram">{ops_joins()}<figcaption>The join map. No guessing by timestamps: every link is a key our framework writes.</figcaption></figure>
+
+<h3>The ops tables</h3>
+<p>A small star schema of its own, in <code>prod_ops</code>, built by an ordinary pipeline with the same tests as any other.</p>
+{ops_model_table}
+
 <h3>The ops dashboard</h3>
 <p>One AI/BI dashboard on the ops gold tables, for everyone from the on-call engineer to the plant's data product owner. Numbers in the sketch are made up.</p>
 <figure class="diagram">{ops_board()}<figcaption>Sketch of the ops dashboard. Every tile drills down to the run, the step and the error.</figcaption></figure>
@@ -1262,7 +1359,9 @@ def page():
 <p>Databricks SQL alerts and job notifications cover what happens inside Databricks; CloudWatch alarms with Amazon SNS cover the AWS movers and the database. All of them post to the same Teams or Slack channel and, for tier-1 data products, to the on-call pager.</p>
 {alerts_table}
 <div class="rules">{alert_rules}</div>
-<p><b>Later, self-healing:</b> for known causes (a source briefly down, a late file) an agent may propose the fix and re-run in dev; a person approves before anything touches production.</p>
+<h3>From alert to incident</h3>
+<div class="rules">{incident_rules}</div>
+<p><b>Later, self-healing:</b> for known causes (a source briefly down, a late file) an agent may propose the fix and re-run in dev; a person approves before anything touches production. See <a href="#agents">agents</a>.</p>
 </section>
 
 <section id="testing"><p class="eyebrow">Testing and data contracts</p><h2>Catch it early, prove it before release</h2>
@@ -1379,6 +1478,16 @@ def page():
 {env_table}
 <h3>Five rules</h3>
 <div class="rules">{cicd_rules}</div>
+</section>
+
+<section id="agents"><p class="eyebrow">Agents</p><h2>Agents propose, people decide</h2>
+<p>Agents help most with work that is slow and repetitive for people: reading logs after a failure, drafting a quality rule, writing YAML for a new source. In this design an agent never changes production. It reads, explains, and proposes a change as a pull request, which then takes the same release path as any other change. The agents run on <a href="/learn/agent-harness-aws/">the agent harness on AWS</a>.</p>
+<h3>Seven agents, one job each</h3>
+{agents_table}
+<h3>How far each may go</h3>
+{autonomy_table}
+<h3>Five rules</h3>
+<div class="rules">{agent_rules}</div>
 </section>
 
 <section id="binding"><p class="eyebrow">22 concerns, bound</p><h2>What Databricks gives, what AWS gives, what we add</h2>
