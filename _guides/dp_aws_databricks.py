@@ -1409,7 +1409,7 @@ def page():
 <p class="eyebrow" style="margin-top:22px">Data platform architecture · binding · AWS + Databricks</p>
 <h1>The data platform on AWS and Databricks</h1>
 <p class="lede">The same architecture as <a href="{BASE}">the abstract picture</a>, with a product in every box, for a tyre manufacturer that already runs on AWS and wants Databricks. The design stays the same; only the names change.</p>
-<div class="sib"><a href="{BASE}">↑ The abstract picture</a><a href="/leaders/spec-driven/data-platform/">Spec-driven development for data</a><a href="/learn/medallion-architecture/">Medallion, drawn right</a></div>
+<div class="sib"><a href="{BASE}">↑ The abstract picture</a><a href="{BASE}aws-databricks/etl/">The ETL, end to end</a><a href="/leaders/spec-driven/data-platform/">Spec-driven development for data</a><a href="/learn/medallion-architecture/">Medallion, drawn right</a></div>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li><li><a href="#foundation">The foundation</a></li><li><a href="#metadata">Metadata and ingestion</a></li><li><a href="#quality">Data quality and profiling</a></li><li><a href="#ops">Observability and alerts</a></li><li><a href="#testing">Testing and data contracts</a></li>
 <li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">Gold, semantic layer and AI/BI</a></li><li><a href="#security">Security and privacy</a></li><li><a href="#cicd">CI/CD and environments</a></li><li><a href="#agents">Agents</a></li><li><a href="#run">Running it</a></li><li><a href="#edges">Migration, sharing and ML</a></li><li><a href="#binding">22 concerns, bound</a></li>
@@ -1459,6 +1459,7 @@ def page():
 <p>The Common Ingestion Framework is <b>metadata-driven</b>: adding a source is a few lines of YAML, not a new pipeline. It follows the <a href="https://medium.com/@basant.choudhary09/metadata-db-design-for-data-engineering-components-ingestion-processing-data-quality-data-6b355ad5ecb9">Metadata DB Design for Data Engineering Platforms</a>, already built in our framework. Full table definitions, the view and the reader code are on <a href="{BASE}metadata-store/">the metadata store page</a>.</p>
 <h3>The tables</h3>
 {md_table}
+<p><b>How it all runs</b>, step by step from a source to gold, with every job, trigger, id and log row: <a href="{BASE}aws-databricks/etl/">The ETL, end to end</a>.</p>
 <p class="note">The framework also has a key registry (every allowed setting and its type), per-column settings, quality results and a PII policy table on the same database.</p>
 
 <h3>YAML in GitHub, and a SQL database</h3>

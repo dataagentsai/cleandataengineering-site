@@ -42,6 +42,7 @@ SECTIONS = [
             ("Eval Harness", "/learn/eval-harness/"),
             ("Data platform architecture", "/learn/data-platform-architecture/"),
             ("Data platform on AWS + Databricks", "/learn/data-platform-architecture/aws-databricks/"),
+            ("The ETL, end to end (AWS)", "/learn/data-platform-architecture/aws-databricks/etl/"),
             ("Test architecture for data", "/learn/data-platform-architecture/testing/"),
             ("Medallion architecture", "/learn/medallion-architecture/"),
             ("Real-time analytics", "/learn/real-time-analytics/"),
