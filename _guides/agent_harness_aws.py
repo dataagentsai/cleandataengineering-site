@@ -198,7 +198,7 @@ C = [
   [("Bedrock model evaluation", "plan", "LLM-as-judge and human review"), ("Bedrock RAG evaluation", "plan", ""),
    ("AgentCore Evaluations", "list", "check current status")],
   [("AgentTwin, pytest, pydantic-evals", "use", ""), ("promptfoo, PyRIT", "plan", "red team")],
-  "Golden sets owned by clinicians, hard graders, 4 CI gates, model selection run",
+  "Golden sets owned by quality, warranty and dealer-service leads, hard graders, 4 CI gates, model selection run",
   "Foundry evaluation + AgentTwin",
   "The pretend dealer network and plant (AgentTwin) and the hard graders are the same on any cloud; AWS judges are one plug-in.", (25, 45, 30)),
  ("L15", "Release & config", "Change", "Prompt, model and policy versioned and rolled back together.",
