@@ -1,0 +1,746 @@
+{
+ "results": [
+  {
+   "check": "S01.1",
+   "verdict": "STATED",
+   "quote": "The MES lander job runs on a 15-minute schedule; that is its only trigger.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S01.2",
+   "verdict": "STATED",
+   "quote": "writes the master_run_log row (RUNNING) ... It marks the master run SUCCEEDED, PARTIAL ... or FAILED",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S01.3",
+   "verdict": "STATED",
+   "quote": "Each opens its run_log row (STARTED) with the master run id, job run id and task run id.",
+   "note": "SUCCEEDED comes from step 6.",
+   "feasibility": ""
+  },
+  {
+   "check": "S01.4",
+   "verdict": "STATED",
+   "quote": "After the Delta commit the file log marks the batch loaded",
+   "note": "file_log holds 'which run loaded it'.",
+   "feasibility": ""
+  },
+  {
+   "check": "S01.5",
+   "verdict": "STATED",
+   "quote": "_run_id, _file, _source_system, _ingested_at, and from the mover: _op, _commit_ts, _change_seq (DMS)",
+   "note": "Observability table says DMS order columns are still 'to add' (status, not design).",
+   "feasibility": ""
+  },
+  {
+   "check": "S01.6",
+   "verdict": "STATED",
+   "quote": "After the Delta commit ... run_log becomes SUCCEEDED with ... the newest commit time as the run's watermark",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S01.7",
+   "verdict": "STATED",
+   "quote": "writes one row to the batch-ready marker table",
+   "note": "Closing task depends on the for-each with run_if: ALL_DONE.",
+   "feasibility": ""
+  },
+  {
+   "check": "S01.8",
+   "verdict": "STATED",
+   "quote": "triggered by updates to the marker tables of its sources (MES, the press master), not by each bronze table",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S01.9",
+   "verdict": "STATED",
+   "quote": "A wrapper task opens a run_log row with the pipeline's update id",
+   "note": "",
+   "feasibility": "CHECK: a wrapper task that runs before the pipeline task cannot know the update_id, which only exists once the update starts; it must be back-filled from the event log or the run row opened after the update begins."
+  },
+  {
+   "check": "S01.10",
+   "verdict": "STATED",
+   "quote": "After each silver update, the pipeline's wrapper task writes input_watermark",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S01.11",
+   "verdict": "STATED",
+   "quote": "closes the run, then starts the window-recompute job directly",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S01.12",
+   "verdict": "STATED",
+   "quote": "marks each hour complete only if every input's bookmark is past its end",
+   "note": "_is_complete column is listed on gold rows.",
+   "feasibility": ""
+  },
+  {
+   "check": "S01.13",
+   "verdict": "STATED",
+   "quote": "A dataset is fresh when its bookmark is within its target, whatever its runs say.",
+   "note": "Ops builder runs every 15 minutes.",
+   "feasibility": ""
+  },
+  {
+   "check": "S02.1",
+   "verdict": "STATED",
+   "quote": "an EventBridge rule on the flow-run event calls a Lambda that writes the manifest and starts the lander ... one clock: AppFlow's",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S02.2",
+   "verdict": "STATED",
+   "quote": "SAP rows carry the extractor's change mode where it exists.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S02.3",
+   "verdict": "STATED",
+   "quote": "Sequence by the extraction run, then the extractor's change counter where it has one",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S02.4",
+   "verdict": "STATED",
+   "quote": "a delete closes the current version: _valid_to is set and _is_deleted is true ... a deleted order line stops counting in sales",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S02.5",
+   "verdict": "STATED",
+   "quote": "objects whose delta does not carry deletes are loaded as a nightly full copy instead",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S03.1",
+   "verdict": "STATED",
+   "quote": "a lag alarm that treats missing data as breaching",
+   "note": "Alarm exists in 'Caught by'; no named alert row for it in the alerts table.",
+   "feasibility": ""
+  },
+  {
+   "check": "S03.2",
+   "verdict": "GAP",
+   "quote": "the lander finds nothing new and ends as skipped",
+   "note": "Which row records 'skipped' is unclear: master_run_log has no SKIPPED status and the for-each only creates run_log rows for due datasets.",
+   "feasibility": ""
+  },
+  {
+   "check": "S03.3",
+   "verdict": "STATED",
+   "quote": "a stopped task or a large latency freezes it.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S03.4",
+   "verdict": "STATED",
+   "quote": "Freshness goes red from the bookmark at the promised time",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S03.5",
+   "verdict": "STATED",
+   "quote": "gold hours stay incomplete until the bookmark passes them",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S03.6",
+   "verdict": "STATED",
+   "quote": "the lander loads the backlog over a few runs",
+   "note": "Selection is 'every file not yet in the file log'.",
+   "feasibility": ""
+  },
+  {
+   "check": "S03.7",
+   "verdict": "STATED",
+   "quote": "then fill in as restatements",
+   "note": "Recompute picks 'hours that changed in any input'; an hour whose data did not change but whose bookmark merely advanced is not obviously re-picked.",
+   "feasibility": ""
+  },
+  {
+   "check": "S03.8",
+   "verdict": "STATED",
+   "quote": "Each database keeps its change log at least 72 hours, so DMS can catch up after an outage without a full reload.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S04.1",
+   "verdict": "STATED",
+   "quote": "queue: { enabled: true }  # a run waits; it never overlaps or vanishes",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S04.2",
+   "verdict": "STATED",
+   "quote": "takes every file not yet in the file log",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S04.3",
+   "verdict": "STATED",
+   "quote": "a batch committed before a crash is never appended twice",
+   "note": "'Lists only the date folders that can hold new files' is vague about late files in older folders.",
+   "feasibility": ""
+  },
+  {
+   "check": "S05.1",
+   "verdict": "STATED",
+   "quote": "checks it (readable, header, row count), and reads exactly the checked list. Auto Loader does not choose files",
+   "note": "",
+   "feasibility": "CHECK: Auto Loader discovers files from a path and cannot be handed an explicit file list; reading 'exactly the checked list' is a plain batch read, so the Auto Loader wording is inconsistent."
+  },
+  {
+   "check": "S05.2",
+   "verdict": "STATED",
+   "quote": "The dataset is BLOCKED at that file: no later change files are loaded",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S05.3",
+   "verdict": "STATED",
+   "quote": "Other datasets carry on",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S05.4",
+   "verdict": "STATED",
+   "quote": "the master run is PARTIAL ... The job itself ends green when every failure was a handled data problem",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S05.5",
+   "verdict": "STATED",
+   "quote": "Only passing errors are retried; the lander ends data problems itself, as handled failures",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S05.6",
+   "verdict": "STATED",
+   "quote": "its bookmark stops, so gold shows the hours as incomplete",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S05.7",
+   "verdict": "STATED",
+   "quote": "the 'dataset blocked' alert fires",
+   "note": "Ops builder 'raises alerts' from runtime rows.",
+   "feasibility": ""
+  },
+  {
+   "check": "S05.8",
+   "verdict": "STATED",
+   "quote": "Repair the file, or reload that table through the bulk job; then the dataset unblocks",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S06.1",
+   "verdict": "STATED",
+   "quote": "The file is moved to landing/_rejected and file_log says why",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S06.2",
+   "verdict": "STATED",
+   "quote": "the dataset's run ends FAILED as handled; other datasets carry on; master run PARTIAL",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S06.3",
+   "verdict": "STATED",
+   "quote": "The partner or source re-sends; the next run loads it",
+   "note": "Upload-copied trigger starts the lander.",
+   "feasibility": ""
+  },
+  {
+   "check": "S07.1",
+   "verdict": "STATED",
+   "quote": "copies each upload to landing under a unique key (partner, file, arrival time)",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S07.2",
+   "verdict": "STATED",
+   "quote": "Lands as a new file with a unique name",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S07.3",
+   "verdict": "STATED",
+   "quote": "silver replaces the slice the contract names (dealer and month) with the newest file",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S07.4",
+   "verdict": "STATED",
+   "quote": "gold rebuilds the affected windows, of any age, as restatements",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S08.1",
+   "verdict": "STATED",
+   "quote": "A pull that came back short matches its own manifest, so only this guard catches it.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S08.2",
+   "verdict": "STATED",
+   "quote": "more than a set share of the table (5% by default ...), the load stops before silver changes",
+   "note": "",
+   "feasibility": "CHECK: AUTO CDC FROM SNAPSHOT has no pre-apply hook; the guard must be a separate failing check that runs before the snapshot flow (e.g. in the wrapper or an upstream expect_or_fail view), which the page does not place."
+  },
+  {
+   "check": "S08.3",
+   "verdict": "STATED",
+   "quote": "the load stops before silver changes",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S08.4",
+   "verdict": "STATED",
+   "quote": "'mass delete stopped' alert | Check the source; re-pull",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S09.1",
+   "verdict": "STATED",
+   "quote": "A row missing from the new copy is deleted ... _valid_to is set and _is_deleted is true",
+   "note": "Assumes press master is an SCD2 history table; not stated explicitly.",
+   "feasibility": ""
+  },
+  {
+   "check": "S09.2",
+   "verdict": "STATED",
+   "quote": "A decommissioned press keeps its row in gold's press dimension, flagged, so old facts still find it.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S09.3",
+   "verdict": "STATED",
+   "quote": "Facts join dimensions as of the event time, never just to the current row.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S10.1",
+   "verdict": "STATED",
+   "quote": "If there was no progress and the pipeline is not running, the row says DOWN",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S10.2",
+   "verdict": "STATED",
+   "quote": "the per-press check is held back, and one stream alert fires instead of hundreds",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S10.3",
+   "verdict": "STATED",
+   "quote": "Kinesis keeps 7 days, so a stream down for less than that loses nothing; on restart it reads from its checkpoint.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S10.4",
+   "verdict": "STATED",
+   "quote": "Hours not yet caught up are marked incomplete.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S10.5",
+   "verdict": "STATED",
+   "quote": "re-checks the last 2 days for readings that arrived late",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S11.1",
+   "verdict": "STATED",
+   "quote": "A per-press check (no reading for 30 minutes in a planned shift) catches one quiet press.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S11.2",
+   "verdict": "STATED",
+   "quote": "the hour is published as incomplete, left out of OEE's top and bottom",
+   "note": "Per-press sensor bookmark makes it press-specific.",
+   "feasibility": ""
+  },
+  {
+   "check": "S11.3",
+   "verdict": "STATED",
+   "quote": "OEE for the morning meeting, with completeness shown.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S12.1",
+   "verdict": "STATED",
+   "quote": "corrections live in their own table (silver.corrections: ... applies from ...), and gold lays them over silver",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S12.2",
+   "verdict": "STATED",
+   "quote": "Adding a correction never triggers a recompute of months by itself ... A backfill plan says which windows to rebuild",
+   "note": "But the recompute takes 'hours that changed in any input' and reads corrections, which would pick the correction up automatically (see contradictions).",
+   "feasibility": "CHECK: simple facts are materialized views that read corrections; any refresh recomputes with the new correction, so 'never by itself' cannot hold for MV-built facts."
+  },
+  {
+   "check": "S12.3",
+   "verdict": "STATED",
+   "quote": "the only writer of that fact, works through it one chunk per run between normal updates",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S12.4",
+   "verdict": "STATED",
+   "quote": "It never moves a run watermark or an input bookmark.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S12.5",
+   "verdict": "STATED",
+   "quote": "Every rebuilt window is a restatement.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S13.1",
+   "verdict": "STATED",
+   "quote": "Times out after 10 seconds and retries twice; if it still cannot write, the job fails before any work.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S13.2",
+   "verdict": "STATED",
+   "quote": "Databricks' own job alerts, duration rules and the heartbeat alert do not need our database",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S13.3",
+   "verdict": "STATED",
+   "quote": "No heartbeat row for 30 minutes (a Databricks SQL alert, independent of Aurora)",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S13.4",
+   "verdict": "STATED",
+   "quote": "Step and quality rows are buffered and retried; a failure to log a step never fails the data work.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S14.1",
+   "verdict": "STATED",
+   "quote": "the ops builder lists runs still STARTED past their job's timeout",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S14.2",
+   "verdict": "STATED",
+   "quote": "If bronze holds rows with that run id, the commit happened: the run is closed as SUCCEEDED with counts from bronze",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S14.3",
+   "verdict": "STATED",
+   "quote": "Every sweep is logged, so a run closed by the sweeper is visible as such.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S14.4",
+   "verdict": "STATED",
+   "quote": "each batch is appended with a transaction id ..., so a batch committed before a crash is never appended twice",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S15.1",
+   "verdict": "STATED",
+   "quote": "Retried up to 2 times (only passing errors reach Lakeflow)",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S15.2",
+   "verdict": "STATED",
+   "quote": "the batch's transaction id stops a second append",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S15.3",
+   "verdict": "GAP",
+   "quote": "takes every file not yet in the file log",
+   "note": "Files are written to file_log as a batch before the read; the page never says a retry or the next run re-reads a checked-but-unloaded batch, and the literal selection rule would skip it.",
+   "feasibility": ""
+  },
+  {
+   "check": "S16.1",
+   "verdict": "STATED",
+   "quote": "For sources without personal data, bronze still holds everything",
+   "note": "Whether the SAP delivery extract counts as personal-data is not stated.",
+   "feasibility": ""
+  },
+  {
+   "check": "S16.2",
+   "verdict": "STATED",
+   "quote": "Silver's contract check stops that table; silver stays as it was",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S16.3",
+   "verdict": "STATED",
+   "quote": "the 'schema changed' alert goes to the source owner named in the contract",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S16.4",
+   "verdict": "STATED",
+   "quote": "the table is replayed from bronze ... SAP is never asked to re-extract.",
+   "note": "",
+   "feasibility": "CHECK: a full refresh of an AUTO CDC/streaming silver table rebuilds only from what bronze still holds, so nightly 'retention deletes' must never touch bronze for SAP deltas; the page does not set bronze retention."
+  },
+  {
+   "check": "S17.1",
+   "verdict": "CONTRADICTED",
+   "quote": "The file is held in the personal-data landing bucket ..., the dataset is BLOCKED ... Once the contract says what it is, the held files load.",
+   "note": "Page holds and blocks; it does not drop the column and load.",
+   "feasibility": ""
+  },
+  {
+   "check": "S17.2",
+   "verdict": "STATED",
+   "quote": "Kept in bronze as rescued data and ignored until someone maps it.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S17.3",
+   "verdict": "STATED",
+   "quote": "The contract check does not stop on an added column.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S18.1",
+   "verdict": "STATED",
+   "quote": "the DBA enables CDC on the table (a checklist item)",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S18.2",
+   "verdict": "STATED",
+   "quote": "the generator adds the table to its DMS task group; only that group pauses.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S18.3",
+   "verdict": "STATED",
+   "quote": "The deploy creates the empty bronze table and its marker entry from the contract, before any trigger refers to them.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S18.4",
+   "verdict": "STATED",
+   "quote": "First load in the bulk job. In segments; it records its files in the same file log.",
+   "note": "'Own checkpoint' = segment_run_log; 'none in the way of the normal runs'.",
+   "feasibility": "CHECK: bulk-job rows carry no _commit_ts/_change_seq, so ordering against DMS CDC rows (and the CDC start position vs the snapshot time) is undefined; DMS normally does its own full load with IncludeOpForFullLoad for this reason."
+  },
+  {
+   "check": "S18.5",
+   "verdict": "STATED",
+   "quote": "From the next run the lander job includes the dataset and takes only the files the bulk job did not.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S19.1",
+   "verdict": "STATED",
+   "quote": "Lander runs store the merged settings in config_snapshot by their fingerprint.",
+   "note": "Pipeline runs store the fingerprint on the update's run row.",
+   "feasibility": ""
+  },
+  {
+   "check": "S19.2",
+   "verdict": "STATED",
+   "quote": "A run in progress keeps the settings it started with; the next run picks up the new ones, and the logs show which run used which.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S19.3",
+   "verdict": "STATED",
+   "quote": "Changes to quality limits, watermarks, replacement rules and grants always take the full gates",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S20.1",
+   "verdict": "STATED",
+   "quote": "A queued run of the same lander job with run type rerun, linked to the failed master run.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S20.2",
+   "verdict": "STATED",
+   "quote": "The file log means only what was not loaded is read.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S20.3",
+   "verdict": "STATED",
+   "quote": "It writes new run rows; the earlier FAILED rows stay as history",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S21.1",
+   "verdict": "STATED",
+   "quote": "Names, phone numbers and emails are replaced by random tokens; the real values go only to the token vault",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S21.2",
+   "verdict": "STATED",
+   "quote": "Free-text fields such as warranty notes go through a personal-data detector behind a port; names it finds are tokenised too.",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S21.3",
+   "verdict": "STATED",
+   "quote": "Files in the personal-data landing bucket are deleted one day after they are read.",
+   "note": "",
+   "feasibility": "CHECK: S3 lifecycle expiry counts from object creation, not from read; 'one day after read' needs a custom job (nightly housekeeping makes it up to ~2 days), and a creation-based rule would delete unread files of a BLOCKED dataset."
+  },
+  {
+   "check": "S21.4",
+   "verdict": "STATED",
+   "quote": "No log row holds a real value: error messages are scrubbed",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S22.1",
+   "verdict": "STATED",
+   "quote": "A row in every layer every 15 minutes",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S22.2",
+   "verdict": "STATED",
+   "quote": "No heartbeat row for 30 minutes (a Databricks SQL alert, independent of Aurora)",
+   "note": "",
+   "feasibility": ""
+  },
+  {
+   "check": "S22.3",
+   "verdict": "STATED",
+   "quote": "A source that went quiet because it broke goes red; one that is genuinely quiet stays green.",
+   "note": "'Now minus latency' is stated for DMS only; and the mechanism conflicts with bookmarks being written only after a silver update (see contradictions).",
+   "feasibility": ""
+  }
+ ],
+ "contradictions": [
+  {
+   "a": "A run that finds nothing new still moves its bookmark to the time it looked.",
+   "b": "After each silver update, the pipeline's wrapper task writes input_watermark / Silver: runs when one of its sources has finished a batch",
+   "note": "A skipped lander run triggers no silver update, so nothing writes the quiet source's bookmark; it would go red."
+  },
+  {
+   "a": "Adding a correction never triggers a recompute of months by itself",
+   "b": "The recompute ... takes the hours that changed in any input (Gold builder reads: Silver, integrated silver, corrections, input watermarks)",
+   "note": "Corrections are an input, so a back-dated correction changes old hours and the normal recompute picks them up."
+  },
+  {
+   "a": "takes every file not yet in the file log",
+   "b": "If not, it is closed as FAILED and the files stay unloaded for the next run.",
+   "note": "The files were already written to file_log as a checked batch, so the selection rule would skip them."
+  },
+  {
+   "a": "AWS DMS: full load once, then change data capture ... Full-load rows carry an operation flag too (IncludeOpForFullLoad)",
+   "b": "First load of a new dataset | A new table, or a new source | The bulk job, in segments",
+   "note": "Two different first-load paths for DMS tables."
+  },
+  {
+   "a": "Movers never write to bronze; the lander never talks to a source ... Every source enters the same way",
+   "b": "Kinesis streams | A streaming table reading Kinesis directly, always on",
+   "note": "Streams bypass landing, the lander, tokenising and the file log, the 'second way in' the page rejects for Lakeflow Connect."
+  },
+  {
+   "a": "Lakeflow Jobs owns everything from landing onwards; AWS only moves.",
+   "b": "an EventBridge rule on the flow-run event calls a Lambda that ... starts the lander through the Jobs API ... one clock: AppFlow's",
+   "note": "For AppFlow and Transfer Family sources, AWS (EventBridge/Lambda) starts the lander."
+  },
+  {
+   "a": "Window-recompute job ... the only writer of that fact",
+   "b": "Stream gold job ... Hourly gold for the closed hour / 06:15 Stream gold closes the 05:00-06:00 hour; the window recompute sets completeness",
+   "note": "Two jobs build and set completeness on the same press-hour OEE; which one owns the fact is unclear."
+  },
+  {
+   "a": "a run with nothing due ends as skipped",
+   "b": "master_run_log ... RUNNING, SUCCEEDED, PARTIAL, FAILED",
+   "note": "The master run has no SKIPPED status to end in."
+  }
+ ]
+}
