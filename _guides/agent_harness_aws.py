@@ -334,14 +334,14 @@ def marks(items):
 
 def binding_table():
     out = ['<div class="sd-table wide"><table><tr><th>Concern</th><th>On AWS</th><th>Open source</th>'
-           '<th>Ours, built once, and why</th><th>For comparison: on Azure</th></tr>']
+           '<th>Ours, built once, and why</th></tr>']
     for fam, sub in FAMILIES:
-        out.append(f'<tr class="aw-fam"><td colspan="5">{fam} <small style="font-family:var(--sans);font-size:14px">· {sub}</small></td></tr>')
+        out.append(f'<tr class="aw-fam"><td colspan="4">{fam} <small style="font-family:var(--sans);font-size:14px">· {sub}</small></td></tr>')
         for cid, name, f, does, aws, oss, ours, az, why, _ in C:
             if f != fam:
                 continue
             out.append(f"<tr><td><b>{cid} · {E(name)}</b><br><small>{E(does)}</small></td><td>{marks(aws)}</td><td>{marks(oss)}</td>"
-                       f"<td>{E(ours)}<br><small><i>{E(why)}</i></small></td><td><small>{E(az)}</small></td></tr>")
+                       f"<td>{E(ours)}<br><small><i>{E(why)}</i></small></td></tr>")
     out.append("</table></div>")
     return "".join(out)
 
@@ -421,7 +421,7 @@ BODY = f"""<main class="wrap">
 </table></div></section>
 
 <section><p class="eyebrow">Every concern, bound to AWS</p><h2>The 22 concerns, one table</h2>
-<p>For each concern: what AWS offers and whether we use it, the open-source options, what we code once for every agent, what it was on Azure, and why.</p>
+<p>For each concern: what AWS offers and whether we use it, the open-source options, and what we code once for every agent, and why.</p>
 <p class="aw-key"><span class="aw-mark use">use</span> in the design &nbsp; <span class="aw-mark plan">planned</span> next phase &nbsp; <span class="aw-mark list">considered</span> not picked, or newer service to check &nbsp; <span class="aw-mark no">not used</span> and why</p>
 {binding_table()}
 <p class="aw-key">Services marked "check current status" are newer AWS offerings; confirm their availability in the Mumbai, Hyderabad, Frankfurt and Ireland regions before relying on them.</p>
@@ -429,7 +429,7 @@ BODY = f"""<main class="wrap">
 
 <section><p class="eyebrow">Who builds what</p><h2>What AWS gives, what we build, what each agent writes</h2>
 <p>For each concern, how much does AWS give us, how much do we code once for every agent, and how much does each agent team still write? AWS gives the plumbing. The parts that make an agent safe for dealers and customers stay in our code.</p>
-{fig(fig_split(), "Our judgement, not a measurement. Compared with Azure, model invocation moves from AWS to us because AWS has no ready AI gateway; most other concerns are about the same.")}
+{fig(fig_split(), "Our judgement, not a measurement. AWS gives the plumbing (gateway, identity, storage, logging); the parts that make an agent trustworthy stay in our code.")}
 <p>The rule that keeps this healthy: when two agents write the same code, it moves into the shared middle (blue). When AWS catches up, it moves to the left (grey).</p></section>
 
 <section><p class="eyebrow">Open decisions</p><h2>Five choices to make with the company's team</h2>
