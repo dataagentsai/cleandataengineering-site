@@ -467,8 +467,8 @@ def the_bundle():
         ("1b", "Spec 0.2: notebooks, dbt, materialized views, metric views, clean code on 404 Ruff rules, an SCD2 example with a test kit, CI and container templates", "done"),
         ("2", "Proof material: a sample shop with 101 planted problems, 16 false-alarm traps and a hidden answer key. Ruff alone catches 17 of 101 with no false alarms; the rest is what the next tiers build", "done"),
         ("3", "One runner over eight open-source tools, findings as SARIF on the pull request, block or warn, baseline for existing code. First measured run: 34 of 101 planted problems caught, no false alarms, under 8 seconds", "done"),
-        ("4", "Cost rules plugged in; young PySpark linters tried; missing plan rules added", "next"),
-        ("5", "What we build: purity report, test-time purity check, empty-table plan check, gap report", "later"),
+        ("4", "Cost rules plugged in (our earlier cost-analysis rules, SparkDoctor after a trial of three young PySpark linters, our own materialized-view and job-config rules). Second measured run: 64 of 101 caught, still no false alarms", "done"),
+        ("5", "What we build: purity report, test-time purity check, empty-table plan check, gap report", "next"),
         ("6", "A real repo: cut the noise, feed gaps back into the spec", "later"),
         ("7", "Teach and release: this guide kept current, a Claude skill, CI templates, version 0.1", "alongside"),
         ("8", "Azure binding", "later")])}</section>
