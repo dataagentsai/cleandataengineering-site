@@ -205,13 +205,15 @@ def page():
 <section id="binding"><p class="eyebrow">Concept vs product</p><h2>One design, every platform</h2>
 <p>The picture above names no product. Each platform gets a binding: which product does each job. Moving platform means a new binding and new adapters, not a new design.</p>
 <div class="tw"><table class="t"><tr><th>Job</th><th>AWS</th><th>Azure / Fabric</th><th>Google Cloud</th><th>Databricks</th><th>Open source</th></tr>{binding}</table></div>
-<p class="note">Product names change often; check the current docs before you build.</p></section>
+<p class="note">Product names change often; check the current docs before you build.</p>
+<p><b>One binding in full:</b> <a href="/learn/data-platform-architecture/aws-databricks/">the data platform on AWS + Databricks</a>: the whole picture with a product in every box, the shared assets, and all 22 concerns with what Databricks gives and what we fill in.</p></section>
 
 <section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{faq}</section>
 
 <section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
 <p><b>Zoom into the middle row:</b> <a href="{MED}">Medallion architecture, drawn right</a>: each layer, one order followed through all of them, the rules and the mistakes.</p>
 <p><b>The ideas behind the boxes:</b> <a href="/concepts/#data-engineering">key data engineering concepts</a>, one short page each.</p>
+<p><b>On a real stack:</b> <a href="/learn/data-platform-architecture/aws-databricks/">Data platform on AWS + Databricks</a>, and <a href="/leaders/spec-driven/data-platform/">how a team builds it spec-first</a>.</p>
 <p><b>Learn it step by step:</b> <a href="/paths/data-engineering/">the Data Engineering path</a>, on AWS, Azure, Google Cloud, Databricks or open source.</p>
 <p><b>Each component, in detail:</b> <a href="/learn/data-platform-architecture/metadata-store/">metadata store</a> · <a href="/learn/data-platform-architecture/ingestion/">ingestion</a> · <a href="/learn/data-platform-architecture/bronze-to-silver/">bronze to silver (SCD Type 1 and 2)</a> · <a href="/learn/data-platform-architecture/gold/">gold</a>.</p>
 <p><b>Run it:</b> <a href="/learn/data-platform-sim/">DataTwin Studio</a>: watch one batch go through the whole platform, recorded from a real run, then send the same file again and see what breaks.</p></section>"""

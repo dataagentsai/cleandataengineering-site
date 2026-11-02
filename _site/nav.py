@@ -38,8 +38,10 @@ SECTIONS = [
         ("Courses", "/learn/", [
             ("The AI Universe", "/learn/ai-universe/"),
             ("Agent Harness", "/learn/agent-harness/"),
+            ("Agent Harness on AWS", "/learn/agent-harness-aws/"),
             ("Eval Harness", "/learn/eval-harness/"),
             ("Data platform architecture", "/learn/data-platform-architecture/"),
+            ("Data platform on AWS + Databricks", "/learn/data-platform-architecture/aws-databricks/"),
             ("Medallion architecture", "/learn/medallion-architecture/"),
             ("Real-time analytics", "/learn/real-time-analytics/"),
             ("Shift left: fail fast on data code", "/learn/shift-left/"),
@@ -106,7 +108,10 @@ SECTIONS = [
     ]),
     ("For leaders", [
         ("The one-minute version", "/leaders/", []),
-        ("Spec-driven development", "/leaders/spec-driven/", []),
+        ("Spec-driven development", "/leaders/spec-driven/", [
+            ("For agents", "/leaders/spec-driven/"),
+            ("For data platforms", "/leaders/spec-driven/data-platform/"),
+        ]),
         ("Questions leaders ask", "/leaders/#questions", []),
         ("Technical papers", "/papers/", []),
         ("Blog", "/writing/", []),

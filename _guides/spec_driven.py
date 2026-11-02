@@ -439,6 +439,7 @@ BODY = f"""<main class="wrap">
 <tr><th>Question the spec answers</th><th>AI engineering (agent harness)</th><th>Data engineering</th></tr>
 {"".join(f"<tr><td>{q}</td><td>{a}</td><td>{d}</td></tr>" for q, a, d in PARALLEL)}
 </table></div>
+<p><b>The full data version:</b> <a href="/leaders/spec-driven/data-platform/">Spec-driven development for data platforms</a>. On AWS: <a href="/learn/agent-harness-aws/">the agent harness on AWS</a> and <a href="/learn/data-platform-architecture/aws-databricks/">the data platform on AWS + Databricks</a>.</p>
 <p>Read more: <a href="/learn/data-platform-architecture/">data platform architecture</a>, <a href="/learn/datatwin/">DataTwin, explained</a>, <a href="https://dataagentsai.github.io/ai-harness-catalog/">AI Harness Catalog</a>, <a href="https://dataagentsai.github.io/ai-assurance-catalog/">AI Assurance Catalog</a>.</p></section>
 
 <section><p class="eyebrow">The case for leaders</p><h2>What you get, and what it takes</h2>
