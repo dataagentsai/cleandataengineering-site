@@ -141,13 +141,11 @@ def big_picture():
         a(link(href, inner, name))
     a(tx(36 + 4 * 230 + 109, 610 + 74, "all 22 concerns on by default", 14, "middle"))
     # foundation
-    a(rect(20, 732, 582, 112, "#F1F1EF"))
-    a(tx(38, 758, "AWS foundation: your account", 19))
+    a(link("#foundation", rect(20, 732, 582, 112, "#F1F1EF") + tx(38, 758, "AWS foundation: your account", 19), "The foundation"))
     for k, ln in enumerate(["Customer-managed VPC · PrivateLink to Databricks", "S3 holds all data · KMS keys you own · IAM roles · CloudTrail",
-                            "Regions: Mumbai for India · Frankfurt or Ireland for EU plants"]):
+                            "Mumbai, with Hyderabad for recovery · EU only if legal requires"]):
         a(tx(38, 784 + k * 22, ln, 15))
-    a(rect(618, 732, 582, 112, "#E6EAF7"))
-    a(tx(636, 758, "Databricks on AWS: runs in your account", 19))
+    a(link("#foundation", rect(618, 732, 582, 112, "#E6EAF7") + tx(636, 758, "Databricks on AWS: runs in your account", 19), "The foundation"))
     for k, ln in enumerate(["Workspace with serverless and classic compute · Photon", "Unity Catalog: one catalog for every table, file and model",
                             "System tables: billing, audit, lineage, job runs"]):
         a(tx(636, 784 + k * 22, ln, 15))
@@ -404,6 +402,93 @@ WM_STEPS = [
     ("Late rows", "A look-back overlap (say 2 hours, set in dataset_config) re-reads a little of the last window; the MERGE drops the repeats."),
     ("Files and streams", "Auto Loader and streaming keep their own checkpoints; we record the checkpoint location, not a second watermark. CDC sources use the change position (LSN or SCN); SAP uses its delta token."),
 ]
+
+
+# ---------------------------------------------------------------- foundation (tier T0)
+FOUNDATION = [
+    ("AWS accounts", "One AWS account per environment: dev, pre-prod, prod. All three sit under your AWS Organization and send logs to your central security and log accounts.",
+     "A mistake in dev cannot touch prod, permissions stay simple, and each environment's bill is separate."),
+    ("Region", "Mumbai (ap-south-1) is home. Hyderabad (ap-south-2) holds the recovery copy.",
+     "Both are in India, so recovery does not move data out of the country."),
+    ("EU plants", "Plant and production data from EU plants comes to Mumbai too. Personal data about EU people (staff, dealers) is kept to the minimum, masked where possible.",
+     "Press readings and scrap counts are not personal data. One platform costs half of two. A separate EU platform (Frankfurt) only if your legal team requires it."),
+    ("Databricks workspaces", "Three workspaces (dev, pre-prod, prod) on one Unity Catalog. Each catalog is bound to its workspace, so prod tables are visible only in prod.",
+     "Databricks allows one Unity Catalog per region, so the three share it; binding keeps the environments apart."),
+    ("Network", "No public IP addresses anywhere. Compute runs in your own VPC, across two availability zones. Databricks is reached through PrivateLink, never the open internet.",
+     "This is the first thing a manufacturer's security team asks. Two zones keep the platform up if one data centre fails."),
+    ("Storage and keys", "One S3 bucket and one KMS key per catalog. A landing bucket per environment. Recipes get their own bucket and key with the tightest access.",
+     "Recipes are the crown jewels: with their own key, revoking all access is one action, and every use of the key is logged."),
+    ("Compute", "Serverless by default for SQL, jobs and pipelines. Classic compute (clusters inside your VPC) only where a job must reach a private system that serverless cannot yet reach.",
+     "Starts in seconds, nothing to patch or size. Serverless private reach on AWS: " + CHECK + "."),
+    ("Sign-in and identity", "People sign in through your existing identity provider; groups sync to Databricks automatically (SCIM). Jobs run as service principals, never as a person.",
+     "When someone leaves, one change removes all their access, and no job breaks because its owner left."),
+    ("How it is built", "Terraform builds all of the above from Git (AWS and Databricks providers). Pipelines are deployed separately with Databricks Asset Bundles.",
+     "The whole foundation can be rebuilt the same way in every environment, and in Hyderabad after a disaster."),
+]
+
+ASSUMPTIONS = [
+    ("Is there already an AWS landing zone (Control Tower or similar)?", "Yes, with central security and log-archive accounts", "If not, we add a minimal one first: an Organization, CloudTrail to a log account, guardrails (SCPs). About a week."),
+    ("Which identity provider?", "Microsoft Entra ID", "Okta or another SAML / OIDC provider works the same way; only the Terraform settings change."),
+    ("How do plants reach AWS?", "Direct Connect from the head office, plants on the company network (MPLS or SD-WAN)", "With only VPN, sensor streaming is sized smaller and the plant historian is pulled in batches."),
+    ("Where does SAP run?", "SAP S/4HANA on AWS (RISE) or in a data centre linked to AWS", "The mover changes (see the ingestion table); the foundation does not."),
+    ("Must EU data stay in the EU?", "Not for plant data; personal data minimised", "If yes for everything, add a fourth workspace in Frankfurt on its own Unity Catalog, and share gold tables back with Delta Sharing."),
+]
+
+BUCKETS = [
+    ("landing-&lt;env&gt;", "Raw files from the movers, as they arrived", "Environment key", "Files deleted 30 days after they reach bronze; versioning on"),
+    ("&lt;env&gt;-bronze, -silver, -gold, -semantic, -ops", "The managed tables of each catalog", "One key per catalog", "Delta handles history; old versions cleaned by VACUUM after 30 days"),
+    ("&lt;env&gt;-restricted", "Recipes and compound formulations", "Its own key; only the recipe group can use it", "Access logged and reviewed monthly"),
+    ("audit-&lt;env&gt;", "Copies of audit and config change logs", "Environment key", "Object Lock: cannot be changed or deleted for 7 years"),
+    ("dr-* (Hyderabad)", "Copies of prod gold and restricted, for recovery", "Keys in Hyderabad", "S3 replication; restore tested twice a year"),
+]
+
+BINDING = [
+    ("dev_* catalogs", "Read and write", "Not visible", "Not visible"),
+    ("preprod_* catalogs", "Not visible", "Read and write", "Not visible"),
+    ("prod_bronze, prod_silver, prod_gold, prod_semantic", "Not visible", "Read only (for real-data tests and shallow clones)", "Jobs write; people read through grants"),
+    ("prod_restricted", "Not visible", "Not visible", "Recipe group only"),
+    ("prod_ops", "Not visible", "Read only", "Pipelines write; everyone on the platform reads"),
+]
+
+TF_TREE = """foundation/                     # Terraform, one folder per layer, applied in this order
+  1-org/          accounts, guardrails (SCPs), CloudTrail to the log account
+  2-network/      VPC per env, private subnets in 2 zones, endpoints (S3, STS, Kinesis), PrivateLink
+  3-storage/      buckets and KMS keys per catalog, IAM roles Databricks may assume
+  4-databricks/   workspaces, metastore, catalogs, workspace bindings, external locations
+  5-identity/     SCIM groups, service principals, grants on catalogs
+  envs/           dev.tfvars, preprod.tfvars, prod.tfvars, dr.tfvars   # the only differences"""
+
+
+def foundation_map():
+    b = []
+    a = b.append
+    a(rect(20, 20, 170, 58, "#FFF4D9") + tx(36, 44, "Your login system", 14.5) + tx(36, 64, "Entra ID · groups synced", 11.5, fill="#555"))
+    a(arr(190, 49, 220, 49))
+    a(rect(220, 16, 700, 66, "#E6EAF7") + tx(570, 42, "Databricks account · Unity Catalog in Mumbai", 16, "middle")
+      + tx(570, 64, "users and groups · system tables for audit, billing, lineage", 12, "middle", fill="#555"))
+    envs = [("dev", "#E0F1F7"), ("pre-prod", "#FFF4D9"), ("prod", "#E6F4EC")]
+    for i, (e, f) in enumerate(envs):
+        x = 220 + i * 240
+        a(arr(x + 110, 82, x + 110, 120, dash=True))
+        a(tx(x + 118, 106, "PrivateLink", 11, fill="#555"))
+        a(rect(x, 120, 220, 290, f))
+        a(tx(x + 14, 144, f"AWS account: {e}", 15, weight="700"))
+        a(rect(x + 12, 156, 196, 92, "#fff", r=10) + tx(x + 24, 178, "VPC, 2 zones, no public IPs", 12.5)
+          + tx(x + 24, 198, "compute (classic, if needed)", 11.5, fill="#555") + tx(x + 24, 216, "Aurora metadata database", 11.5, fill="#555")
+          + tx(x + 24, 234, "endpoints: S3, STS, Kinesis", 11.5, fill="#555"))
+        a(rect(x + 12, 258, 196, 62, "#fff", r=10) + tx(x + 24, 282, f"Workspace: {e}", 13.5)
+          + tx(x + 24, 302, f"sees {e.replace('-', '')}_* catalogs only", 11.5, fill="#555"))
+        a(rect(x + 12, 330, 196, 68, "#fff", r=10) + tx(x + 24, 352, "S3: landing + a bucket", 12.5)
+          + tx(x + 24, 370, "per catalog, each with", 12.5) + tx(x + 24, 388, "its own KMS key", 12.5))
+    a(f'<path d="M700,300 C690,300 690,300 668,300" fill="none" stroke="{INK}" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ahx)"/>')
+    a(tx(684, 430, "pre-prod reads prod, read only", 11.5, "middle", fill="#555"))
+    a(rect(20, 180, 170, 92, "#F4F4F2") + tx(36, 204, "Plants + SAP", 14.5) + tx(36, 224, "Direct Connect", 11.5, fill="#555")
+      + tx(36, 242, "to every VPC through", 11.5, fill="#555") + tx(36, 260, "a Transit Gateway", 11.5, fill="#555"))
+    a(arr(190, 226, 220, 226))
+    a(arr(920, 265, 950, 265))
+    a(rect(950, 200, 170, 130, "#F8E6EF", dash=True) + tx(966, 224, "Hyderabad (recovery)", 14) + tx(966, 246, "prod gold + recipes", 11.5, fill="#555")
+      + tx(966, 264, "copied by S3 replication", 11.5, fill="#555") + tx(966, 286, "workspace rebuilt", 11.5, fill="#555") + tx(966, 304, "from Terraform", 11.5, fill="#555"))
+    return svg(1140, 445, "".join(b), "The foundation: your login system syncs groups to one Databricks account in Mumbai with one Unity Catalog. Below it, three AWS accounts (dev, pre-prod, prod), each with a private VPC in two zones, its own workspace that sees only its own catalogs, and S3 buckets with a key per catalog, reached over PrivateLink. Plants and SAP connect over Direct Connect. Pre-prod reads prod read-only. Prod gold and recipes are copied to Hyderabad for recovery.")
 
 
 # ---------------------------------------------------------------- data quality and profiling (tier T3)
@@ -734,6 +819,10 @@ def page():
     need_table = table(["Where", "Contract?", "Why"], CONTRACT_NEED)
     parts_table = table(["Part of the contract", "Example", "Enforced by"], CONTRACT_PARTS)
     adf_table = table(["Azure Data Factory part", "On AWS", "On Databricks"], ADF_MAP)
+    found_table = table(["Decision", "Our pick", "Why"], FOUNDATION)
+    assume_table = table(["Question", "We assume", "If it is different"], ASSUMPTIONS)
+    bucket_table = table(["Bucket", "Holds", "Key", "Rules"], BUCKETS, raw=(0,))
+    binding_table = table(["Catalog", "Dev workspace", "Pre-prod workspace", "Prod workspace"], BINDING)
     dq_engine_table = table(["Engine", "Used for", "Verdict", "Why"], DQ_ENGINES)
     dq_hop_table = table(["Hop", "What is checked", "What happens to bad data"], DQ_HOPS)
     dq_tables = table(["Table", "Holds", "Written by"], DQ_TABLES, raw=(0,))
@@ -748,7 +837,7 @@ def page():
 <p class="lede">The same architecture as <a href="{BASE}">the abstract picture</a>, with a product in every box, for a tyre manufacturer that already runs on AWS and wants Databricks. The design stays the same; only the names change.</p>
 <div class="sib"><a href="{BASE}">↑ The abstract picture</a><a href="/leaders/spec-driven/data-platform/">Spec-driven development for data</a><a href="/learn/medallion-architecture/">Medallion, drawn right</a></div>
 <nav class="toc"><b>On this page</b><ol>
-<li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li><li><a href="#metadata">Metadata and ingestion</a></li><li><a href="#quality">Data quality and profiling</a></li><li><a href="#ops">Observability and alerts</a></li><li><a href="#testing">Testing and data contracts</a></li>
+<li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li><li><a href="#foundation">The foundation</a></li><li><a href="#metadata">Metadata and ingestion</a></li><li><a href="#quality">Data quality and profiling</a></li><li><a href="#ops">Observability and alerts</a></li><li><a href="#testing">Testing and data contracts</a></li>
 <li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">The right AI/BI</a></li><li><a href="#binding">22 concerns, bound</a></li>
 <li><a href="#aws">AWS native or Databricks</a></li><li><a href="#plan">How we would start</a></li><li><a href="#faq">Questions</a></li></ol></nav>
 
@@ -766,6 +855,31 @@ def page():
 <section id="assets"><p class="eyebrow">Horizontal assets</p><h2>Built once, used by every data product</h2>
 <p>A horizontal asset is something every pipeline needs, whatever the subject. Databricks gives the plumbing; these assets are the parts that make the platform trustworthy and cheap to grow. The status column is honest: some are built, some are designed, some are still to build.</p>
 {assets_table}</section>
+
+<section id="foundation"><p class="eyebrow">The foundation</p><h2>Accounts, network, storage and keys, before any pipeline</h2>
+<p>Before a single pipeline runs, the platform needs somewhere safe to live: AWS accounts to hold it, a private network, buckets for the data with keys you own, Databricks workspaces to work in, and one catalog that decides who sees what. Think of it as the land, the roads and the locks. Done right once, nobody thinks about it again; done wrong, every later layer inherits the problem.</p>
+<figure class="diagram">{foundation_map()}<figcaption>Three environments, each in its own AWS account and private network, on one Unity Catalog. Nothing is reachable from the internet.</figcaption></figure>
+
+<h3>The nine choices</h3>
+{found_table}
+
+<h3>What we assumed</h3>
+<p>This design is written for a typical Indian manufacturer already on AWS. Where your answer differs, the right column says what changes. None of them changes the layers above.</p>
+{assume_table}
+
+<h3>Which workspace sees which catalog</h3>
+<p>Catalogs are named by environment and layer (<code>prod_silver</code>, <code>dev_gold</code>). Binding each catalog to workspaces is what keeps a test in dev from ever writing to prod, even by mistake.</p>
+{binding_table}
+
+<h3>Buckets and keys</h3>
+<p>Every bucket blocks public access, is encrypted with a KMS key you own, and is reached only through the VPC endpoint or by Databricks through an IAM role it is allowed to assume.</p>
+{bucket_table}
+
+<h3>Built from code</h3>
+<p>The foundation is Terraform in Git, applied in five steps. The environments differ only in one settings file each, so dev, pre-prod and prod are the same platform at different sizes.</p>
+{C.code(TF_TREE, "Folder layout of the foundation code. Pipelines are not here: they are deployed with Asset Bundles.")}
+<p><b>Recovery:</b> if Mumbai is lost, the same Terraform with <code>dr.tfvars</code> builds the workspace in Hyderabad on the copied buckets. Target: gold tables back within a day (an RTO of 24 hours), losing at most a few hours of data. We rehearse it twice a year.</p>
+</section>
 
 <section id="metadata"><p class="eyebrow">Metadata and ingestion on AWS</p><h2>One metadata database, one ingestion framework</h2>
 <p>The Common Ingestion Framework is <b>metadata-driven</b>: adding a source is a few lines of YAML, not a new pipeline. It follows the <a href="https://medium.com/@basant.choudhary09/metadata-db-design-for-data-engineering-components-ingestion-processing-data-quality-data-6b355ad5ecb9">Metadata DB Design for Data Engineering Platforms</a>, already built in our framework. Full table definitions, the view and the reader code are on <a href="{BASE}metadata-store/">the metadata store page</a>.</p>
