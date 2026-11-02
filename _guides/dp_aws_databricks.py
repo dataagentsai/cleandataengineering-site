@@ -97,7 +97,7 @@ RAIL = [
     ("Personal data", ["dealers, drivers:", "tagged, masked"]),
     ("Recipe IP", ["compound recipes in", "a restricted catalog"]),
     ("Audit", ["audit system tables", "+ AWS CloudTrail"]),
-    ("Residency", ["India: Mumbai, Hyd.", "EU: Frankfurt, Ireland"]),
+    ("Residency", ["India: Mumbai + Hyd.", "EU only if legal asks"]),
     ("DPDP + GDPR", ["India and EU rules:", "consent, erasure"]),
     ("Owners", ["every table has", "a named owner"]),
 ]
@@ -544,6 +544,131 @@ def star():
     return svg(940, 360, "".join(b), "A star schema: the production fact in the middle, one row per press per hour, joined to five dimensions: date, plant, press, shift and material, where material keeps history (SCD2).")
 
 
+# ---------------------------------------------------------------- security, privacy, governance (tier T7)
+SENSITIVITY = [
+    ("Internal", "Production counts, OEE, scrap, downtime, stock", "prod_gold, prod_semantic", "Every employee group that needs it; plant staff see their own plant's rows", "Row filter by plant"),
+    ("Confidential", "Prices, dealer discounts, margins, cost per tyre", "prod_gold.sales, columns tagged confidential", "Finance and sales groups", "Column mask for everyone else"),
+    ("Personal", "Dealer contacts, fleet drivers, consumers who register a warranty, operator ids on shift logs", "Tokenised at the lander; real values only in the token vault", "Almost nobody needs the real value; the warranty team for a live claim", "Tokens everywhere, mask on the vault, purpose and retention per category"),
+    ("Restricted", "Compound recipes, cure recipes, process settings", "prod_restricted only, its own bucket and key", "The named recipe custodians", "No Genie space, no copies, every read alerted"),
+]
+
+ROLES = [
+    ("Platform engineer", "Read and write in dev; read prod_ops", "Deploys only through CI/CD"),
+    ("Data engineer", "Read and write in dev; read pre-prod", "Never writes to prod by hand"),
+    ("Analyst, data scientist", "Read prod_gold and prod_semantic", "Personal and confidential columns masked"),
+    ("Plant manager, shift lead", "Read prod_semantic; dashboards and the Plant performance Genie space", "Own plant's rows only"),
+    ("Quality engineer", "Read quality and manufacturing gold and metric views", "Personal data in warranty claims masked"),
+    ("Sales and finance", "Read sales gold and metric views, confidential columns visible", "Own region's rows for regional managers"),
+    ("Recipe custodian", "Read prod_restricted", "Named people, reviewed monthly"),
+    ("Auditor", "Read audit system tables and the audit schema", "No business data"),
+    ("Service principals", "One per pipeline area; write only their own target schemas in prod", "The only identities that write to prod"),
+]
+
+ACCESS_MECH = [
+    ("Groups from your identity provider", "Every grant goes to a group, never to a person. Joining or leaving a group is the only way access changes."),
+    ("Tags set from metadata", "In silver, the pipeline tags each column as personal, confidential or recipe, from dataset_config. Nobody tags by hand."),
+    ("Policies on tags", "One policy per tag masks the column for every table that carries it, through attribute-based access control (" + CHECK + "). Where that is not yet available, the pipeline generates a column mask per table from the same tags."),
+    ("Row filters by plant and region", "A small mapping table (group to plants, group to regions), loaded from Git like all config, drives one row-filter function used on every fact table."),
+    ("Grants from metadata", "Grants are declared in YAML next to the datasets and applied by the deploy, so the catalog always matches Git and drift is reported."),
+]
+
+ERASURE = [
+    ("Request arrives", "From the privacy team's case system, with the person's identifier."),
+    ("Find the token", "Look up the person's token in the vault (prod_restricted.pii_vault)."),
+    ("Find every place", "Lineage and tags list every table holding that token: silver, gold, quarantine tables."),
+    ("Erase", "Delete the vault row first: from that moment the token points to nobody. Then delete or blank the token's rows in silver, including old SCD2 versions, and rebuild the affected gold windows."),
+    ("Clean old files", "Delta keeps old file versions for 30 days; after VACUUM, the data is gone from storage. Bronze and landing only ever held the token."),
+    ("Record evidence", "Write what was erased, where and when to the audit schema, and close the case."),
+]
+
+PRIVACY_RULES = [
+    ("Tokenise at the door.", "The lander swaps names, phone numbers and emails for tokens before bronze. Bronze stays append-only and still holds nothing personal, so erasure never fights the replay design."),
+    ("A purpose for every personal column.", "dataset_config records why it is kept (warranty claim handling, dealer payments) and for how long; columns without a purpose are not loaded."),
+    ("Retention runs itself.", "A nightly job deletes personal data past its retention period and logs what it removed."),
+    ("Consent stays at the source.", "Warranty and dealer systems collect consent; we load the consent flag and filter on it, we never decide it."),
+    ("Breach response is written down.", "Who decides, who tells the regulator and the people affected, inside the deadlines of the DPDP Act and GDPR (72 hours for GDPR; DPDP Rules timelines: " + CHECK + ")."),
+]
+
+AI_GOV = [
+    ("Genie and the Conversation UI run as the person asking.", "Row filters and masks apply exactly as in a dashboard."),
+    ("prod_restricted is never added to a Genie space or an agent's tools.", "Recipes are not answerable in plain words, by design."),
+    ("Models run inside the platform or your AWS account.", "Databricks-hosted models or Amazon Bedrock in your account; no data is sent to a public chat service."),
+    ("Every question and answer is logged.", "With the person, the metric used and the SQL the engine ran, kept in prod_ops for review."),
+]
+
+GOV_ROLES = [
+    ("Data owner", "A business head (plant operations, quality, sales)", "Decides who may see the data and signs off metric definitions"),
+    ("Data steward", "A named person per source", "Writes quality rules, reviews quarantine weekly, approves suggested rules"),
+    ("Custodian", "The platform team", "Runs the platform, applies the owner's decisions, never decides access"),
+    ("Privacy lead", "From the legal or privacy team", "Owns purposes, retention, erasure requests and breach response"),
+]
+
+
+# ---------------------------------------------------------------- CI/CD and environments (tier T9)
+REPOS = [
+    ("platform-foundation", "Terraform for accounts, network, storage, keys, workspaces, catalogs", "Platform team", "Terraform plan on every pull request; apply after approval"),
+    ("data-platform", "The framework code, all YAML config (sources, datasets, rules, contracts, grants), gold SQL, metric views, dashboards, Genie space definitions, Asset Bundles", "Shared, with CODEOWNERS per folder", "The six gates below"),
+]
+
+OWNERS = [
+    ("framework/", "Platform team"),
+    ("config/sources/, config/datasets/", "Data engineers for that source"),
+    ("config/dq/", "The source's data steward"),
+    ("contracts/", "The producing team and the platform team"),
+    ("gold/, semantic/", "The business area's data owner and an analytics engineer"),
+    ("config/grants/, config/access/", "The data owner, plus the privacy lead for personal data"),
+]
+
+DEPLOYS = [
+    ("Accounts, network, buckets, keys, workspaces, catalogs", "Terraform", "platform-foundation"),
+    ("Jobs, pipelines, dashboards", "Databricks Asset Bundles", "data-platform"),
+    ("Sources, datasets, rules, profiling settings", "Our config loader, into the metadata database", "data-platform"),
+    ("Metric views, row filters, masks, grants", "SQL run by the deploy, generated from YAML", "data-platform"),
+    ("Genie spaces", "Their definitions in Git, applied through the Genie API (" + CHECK + ")", "data-platform"),
+]
+
+PIPE_STAGES = [
+    ("Pull request", "Lint, shift-left checks, unit tests, contract checks, config dry-run against the key registry, bundle validate, Terraform plan", "Laptop and CI runner, no Databricks needed", "minutes"),
+    ("Merge to main", "Deploy to dev; per-hop integration tests on fixed fixtures", "Dev workspace, fresh schema per run", "about 20 minutes"),
+    ("Release tag", "Deploy to pre-prod; end-to-end on synthetic data, DataTwin faults, real-data run on shallow clones, parallel run against prod, Genie benchmarks", "Pre-prod workspace", "an hour or two"),
+    ("Approval", "The release report goes to the data owner of each changed area; one approval per area", "GitHub environment approval", "same day"),
+    ("Prod deploy", "Deployed by the prod service principal; risky changes to one plant first, then all", "Prod workspace", "minutes"),
+    ("After deploy", "Smoke checks: first runs green, row counts within band, metrics within band", "Prod", "first run"),
+]
+
+ENVS = [
+    ("Dev", "Synthetic data and small samples; no personal data", "Data and platform engineers", "Small serverless; jobs stop after 2 hours; budget alert"),
+    ("Pre-prod", "Shallow clones of prod, personal data already tokens, recipes excluded", "Engineers read; CI writes", "Like prod, for an hour or two per release"),
+    ("Prod", "Real data", "Read through groups; only service principals write", "Sized for the plants' shifts; budget policies per data product"),
+]
+
+CICD_RULES = [
+    ("No secrets in CI.", "GitHub Actions signs in to AWS and Databricks with short-lived OIDC tokens (" + CHECK + " for Databricks), not stored keys."),
+    ("A config change is a deploy.", "A new rule or source goes through the same pipeline, with lighter gates when no code changed."),
+    ("Breaking schema changes are versioned.", "Adding a column is automatic; renaming or removing one needs a new contract version, a migration step and a notice to consumers."),
+    ("Rollback is redeploying the last tag.", "If wrong data was written, Delta RESTORE takes the table back to the version before the run; the run id says which version."),
+    ("Small, frequent releases.", "Trunk-based: short branches, merged within a day or two, released weekly or on demand."),
+]
+
+
+def cicd_flow():
+    b = []
+    a = b.append
+    st = [("Pull request", ["checks on the code"], "#F4F4F2"), ("Dev", ["per-hop tests"], "#E0F1F7"),
+          ("Pre-prod", ["real data, DataTwin,", "parallel run, benchmarks"], "#FFF4D9"),
+          ("Approval", ["data owners sign"], "#F8E6EF"), ("Prod", ["one plant first"], "#E6F4EC")]
+    for i, (t, subs, f) in enumerate(st):
+        x = 20 + i * 214
+        a(rect(x, 40, 186, 84, f) + tx(x + 93, 70, t, 16, "middle") + "".join(tx(x + 93, 92 + k * 17, ln, 12, "middle", fill="#555") for k, ln in enumerate(subs)))
+        if i < 4:
+            a(arr(x + 186, 82, x + 214, 82))
+    for who, x in [("developer opens it", 113), ("merge to main", 327), ("release tag", 541), ("release report", 755), ("prod service principal", 969)]:
+        a(tx(x, 26, who, 11.5, "middle", fill="#555"))
+    a(rect(20, 150, 1040, 50, "#fff", dash=True) + tx(540, 180, "One repo, three things deployed together: code (Asset Bundles), config (loader into the metadata database), definitions (metric views, grants, Genie)", 13, "middle"))
+    a(rect(20, 216, 1040, 40, "#F8E6EF") + tx(540, 241, "If a release is wrong: redeploy the last tag, and restore each table to the version before the run", 13, "middle"))
+    return svg(1080, 270, "".join(b), "The release path: pull request checks, deploy to dev with per-hop tests, release tag to pre-prod with real data, DataTwin, parallel run and benchmarks, approval by data owners, then prod, one plant first. Code, config and definitions are deployed together; rollback redeploys the last tag and restores tables.")
+
+
 # ---------------------------------------------------------------- foundation (tier T0)
 FOUNDATION = [
     ("AWS accounts", "One AWS account per environment: dev, pre-prod, prod. All three sit under your AWS Organization and send logs to your central security and log accounts.",
@@ -969,6 +1094,19 @@ def page():
     sem_rules = '<div class="rules">' + "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(SEMANTIC_RULES)) + "</div>"
     genie_space_table = table(["Space", "For", "Reads", "Benchmark"], GENIE_SPACES)
     genie_rules = '<div class="rules">' + "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(GENIE_RULES)) + "</div>"
+    sens_table = table(["Level", "Examples", "Where it lives", "Who sees it", "Protection"], SENSITIVITY)
+    roles_table = table(["Role (a group)", "Gets", "Limits"], ROLES)
+    access_rules = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(ACCESS_MECH))
+    privacy_rules = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(PRIVACY_RULES))
+    erasure_steps = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(ERASURE))
+    ai_rules = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(AI_GOV))
+    gov_table = table(["Role", "Who", "Decides"], GOV_ROLES)
+    repo_table = table(["Repository", "Holds", "Owner", "Checks"], REPOS)
+    owner_table = table(["Folder", "Approved by"], OWNERS)
+    deploy_table = table(["What", "Deployed by", "From"], DEPLOYS)
+    stage_table = table(["Step", "What runs", "Where", "Takes"], PIPE_STAGES)
+    env_table = table(["Environment", "Data", "Who", "Size and cost guard"], ENVS)
+    cicd_rules = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(CICD_RULES))
     found_table = table(["Decision", "Our pick", "Why"], FOUNDATION)
     assume_table = table(["Question", "We assume", "If it is different"], ASSUMPTIONS)
     bucket_table = table(["Bucket", "Holds", "Key", "Rules"], BUCKETS, raw=(0,))
@@ -988,7 +1126,7 @@ def page():
 <div class="sib"><a href="{BASE}">↑ The abstract picture</a><a href="/leaders/spec-driven/data-platform/">Spec-driven development for data</a><a href="/learn/medallion-architecture/">Medallion, drawn right</a></div>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li><li><a href="#foundation">The foundation</a></li><li><a href="#metadata">Metadata and ingestion</a></li><li><a href="#quality">Data quality and profiling</a></li><li><a href="#ops">Observability and alerts</a></li><li><a href="#testing">Testing and data contracts</a></li>
-<li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">Gold, semantic layer and AI/BI</a></li><li><a href="#binding">22 concerns, bound</a></li>
+<li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">Gold, semantic layer and AI/BI</a></li><li><a href="#security">Security and privacy</a></li><li><a href="#cicd">CI/CD and environments</a></li><li><a href="#binding">22 concerns, bound</a></li>
 <li><a href="#aws">AWS native or Databricks</a></li><li><a href="#plan">How we would start</a></li><li><a href="#faq">Questions</a></li></ol></nav>
 
 <section id="minute"><p class="eyebrow">The one-minute version</p><h2>Your account, your data, one catalog</h2>
@@ -1192,6 +1330,56 @@ def page():
 
 <h3>Genie or our Conversation UI?</h3>
 {genie_table}</section>
+
+<section id="security"><p class="eyebrow">Security, privacy and governance</p><h2>Who may see what, and how we prove it</h2>
+<p>Three kinds of data need protecting here: <b>personal data</b> (dealers, fleet drivers, consumers who register a warranty, operators on shift logs), <b>commercial data</b> (prices, discounts, margins) and the <b>recipes</b> that make the tyres. The design protects each one where the data lives, in the catalog, so the protection holds in every tool: a dashboard, a notebook, Genie or an agent.</p>
+
+<h3>Four levels of sensitivity</h3>
+{sens_table}
+
+<h3>Roles and what they get</h3>
+<p>People read; only service principals write to prod. That one rule removes most accidents.</p>
+{roles_table}
+
+<h3>How access is enforced</h3>
+<div class="rules">{access_rules}</div>
+
+<h3>Personal data: India's DPDP Act and the EU's GDPR</h3>
+<p>Both laws ask the same things in practice: keep personal data only for a stated purpose, only as long as needed, protect it, and erase it when asked. The hard part in a lakehouse is erasure, because bronze keeps everything for replay. The design solves it at the door.</p>
+<div class="rules">{privacy_rules}</div>
+<h3>When someone asks to be erased</h3>
+<div class="rules">{erasure_steps}</div>
+<p class="note">Tokenising uses the framework's existing <code>pii_policy</code> table (actions: pass through, hash, mask, tokenise, redact, per environment). The salt and the vault key live in AWS Secrets Manager and KMS.</p>
+
+<h3>Recipes</h3>
+<p>Recipes and process settings sit in <code>prod_restricted</code>, in their own bucket with their own key. Gold carries only the compound family, never the recipe. Only the named custodian group can read it, every read raises a notice to the recipe owner, access is reviewed every month, and revoking the key cuts all access at once. It is never added to Genie or to an agent.</p>
+
+<h3>AI on governed data</h3>
+<div class="rules">{ai_rules}</div>
+
+<h3>Who decides</h3>
+{gov_table}
+<p><b>Proof, not promises.</b> Databricks audit system tables, AWS CloudTrail and KMS key-use logs are joined in prod_ops into an access report: who read what, from which tool. The data owners review it every quarter, and it is the evidence pack for an auditor.</p>
+</section>
+
+<section id="cicd"><p class="eyebrow">CI/CD and environments</p><h2>Every change takes the same path to production</h2>
+<p>Code, configuration and definitions all change through Git and reach production the same way, through the six test gates. Nobody clicks a change into prod, and every release can be undone.</p>
+<figure class="diagram">{cicd_flow()}<figcaption>From a pull request to production, with the checks at each step and the way back.</figcaption></figure>
+
+<h3>Two repositories</h3>
+{repo_table}
+<h3>Who approves which folder</h3>
+<p>GitHub CODEOWNERS sends each change to the people who own it: a quality rule to its steward, a metric to its owner.</p>
+{owner_table}
+<h3>What deploys what</h3>
+{deploy_table}
+<h3>The path, step by step</h3>
+{stage_table}
+<h3>Three environments</h3>
+{env_table}
+<h3>Five rules</h3>
+<div class="rules">{cicd_rules}</div>
+</section>
 
 <section id="binding"><p class="eyebrow">22 concerns, bound</p><h2>What Databricks gives, what AWS gives, what we add</h2>
 <p>For each of the 22 cross-cutting concerns: reuse what Databricks does well, use AWS where the job sits outside Databricks, and fill only the gap. Every concern is switched on and configured from the metadata store, and every product sits behind a port (a fixed interface), so a product can be swapped without touching the pipelines.</p>
