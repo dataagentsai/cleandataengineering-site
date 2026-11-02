@@ -346,6 +346,21 @@ def binding_table():
     return "".join(out)
 
 
+def final_table():
+    """Only what we picked: AWS and open-source items marked use or planned, plus our own code."""
+    def picked(items):
+        got = [E(nm) + (" <small>(planned)</small>" if m == "plan" else "") for nm, m, _ in items if m in ("use", "plan")]
+        return "<br>".join(got) or "—"
+    out = ['<div class="sd-table wide"><table><tr><th>Concern</th><th>AWS service</th><th>Open source</th><th>Our own code</th></tr>']
+    for fam, sub in FAMILIES:
+        out.append(f'<tr class="aw-fam"><td colspan="4">{fam}</td></tr>')
+        for cid, name, f, does, aws, oss, ours, az, why, _ in C:
+            if f == fam:
+                out.append(f"<tr><td><b>{cid} · {E(name)}</b></td><td>{picked(aws)}</td><td>{picked(oss)}</td><td>{E(ours)}</td></tr>")
+    out.append("</table></div>")
+    return "".join(out)
+
+
 DECISIONS = [
     ("Which model?", "Claude on Bedrock · Llama or Nova on Bedrock · a model outside AWS via the gateway",
      "Claude on Bedrock as the default for every job, behind our gateway. The golden set picks the model per job offline; cheaper models win where they pass.",
@@ -446,6 +461,11 @@ BODY = f"""<main class="wrap">
 <div class="sd-answer"><p><b>What does not change: specs, tests and agent code.</b></p>
 <ul>{"".join(f"<li>{E(s)}</li>" for s in SAME)}</ul>
 <p>That is the point of binding through ports: moving from Azure to AWS is a new binding file and a set of adapters, not a rebuild.</p></div>
+</section>
+
+<section id="final"><p class="eyebrow">Finally</p><h2>What we are using</h2>
+<p>The whole binding on one page: for each concern, only what we picked. AWS services and open-source tools marked <i>planned</i> are chosen but not yet switched on; everything else in the tables above was considered and left out.</p>
+{final_table()}
 </section>
 
 <section><p class="eyebrow">Read next</p><h2>Go deeper</h2>
