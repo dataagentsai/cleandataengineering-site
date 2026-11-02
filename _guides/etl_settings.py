@@ -17,6 +17,7 @@ scenarios: ids in etl_scenarios.py that exercise the setting (empty = not tested
 SETTINGS = [
     # ---------------------------------------------------------------- platform (one set per environment)
     ("runtime_environment", "platform", "dev, preprod, prod", "prod", "recorder, deploy", ["S29"], "adapt", "'staging' becomes 'preprod'"),
+    ("realm", "platform", "aws-databricks, adf-adls", "aws-databricks", "deploy", ["S29"], "adapt", "was default_realm; chooses which generators the deploy runs"),
     ("aws_region", "platform", "AWS region code", "ap-south-1", "deploy, mover", ["S29"], "new", ""),
     ("catalog_prefix", "platform", "text", "the environment name plus _", "lander, silver, gold, deploy", ["S23"], "new", "dev_, preprod_, prod_ in front of bronze, silver, gold, ops"),
     ("landing_bucket", "platform", "S3 bucket", "landing-<env>", "mover, lander", ["S01"], "new", "replaces target_storage_account"),
@@ -91,7 +92,7 @@ SETTINGS = [
     ("profile.enabled, profile.when, profile.scope, profile.sample_pct, profile.columns, profile.suggest_rules", "dataset", "see the platform page", "off, daily, new_rows, 10, all, true", "silver, ops", ["S34"], "new", ""),
     ("file_format, file_pattern, file_encoding, csv_*, excel_*, xml_record_xpath", "dataset", "as today", "as today", "lander", ["S06", "S24"], "adapt", "read by the lander instead of ADF"),
     ("load_profile, segmentation_*, segment_count", "dataset", "as today", "auto", "controller", ["S18"], "exists", "the bulk job"),
-    ("budget_daily_usd", "dataset", "number", "none", "ops", ["S33"], "new", ""),
+    ("budget_daily_usd", "dataset", "number", "none", "ops", ["S33"], "new", "judged against the estimated cost split per dataset"),
     ("realm", "dataset", "aws-databricks", "the platform's", "deploy", ["S29"], "adapt", "new realm name"),
     ("target_container, target_path_template", "dataset", "-", "-", "-", [], "retire", "the landing layout is fixed by the landing contract"),
     ("intended_dius, parallel_copies, enable_staging, sink_max_concurrent_connections, partition_*", "dataset", "-", "-", "-", [], "retire", "ADF copy settings"),

@@ -21,9 +21,10 @@ for p in runs:
     d = json.load(open(p))
     r = d["results"]
     by = {x["check"]: x["verdict"] for x in r}
-    passing = sum(1 for s in SC.SCENARIOS if all(by.get(f"{s['id']}.{i}") == "STATED" for i in range(1, len(s["then"]) + 1)))
+    run_ids = {c.split(".")[0] for c in by}
+    passing = sum(1 for s in SC.SCENARIOS if s["id"] in run_ids and all(by.get(f"{s['id']}.{i}") == "STATED" for i in range(1, len(s["then"]) + 1)))
     history.append({"run": int(re.search(r"run(\d+)_", p.name).group(1)), "date": p.stem.split("_", 1)[1],
-                    "stated": sum(v == "STATED" for v in by.values()), "gap": sum(v == "GAP" for v in by.values()),
+                    "total": len(by), "scenarios": len({c.split(".")[0] for c in by}), "stated": sum(v == "STATED" for v in by.values()), "gap": sum(v == "GAP" for v in by.values()),
                     "contradicted": sum(v == "CONTRADICTED" for v in by.values()),
                     "feasibility": sum(1 for x in r if x.get("feasibility")),
                     "contradictions_in_page": (len(d["contradictions"]) if "contradictions" in d else None), "passing": passing})

@@ -339,7 +339,7 @@ MOVERS = [
     ("Small and reference tables, databases without CDC", "Our puller (the framework's built connectors) as a Databricks job", "Full copy or watermark, into landing like everything else"),
     ("Plant historian and press / mixer sensors", "AWS IoT SiteWise → Kinesis or S3", "The streaming lane: same layers, continuous"),
     ("Dealer management system, CRM (SaaS)", "Amazon AppFlow; our puller's REST connector where AppFlow has none", "Lakeflow Connect is not used in v1"),
-    ("Supplier files, raw-material prices", "AWS Transfer Family (SFTP) → S3", "Auto Loader picks the files up"),
+    ("Supplier files, raw-material prices", "AWS Transfer Family (SFTP) → S3", "The lander reads the new files listed in its file log"),
 ]
 
 ADF_MAP = [
@@ -375,7 +375,7 @@ CREATE TABLE runtime.run_log (
   run_id          uuid PRIMARY KEY,
   dataset_id      uuid NOT NULL REFERENCES config.dataset_master(dataset_id),
   job_run_id      text,                    -- Databricks job run id, to join system tables
-  status          text NOT NULL,           -- running, succeeded, failed, skipped
+  status          text NOT NULL,           -- started, succeeded, failed, skipped, blocked
   started_at      timestamptz NOT NULL,
   ended_at        timestamptz,
   window_low      text,                    -- watermark this run started from
@@ -397,7 +397,7 @@ CREATE TABLE runtime.watermark (
 WM_STEPS = [
     ("Read", "Read the last good watermark (low) from runtime.watermark."),
     ("Fix the window", "Fix the upper end (high) at the start, e.g. the source's current maximum, minus a small safety gap. The run loads only rows above low and up to high, so it never chases a moving target."),
-    ("Load safely", "Append to bronze, every row stamped with the run id. Bronze is never updated, so replay always works. If a crash means a window lands twice, silver's duplicate step keeps one copy, so no number doubles."),
+    ("Load safely", "Append to bronze, every row stamped with the run id. Bronze is never updated, so replay always works. Each batch is appended with a transaction id from the file log, so a batch committed before a crash is never appended twice."),
     ("Commit once", "Only after the data is committed: mark the run succeeded and move the watermark to high, in one database transaction."),
     ("Crash in between?", "The watermark did not move, so the next run reloads the same window, and silver's duplicate step makes that harmless."),
     ("Late rows", "A look-back overlap (say 2 hours, set in dataset_config) re-reads a little of the last window; silver drops the repeats."),
@@ -599,7 +599,7 @@ ERASURE = [
 ]
 
 PRIVACY_RULES = [
-    ("Tokenise at the door.", "The lander swaps names, phone numbers and emails for tokens before bronze, and checks the suppression list. Free-text fields such as warranty notes go through a personal-data detector behind a port, which must handle English and German (Amazon Comprehend's detection covers English and Spanish, check current status; an open-source detector such as Presidio with German models otherwise); until that is confirmed, EU free text is held out of bronze. For sources with personal data, columns nobody declared are dropped before bronze and only their names are logged, so a new personal column cannot slip in as rescued data. Bronze stays append-only and still holds nothing personal, so erasure never fights the replay design."),
+    ("Tokenise at the door.", "The lander swaps names, phone numbers and emails for tokens before bronze, and checks the suppression list. Free-text fields such as warranty notes go through a personal-data detector behind a port, which must handle English and German (Amazon Comprehend's detection covers English and Spanish, check current status; an open-source detector such as Presidio with German models otherwise); until that is confirmed, EU free text is held out of bronze. For sources with personal data, a file with a column nobody declared is held and the dataset blocked until the contract says what it is (only the column's name is logged), so a new personal column cannot slip in as rescued data. Bronze stays append-only and still holds nothing personal, so erasure never fights the replay design."),
     ("Real values never wait in landing.", "Files from sources with personal data use their own landing folder, deleted one day after the lander has read them, with old versions expiring the same day. Macie scans landing weekly for personal data in the wrong place."),
     ("EU personal data leaves the EU only on a legal basis.", "India has no EU adequacy decision, so personal data from EU plants and dealers travels under the company's Standard Contractual Clauses with a transfer impact assessment, or is tokenised in the EU before it leaves. Your legal team picks; until then, EU sources are loaded without personal columns."),
     ("A purpose for every personal column.", "dataset_config records why it is kept (warranty claim handling, dealer payments) and for how long; columns without a purpose are not loaded."),
@@ -666,7 +666,7 @@ ENVS = [
 
 CICD_RULES = [
     ("No secrets in CI.", "GitHub Actions signs in to AWS and Databricks with short-lived OIDC tokens (" + CHECK + " for Databricks), not stored keys."),
-    ("A config change is a deploy.", "A new rule or source goes through the same pipeline, with lighter gates when no code changed, except changes to quality limits, watermarks and grants, which always take the full gates."),
+    ("A config change is a deploy.", "A new rule or source goes through the same pipeline, with lighter gates when no code changed, except changes to quality limits, watermarks, replacement rules and grants, which always take the full gates."),
     ("Breaking schema changes are versioned.", "A new column passes: it lands in bronze and is ignored until someone maps it. A removed, renamed or narrowed column stops at silver's contract check and needs a new contract version, a migration step and a notice to consumers."),
     ("Rollback is redeploying the last tag.", "If wrong data was written for one plant, recompute only that plant's windows with the previous tag, so good runs for other plants are kept; watermarks are reset by a backfill plan, not by hand. A whole-table RESTORE only when every later run is also wrong, and never to a version before an erasure. The platform lead decides rollback or fix."),
     ("Small, frequent releases.", "Trunk-based: short branches, merged within a day or two, released weekly or on demand."),
@@ -731,7 +731,7 @@ SIZING = [
 ]
 
 STREAM_RULES = [
-    ("One path for sensors.", "SiteWise or IoT Core at the plant edge, Amazon Kinesis Data Streams in Mumbai, a streaming table into bronze, cleaned per minute into silver, hourly gold as a materialized view."),
+    ("One path for sensors.", "SiteWise or IoT Core at the plant edge, Amazon Kinesis Data Streams in Mumbai, a streaming table into bronze, cleaned per minute into silver; each closed hour's sensor aggregates feed the window-recompute job, the only writer of the production fact."),
     ("Late readings have a limit.", "Streams wait 2 hours for late readings (an event-time watermark). Anything later lands in bronze and is picked up by the gold window recompute, so it is never lost."),
     ("Replay has a window.", "Kinesis keeps 7 days; bronze keeps everything after that. Checkpoints live in S3 per environment."),
     ("If the link to AWS drops,", "the edge buffers readings and sends them when the link is back (" + CHECK + " for buffer size); OEE for those hours shows as incomplete until they arrive."),
@@ -908,7 +908,7 @@ ASSUMPTIONS = [
 
 BUCKETS = [
     ("landing-&lt;env&gt;", "Raw files from the movers, as they arrived", "Environment key", "Files deleted 30 days after they reach bronze; versioning on, old versions expire with them"),
-    ("landing-pii-&lt;env&gt;", "Raw files from sources with personal data", "Its own key", "Deleted one day after the lander reads them; old versions expire the same day"),
+    ("landing-pii-&lt;env&gt;", "Raw files from sources with personal data", "Its own key", "Deleted within a day of being loaded by an hourly purge; held files kept up to 7 days; old versions expire with them"),
     ("&lt;env&gt;-pii-vault", "The token vault and the suppression list", "Its own key; only privacy case handlers", "Every lookup logged"),
     ("&lt;env&gt;-bronze, -silver, -gold, -semantic, -ops", "The managed tables of each catalog", "One key per catalog", "Delta handles history; old versions cleaned by VACUUM after 30 days"),
     ("&lt;env&gt;-restricted", "Recipes and compound formulations", "Its own key; only the recipe group can use it", "Access logged and reviewed monthly"),
@@ -1152,7 +1152,7 @@ OPS_PANELS = [
     ("Compute and queries", "Busy or idle clusters, slow SQL queries, who ran what", "System tables: compute, query history, audit", "Platform engineers"),
     ("Lineage", "What feeds each table and what breaks if it fails", "System tables: table and column lineage", "Data engineers, stewards"),
     ("Failures by cause", "Source down, schema changed, bad data, our bug; trend over 7 and 30 days", "Mixed: failure state from system tables, the cause class from our error_log", "Platform lead"),
-    ("Freshness against target", "Each data product green, amber or red against its promised time", "Ours: targets in dataset_config, last success in run_log", "Data product owners, business"),
+    ("Freshness against target", "Each data product green, amber or red against its promised time", "Ours: targets in dataset_config, judged against each input's bookmark (input_watermark), not the last run", "Data product owners, business"),
     ("Quality", "Failing rules, rows parked in quarantine, by dataset and plant", "Ours: dq_result (plus pipeline expectation events)", "Data quality lead, stewards"),
     ("Volumes", "Rows in and out against the usual range; sudden drops are the early warning", "Ours: run_log", "Ops"),
     ("Watermark lag", "How far behind each incremental source is", "Ours: watermark", "Ops"),
@@ -1165,7 +1165,7 @@ ALERTS = [
     ("Quality rule set to stop failed", "dq_result failed on a rule whose action is stop", "High", "Data quality lead and steward; the load is held"),
     ("Volume out of range", "Rows written outside the usual band for that dataset and weekday; for streams, per 15-minute window", "Medium", "On-call; often the first sign of a source problem"),
     ("A press went silent", "A press in the press master sent no reading for 30 minutes during a planned shift", "High (OEE is tier 1, so it pages)", "Plant maintenance and on-call; one silent press is too small to move a volume band, so it gets its own check"),
-    ("Schema changed at source", "Contract check finds a new, missing or retyped column", "Medium", "Data engineer for that source; silver is protected by the contract"),
+    ("Schema changed at source", "Contract check finds a new, missing or retyped column", "Medium", "The source owner named in the contract; silver is protected by the contract"),
     ("Run much slower than usual", "Duration above 2 × the usual p95", "Low", "Platform engineers, next working day"),
     ("Cost over budget", "Daily or monthly cost per pipeline, per SQL warehouse or for the AWS side above its budget", "Medium", "Platform lead and finance (CostSherlock)"),
     ("Cost jump", "Yesterday's total cost (Databricks and AWS) more than 1.5 × its 7-day average", "High", "Platform lead; the runbook can pause tier-3 schedules and shrink warehouses within the hour"),
@@ -1487,7 +1487,7 @@ def page():
 {C.code(RUNTIME_DDL, "The two runtime tables most people ask about first. The full config schema is on the metadata store page.")}
 
 <h3>Ingestion: movers bring data in, our lander loads it</h3>
-<p>The full list of sources, the five ingestion technologies and the landing contract are on <a href="{BASE}aws-databricks/etl/#sources">The ETL, end to end</a>.</p>
+<p>The full list of sources, the five ingestion technologies and the landing contract are on <a href="{BASE}aws-databricks/etl/#sources">The ETL, end to end</a>. Where this page and that one differ on how the runtime works, that page is the one to follow.</p>
 <p>Ingestion has two steps. A <b>mover</b> brings raw data from the source into an S3 landing folder; which mover is a setting in <code>source_config</code>, so it can change without code. Then <b>one lander</b>, our PySpark job on Databricks that reads exactly the new files listed in its file log, reads its settings from <code>dataset_view</code>, writes bronze with arrival details, records a <code>run_log</code> row and is safe to run twice. Lakeflow Jobs are generated from the metadata and deployed with Databricks Asset Bundles.</p>
 {mover_table}
 
