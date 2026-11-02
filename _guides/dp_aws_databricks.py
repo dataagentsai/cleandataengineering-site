@@ -260,7 +260,7 @@ BIND = {
     "X2": ("full", "Lakeflow Jobs: schedules, file-arrival triggers, retries", "EventBridge for events from outside", "Jobs generated from metadata, not clicked together. Ours."),
     "X3": ("partial", "Delta schema enforcement and evolution; Auto Loader rescued data", "Glue Schema Registry for streams, if used", "Contracts in the open ODCS standard, checked in CI and at run time. Ours."),
     "X4": ("partial", "Declarative Pipelines expectations; DQX (Databricks Labs)", "Glue Data Quality, if already used", "Rules from metadata, quarantine, one results table. Ours, with DQX behind a port."),
-    "X5": ("partial", "Lakehouse Monitoring profiles (" + CHECK + ")", "Glue Data Quality", "Profile per run, drift alerts tied to the run id. Ours."),
+    "X5": ("partial", "DQX profiler; Lakehouse Monitoring on tier-1 gold; Unity Catalog classification for PII (" + CHECK + ")", "Glue Data Quality, if already used", "Profiling settings per dataset, profile compared with the last one, suggested rules as pull requests, all tied to the run id. Ours."),
     "X6": ("none", "-", "-", "Counts and sums from source to gold, per run. Ours."),
     "X7": ("full", "Unity Catalog table and column lineage", "-", "Lineage before Databricks (DMS, source systems) via OpenLineage; joined to the run id. Ours."),
     "X8": ("partial", "System tables for jobs, queries, pipeline event logs", "CloudWatch for DMS, Kinesis, MSK", "One run log with one run id across both. Ours."),
@@ -404,6 +404,130 @@ WM_STEPS = [
     ("Late rows", "A look-back overlap (say 2 hours, set in dataset_config) re-reads a little of the last window; the MERGE drops the repeats."),
     ("Files and streams", "Auto Loader and streaming keep their own checkpoints; we record the checkpoint location, not a second watermark. CDC sources use the change position (LSN or SCN); SAP uses its delta token."),
 ]
+
+
+# ---------------------------------------------------------------- data quality and profiling (tier T3)
+DQ_ENGINES = [
+    ("DQX (Databricks Labs)", "Default for every PySpark step: the lander, bronze to silver, the gold recompute jobs",
+     "Pursue", "Rules as data (YAML or a table), row-level and table-level checks, splits good and bad rows, has a profiler that suggests rules. Open source, so no lock-in. Labs project: " + CHECK + " for support terms."),
+    ("Lakeflow expectations", "Inside Declarative Pipelines (silver and gold tables built that way)",
+     "Pursue", "Native to the pipeline, results land in the pipeline event log, no extra code. We generate them from the same rules, so a rule is written once."),
+    ("Plain Spark SQL", "Fallback: any rule the two above cannot express, such as a reconcile across two tables",
+     "Pursue", "A predicate in SQL: rows where it is true are the bad rows. This is how the framework's rules already work today."),
+    ("Great Expectations, Soda", "Not used", "Drop", "Good tools, but a second rule language and a second results store. DQX plus expectations already cover the need inside Databricks."),
+    ("AWS Glue Data Quality", "Only if a team already uses it on Glue jobs", "Drop", "Runs outside Databricks; results would not join our run id without extra work."),
+]
+
+DQ_HOPS = [
+    ("Landing to bronze", "Contract check: expected columns and types, file not empty, row count against the source's count",
+     "Stop on a contract break; nothing else is checked here, bronze keeps the data as it arrived"),
+    ("Bronze to silver", "Row rules: not null, ranges, allowed values, keys unique, references exist (press, plant, material)",
+     "Bad rows go to the silver table's quarantine table; good rows carry on. Stop only if the bad share passes a limit"),
+    ("Silver to gold", "Table rules: totals reconcile with silver, no gaps in the press-hour grain, share of 'unknown' members under a limit",
+     "Stop: a wrong gold number is worse than a late one"),
+    ("Gold to semantic", "Metric checks: OEE between 0 and 100%, scrap rate against last month's band",
+     "Warn, and flag the metric on the dashboard"),
+]
+
+DQ_TABLES = [
+    ("config.dq_rule", "One row per rule: dataset, layer, the check, when it runs, severity, action (warn, quarantine, stop), who wrote it, whether it was suggested by the profiler",
+     "The loader, from YAML in Git"),
+    ("config.profile_setting", "Per dataset: is profiling on, when it runs, which columns, sample size, may it suggest rules",
+     "The loader, from YAML in Git"),
+    ("runtime.dq_result", "One row per rule per run: passed or failed, failing row count, action taken, time taken",
+     "Pipelines"),
+    ("runtime.dq_violation", "Keys of a sample of failing rows (capped, 100 by default), for the steward to look at",
+     "Pipelines"),
+    ("runtime.dq_profile", "One row per column per profiled run: null share, distinct count, min, max, mean, top values, and the change from the last profile",
+     "Pipelines"),
+    ("&lt;table&gt;_quarantine (Delta)", "The failing rows themselves, next to each silver table, with the run id and the rule id",
+     "Pipelines; stewards review weekly"),
+]
+
+PROFILE_KEYS = [
+    ("profile.enabled", "true", "Turn profiling on or off for this dataset"),
+    ("profile.when", "every_run, daily, weekly, on_change", "How often; daily is the default for silver, every run for tier-1 gold"),
+    ("profile.scope", "new_rows, full_table", "Profile only what this run loaded, or the whole table"),
+    ("profile.sample_pct", "10", "Share of rows to read; large sensor tables use a sample"),
+    ("profile.columns", "all, or a list", "Which columns; recipe columns are always left out"),
+    ("profile.suggest_rules", "true", "Let the profiler propose new rules (they are never switched on by themselves)"),
+]
+
+PROFILERS = [
+    ("DQX profiler", "Every profiled dataset", "Measures columns and proposes candidate rules. Runs inside our step, so its output carries our run id."),
+    ("Lakehouse Monitoring (data profiling)", "Tier-1 gold tables only (OEE, scrap, warranty claims)", "Managed profiles and drift over time, with its own dashboard. Costs compute on every refresh, so not everywhere. Name and features: " + CHECK + "."),
+    ("Unity Catalog data classification", "Every catalog except restricted", "Finds columns that look like personal data (names, phone numbers, emails of dealers and fleet drivers) and suggests PII tags. " + CHECK.capitalize() + "."),
+]
+
+DQ_RULES_YAML = """# config/dq/silver_mes_press_reading.yaml  (one file per dataset and layer)
+dataset: mes.press_reading
+layer: silver
+rules:
+  - name: press_known
+    check: press_id IN (SELECT press_id FROM prod_silver.mes.press)
+    severity: error
+    action: quarantine
+  - name: cure_temp_in_range
+    check: cure_temp_c BETWEEN 120 AND 220        # example range; the plant engineer owns it
+    severity: error
+    action: quarantine
+  - name: not_in_future
+    check: reading_ts <= current_timestamp() + INTERVAL 5 MINUTES
+    severity: warning
+    action: warn
+  - name: bad_share_limit                         # table-level: stop if too much is bad
+    check: quarantined_pct <= 2
+    severity: error
+    action: stop
+profile:
+  enabled: true
+  when: daily
+  scope: new_rows
+  sample_pct: 10
+  columns: all
+  suggest_rules: true"""
+
+DQ_STEPS = [
+    ("Profile", "The profiler measures each column of new data and writes runtime.dq_profile with the run id."),
+    ("Compare", "Each profile is compared with the last one. A big change (nulls jump from 0.1% to 8%, a new value in plant_code) raises a warning on the ops dashboard."),
+    ("Suggest", "If suggest_rules is on, candidate rules are written as a pull request to the rules YAML, marked as suggested. They are never switched on automatically."),
+    ("Approve", "The data steward for that source reviews the pull request, adjusts the limits and merges. The loader puts the rule in config.dq_rule."),
+    ("Enforce", "From the next run the rule is checked at its hop; the result lands in runtime.dq_result, failing rows in quarantine."),
+    ("Review", "Every week the steward looks at the quarantine tables, fixes the source or the rule, and releases or drops the parked rows."),
+]
+
+
+def dq_flow():
+    b = []
+    a = b.append
+    a(rect(20, 20, 200, 64, "#FFF4D9") + tx(36, 46, "Rules YAML in Git", 15) + tx(36, 68, "written by stewards", 12, fill="#555"))
+    a(arr(220, 52, 280, 52))
+    a(rect(280, 20, 200, 64, "#F4F4F2") + tx(296, 46, "config.dq_rule", 15) + tx(296, 68, "loaded and validated", 12, fill="#555"))
+    a(arr(380, 84, 380, 130))
+    hops = [("bronze", "#F3E3D3"), ("silver", "#E6E6E6"), ("gold", "#F7E7B4")]
+    for i, (h, f) in enumerate(hops):
+        x = 200 + i * 130
+        a(rect(x, 130, 110, 50, f) + tx(x + 55, 160, h, 15, "middle"))
+        if i:
+            a(arr(x - 20, 155, x, 155))
+    a(tx(395, 205, "rules run at every hop (DQX, expectations, SQL)", 12.5, "middle", fill="#555"))
+    outs = [("Pass", "row carries on", "#E6F4EC"), ("Warn", "logged, shown", "#FFF4D9"), ("Quarantine", "row parked", "#F8E6EF"), ("Stop", "load held, owner told", "#F8D7DA")]
+    for i, (t, sub, f) in enumerate(outs):
+        x = 100 + i * 150
+        a(arr(395, 215, x + 67, 250))
+        a(rect(x, 250, 135, 54, f) + tx(x + 67, 274, t, 14.5, "middle") + tx(x + 67, 293, sub, 11.5, "middle", fill="#555"))
+    a(arr(395, 304, 395, 340))
+    a(rect(280, 340, 230, 54, "#E9EDF8") + tx(395, 364, "runtime.dq_result", 14.5, "middle") + tx(395, 383, "+ run id, to the ops dashboard", 11.5, "middle", fill="#555"))
+    # profiling loop on the right
+    a(rect(700, 130, 210, 56, "#E0F1F7") + tx(716, 154, "Profiler", 15) + tx(716, 174, "DQX, Lakehouse Monitoring", 11.5, fill="#555"))
+    a(arr(560, 155, 700, 158, dash=True))
+    a(arr(805, 186, 805, 250))
+    a(rect(700, 250, 210, 56, "#E0F1F7") + tx(716, 274, "runtime.dq_profile", 14.5) + tx(716, 294, "change vs last profile", 11.5, fill="#555"))
+    a(arr(910, 278, 960, 278))
+    a(rect(960, 230, 160, 96, "#fff", dash=True) + tx(1040, 258, "Suggested rules", 14, "middle") + tx(1040, 278, "pull request", 12, "middle")
+      + tx(1040, 298, "steward approves", 12, "middle"))
+    a(f'<path d="M1040,230 C1040,60 700,52 482,52" fill="none" stroke="{INK}" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#ahx)"/>')
+    return svg(1140, 410, "".join(b), "Rules written in Git are loaded into config.dq_rule and run at bronze, silver and gold; each check ends in pass, warn, quarantine or stop, and the result is written to runtime.dq_result with the run id. Beside it, the profiler measures the data, writes runtime.dq_profile, and proposes rules as a pull request that a steward approves back into Git.")
 
 
 # ---------------------------------------------------------------- pipeline observability, ops dashboard, alerts
@@ -610,6 +734,12 @@ def page():
     need_table = table(["Where", "Contract?", "Why"], CONTRACT_NEED)
     parts_table = table(["Part of the contract", "Example", "Enforced by"], CONTRACT_PARTS)
     adf_table = table(["Azure Data Factory part", "On AWS", "On Databricks"], ADF_MAP)
+    dq_engine_table = table(["Engine", "Used for", "Verdict", "Why"], DQ_ENGINES)
+    dq_hop_table = table(["Hop", "What is checked", "What happens to bad data"], DQ_HOPS)
+    dq_tables = table(["Table", "Holds", "Written by"], DQ_TABLES, raw=(0,))
+    profile_keys = table(["Setting", "Values", "Meaning"], PROFILE_KEYS)
+    profilers_table = table(["Profiler", "Where", "What it does"], PROFILERS)
+    dq_steps = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(DQ_STEPS))
     faq = C.faq(FAQ)
 
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="{BASE}">Data platform architecture</a> › On AWS + Databricks</p>
@@ -618,7 +748,7 @@ def page():
 <p class="lede">The same architecture as <a href="{BASE}">the abstract picture</a>, with a product in every box, for a tyre manufacturer that already runs on AWS and wants Databricks. The design stays the same; only the names change.</p>
 <div class="sib"><a href="{BASE}">↑ The abstract picture</a><a href="/leaders/spec-driven/data-platform/">Spec-driven development for data</a><a href="/learn/medallion-architecture/">Medallion, drawn right</a></div>
 <nav class="toc"><b>On this page</b><ol>
-<li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li><li><a href="#metadata">Metadata and ingestion</a></li><li><a href="#ops">Observability and alerts</a></li><li><a href="#testing">Testing and data contracts</a></li>
+<li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li><li><a href="#metadata">Metadata and ingestion</a></li><li><a href="#quality">Data quality and profiling</a></li><li><a href="#ops">Observability and alerts</a></li><li><a href="#testing">Testing and data contracts</a></li>
 <li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">The right AI/BI</a></li><li><a href="#binding">22 concerns, bound</a></li>
 <li><a href="#aws">AWS native or Databricks</a></li><li><a href="#plan">How we would start</a></li><li><a href="#faq">Questions</a></li></ol></nav>
 
@@ -676,6 +806,37 @@ def page():
 
 <p><b>Is there an Azure Data Factory on AWS?</b> Not as one tool; its parts are spread across services. We use them only as movers. The framework itself is Python, so it is tested, reviewed and portable, instead of hundreds of hand-built visual pipelines.</p>
 {adf_table}
+</section>
+
+<section id="quality"><p class="eyebrow">Data quality and profiling</p><h2>Rules written once, checked at every hop</h2>
+<p>Two different jobs. <b>Data quality rules</b> are checks we write down: "every reading belongs to a known curing press", "scrap quantity is never negative". <b>Profiling</b> measures what the data actually looks like (how many blanks, how many different values, the smallest and largest) so we notice when it changes, and so we can find rules nobody thought to write. Both are horizontal assets: switched on for every dataset from the metadata, not coded per pipeline.</p>
+<figure class="diagram">{dq_flow()}<figcaption>Rules come from Git and run at every hop; every check ends in one of four actions and one result row. The profiler watches the data beside it and proposes new rules for a person to approve.</figcaption></figure>
+
+<h3>Which engine checks the rules</h3>
+<p>Rules are stored as data in the metadata store, and the engine sits behind our quality port (a fixed interface), so the engine can change without touching a single rule.</p>
+{dq_engine_table}
+
+<h3>What is checked at each hop</h3>
+<p>Each layer checks what it promises, and nothing more. Bronze keeps data as it arrived, so the real cleaning checks start at silver.</p>
+{dq_hop_table}
+
+<h3>A rule file, for one table</h3>
+<p>Stewards write rules as YAML next to the dataset's settings. The same file switches profiling on.</p>
+{C.code(DQ_RULES_YAML, "Rules and profiling settings for curing-press readings in silver. Ranges are examples; the plant's process engineer owns the real ones.")}
+
+<h3>Where the rules and results live</h3>
+<p>In the same metadata database, split by the three schemas: rules and settings in <code>config</code> (changed only through Git), results in <code>runtime</code>. These tables already exist in our framework; on AWS they move to Aurora PostgreSQL.</p>
+{dq_tables}
+
+<h3>Profiling: three tools, each where it pays</h3>
+<p>Profiling every table on every run costs compute for little gain. So the default profiler runs on new data, the managed monitor runs only on the tables the business watches most, and personal-data detection runs on the catalogs.</p>
+{profilers_table}
+<p>Profiling is set per dataset with six settings in <code>dataset_config</code>:</p>
+{profile_keys}
+
+<h3>From profile to rule: a person always decides</h3>
+<div class="rules">{dq_steps}</div>
+<p><b>Later, an agent:</b> it may read the profiles and quarantine tables, explain what changed in plain words and draft the rule change. It still arrives as a pull request for the steward.</p>
 </section>
 
 <section id="ops"><p class="eyebrow">Pipeline observability</p><h2>The ops dashboard and alerts</h2>
