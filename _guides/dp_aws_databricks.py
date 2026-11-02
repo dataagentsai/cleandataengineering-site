@@ -517,6 +517,69 @@ ORCH = [
 ]
 
 
+# ---------------------------------------------------------------- testing and data contracts
+def gates():
+    b = []
+    a = b.append
+    G = [("Laptop", "pre-commit", ["shift-left checks", "unit tests (local Spark)"], "#F4F4F2", "seconds"),
+         ("Pull request", "CI", ["shift-left full scan", "unit + contract tests", "contract breaking-change check"], "#E9EDF8", "minutes"),
+         ("Dev workspace", "after merge", ["integration test: one slice", "source → silver → gold", "on a fresh schema"], "#E6F4EC", "15–30 min"),
+         ("DataTwin", "nightly, before release", ["pretend plant, 30 days", "planted faults", "caught? held? accounted?"], "#FFF4D9", "an hour"),
+         ("Production", "every run", ["contract check at silver", "quality rules", "freshness + volume alerts"], "#F8E6EF", "always on")]
+    for i, (t, when, lines, f, dur) in enumerate(G):
+        x = 20 + i * 208
+        a(rect(x, 30, 188, 186, f) + tx(x + 94, 60, t, 18, "middle") + tx(x + 94, 80, when, 12, "middle", fill="#555"))
+        for k, ln in enumerate(lines):
+            a(tx(x + 14, 112 + k * 24, "· " + ln, 12.5))
+        a(tx(x + 94, 204, dur, 12, "middle", fill="#555"))
+        if i < 4:
+            a(arr(x + 188, 122, x + 208, 122))
+    a(tx(530, 250, "cheapest and fastest on the left · a problem caught one gate earlier costs a fraction to fix", 14, "middle"))
+    return svg(1060, 262, "".join(b), "Five gates from laptop to production: shift-left checks and unit tests, pull request checks, an integration run in a dev workspace, a DataTwin run with planted faults, and always-on checks in production.")
+
+
+TEST_LAYERS = [
+    ("Shift-left checks", "Problems found by reading the code, before it runs: Python and PySpark anti-patterns, SQL injection, secrets, collect() on big data, cartesian joins, missing keys in MERGE, costly job settings, metric view mistakes",
+     "Our shift-left bundle (built: 131 checks specified; caught 88 of 101 planted problems on a sample project with no false alarms) on Ruff, sqlfluff and dbt-bouncer", "Laptop and pull request"),
+    ("Unit tests", "Each transformation as a pure function, tested table-driven: a table of input rows and expected output rows per case (SCD2 new, changed, unchanged, deleted; duplicates; late rows; time zones)",
+     "pytest + local Spark and Delta (no cluster); the shift-left test kit for SCD2 and idempotency", "Laptop and pull request"),
+    ("Contract tests", "Each contract is valid, and a change does not break consumers (a removed column, a narrowed type, a renamed key)",
+     "ODCS schema validation + a breaking-change diff against the last released version", "Pull request"),
+    ("Integration tests", "One slice end to end on real Databricks: lander, silver with SCD2, gold, metric view; run twice to prove re-runs change nothing; reconciliation counts and sums agree",
+     "Databricks Asset Bundles deploy to the dev workspace on a fresh schema per pull request; small fixed sample files in S3", "After merge, in dev"),
+    ("DataTwin", "A pretend plant and business that produce data for 30 simulated days with faults planted on purpose; checks that the platform caught each one, held bad data back, and every number is accounted for",
+     "DataTwin (designed; the DataTwin Studio and Problem Lab are built and run on real Spark and Delta)", "Nightly and before each release"),
+    ("Production checks", "Contract check at silver, quality rules with warn / quarantine / stop, freshness and volume alerts",
+     "Lakeflow expectations or DQX behind our quality port; rules from dataset_config", "Every run"),
+]
+
+TWIN_FAULTS = [
+    ("SAP sends the same delivery twice", "No duplicate in silver; sales not doubled in gold"),
+    ("MES adds a column and renames another", "Contract check stops it at silver; alert to the MES owner; gold untouched"),
+    ("A press sensor goes silent for 3 hours", "Volume alert fires; OEE marked incomplete, not wrongly high"),
+    ("The warranty file arrives a day late", "Freshness alert; the late rows land in the right day when they arrive"),
+    ("A dealer's master record changes twice in a day", "SCD2 keeps both versions with correct dates"),
+    ("Daylight saving at the plant in Europe", "No lost or doubled hour in hourly scrap"),
+    ("A job dies halfway", "Watermark not moved; the re-run loads the same window once"),
+]
+
+CONTRACT_NEED = [
+    ("At sources we do not control (SAP, MES, quality LIMS, dealer DMS)", "Yes", "Their teams change systems on their own timetable; a contract turns a silent break into a clear alert with an owner."),
+    ("At data products other teams use (OEE, scrap rate, warranty claims)", "Yes", "Consumers need to know the columns, the meaning, how fresh and who to call; it is also what Genie and dashboards rely on."),
+    ("Between our own internal layers (bronze to silver to gold)", "No", "Our tests and quality rules already cover them; a contract there is paperwork."),
+    ("A full contract platform or marketplace tool", "Not now", "YAML in Git plus the checks we already run is enough to start; revisit when there are dozens of producing teams."),
+]
+
+CONTRACT_PARTS = [
+    ("Schema", "Columns, types, keys, which may be empty", "Contract check at silver; breaking-change diff in pull requests"),
+    ("Quality", "Rules such as 'scrap quantity is never negative'", "The same rules run as quality checks"),
+    ("Freshness and volume", "Ready by 06:00, between 40k and 60k rows a day", "Freshness and volume alerts"),
+    ("Meaning and owner", "What a column means; the producing and consuming owners", "Unity Catalog comments and tags; alert routing"),
+    ("Privacy", "Which columns hold personal data or recipe IP", "Unity Catalog tags, column masks and restricted catalogs"),
+    ("Version", "Major version for breaking changes, with notice to consumers", "Pull request review; consumers named in the contract approve"),
+]
+
+
 def page():
     concerns = []
     for cid, name, one, grp, _link in A.CONCERNS:
@@ -541,6 +604,10 @@ def page():
     alert_rules = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(ALERT_RULES))
     slo_table = table(["Target (SLO)", "Measures", "Example"], SLOS)
     orch_table = table(["Service", "What it does here", "Verdict", "Why"], ORCH)
+    test_table = table(["Layer", "What it proves", "Built with", "Runs"], TEST_LAYERS)
+    twin_table = table(["Fault planted in the pretend plant", "The platform passes if"], TWIN_FAULTS)
+    need_table = table(["Where", "Contract?", "Why"], CONTRACT_NEED)
+    parts_table = table(["Part of the contract", "Example", "Enforced by"], CONTRACT_PARTS)
     adf_table = table(["Azure Data Factory part", "On AWS", "On Databricks"], ADF_MAP)
     faq = C.faq(FAQ)
 
@@ -550,7 +617,7 @@ def page():
 <p class="lede">The same architecture as <a href="{BASE}">the abstract picture</a>, with a product in every box, for a tyre manufacturer that already runs on AWS and wants Databricks. The design stays the same; only the names change.</p>
 <div class="sib"><a href="{BASE}">↑ The abstract picture</a><a href="/leaders/spec-driven/data-platform/">Spec-driven development for data</a><a href="/learn/medallion-architecture/">Medallion, drawn right</a></div>
 <nav class="toc"><b>On this page</b><ol>
-<li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li><li><a href="#metadata">Metadata and ingestion</a></li><li><a href="#ops">Observability and alerts</a></li>
+<li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li><li><a href="#metadata">Metadata and ingestion</a></li><li><a href="#ops">Observability and alerts</a></li><li><a href="#testing">Testing and data contracts</a></li>
 <li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">The right AI/BI</a></li><li><a href="#binding">22 concerns, bound</a></li>
 <li><a href="#aws">AWS native or Databricks</a></li><li><a href="#plan">How we would start</a></li><li><a href="#faq">Questions</a></li></ol></nav>
 
@@ -632,6 +699,23 @@ def page():
 {alerts_table}
 <div class="rules">{alert_rules}</div>
 <p><b>Later, self-healing:</b> for known causes (a source briefly down, a late file) an agent may propose the fix and re-run in dev; a person approves before anything touches production.</p>
+</section>
+
+<section id="testing"><p class="eyebrow">Testing and data contracts</p><h2>Catch it early, prove it before release</h2>
+<p>Most data platforms are tested by looking at the dashboard after go-live. We test in five gates, from the developer's laptop to production, and each gate catches what the earlier ones cannot. All of it is part of the platform from day one, not a project for later.</p>
+<figure class="diagram">{gates()}<figcaption>Five gates. The same tests run for every pipeline, because the pipelines are generated from the same metadata.</figcaption></figure>
+{test_table}
+<p><b>How this uses what we are building.</b> The <a href="/learn/shift-left/">shift-left bundle</a> and its test kit run at the first two gates; the <a href="/learn/data-platform-sim/problems/">Problem Lab</a> scenarios (duplicates, late data, failure mid-job, schema drift, SCD2 pitfalls) become the unit and integration cases; <a href="/learn/datatwin/">DataTwin</a> is the release gate. Because pipelines are generated from metadata, a new source gets these tests without anyone writing them again.</p>
+
+<h3>DataTwin: a pretend plant with faults planted on purpose</h3>
+<p>Real data rarely shows the bad days on schedule. DataTwin produces data the way the plants and the business would, then plants the faults below. The release passes only if the platform catches every one and the dashboard still matches the pretend world's true numbers.</p>
+{twin_table}
+
+<h3>Data contracts: do we need them?</h3>
+<p>A <b>data contract</b> is a written agreement between the team that produces data and the teams that use it: which columns, what they mean, how fresh, how good, and who owns it. It is written as a YAML file in Git using the open standard <b>ODCS</b> (Open Data Contract Standard, version 3), so it is both readable and checkable by machine. The short answer: <b>yes, at the two boundaries, and no, not everywhere.</b></p>
+{need_table}
+{parts_table}
+<p>Nothing new has to be built to enforce them: the contract check in the lander, the quality rules, the freshness and volume alerts and Unity Catalog tags already do it. The contract simply makes the promise explicit and gives every alert an owner. The open-source <code>datacontract</code> command-line tool can lint ODCS files and test them against the data if a team wants it.</p>
 </section>
 
 <section id="medallion"><p class="eyebrow">The right medallion</p><h2>One medallion, two speeds</h2>
