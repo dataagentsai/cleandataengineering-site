@@ -271,9 +271,9 @@ BIND = {
     "X15": ("partial", "Delta time travel, MERGE, full refresh of pipelines", "S3 versioning", "Backfill plans and watermark resets from metadata, never doubling a number. Ours."),
     "X16": ("full", "Asset Bundles, Git folders, Terraform provider", "GitHub Actions with short-lived OIDC sign-in; separate accounts per environment", "Templates only. Ours."),
     "X17": ("none", "-", "-", "Unit, contract and data tests (pytest), shift-left checks, DataTwin worlds. Ours, open source."),
-    "X18": ("partial", "Time travel, deep clone, job retries", "S3 replication, AWS Backup, a second region", "A written, tested restore drill. Ours."),
+    "X18": ("partial", "Time travel, deep clone, job retries", "S3 replication and deep clone to Hyderabad (no AWS Backup on personal data)", "A written, tested restore drill. Ours."),
     "X19": ("full", "Photon, liquid clustering, predictive optimization, serverless", "-", "Checks in CI and cost findings. Shift-left bundle + CostSherlock."),
-    "X20": ("none", "-", "-", "Detect → fix in dev → pull request → verify → roll back. Ours."),
+    "X20": ("none", "-", "-", "Detect → fix proved on a pre-prod clone → pull request → verify → roll back. Ours."),
     "X21": ("partial", "Databricks Assistant for code", "Bedrock, if preferred for models", "Agents that draft manifest entries, rules and docs as pull requests. Ours."),
     "X22": ("none", "-", "-", "A pretend plant with planted faults (a press goes silent, a batch sent twice). DataTwin, ours."),
 }
@@ -292,11 +292,11 @@ AWS_VS_DB = [
 ]
 
 FAQ = [
-    ("Does our data leave our AWS account?", "No. Databricks on AWS runs its compute in your account and your VPC, and all tables live in your S3 buckets, encrypted with KMS keys you own. The Databricks control plane manages the workspace; for serverless compute, check the current data-residency terms for your region."),
+    ("Does our data leave our AWS account?", "No. Classic compute runs in your account and your VPC; serverless compute runs in Databricks' serverless plane in the same region. All tables live in your S3 buckets, encrypted with KMS keys you own. The Databricks control plane manages the workspace; for serverless compute, check the current data-residency terms for your region."),
     ("Why Databricks if we already have Glue, EMR and Redshift?", "One engine for batch and streaming, one catalog (Unity Catalog) for access, lineage and audit, and AI/BI with Genie on the same governed data. You do not have to switch everything at once: keep what works and put new work on the lakehouse."),
     ("What is a metric view?", "A definition of a business metric (for example, scrap rate) stored once in Unity Catalog, with its formula, dimensions and filters. Dashboards, Genie and the Conversation UI all use it, so the number is the same everywhere."),
     ("What are horizontal assets?", "Parts built once and reused by every pipeline and data product: ingestion, metadata, quality, cost, testing and the conversation layer. They are what makes the tenth data product much cheaper than the first."),
-    ("How are compound recipes and personal data protected?", "Recipes and formulation data sit in a restricted catalog with its own storage and encryption key, readable only by a named group. Personal data of dealers, fleet drivers and consumers is swapped for tokens as it enters the platform; the real values live only in a separate token vault, and erasing a person means deleting their vault entry. Commercial columns such as prices are masked by Unity Catalog for everyone outside finance and sales, in every tool, not only in dashboards. All data stays in India (Mumbai, with recovery in Hyderabad); personal data from the EU travels only as the law allows (see the privacy section), and a separate EU platform is added only if your legal team requires it. Access is audited in system tables and CloudTrail."),
+    ("How are compound recipes and personal data protected?", "Recipes and formulation data sit in a restricted catalog with its own storage and encryption key, readable only by a named group. Personal data of dealers, fleet drivers and consumers is swapped for tokens as it enters the platform; the real values live only in a separate token vault, and erasing a person means deleting their vault entry, blocking them from being loaded again, and erasing the recovery copies too. Commercial columns such as prices are masked by Unity Catalog for everyone outside finance and sales, in every tool, not only in dashboards. All data stays in India (Mumbai, with recovery in Hyderabad); personal data from the EU travels only as the law allows (see the privacy section), and a separate EU platform is added only if your legal team requires it. Access is audited in system tables and CloudTrail."),
 ]
 
 
@@ -355,9 +355,9 @@ SCHEMAS = [
     ("config", "What to do: platform_config, source_master, source_config, dataset_master, dataset_config, the key registry, quality rules, PII policy, and dataset_view",
      "Only the loader writes; pipelines read", "Small; changes only through Git"),
     ("runtime", "What happened: run_log, step_log, error_log, dq_result, watermark, config_snapshot",
-     "Pipelines write; nobody else", "Grows every run; monthly partitions, 13 months kept, older months copied to Delta"),
+     "Pipelines write; nobody else", "Grows every run; monthly partitions, 13 months kept, then summarised into prod_ops"),
     ("audit", "Who changed what: config_load_log (every loader run, Git commit, who approved, what changed)",
-     "Only the loader appends; never updated or deleted", "Small; kept for as long as audit rules require"),
+     "Only the loader appends; never updated or deleted", "Small; kept 7 years, like the audit bucket"),
 ]
 
 LOG_TABLES = [
@@ -512,8 +512,16 @@ measures:
     expr: SUM(source.tyres_scrapped) FILTER (WHERE source.batch_type = 'production') / NULLIF(SUM(source.tyres_cured) FILTER (WHERE source.batch_type = 'production'), 0)
   - name: Completeness                                # share of expected press-hours that arrived
     expr: SUM(source.hours_received) / NULLIF(SUM(source.hours_expected), 0)
+  # OEE parts count complete press-hours only (top and bottom alike), so a silent press
+  # makes OEE incomplete, never wrongly high or low; Completeness shows how much is missing.
   - name: Availability
-    expr: SUM(source.run_minutes) / NULLIF(SUM(source.planned_minutes), 0)"""
+    expr: SUM(source.run_minutes) FILTER (WHERE source.is_complete) / NULLIF(SUM(source.planned_minutes) FILTER (WHERE source.is_complete), 0)
+  - name: Performance
+    expr: SUM(source.ideal_cycle_seconds * source.tyres_cured) FILTER (WHERE source.is_complete) / NULLIF(SUM(source.run_minutes * 60) FILTER (WHERE source.is_complete), 0)
+  - name: Quality
+    expr: SUM(source.tyres_good) FILTER (WHERE source.is_complete) / NULLIF(SUM(source.tyres_cured) FILTER (WHERE source.is_complete), 0)
+  - name: OEE                                         # good tyres x ideal cycle time over planned time
+    expr: SUM(source.ideal_cycle_seconds * source.tyres_good) FILTER (WHERE source.is_complete) / NULLIF(SUM(source.planned_minutes * 60) FILTER (WHERE source.is_complete), 0)"""
 
 GENIE_SPACES = [
     ("Plant performance", "Plant managers, shift leads", "Press performance, downtime and scrap metric views", "40 questions"),
@@ -559,7 +567,7 @@ SENSITIVITY = [
 
 ROLES = [
     ("Platform engineer", "Read and write in dev; read prod_ops", "Deploys only through CI/CD"),
-    ("Data engineer", "Read and write in dev; read pre-prod", "Never writes to prod by hand"),
+    ("Data engineer", "Read and write in dev; read the results schemas in pre-prod", "Never writes to prod by hand; prod clones in pre-prod are readable only by CI"),
     ("Analyst, data scientist", "Read prod_gold and prod_semantic", "Personal data only as tokens; confidential columns masked"),
     ("Plant manager, shift lead", "Read prod_semantic; dashboards and the Plant performance Genie space", "Own plant's rows only"),
     ("Quality engineer", "Read quality and manufacturing gold and metric views", "Personal data only as tokens"),
@@ -582,18 +590,21 @@ ERASURE = [
     ("Request arrives", "From the privacy team's case system, with the person's identifier."),
     ("Find the token", "Look up the person's token in the vault (prod_pii_vault)."),
     ("Find every place", "Lineage and tags list every table holding that token: silver, gold, quarantine tables."),
-    ("Erase", "Delete the vault row first: from that moment the token points to nobody. Add a one-way fingerprint of the identifier to the suppression list, so a re-sent extract cannot bring the person back. Then blank the token's rows in silver, including old SCD2 versions, and rebuild the affected gold windows. Where the law requires a claim to be kept (product liability), the claim stays and only the identity goes."),
+    ("Erase or restrict?", "The privacy lead decides. An open claim or a product recall may need the identity kept for now: processing is then restricted instead, and the decision is recorded in the case."),
+    ("Erase", "Delete the vault row first: from that moment the token points to nobody. Add a one-way fingerprint of the identifier to the suppression list, so a re-sent extract cannot bring the person back. Then blank the token's rows in silver (including old SCD2 versions) and in the quarantine tables, and rebuild the affected gold windows. Where the law requires a claim to be kept (product liability), the claim stays and only the identity goes."),
     ("Erase the copies", "Run the same erasure on the recovery copies in Hyderabad, and delete the person's files from landing, including old versions."),
-    ("Clean old files", "Delta keeps old file versions for 30 days; after VACUUM, the data is gone from storage. Bronze only ever held the token. No table may be restored to a version from before an erasure; if one is, the erasure log is replayed straight after."),
+    ("Clean old files", "Delta keeps old file versions for 30 days; after VACUUM, the data is gone from storage. Bronze only ever held the token. VACUUM runs in Hyderabad too, every bucket expires old object versions within 30 days, and AWS Backup is not used for the vault or personal-data tables. No table may be restored to a version from before an erasure; if one is, the erasure log is replayed straight after."),
     ("Record evidence", "Write what was erased, where and when to the audit schema, and close the case."),
 ]
 
 PRIVACY_RULES = [
-    ("Tokenise at the door.", "The lander swaps names, phone numbers and emails for tokens before bronze, and checks the suppression list. Free-text fields such as warranty notes go through personal-data detection (Amazon Comprehend) and names found are tokenised too. Bronze stays append-only and still holds nothing personal, so erasure never fights the replay design."),
+    ("Tokenise at the door.", "The lander swaps names, phone numbers and emails for tokens before bronze, and checks the suppression list. Free-text fields such as warranty notes go through a personal-data detector behind a port, which must handle English and German (Amazon Comprehend's detection covers English and Spanish, check current status; an open-source detector such as Presidio with German models otherwise); until that is confirmed, EU free text is held out of bronze. For sources with personal data, columns nobody declared are dropped before bronze and only their names are logged, so a new personal column cannot slip in as rescued data. Bronze stays append-only and still holds nothing personal, so erasure never fights the replay design."),
     ("Real values never wait in landing.", "Files from sources with personal data use their own landing folder, deleted one day after the lander has read them, with old versions expiring the same day. Macie scans landing weekly for personal data in the wrong place."),
     ("EU personal data leaves the EU only on a legal basis.", "India has no EU adequacy decision, so personal data from EU plants and dealers travels under the company's Standard Contractual Clauses with a transfer impact assessment, or is tokenised in the EU before it leaves. Your legal team picks; until then, EU sources are loaded without personal columns."),
     ("A purpose for every personal column.", "dataset_config records why it is kept (warranty claim handling, dealer payments) and for how long; columns without a purpose are not loaded."),
     ("Retention runs itself.", "A nightly job deletes personal data past its retention period and logs what it removed."),
+    ("Logs never hold values.", "The lander, which sees real values before tokenising, never logs row values; its error messages are scrubbed before they reach error_log."),
+    ("Tokens are random.", "A token is a random value, mapped to the person only in the vault, so deleting the vault entry really does make the data anonymous. The suppression fingerprint uses a separate secret key."),
     ("Consent stays at the source.", "Warranty and dealer systems collect consent; we load the consent flag and filter on it, we never decide it."),
     ("Breach response is written down.", "Who decides, who tells the regulator and the people affected, inside the deadlines of the DPDP Act and GDPR (72 hours for GDPR; DPDP Rules timelines: " + CHECK + ")."),
 ]
@@ -617,7 +628,7 @@ GOV_ROLES = [
 # ---------------------------------------------------------------- CI/CD and environments (tier T9)
 REPOS = [
     ("platform-foundation", "Terraform for accounts, network, storage, keys, workspaces, catalogs", "Platform team", "Terraform plan on every pull request; apply after approval"),
-    ("data-platform", "The framework code, all YAML config (sources, datasets, rules, contracts, grants), gold SQL, metric views, dashboards, Genie space definitions, Asset Bundles", "Shared, with CODEOWNERS per folder", "The six gates below"),
+    ("data-platform", "The framework code, all YAML config (sources, datasets, rules, contracts, grants), gold SQL, metric views, dashboards, Genie space definitions, Asset Bundles", "Shared, with CODEOWNERS per folder", "The release path below"),
 ]
 
 OWNERS = [
@@ -682,7 +693,7 @@ def cicd_flow():
 # ---------------------------------------------------------------- agents (tier T10)
 AGENTS = [
     ("Triage", "An alert opens an incident", "Collects the evidence: the failed run, the error, recent config and code changes, upstream lineage, CloudWatch for the mover. Writes a diagnosis and the likely cause class into the incident.", "Read only"),
-    ("Fix proposer", "A diagnosed incident with a known cause", "Starts only after a person has confirmed the triage diagnosis. Drafts the fix as a pull request (a widened type, a new rule limit, a watermark reset plan), and proves it by re-running the failed window on a shallow clone in pre-prod.", "Pull request + pre-prod clone"),
+    ("Fix proposer", "A diagnosed incident with a known cause", "Starts only after a person has confirmed the triage diagnosis. Its clone runs go through the CI pipeline, so it never reads prod itself. Drafts the fix as a pull request (a widened type, a new rule limit, a watermark reset plan), and proves it by re-running the failed window on a shallow clone in pre-prod.", "Pull request + pre-prod clone"),
     ("Rule suggester", "A new profile or a full quarantine table", "Explains what changed in plain words and drafts quality rule changes for the steward.", "Pull request"),
     ("Source onboarder", "A sample file or a database table from a new source", "Drafts the source and dataset YAML, the contract and the first quality rules.", "Pull request"),
     ("Genie curator", "Thumbs-down answers and failed benchmark questions", "Drafts better instructions, example questions and new benchmark questions for the space owner.", "Pull request"),
@@ -700,7 +711,7 @@ AUTONOMY = [
 AGENT_RULES = [
     ("Each agent is its own service principal.", "With read access to prod_ops and the metadata, and no access to prod_restricted or prod_pii_vault: agents see tokens, never personal data."),
     ("Tools are listed, not open.", "Each agent gets a short list of tools (read a run, read lineage, open a pull request); no general SQL on prod."),
-    ("Every step is logged.", "Prompts, tool calls and outputs go to prod_ops with the incident id, so a reviewer can see why the agent said what it said."),
+    ("Every step is logged.", "Prompts, tool calls and outputs go to prod_ops.ai_log with the incident id (restricted like the Genie log), so a reviewer can see why the agent said what it said."),
     ("Tested before trusted, measured after.", "The DataTwin faults are the agents' exam: the triage agent must name the planted cause for each fault before it is switched on, and again after every change. In production, its cause is compared with the cause the person closes the incident with, and the hit rate is on the ops dashboard."),
     ("Models stay in the account.", "Databricks-hosted models or Amazon Bedrock in your AWS account."),
 ]
@@ -726,18 +737,21 @@ STREAM_RULES = [
 ]
 
 RECOVERY = [
-    ("Bronze", "S3 cross-region replication to Hyderabad (tokens only)", "15 minutes", "Registered as tables in the Hyderabad catalog"),
+    ("Landing", "S3 cross-region replication, same expiry rules (personal-data files still deleted after a day)", "15 minutes", "Lets the lander replay the last minutes that had not reached bronze"),
+    ("Bronze", "S3 cross-region replication to Hyderabad (tokens only)", "15 minutes", "Registered at the last version whose files have all arrived (replication does not keep order), then silver and gold catch up from bronze by run id"),
     ("Silver, gold, recipes, token vault", "Incremental Delta deep clone every 4 hours", "4 hours", "Registered on the clones; erasures since the last clone are replayed"),
     ("Metadata database (Aurora)", "Aurora Global Database with a copy in Hyderabad (" + CHECK + "; otherwise snapshots copied every hour)", "Seconds (or 1 hour)", "Promote the copy; watermarks and run log carry on"),
     ("Unity Catalog", "Not copied: Hyderabad has its own catalog, built from Git", "Nothing lost", "Terraform builds catalogs and catalog grants; the data-platform deploy adds schema grants, row filters, masks, metric views and Genie spaces"),
-    ("Streams", "Checkpoints are not copied", "Gap filled from the edge buffer", "Streams restart from the last bronze row"),
+    ("Streams", "Checkpoints are not copied; a Kinesis stream in Hyderabad is built in advance", "Gap filled from the edge buffer", "The edges switch to the Hyderabad stream; streams start from the last bronze row"),
+    ("Secrets", "Secrets Manager replicates every secret to Hyderabad", "Nothing lost", "Movers and the lander find their credentials in place"),
     ("Code and config", "In GitHub", "Nothing lost", "Deployed as in any release"),
 ]
 
 RECOVERY_STEPS = [
     ("Declare.", "The head of IT, or their deputy, declares the disaster. Nobody else can."),
-    ("Build.", "Terraform with dr.tfvars builds the workspace and catalogs in Hyderabad. The network path is already in place: the Transit Gateway in Hyderabad is peered and the Direct Connect gateway reaches both regions."),
-    ("Lock, then secure.", "Readers are locked out. The data-platform deploy applies every grant, row filter and mask, then the row-security test runs as plant-manager and analyst test identities."),
+    ("Build.", "Terraform with dr.tfvars builds the workspace, catalogs, Kinesis stream and mover definitions in Hyderabad. The network path is already in place: the Transit Gateway in Hyderabad is peered, the Direct Connect gateway reaches both regions, and the EU plants' VPN tunnels to Hyderabad are configured but idle."),
+    ("Reset the bookmarks.", "Aurora's copy is seconds behind, but bronze can be up to 15 minutes behind, so each watermark is set back to the highest window actually present in Hyderabad bronze, minus the usual overlap. The lander then replays the gap from the copied landing files; nothing is marked loaded that is not there."),
+    ("Lock, then secure.", "Readers are locked out. The data-platform deploy applies column tags from dataset_config first, then every grant, row filter and mask; the security test then checks one row filter and one masked column as plant-manager and analyst test identities. Nobody reads until it passes."),
     ("Open by tier.", "Tier-1 data products open first (target: 24 hours), the rest within 72 hours. Dashboards show a banner saying the platform is running from recovery."),
     ("Fail back.", "When Mumbai returns, clone the changed tables back, reconcile counts, switch the movers, and close the incident with a review."),
     ("Rehearse.", "Twice a year, against the clock, with the results in the ops dashboard."),
@@ -745,9 +759,9 @@ RECOVERY_STEPS = [
 
 RETENTION = [
     ("Landing", "30 days; files with personal data 1 day"),
-    ("Bronze", "3 years in standard storage, then archive storage (tokens only)"),
+    ("Bronze", "3 years in standard storage, then an archive class Spark can still read (S3 Glacier Instant Retrieval) until year 8, then deleted. Tokens only"),
     ("Silver", "8 years for anything that supports the accounts (as Indian company law asks for books of account); 5 years for the rest"),
-    ("Gold", "10 years, for trends"),
+    ("Gold", "10 years, for trends. Rows older than silver's retention are kept only as summaries without tokens, so an erasure never needs to rebuild them"),
     ("Quarantine tables", "90 days after the steward's decision"),
     ("Runtime and ops tables", "13 months live, then summarised"),
     ("AI question log", "1 year"),
@@ -838,6 +852,8 @@ OPEN = [
     ("Are tag-based access policies (ABAC) available in Mumbai?", "If not, the deploy generates a mask per table from the same tags", "Platform lead", "Crawl, week 1"),
     ("Which route out of SAP?", "Licence and support terms decide it", "SAP team and procurement", "Before the walk phase"),
     ("What is the legal basis for EU personal data in India?", "Until decided, EU sources load without personal columns", "Legal team", "Before the first EU source"),
+    ("Does Databricks run in Hyderabad (ap-south-2)?", "The recovery plan builds the workspace there. If not, the data copies stay in Hyderabad and compute is rebuilt in the nearest supported region, with legal sign-off for data leaving India", "Platform lead and legal team", "Before go-live"),
+    ("Which personal-data detector reads German free text?", "Until decided, EU warranty notes are held out of bronze", "Privacy lead and platform lead", "Before the first EU source"),
     ("Is Aurora Global Database available in Hyderabad?", "Sets the metadata recovery point: seconds or one hour", "Platform lead", "Before go-live"),
     ("What are the DPDP Rules timelines for breach notice?", "Fills in the breach runbook", "Legal team", "Before go-live"),
     ("Can Genie be embedded and driven by API?", "Decides how much of the Conversation UI we build", "Product owner", "Walk phase"),
@@ -846,12 +862,12 @@ OPEN = [
 DESIGN_TEST = [
     ("A new EU plant's MES must reach OEE within a sprint", "Passes with gaps", "Passes", "EU network path, master data owners, onboarding checklist, EU legal basis"),
     ("SAP renames a column without warning", "Passes with gaps", "Passes", "Contract check fixed at silver; replay from landing, never re-extract from SAP; freshness shown on every metric"),
-    ("A press goes silent for 3 hours on the night shift", "Fails", "Passes", "Gold writes incomplete rows instead of stopping; a completeness measure; a silent-press alert; paging by tier"),
+    ("A press goes silent for 3 hours on the night shift", "Fails", "Passes (round 2 fixed how OEE treats incomplete hours)", "Gold writes incomplete rows instead of stopping; a completeness measure; a silent-press alert; paging by tier"),
     ("A warranty file arrives two days late", "Passes with gaps", "Passes", "Restatements logged and shown; freshness alerts grouped by date; warranty tier and target stated"),
-    ("A consumer in Germany asks to be erased", "Fails", "Passes, once legal picks the basis", "Vault in its own catalog; landing purged in a day; recovery copies erased; suppression list; free text scanned; no restore across an erasure"),
+    ("A consumer in Germany asks to be erased", "Fails", "Passes once two open decisions are settled: the legal basis and a German-capable detector", "Vault in its own catalog; landing purged in a day; recovery copies erased; suppression list; free text scanned; no restore across an erasure"),
     ("Scrap rate is redefined to exclude trial batches", "Passes with gaps", "Passes", "One source for scrap rate; batch type in gold; definition changes dated; owner updates benchmarks"),
     ("A release is wrong for one plant", "Passes with gaps", "Passes", "Recompute that plant only; canary for a full day; business banner; platform lead decides"),
-    ("The Mumbai region is down for a day", "Fails", "Passes", "Recovery per layer with targets; security deployed before readers; metadata database copied; network ready; who declares"),
+    ("The Mumbai region is down for a day", "Fails", "Passes once Databricks in Hyderabad is confirmed", "Recovery per layer with targets; security deployed before readers; metadata database copied; network ready; who declares"),
     ("A plant manager asks Genie for all plants", "Passes with gaps", "Passes, once the metric-view test is green", "Row security as a release test; 'for your plant' wording; AI log restricted"),
     ("An engineer joins, a recipe keeper leaves", "Passes with gaps", "Passes", "Owners checked against the identity provider nightly; deputies; personal access tokens off; pre-prod sees results only"),
     ("The bill doubles overnight", "Passes with gaps", "Passes", "Cost-jump alert on the whole account; runbook to pause and shrink within the hour; cost as a cause"),
@@ -869,7 +885,7 @@ FOUNDATION = [
      "Press readings and scrap counts are not personal data. One platform costs half of two. A separate EU platform (Frankfurt) only if your legal team requires it."),
     ("Databricks workspaces", "Three workspaces (dev, pre-prod, prod) on one Unity Catalog. Each catalog is bound to its workspace, so prod tables are visible only in prod.",
      "Databricks allows one Unity Catalog per region, so the three share it; binding keeps the environments apart."),
-    ("Network", "No public IP addresses anywhere. Compute runs in your own VPC, across two availability zones. Databricks is reached through PrivateLink, never the open internet.",
+    ("Network", "No public IP addresses anywhere. Classic compute runs in your own VPC, across two availability zones; serverless compute runs in Databricks' serverless plane in the same region and reaches your data over private connections. Databricks is reached through PrivateLink, never the open internet.",
      "This is the first thing a manufacturer's security team asks. Two zones keep the platform up if one data centre fails."),
     ("Storage and keys", "One S3 bucket and one KMS key per catalog. A landing bucket per environment. Recipes get their own bucket and key with the tightest access.",
      "Recipes are the crown jewels: with their own key, revoking all access is one action, and every use of the key is logged."),
@@ -901,7 +917,7 @@ BUCKETS = [
 
 BINDING = [
     ("dev_* catalogs", "Read and write", "Not visible", "Not visible"),
-    ("preprod_* catalogs", "Not visible", "Read and write", "Not visible"),
+    ("preprod_* catalogs", "Not visible", "CI writes; engineers read the results schemas only, not the clones", "Not visible"),
     ("prod_bronze, prod_silver, prod_gold, prod_semantic", "Not visible", "Read only, by the CI service principal (for real-data tests and shallow clones); people in pre-prod see the results, not the prod rows", "Jobs write; people read through grants"),
     ("prod_restricted", "Not visible", "Not visible", "Recipe group only"),
     ("prod_pii_vault", "Not visible", "Not visible", "Privacy case handlers only"),
@@ -944,9 +960,9 @@ def foundation_map():
       + tx(36, 242, "to every VPC through", 11.5, fill="#555") + tx(36, 260, "a Transit Gateway", 11.5, fill="#555"))
     a(arr(190, 226, 220, 226))
     a(arr(920, 265, 950, 265))
-    a(rect(950, 200, 170, 130, "#F8E6EF", dash=True) + tx(966, 224, "Hyderabad (recovery)", 14) + tx(966, 246, "prod gold + recipes", 11.5, fill="#555")
-      + tx(966, 264, "copied by S3 replication", 11.5, fill="#555") + tx(966, 286, "workspace rebuilt", 11.5, fill="#555") + tx(966, 304, "from Terraform", 11.5, fill="#555"))
-    return svg(1140, 445, "".join(b), "The foundation: your login system syncs groups to one Databricks account in Mumbai with one Unity Catalog. Below it, three AWS accounts (dev, pre-prod, prod), each with a private VPC in two zones, its own workspace that sees only its own catalogs, and S3 buckets with a key per catalog, reached over PrivateLink. Plants and SAP connect over Direct Connect. Pre-prod reads prod read-only. Prod gold and recipes are copied to Hyderabad for recovery.")
+    a(rect(950, 200, 170, 130, "#F8E6EF", dash=True) + tx(966, 224, "Hyderabad (recovery)", 14) + tx(966, 246, "bronze to gold, recipes, vault", 11.5, fill="#555")
+      + tx(966, 264, "replicated and cloned", 11.5, fill="#555") + tx(966, 286, "workspace rebuilt", 11.5, fill="#555") + tx(966, 304, "from Terraform", 11.5, fill="#555"))
+    return svg(1140, 445, "".join(b), "The foundation: your login system syncs groups to one Databricks account in Mumbai with one Unity Catalog. Below it, three AWS accounts (dev, pre-prod, prod), each with a private VPC in two zones, its own workspace that sees only its own catalogs, and S3 buckets with a key per catalog, reached over PrivateLink. Plants and SAP connect over Direct Connect. Pre-prod reads prod read-only. Prod data from bronze to gold, the recipes and the vault are copied to Hyderabad for recovery.")
 
 
 # ---------------------------------------------------------------- data quality and profiling (tier T3)
@@ -967,7 +983,7 @@ DQ_HOPS = [
     ("Bronze to silver", "First the contract check (promised columns and types), then row rules: not null, ranges, allowed values, keys unique, references exist (press, plant, material)",
      "Bad rows go to the silver table's quarantine table; good rows carry on. Stop only if the bad share passes a limit"),
     ("Silver to gold", "Table rules: totals reconcile with silver, share of 'unknown' members under a limit, and every expected press-hour present",
-     "Stop if totals do not reconcile: a wrong gold number is worse than a late one. A missing press-hour does not stop the load: it is written as an incomplete row, so the number is on time and says it is incomplete"),
+     "Stop if totals do not reconcile: a wrong gold number is worse than a late one. A missing press-hour does not stop the load: it is written as an incomplete row, which OEE leaves out of both the top and the bottom of every part, so the number is on time, not skewed, and says how complete it is"),
     ("Gold to semantic", "Metric checks: OEE between 0 and 100%, scrap rate against last month's band, completeness of the period shown",
      "Warn, and flag the metric on the dashboard; every dashboard and Genie answer shows how complete and how fresh the data is"),
 ]
@@ -1147,7 +1163,7 @@ ALERTS = [
     ("Data product late", "Freshness past the promised time in dataset_config", "High for tier 1, Medium otherwise", "Owner of the data product, on-call"),
     ("Quality rule set to stop failed", "dq_result failed on a rule whose action is stop", "High", "Data quality lead and steward; the load is held"),
     ("Volume out of range", "Rows written outside the usual band for that dataset and weekday; for streams, per 15-minute window", "Medium", "On-call; often the first sign of a source problem"),
-    ("A press went silent", "A press in the press master sent no reading for 30 minutes during a planned shift", "Follows the tier of OEE", "Plant maintenance and on-call; one silent press is too small to move a volume band, so it gets its own check"),
+    ("A press went silent", "A press in the press master sent no reading for 30 minutes during a planned shift", "High (OEE is tier 1, so it pages)", "Plant maintenance and on-call; one silent press is too small to move a volume band, so it gets its own check"),
     ("Schema changed at source", "Contract check finds a new, missing or retyped column", "Medium", "Data engineer for that source; silver is protected by the contract"),
     ("Run much slower than usual", "Duration above 2 × the usual p95", "Low", "Platform engineers, next working day"),
     ("Cost over budget", "Daily or monthly cost per pipeline, per SQL warehouse or for the AWS side above its budget", "Medium", "Platform lead and finance (CostSherlock)"),
@@ -1279,7 +1295,7 @@ TEST_LAYERS = [
 TWIN_FAULTS = [
     ("SAP sends the same delivery twice", "No duplicate in silver; sales not doubled in gold"),
     ("MES adds a column and renames another", "Contract check stops it at silver; alert to the MES owner; gold untouched"),
-    ("A press sensor goes silent for 3 hours", "Volume alert fires; OEE marked incomplete, not wrongly high"),
+    ("A press sensor goes silent for 3 hours", "The silent-press alert fires and pages; OEE is on time, marked incomplete, and neither too high nor too low"),
     ("The warranty file arrives a day late", "Freshness alert; the late rows land in the right day when they arrive"),
     ("A dealer's master record changes twice in a day", "SCD2 keeps both versions with correct dates"),
     ("Daylight saving at the plant in Europe", "No lost or doubled hour in hourly scrap"),
@@ -1546,7 +1562,7 @@ def page():
 <div class="rules">{alert_rules}</div>
 <h3>From alert to incident</h3>
 <div class="rules">{incident_rules}</div>
-<p><b>Later, self-healing:</b> for known causes (a source briefly down, a late file) an agent may propose the fix and re-run in dev; a person approves before anything touches production. See <a href="#agents">agents</a>.</p>
+<p><b>Later, self-healing:</b> for known causes (a source briefly down, a late file) an agent may propose the fix and prove it on a pre-prod clone; a person approves before anything touches production. See <a href="#agents">agents</a>.</p>
 </section>
 
 <section id="testing"><p class="eyebrow">Testing and data contracts</p><h2>Catch it early, prove it before release</h2>
@@ -1633,10 +1649,10 @@ def page():
 <div class="rules">{privacy_rules}</div>
 <h3>When someone asks to be erased</h3>
 <div class="rules">{erasure_steps}</div>
-<p class="note">Tokenising uses the framework's existing <code>pii_policy</code> table (actions: pass through, hash, mask, tokenise, redact, per environment). The vault is its own catalog, <code>prod_pii_vault</code>, with its own bucket and key, readable only by privacy case handlers; recipe keepers cannot read it, and the privacy team cannot read recipes. The salt and the vault key live in AWS Secrets Manager and KMS.</p>
+<p class="note">Tokenising uses the framework's existing <code>pii_policy</code> table (actions: pass through, hash, mask, tokenise, redact, per environment). The vault is its own catalog, <code>prod_pii_vault</code>, with its own bucket and key, readable only by privacy case handlers; recipe keepers cannot read it, and the privacy team cannot read recipes. The fingerprint key and the vault key live in AWS Secrets Manager and KMS.</p>
 
 <h3>Recipes</h3>
-<p>Recipes and process settings sit in <code>prod_restricted</code>, in their own bucket with their own key. Gold carries only the compound family, never the recipe. Only the named recipe keepers can read it, every read raises a notice to the recipe owner, access is reviewed every month, and revoking the key cuts all access at once. It is never added to Genie or to an agent.</p>
+<p>Recipes and process settings sit in <code>prod_restricted</code>, in their own bucket with their own key. Gold carries only the compound family, never the recipe. Only the named recipe keepers can read it, every read raises a notice to the recipe owner (the head of compound development), access is reviewed every month, and revoking the key cuts all access at once. It is never added to Genie or to an agent.</p>
 
 <h3>AI on governed data</h3>
 <div class="rules">{ai_rules}</div>
@@ -1744,14 +1760,14 @@ def page():
 </div></section>
 
 <section id="open"><p class="eyebrow">Open decisions</p><h2>What must be settled before or during the first slice</h2>
-<p>Most items marked "check current status" on this page are product details that do not change the design. These eight do: each has a fallback, an owner and a date.</p>
+<p>Most items marked "check current status" on this page are product details that do not change the design. These ten do: each has a fallback, an owner and a date.</p>
 {open_table}
 </section>
 
 <section id="design-test"><p class="eyebrow">How we tested this design</p><h2>Twelve situations, walked through before anything was built</h2>
-<p>We tested the design on paper first. Two reviewers who had not written it worked from the page alone. One walked twelve real situations through it step by step; the other checked every section against every other and against 25 topics a complete design must cover. They found 3 situations that failed outright, about 30 places where two sections disagreed, and several topics that were missing (sizing, recovery, migration, sharing). Every finding was fixed in the page above.</p>
+<p>We tested the design on paper first. Two reviewers who had not written it worked from the page alone. One walked twelve real situations through it step by step; the other checked every section against every other and against 25 topics a complete design must cover. They found 3 situations that failed outright, about 30 places where two sections disagreed, and several topics that were missing (sizing, recovery, migration, sharing). Every finding was fixed in the page above. A third reviewer then re-tested the three failures and looked for new contradictions; that round found 27 more, mostly in recovery and privacy details, and those are fixed too.</p>
 {test_result_table}
-<p class="note">Two situations pass only once an open decision is settled: the EU legal basis, and the metric-view security test. Both are in the open decisions above.</p>
+<p class="note">Four situations pass only once an open decision is settled: the EU legal basis, a German-capable detector, Databricks in Hyderabad, and the metric-view security test. All are in the open decisions above.</p>
 </section>
 
 <section id="faq"><p class="eyebrow">Questions</p><h2>Questions leaders ask</h2>{faq}</section>
