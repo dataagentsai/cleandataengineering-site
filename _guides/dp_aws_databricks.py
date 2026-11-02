@@ -2,7 +2,7 @@
 
     python3 _guides/dp_aws_databricks.py
 
-The abstract architecture (architecture.py) with a product in every box, for a hospital group
+The abstract architecture (architecture.py) with a product in every box, for a tyre manufacturer
 that runs on AWS and wants Databricks. Reuses the page shell and CSS of components.py and the
 22 concerns of architecture.py. Facts we are unsure of are marked "check current status".
 """
@@ -68,13 +68,13 @@ def link(href, inner, title=""):
 
 # ------------------------------------------------------------------ 1. the big picture
 SPINE = [
-    ("Sources", "#F4F4F2", ["HIS / EMR", "LIS (lab)", "PACS/RIS metadata", "Pharmacy", "Billing & TPA", "CRM, call centre", "Devices / IoT", "HL7 / FHIR feeds"], "/concepts/cdc/"),
-    ("Ingestion", "#E6F4EC", ["Common Ingestion", "Framework,", "metadata-driven", "DBs: AWS DMS or", "Lakeflow Connect", "Files: Auto Loader", "Streams: Kinesis", "or MSK"], BASE + "ingestion/"),
+    ("Sources", "#F4F4F2", ["SAP S/4HANA (ERP)", "MES", "Plant historian,", "press + mixer sensors", "Quality / LIMS", "Warranty claims", "Dealer DMS, CRM", "Rubber prices, fleets"], "/concepts/cdc/"),
+    ("Ingestion", "#E6F4EC", ["Common Ingestion", "Framework,", "metadata-driven", "SAP: Datasphere /", "certified extractor", "DBs: DMS, Lakeflow", "Files: Auto Loader", "Sensors: SiteWise,", "Kinesis or MSK"], BASE + "ingestion/"),
     ("S3 landing", "#FFFFFF", ["files as received", "never changed", "short retention", "KMS-encrypted", "in your bucket"], BASE + "ingestion/"),
     ("Bronze", "#F3E3D3", ["raw, append-only", "+ ingest metadata", "source schema", "replayable", "streaming tables"], BASE + "ingestion/"),
-    ("Silver", "#ECEDEF", ["typed, deduped", "conformed keys", "SCD2 history", "(AUTO CDC)", "expectations", "bad rows parked", "PHI tagged"], BASE + "bronze-to-silver/"),
+    ("Silver", "#ECEDEF", ["typed, deduped", "conformed keys", "SCD2 history", "(AUTO CDC)", "expectations", "bad rows parked", "personal data tagged"], BASE + "bronze-to-silver/"),
     ("Gold", "#FFF4D9", ["business shape", "star schema", "data products", "reads only silver", "liquid clustering"], BASE + "gold/"),
-    ("Semantic", "#F8EBF1", ["Metric Views", "in Unity Catalog", "each metric once:", "bed occupancy,", "OPD visits,", "lab turnaround", "no own tables"], "#aibi"),
+    ("Semantic", "#F8EBF1", ["Metric Views", "in Unity Catalog", "each metric once:", "OEE, scrap rate,", "first-pass yield,", "warranty rate", "no own tables"], "#aibi"),
     ("Experiences", "#E9EDF8", ["AI/BI dashboards", "Genie spaces", "Conversation UI", "(Databricks Apps)", "SQL warehouse", "for BI tools", "Vector Search +", "Model Serving", "Delta Sharing"], "#aibi"),
 ]
 
@@ -86,7 +86,7 @@ ASSETS = [
     ("Semantic model template", "each metric defined once", "#aibi"),
     ("Conversation UI", "picks metrics, never writes SQL", "#aibi"),
     ("Shift-left checks", "catch problems before deploy", "/learn/shift-left/"),
-    ("DataTwin", "a pretend hospital, faults planted", "/learn/datatwin/"),
+    ("DataTwin", "a pretend plant, faults planted", "/learn/datatwin/"),
     ("Observability and run log", "one run id joins it all", "#binding"),
 ]
 
@@ -94,11 +94,11 @@ RAIL = [
     ("Lineage", ["table and column", "level, automatic"]),
     ("Access", ["grants, tags,", "ABAC (check status)"]),
     ("Masks and filters", ["rows and columns", "hidden by role"]),
-    ("PHI protection", ["tagged in silver,", "masked downstream"]),
+    ("Personal data", ["dealers, drivers:", "tagged, masked"]),
+    ("Recipe IP", ["compound recipes in", "a restricted catalog"]),
     ("Audit", ["audit system tables", "+ AWS CloudTrail"]),
-    ("Residency", ["data stays in", "India regions"]),
-    ("DPDP Act 2023", ["purpose, consent,", "erase on request"]),
-    ("HIPAA-ready", ["compliance security", "profile (check)"]),
+    ("Residency", ["India: Mumbai, Hyd.", "EU: Frankfurt, Ireland"]),
+    ("DPDP + GDPR", ["India and EU rules:", "consent, erasure"]),
     ("Owners", ["every table has", "a named owner"]),
 ]
 
@@ -130,7 +130,7 @@ def big_picture():
             a(arr(x + 136, 321, x + 149, 321))
     # streaming lane
     a(link("#medallion", rect(20, 460, W, 40, "#fff", dash=True)
-           + tx(36, 485, "Streaming lane: the same layers, run continuously. Kinesis or MSK → bronze streaming tables → silver → gold incremental. Same contracts, same checks.", 14)))
+           + tx(36, 485, "Streaming lane: press and mixer sensor data through the same layers, run continuously. SiteWise, Kinesis or MSK → bronze streaming tables → silver → gold incremental. Same contracts, same checks.", 14)))
     # horizontal assets
     a(rect(20, 516, W, 200, "#FFF4D9"))
     a(tx(40, 544, "Horizontal assets: built once, reused by every pipeline and every data product", 20))
@@ -144,7 +144,7 @@ def big_picture():
     a(rect(20, 732, 582, 112, "#F1F1EF"))
     a(tx(38, 758, "AWS foundation: your account", 19))
     for k, ln in enumerate(["Customer-managed VPC · PrivateLink to Databricks", "S3 holds all data · KMS keys you own · IAM roles · CloudTrail",
-                            "Region: Mumbai (Hyderabad: check current status)"]):
+                            "Regions: Mumbai for India · Frankfurt or Ireland for EU plants"]):
         a(tx(38, 784 + k * 22, ln, 15))
     a(rect(618, 732, 582, 112, "#E6EAF7"))
     a(tx(636, 758, "Databricks on AWS: runs in your account", 19))
@@ -158,15 +158,15 @@ def big_picture():
         y = 58 + k * 87
         a(rect(1228, y, 144, 78, "#fff", r=12) + tx(1300, y + 23, title, 15, "middle")
           + "".join(tx(1300, y + 45 + j * 18, s, 13.5, "middle") for j, s in enumerate(sub)))
-    return svg(1400, 860, "".join(b), "Data platform on AWS and Databricks: agent plane and control plane on top; a spine from hospital sources through ingestion, S3 landing, bronze, silver, gold, semantic and experiences; a streaming lane; a band of nine horizontal assets; the AWS and Databricks foundation; and a governance rail on the right.")
+    return svg(1400, 860, "".join(b), "Data platform on AWS and Databricks: agent plane and control plane on top; a spine from plant and business sources through ingestion, S3 landing, bronze, silver, gold, semantic and experiences; a streaming lane; a band of nine horizontal assets; the AWS and Databricks foundation; and a governance rail on the right.")
 
 
 # ------------------------------------------------------------------ 2. medallion, two speeds
 def two_speeds():
     b = []
     a = b.append
-    a(rect(20, 30, 170, 56, "#F4F4F2") + tx(105, 54, "Batch sources", 16, "middle") + tx(105, 74, "HIS, billing: nightly", 12.5, "middle"))
-    a(rect(20, 130, 170, 56, "#fff", dash=True) + tx(105, 154, "Event sources", 16, "middle") + tx(105, 174, "devices, admissions", 12.5, "middle"))
+    a(rect(20, 30, 170, 56, "#F4F4F2") + tx(105, 54, "Batch sources", 16, "middle") + tx(105, 74, "SAP, MES: hourly", 12.5, "middle"))
+    a(rect(20, 130, 170, 56, "#fff", dash=True) + tx(105, 154, "Event sources", 16, "middle") + tx(105, 174, "press sensors, IoT", 12.5, "middle"))
     for i, (n, f, s) in enumerate([("Bronze", "#F3E3D3", "Auto Loader"), ("Silver", "#ECEDEF", "AUTO CDC + rules"), ("Gold", "#FFF4D9", "marts, products")]):
         x = 260 + i * 200
         a(rect(x, 50, 160, 116, f) + tx(x + 80, 92, n, 20, "middle") + tx(x + 80, 120, s, 13, "middle") + tx(x + 80, 142, "one set of tables", 12, "middle", fill="#555"))
@@ -184,9 +184,9 @@ def aibi():
     b = []
     a = b.append
     steps = [
-        ("Question", ["“Lab turnaround", "last month, by", "hospital?”"], "#F4F4F2"),
+        ("Question", ["“Scrap rate last", "week at Plant A,", "by press?”"], "#F4F4F2"),
         ("Intent", ["model picks:", "metric, dimensions,", "filters, period"], "#E9EDF8"),
-        ("Metric view", ["lab_tat defined once:", "result time minus", "sample time"], "#F8EBF1"),
+        ("Metric view", ["scrap_rate defined", "once: scrapped tyres", "over tyres cured"], "#F8EBF1"),
         ("Governed SQL", ["the engine writes it;", "Unity Catalog row", "filters apply"], "#EAF6EF"),
         ("Answer", ["numbers + chart", "+ the definition", "it used"], "#FFF4D9"),
     ]
@@ -222,17 +222,17 @@ ASSET_ROWS = [
     ('<a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a>', "One place where every source, table, rule, owner and budget is declared. Pipelines read it; nobody configures by hand.", "Ours; a PostgreSQL database (Amazon RDS or Aurora)", "Built (design published, used by the framework)"),
     ("Data quality framework", "Rules declared per table, run at every hop, bad rows parked in quarantine, all results in one table.", "Databricks expectations and DQX behind one port; rules from the metadata store", "Partly built: rules from metadata run in silver; 66 assurance rules written"),
     ('<a href="/learn/medallion-architecture/">Medallion template</a>', "Bronze, silver and gold built the same way for every source, with the rules that keep each layer honest.", "Lakeflow Declarative Pipelines", "Built for the first slice"),
-    ("Semantic model template", "A starter set of metric views (occupancy, visits, turnaround, revenue) with owners and definitions.", "Unity Catalog Metric Views", "To build"),
+    ("Semantic model template", "A starter set of metric views (OEE, scrap rate, first-pass yield, warranty claim rate, sell-out) with owners and definitions.", "Unity Catalog Metric Views", "To build"),
     ("Conversation UI", "Staff ask questions in plain words and get answers that cite the metric used. The model picks metrics; it never writes SQL.", "Ours, on Databricks Apps, reading Metric Views", "Designed (spec written)"),
     ('<a href="/learn/shift-left/">Shift-left checks bundle</a>', "Checks that run on the code before it deploys: PySpark, SQL and Databricks mistakes caught in CI, not in production.", "Open source, ours; runs in CI", "Built: catches 88 of 101 planted problems, no false alarms"),
-    ('<a href="/learn/datatwin/">DataTwin</a>', "A pretend hospital that sends data on its own clock and breaks things on purpose, so the platform proves it catches each fault.", "Ours, open source", "Studio built; the full tool designed"),
+    ('<a href="/learn/datatwin/">DataTwin</a>', "A pretend tyre plant and dealer network that sends data on its own clock and breaks things on purpose, so the platform proves it catches each fault.", "Ours, open source", "Studio built; the full tool designed"),
     ("Observability and run log", "Every run gets one id that joins its quality results, lineage, cost and audit, so any number can be traced to evidence.", "System tables + CloudWatch + our run log", "Run log built; joined evidence view to build"),
 ]
 
 LAYERS = [
     ("Landing (S3)", "Files exactly as received.", "Never changed. Short retention. Encrypted with your KMS key.", "S3 lifecycle rules; Unity Catalog volumes or external locations"),
     ("Bronze", "Everything that arrived, replayable.", "Append-only. Adds ingest metadata (file, time, batch id). Keeps the source schema. Safe to run twice.", "Auto Loader, streaming tables, rescued-data column"),
-    ("Silver", "One clean, trusted row per real thing.", "Typed and deduplicated. Keys conformed (patient, visit, doctor). History kept as SCD Type 2. Bad rows go to quarantine, never silently dropped. PHI tagged.", "AUTO CDC (formerly APPLY CHANGES) for SCD1/SCD2; expectations; column tags"),
+    ("Silver", "One clean, trusted row per real thing.", "Typed and deduplicated. Keys conformed (material, plant, press, batch, dealer). History kept as SCD Type 2. Bad rows go to quarantine, never silently dropped. Personal data and recipe columns tagged.", "AUTO CDC (formerly APPLY CHANGES) for SCD1/SCD2; expectations; column tags"),
     ("Gold", "Shaped for a business question.", "Reads only silver. Star schemas and data products with a stated grain. Rebuilt safely by partition.", "Materialized views; liquid clustering; predictive optimization"),
     ("Semantic", "Each metric defined once.", "No tables of its own. Definitions, joins and names that every tool uses.", "Unity Catalog Metric Views (" + CHECK + ")"),
 ]
@@ -243,15 +243,15 @@ MISTAKES = [
     ("Dropping bad rows silently.", "Counts drift and nobody knows why. Fix: quarantine with a reason, and reconcile counts from source to gold."),
     ("Overwriting history in silver.", "Yesterday's report can no longer be explained. Fix: SCD Type 2 where the business needs history."),
     ("One notebook per source.", "A hundred sources become a hundred snowflakes. Fix: metadata-driven ingestion; a new source is a YAML entry."),
-    ("Masking PHI only in the dashboard.", "Anyone with SQL access sees it. Fix: tag in silver, mask with Unity Catalog column masks everywhere."),
+    ("Protecting recipes and personal data only in the dashboard.", "Anyone with SQL access sees them. Fix: tag in silver, use a restricted catalog and Unity Catalog column masks everywhere."),
 ]
 
 GENIE_ROWS = [
     ("Analysts and managers asking new questions on curated tables", "Strong fit: fast to set up, curated by instructions and example questions", "Possible, but more work", "Genie", "Pursue Genie first; it is in the platform already."),
     ("Answers inside a staff app or chat channel, next to an agent", "Not designed for embedding in our own apps (" + CHECK + ")", "Built for this: an API and a chat window", "Conversation UI", "Pursue for embedded use."),
-    ("A hard rule that the model never writes SQL", "Genie writes SQL, guided by trusted assets and instructions", "The model only picks metrics; the engine writes SQL", "Conversation UI", "Pursue where a wrong number is costly (finance, clinical KPIs)."),
+    ("A hard rule that the model never writes SQL", "Genie writes SQL, guided by trusted assets and instructions", "The model only picks metrics; the engine writes SQL", "Conversation UI", "Pursue where a wrong number is costly (finance, plant KPIs, warranty)."),
     ("Proving answers are right before go-live", "Benchmark questions built in", "Our eval harness with the same benchmark set", "Both", "Use the same benchmark questions for both."),
-    ("Patients or the public", "Not the right tool", "Only behind the agent harness, with its guardrails", "Neither directly", "Drop for now; route through the agent harness."),
+    ("Consumers or the public", "Not the right tool", "Only behind the agent harness, with its guardrails", "Neither directly", "Drop for now; route through the agent harness."),
 ]
 
 # concern id -> (coverage, Databricks feature, AWS piece, gap and who fills it)
@@ -267,7 +267,7 @@ BIND = {
     "X9": ("partial", "Job duration alerts; freshness checks in monitoring (" + CHECK + ")", "CloudWatch alarms", "A freshness promise per table, declared in metadata and alerted. Ours."),
     "X10": ("partial", "Billing system tables, budget policies, tags", "Cost and Usage Report, Cost Explorer, Budgets", "Cost per data product and per run, with findings. CostSherlock."),
     "X11": ("full", "Unity Catalog grants, row filters, column masks, ABAC (" + CHECK + ")", "IAM roles, KMS, VPC, PrivateLink", "Grants declared in metadata and applied by the pipeline. Ours."),
-    "X12": ("partial", "Column masks, tags, data classification (" + CHECK + ")", "Macie for S3; Comprehend Medical for PHI in free text", "Retention and erase-on-request across every layer. Ours."),
+    "X12": ("partial", "Column masks, tags, data classification (" + CHECK + ")", "Macie for personal data in S3; Comprehend for personal data in free text such as warranty notes", "Retention and erase-on-request across every layer. Ours."),
     "X13": ("partial", "Unity Catalog owners, comments, tags; Metric Views", "-", "Glossary and metric ownership workflow. Ours (OpenMetadata optional)."),
     "X14": ("partial", "Audit system tables", "CloudTrail", "Run log with a fingerprint of the config each run used. Ours."),
     "X15": ("partial", "Delta time travel, MERGE, full refresh of pipelines", "S3 versioning", "Backfill plans and watermark resets from metadata, never doubling a number. Ours."),
@@ -277,16 +277,18 @@ BIND = {
     "X19": ("full", "Photon, liquid clustering, predictive optimization, serverless", "-", "Checks in CI and cost findings. Shift-left bundle + CostSherlock."),
     "X20": ("none", "-", "-", "Detect → fix in dev → pull request → verify → roll back. Ours."),
     "X21": ("partial", "Databricks Assistant for code", "Bedrock, if preferred for models", "Agents that draft manifest entries, rules and docs as pull requests. Ours."),
-    "X22": ("none", "-", "-", "A pretend hospital with planted faults. DataTwin, ours."),
+    "X22": ("none", "-", "-", "A pretend plant with planted faults (a press goes silent, a batch sent twice). DataTwin, ours."),
 }
 
 AWS_VS_DB = [
+    ("Plant-floor data collection", "AWS IoT SiteWise, IoT Core, Greengrass", "Auto Loader / streaming tables read what SiteWise lands", "Keep SiteWise at the plant edge: it talks to the machines. Databricks takes the data from S3 or Kinesis for analytics."),
+    ("Ingest from SAP", "AppFlow or a partner extractor", "SAP Business Data Cloud connector (" + CHECK + ")", "Use an SAP-certified route (Datasphere or a certified extractor) behind one port; never read SAP tables directly."),
     ("Ingest from databases (CDC)", "AWS DMS", "Lakeflow Connect", "Keep DMS where it already runs; Lakeflow Connect for new supported sources. Both sit behind one port."),
     ("Batch and streaming pipelines", "Glue jobs, EMR", "Lakeflow Declarative Pipelines and Jobs", "Pursue Databricks: one engine for batch and streaming, built-in quality rules and lineage."),
     ("Warehouse for BI", "Redshift", "Databricks SQL warehouse", "If Redshift is heavily used, keep it and read Delta from it (via Lakehouse Federation or Iceberg, " + CHECK + "); new work on Databricks SQL."),
     ("Ad hoc queries on S3", "Athena", "SQL warehouse", "Keep Athena for small one-off queries; it can read the tables as Iceberg (UniForm)."),
     ("Catalog and access", "Glue Catalog, Lake Formation", "Unity Catalog", "Pursue Unity Catalog as the one catalog: lineage, masks and audit in one place. Avoid running two access models."),
-    ("ML and AI", "SageMaker, Bedrock", "Mosaic AI: Vector Search, Model Serving", "Use Databricks for ML on lakehouse data; call Bedrock models from Databricks where the hospital already has Bedrock agreements."),
+    ("ML and AI", "SageMaker, Bedrock", "Mosaic AI: Vector Search, Model Serving", "Use Databricks for ML on lakehouse data; call Bedrock models from Databricks where the company already uses Bedrock."),
     ("Dashboards", "QuickSight (now part of Amazon Quick Suite, " + CHECK + ")", "AI/BI dashboards and Genie", "Keep existing QuickSight reports; build new ones on AI/BI over the same metric views."),
     ("Cost view", "Cost Explorer, CUR", "Billing system tables", "Use both; CostSherlock joins them per data product."),
 ]
@@ -294,9 +296,9 @@ AWS_VS_DB = [
 FAQ = [
     ("Does our data leave our AWS account?", "No. Databricks on AWS runs its compute in your account and your VPC, and all tables live in your S3 buckets, encrypted with KMS keys you own. The Databricks control plane manages the workspace; for serverless compute, check the current data-residency terms for your region."),
     ("Why Databricks if we already have Glue, EMR and Redshift?", "One engine for batch and streaming, one catalog (Unity Catalog) for access, lineage and audit, and AI/BI with Genie on the same governed data. You do not have to switch everything at once: keep what works and put new work on the lakehouse."),
-    ("What is a metric view?", "A definition of a business metric (for example, lab turnaround time) stored once in Unity Catalog, with its formula, dimensions and filters. Dashboards, Genie and the Conversation UI all use it, so the number is the same everywhere."),
+    ("What is a metric view?", "A definition of a business metric (for example, scrap rate) stored once in Unity Catalog, with its formula, dimensions and filters. Dashboards, Genie and the Conversation UI all use it, so the number is the same everywhere."),
     ("What are horizontal assets?", "Parts built once and reused by every pipeline and data product: ingestion, metadata, quality, cost, testing and the conversation layer. They are what makes the tenth data product much cheaper than the first."),
-    ("How is PHI protected?", "Personal health information is tagged in silver and masked by Unity Catalog column masks and row filters for every reader, not only in dashboards. Access is audited in system tables and CloudTrail."),
+    ("How are compound recipes and personal data protected?", "Recipes and formulation data sit in a restricted catalog with tag-based access; personal data of dealers, fleet drivers and consumers is tagged in silver and masked by Unity Catalog column masks and row filters for every reader, not only in dashboards. Indian data stays in Indian regions and European data in EU regions. Access is audited in system tables and CloudTrail."),
 ]
 
 
@@ -316,7 +318,7 @@ def page():
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="{BASE}">Data platform architecture</a> › On AWS + Databricks</p>
 <p class="eyebrow" style="margin-top:22px">Data platform architecture · binding · AWS + Databricks</p>
 <h1>The data platform on AWS and Databricks</h1>
-<p class="lede">The same architecture as <a href="{BASE}">the abstract picture</a>, with a product in every box, for a hospital group that already runs on AWS and wants Databricks. The design stays the same; only the names change.</p>
+<p class="lede">The same architecture as <a href="{BASE}">the abstract picture</a>, with a product in every box, for a tyre manufacturer that already runs on AWS and wants Databricks. The design stays the same; only the names change.</p>
 <div class="sib"><a href="{BASE}">↑ The abstract picture</a><a href="/leaders/spec-driven/data-platform/">Spec-driven development for data</a><a href="/learn/medallion-architecture/">Medallion, drawn right</a></div>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li>
@@ -327,11 +329,11 @@ def page():
 <div class="answer">
 <p><b>Databricks runs inside your own AWS account.</b> Data stays in your S3 buckets, in your VPC, encrypted with KMS keys you own. Databricks brings the engine, and <b>Unity Catalog</b> (its one catalog for tables, files and models) governs who sees what, tracks lineage and records every access.</p>
 <p><b>The design does not depend on Databricks.</b> It follows the same specs and the same 22 cross-cutting concerns as the abstract architecture. This page is the <em>binding</em>: the one place where product names appear. That is what keeps you free to change a product later.</p>
-<p><b>Most of the value is in the shared parts.</b> Ingestion, metadata, quality, cost, testing and the conversation layer are built once and reused, so each new data product (bed occupancy, lab turnaround, claims) costs less than the one before.</p>
+<p><b>Most of the value is in the shared parts.</b> Ingestion, metadata, quality, cost, testing and the conversation layer are built once and reused, so each new data product (OEE, warranty claim rate, dealer sell-out, demand forecast) costs less than the one before.</p>
 </div></section>
 
-<section id="picture"><p class="eyebrow">The big picture</p><h2>One platform, from hospital systems to answers</h2>
-<p>Read it left to right along the middle row: data moves one way, from the hospital's systems to dashboards, Genie and AI. Above it, the control plane decides what runs, and agents may only suggest. Below it, the horizontal assets serve every layer, on an AWS and Databricks foundation you own. Governance runs down the right side.</p>
+<section id="picture"><p class="eyebrow">The big picture</p><h2>One platform, from plant and business systems to answers</h2>
+<p>Read it left to right along the middle row: data moves one way, from the plants' and the business's systems to dashboards, Genie and AI. Above it, the control plane decides what runs, and agents may only suggest. Below it, the horizontal assets serve every layer, on an AWS and Databricks foundation you own. Governance runs down the right side.</p>
 <figure class="diagram big" style="padding:10px">{big_picture()}<figcaption>The data platform on AWS + Databricks. Click a layer or an asset to open its page.</figcaption></figure></section>
 
 <section id="assets"><p class="eyebrow">Horizontal assets</p><h2>Built once, used by every data product</h2>
@@ -347,12 +349,12 @@ def page():
 <p>More detail, with one record followed through every layer: <a href="/learn/medallion-architecture/">Medallion architecture, drawn right</a>.</p></section>
 
 <section id="aibi"><p class="eyebrow">The right AI/BI</p><h2>The semantic layer first, then the AI</h2>
-<p>Ask three tools for "bed occupancy" and you can get three numbers. The fix is to define each metric <b>once</b>, as a metric view in Unity Catalog, and make every front end read it. Then AI on top is safe: the model only chooses which metric, which breakdown and which filter; the engine writes the SQL, and Unity Catalog's row and column rules apply to whoever is asking.</p>
+<p>Ask three tools for "scrap rate" and you can get three numbers. The fix is to define each metric <b>once</b>, as a metric view in Unity Catalog, and make every front end read it. Then AI on top is safe: the model only chooses which metric, which breakdown and which filter; the engine writes the SQL, and Unity Catalog's row and column rules apply to whoever is asking.</p>
 <figure class="diagram">{aibi()}<figcaption>From a question to an answer that shows its own definition.</figcaption></figure>
 <ul>
 <li><b>Genie spaces</b> are curated: a short list of trusted tables or metric views, written instructions, and example questions with their correct answers.</li>
 <li><b>Benchmark questions</b> are run before go-live and after every change, so we know the answers are still right.</li>
-<li><b>Security flows through:</b> a doctor in one hospital sees only that hospital's rows, in a dashboard, in Genie and in the Conversation UI alike.</li>
+<li><b>Security flows through:</b> a plant manager in one plant sees only that plant's rows, in a dashboard, in Genie and in the Conversation UI alike.</li>
 </ul>
 <h3>Genie or our Conversation UI?</h3>
 {genie_table}</section>
@@ -369,8 +371,8 @@ def page():
 
 <section id="plan"><p class="eyebrow">How we would start</p><h2>One thin slice first</h2>
 <div class="steps3">
-<div><h3>Crawl · 4 to 6 weeks</h3><p>One slice end to end in your AWS account: lab results from the lab system to silver, one metric view (lab turnaround time), one Genie space with benchmark questions.</p><p><b>You see:</b> the whole path working, with quality, lineage and cost on from day one.</p></div>
-<div><h3>Walk · next quarter</h3><p>Three to five more sources (admissions, billing, pharmacy). The horizontal assets on by default. CostSherlock reporting cost per data product.</p><p><b>You see:</b> each new source added as a YAML entry, not a project.</p></div>
+<div><h3>Crawl · 4 to 6 weeks</h3><p>One slice end to end in your AWS account: curing-press sensor data and MES production records to silver, one metric view (OEE or scrap rate), one Genie space for plant managers with benchmark questions.</p><p><b>You see:</b> the whole path working, with quality, lineage and cost on from day one.</p></div>
+<div><h3>Walk · next quarter</h3><p>Three to five more sources (SAP sales and stock, quality lab, warranty claims, dealer sell-out). The horizontal assets on by default. CostSherlock reporting cost per data product.</p><p><b>You see:</b> each new source added as a YAML entry, not a project.</p></div>
 <div><h3>Run · after that</h3><p>A small platform team owns the assets; domain teams build data products on them. The Conversation UI in staff apps. Agents propose fixes as pull requests.</p><p><b>You see:</b> the tenth data product faster and safer than the first.</p></div>
 </div></section>
 
@@ -379,7 +381,7 @@ def page():
 <section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
 <p><a href="{BASE}">↑ The abstract architecture</a> · <a href="/leaders/spec-driven/data-platform/">Spec-driven development for data platforms</a> · <a href="/learn/medallion-architecture/">Medallion layers</a> · <a href="/learn/shift-left/">Shift-left checks</a> · <a href="/learn/datatwin/">DataTwin</a></p></section>"""
 
-    desc = "A data platform on AWS and Databricks for a hospital group: the big picture, horizontal assets, the right medallion and AI/BI, and 22 concerns bound to products."
+    desc = "A data platform on AWS and Databricks for a tyre manufacturer: the big picture, horizontal assets, the right medallion and AI/BI, and 22 concerns bound to products."
     ld = [{"@context": "https://schema.org", "@type": "TechArticle", "headline": "The data platform on AWS and Databricks", "description": desc, "url": URL,
            "inLanguage": "en", "isAccessibleForFree": True, "dateModified": "2026-11-02",
            "author": {"@type": "Person", "name": "Basant Choudhary", "url": f"{SITE}/#about"},

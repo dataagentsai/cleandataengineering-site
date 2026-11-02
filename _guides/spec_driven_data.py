@@ -99,13 +99,13 @@ def fig_floors():
     n = 13
     b = ""
     b += box(n, 30, 30, 800, 110, WASH["rose"])
-    b += t(50, 60, "Data products, built by domain teams (a hospital, say)", 21, hand=True, anchor="start")
-    for k, name in enumerate(["Patient 360", "Bed occupancy", "Claims and TPA", "Lab turnaround", "Pharmacy stock"]):
+    b += t(50, 60, "Data products, built by domain teams (a tyre maker, say)", 21, hand=True, anchor="start")
+    for k, name in enumerate(["OEE per plant", "Scrap and yield", "Warranty claims", "Dealer sell-out", "Demand plan"]):
         x = 50 + k * 155
         b += f'<rect x="{x}" y="80" width="138" height="46" rx="10" fill="#fff" class="o" style="stroke-width:1.6"/>'
         for j in range(3):
             b += f'<rect x="{x + 10 + j * 9}" y="{112 - (j + 1) * 6}" width="6" height="{(j + 1) * 6}" fill="{I.PAL["coral"]}"/>'
-        b += t(x + 87, 108, name, 12.5)
+        b += t(x + 88, 108, name, 12)
     b += box(n, 30, 160, 800, 140, WASH["peri"])
     b += t(50, 190, "Horizontal assets, built once by the COE", 21, hand=True, anchor="start")
     assets = [("Ingestion", "framework"), ("Metadata", "store"), ("Quality", "framework"), ("Semantic", "model"),
@@ -127,7 +127,7 @@ def fig_floors():
     b += t(430, 525, "one lakehouse underneath: the binding decides which", 14, fill="#555")
     b += arrow(n, "M845,90 C905,150 905,320 845,380", dash=True)
     b += f'<g transform="rotate(90 900 235)">{t(900, 230, "every data product feeds back down", 15, hand=True)}</g>'
-    return svg(n, 940, 540, b, "A three-floor building: specs at the bottom, eight horizontal assets in the middle, hospital data products on top, standing on a lakehouse that can be Databricks on AWS or another platform")
+    return svg(n, 940, 540, b, "A three-floor building: specs at the bottom, eight horizontal assets in the middle, tyre-maker data products on top, standing on a lakehouse that can be Databricks on AWS or another platform")
 
 
 # ---------------------------------------------------------------- 4. one spec, eight uses (data)
@@ -240,7 +240,7 @@ ROLE_CARDS = [
      "Writes the operations part of the manifest and the release gate checklist."),
     ("sky", "Data Quality and Test lead", "How we prove the numbers are right: which rules, which tests, which faults to plant.",
      "Writes the assurance rules (DAC) and the test worlds (DWD) for DataTwin."),
-    ("peri", "Data Steward", "Who owns each dataset, which columns hold personal data, and what each business term means.",
+    ("peri", "Data Steward", "Who owns each dataset, which columns hold personal data, and what each business term means: for example, the one agreed definition of scrap rate.",
      "Writes ownership, privacy tags, retention and the glossary."),
 ]
 
@@ -249,7 +249,7 @@ CHECKS = [
     ("Every assurance rule for this dataset has a passing test, or a written waiver with a reason, an owner and an end date.", "Assurance catalog (DAC)"),
     ("A freshness target is set, an alert fires when it is missed, and the alert has a runbook and a named person on call.", "Manifest (DPM), operations part"),
     ("Counts and sums agree from the source to gold (reconciliation), within the agreed tolerance.", "Assurance catalog (DAC)"),
-    ("Columns with personal data are tagged and masked for everyone who should not see them.", "Manifest (DPM) + steward's tags"),
+    ("Personal data of dealers, fleet drivers and consumers is tagged and masked (India DPDP Act, EU GDPR), and compound recipes are readable only by a named group.", "Manifest (DPM) + steward's tags"),
     ("Each job has a cost budget, and the run log records what every run cost.", "Manifest (DPM) + binding (DBS)"),
     ("Replaying a day and backfilling a month were tried once, and no number doubled.", "Assurance catalog (DAC)"),
     ("Lineage is visible: from any number on a dashboard you can walk back to its source tables.", "Platform catalog (DPC) + binding (DBS)"),
@@ -324,7 +324,7 @@ BODY = f"""<main class="wrap">
 <tr><td><b>DPM</b>, Data Platform Manifest</td><td>What this company's platform does: its sources, datasets, data contracts, owners, schedules and targets, one per company</td><td>Manifest</td></tr>
 <tr><td><b>DBS</b>, Data Binding Spec</td><td>Which product does each job, for example Databricks on AWS; the only spec that names products</td><td>Binding</td></tr>
 </table></div>
-<p>Keeping these apart is what makes them reusable. The catalogs are the same for a hospital and a retailer; only the manifest changes.</p></section>
+<p>Keeping these apart is what makes them reusable. The catalogs are the same for a tyre maker and a retailer; only the manifest changes.</p></section>
 
 <section><p class="eyebrow">What the COE builds</p><h2>Specs first, then shared assets, then many data products</h2>
 <p>The COE does not only write documents. It also builds the <b>horizontal assets</b>: the parts every data product needs, whatever its domain. Domain teams then build <b>data products</b> on top, one per business question.</p>
@@ -344,7 +344,7 @@ BODY = f"""<main class="wrap">
 </ul></section>
 
 <section><p class="eyebrow">Then, the data products</p><h2>How one data product gets built: thin slices</h2>
-<p>We never write the whole spec up front. We take one thin slice, such as "orders, from source to silver", and take it all the way through. Then the next slice.</p>
+<p>We never write the whole spec up front. We take one thin slice, such as "scrap rate, from the plant floor (MES and curing-press sensors) to one trusted number", and take it all the way through. Then the next slice.</p>
 {fig(fig_story(), "Step 7 is the important one. Every gap a slice finds goes back into the specs and the shared assets.")}
 <ol>
 <li><b>Spec.</b> The domain team fills in the manifest for this slice: sources, datasets, contracts, owners, targets. The catalogs supply the rest.</li>
@@ -402,7 +402,7 @@ BODY = f"""<main class="wrap">
 <h3>Who owns the specs?</h3>
 <p>The COE owns the catalogs, templates and shared assets. Each domain team owns its part of the manifest. A change to a shared spec goes through the COE, like a change to shared code.</p>
 <h3>Can AI write the specs for us?</h3>
-<p>AI helps a lot with drafting: it can read existing pipelines and propose a manifest, or suggest quality rules from a profile of the data. But decisions such as who may see patient data, or what counts as a late file, belong to people who can be held accountable for them.</p>
+<p>AI helps a lot with drafting: it can read existing pipelines and propose a manifest, or suggest quality rules from a profile of the data. But decisions such as who may see a compound recipe or a dealer's personal data, or what counts as a late file, belong to people who can be held accountable for them.</p>
 <h3>What if we change platform later?</h3>
 <p>Only the binding and its adapters change. The catalogs, the manifest and the tests stay as they are, because they never named a product.</p>
 <h3>How does this relate to data contracts and other standards?</h3>

@@ -4,7 +4,7 @@
 
 The AWS twin of the tutorial's Azure pages (arch-azure, tech). Same 22 concerns, same ids and
 families as ~/agent-harness-tutorial/pages_tech.py; only the binding changes. Example is a
-generic hospital group. Shell, CSS and drawing helpers come from spec_driven.py.
+generic tyre manufacturer. Shell, CSS and drawing helpers come from spec_driven.py.
 The x/y/z splits are judgements, labelled so on the page. AWS service status was checked from
 memory (to mid 2026); newer services are marked "considered, check current status".
 """
@@ -22,7 +22,7 @@ svg, box, t, arrow, fig = SD.svg, SD.box, SD.t, SD.arrow, SD.fig
 ROOT = SD.ROOT
 OUT = ROOT / "learn" / "agent-harness-aws" / "index.html"
 TITLE = "The agent harness on AWS"
-DESC = ("The same agent harness, specs and tests as on Azure, bound to AWS: the big picture for a hospital "
+DESC = ("The same agent harness, specs and tests as on Azure, bound to AWS: the big picture for a tyre manufacturer "
         "group, every one of the 22 concerns mapped to an AWS service, open source or our own code, and the open decisions.")
 URL = "https://cleandataengineering.ai/learn/agent-harness-aws/"
 AH = "/learn/agent-harness/"
@@ -65,48 +65,48 @@ C = [
    ("Claude Agent SDK", "no", "Claude-only, loop hidden")],
   "Hand-written loop, about 400 lines; budgets of 12 steps, 60 s and a cost cap per turn",
   "Hand-written loop (same code)",
-  "Agents that touch patients and money need every step testable and checks at exact positions. Our own loop runs on any model and any cloud.", (0, 80, 20)),
+  "Agents that touch orders, warranties and money need every step testable and checks at exact positions. Our own loop runs on any model and any cloud.", (0, 80, 20)),
  ("L5", "State & memory", "Think", "What is kept, for how long, and for whom.",
   [("Aurora PostgreSQL Serverless v2", "use", "HA, backups, IAM login, scales to near zero in dev"),
    ("DynamoDB", "list", "not picked"), ("ElastiCache for Valkey", "list", "caches only"),
    ("AgentCore Memory", "list", "check current status")],
   [("psycopg + pool", "use", "driver")],
-  "5 agent tables + DBOS state in the same database; retention and erase per patient",
+  "5 agent tables + DBOS state in the same database; retention and erase per person",
   "Azure Database for PostgreSQL",
   "One managed store that also holds the approval engine and, later, pgvector: no extra infrastructure.", (40, 45, 15)),
  ("18", "Knowledge & retrieval", "Think", "Finds sourced passages, filtered by what this user may see.",
   [("pgvector on the same Aurora", "plan", "chosen"), ("Bedrock Knowledge Bases", "list", "managed RAG; less control of filters"),
    ("OpenSearch Serverless", "list", "if the corpus outgrows pgvector"), ("S3 Vectors", "list", "cheap cold vectors; check current status")],
   [("pgvector", "plan", "chosen"), ("Qdrant on ECS", "list", "alternative")],
-  "Entitlement filter as SQL: a nurse sees ward protocols, a patient sees only their own documents",
+  "Entitlement filter as SQL: a plant engineer sees machine manuals, a dealer sees only their own orders and price lists",
   "pgvector on Azure PostgreSQL",
   "One store, one backup, one access model; the entitlement check is just a SQL filter.", (45, 30, 25)),
  # ---- Act
- ("CH", "Channels & human desk", "Act", "How patients and staff reach the agent, and how a person takes over with the full history.",
+ ("CH", "Channels & human desk", "Act", "How dealers, customers and staff reach the agent, and how a person takes over with the full history.",
   [("AWS End User Messaging", "plan", "SMS and WhatsApp"), ("Amazon SES", "plan", "email"),
    ("Amazon Connect", "plan", "contact centre, chat and hand-off to a person"), ("API Gateway WebSocket", "list", "push replies to the window")],
   [("Chatwoot", "plan", "web chat + desk if there is no contact centre"), ("A Next.js window alone", "list", "six more things to build")],
   "Our chat page and desk API; one conversation id across channels",
   "Communication Services, Bot Service, Chatwoot",
-  "If the hospital already runs a contact centre, hand off into it (Connect). Otherwise Chatwoot gives the desk without building one.", (50, 35, 15)),
+  "If the company already runs a contact centre, hand off into it (Connect). Otherwise Chatwoot gives the desk without building one.", (50, 35, 15)),
  ("L3", "Tool layer", "Act", "Actions through typed tools, checked before they run.",
   [("MCP servers on ECS Fargate or Lambda", "use", "one server per system of record"),
    ("Bedrock AgentCore Gateway", "list", "turns APIs and Lambdas into MCP tools; check current status")],
   [("MCP Python SDK", "use", "client + servers"), ("FastMCP", "list", "")],
   "Gating before every call, idempotency keys, size caps, argument checks with jsonschema",
   "MCP servers on Container Apps",
-  "The tool protocol is open (MCP), so the servers move clouds unchanged. The gating that protects patients is ours.", (25, 35, 40)),
+  "The tool protocol is open (MCP), so the servers move clouds unchanged. The gating that protects orders, prices and warranties is ours.", (25, 35, 40)),
  ("L6", "I/O contracts", "Act", "Typed inputs and outputs at every edge.",
   [("API Gateway request validation", "plan", "reject bad shapes at the edge")],
-  [("Pydantic", "use", ""), ("JSON Schema", "use", ""), ("FHIR resources", "plan", "for clinical data")],
+  [("Pydantic", "use", ""), ("JSON Schema", "use", ""), ("SAP OData / BAPI shapes", "plan", "typed at the ERP adapter")],
   "Frozen Pydantic models everywhere; MCP structured output",
   "Pydantic + jsonschema (same code)",
-  "Contracts are code, not cloud. FHIR shapes for clinical records come in through HealthLake or the HIS adapter.", (10, 50, 40)),
+  "Contracts are code, not cloud. SAP and dealer-system shapes are typed once at their adapters.", (10, 50, 40)),
  ("L8", "Concurrency & flow", "Act", "Who gets served first when load spikes.",
   [("Amazon SQS FIFO", "plan", "one message group per conversation keeps order"),
    ("API Gateway usage plans", "use", "rate limits per client"), ("Bedrock quotas", "use", "tokens per minute, the real ceiling")],
   [("Own semaphores", "list", ""), ("LiteLLM limits", "plan", "per agent, in the gateway")],
-  "One turn per conversation (ledger row), priority classes (clinical before marketing), honest shedding",
+  "One turn per conversation (ledger row), priority classes (plant breakdowns before marketing), honest shedding",
   "Service Bus + APIM rate limit",
   "AWS gives the queue and the limits. Which request waits, and what we tell the person, is ours.", (50, 35, 15)),
  ("17", "Agent-to-agent", "Act", "Agents hand work to agents through typed, bounded, traced hand-offs.",
@@ -124,19 +124,19 @@ C = [
   "Servers are stateless and scale out; the model quota is what to plan and load-test.", (55, 35, 10)),
  # ---- Control
  ("L16", "Identity & authz", "Control", "Who is asking, and whose authority the agent acts with.",
-  [("Amazon Cognito", "plan", "patient sign-in, or federate the existing portal"), ("IAM Identity Center", "use", "staff sign-in"),
+  [("Amazon Cognito", "plan", "dealer, fleet and consumer sign-in, or federate the dealer portal"), ("IAM Identity Center", "use", "staff sign-in"),
    ("IAM roles for tasks", "use", "no keys in code"), ("Secrets Manager + KMS", "use", ""),
    ("Amazon Verified Permissions", "list", "Cedar policies for fine-grained rules")],
   [("PyJWT", "use", "local token check"), ("Keycloak", "list", "")],
-  "Principal → patient or staff identity; on-behalf-of: the agent acts with the user's rights, never its own",
+  "Principal → dealer, customer or staff identity; on-behalf-of: the agent acts with the user's rights, never its own",
   "Entra ID, managed identity, Key Vault",
   "Checking a token is local and cloud-neutral. Ports make leaving Cognito a configuration change.", (70, 20, 10)),
- ("PV", "Privacy & data protection", "Control", "Patient data used only for this case, kept in India, masked, and forgotten on request.",
-  [("Comprehend Medical", "plan", "finds health information (PHI) in text"), ("Comprehend PII", "plan", "names, phone, ids"),
-   ("Amazon Macie", "plan", "finds personal data in S3"), ("Mumbai and Hyderabad regions", "use", "ap-south-1, ap-south-2"),
-   ("KMS, PrivateLink, HIPAA-eligible services", "use", "")],
-  [("Presidio", "list", "Aadhaar, ABHA and UHID need custom recognisers anyway")],
-  "redact() in telemetry (Aadhaar, ABHA, UHID, phone), no_pii_echo rule, forget() + retention per the DPDP Act",
+ ("PV", "Privacy & data protection", "Control", "Personal data of dealers, fleet drivers and consumers used only for this case, kept in its region (India or EU), masked, and forgotten on request.",
+  [("Comprehend PII", "plan", "names, phone, ids in text"),
+   ("Amazon Macie", "plan", "finds personal data in S3"), ("Mumbai, Hyderabad; Frankfurt, Ireland", "use", "India data in India, EU data in the EU"),
+   ("KMS, PrivateLink", "use", "")],
+  [("Presidio", "list", "Aadhaar, PAN, GSTIN and vehicle numbers need custom recognisers anyway")],
+  "redact() in telemetry (Aadhaar, PAN, phone, vehicle number), no_pii_echo rule, forget() + retention per the DPDP Act and GDPR",
   "AI Language PII + India regions",
   "Residency and encryption come from AWS. Which data a turn may use, masking and erasure are domain rules we code once.", (45, 40, 15)),
  ("L7", "Policy enforcement", "Control", "Guardrails on the way in and on the way out.",
@@ -146,9 +146,9 @@ C = [
    ("Automated Reasoning checks", "list", "check current status")],
   [("Llama Prompt Guard 2", "plan", "small local classifier"), ("NeMo Guardrails", "no", "wants to own the loop"),
    ("Llama Guard", "no", "an LLM, too slow")],
-  "Our positioned rules (30 checks): no diagnosis promised, no dosage changed, the patient's own records only",
+  "Our positioned rules (30 checks): no price or warranty promised outside policy, no order changed without OK, a dealer's own records only",
   "Content Safety + our rules",
-  "We own every position and every rule; every check that protects a patient is ours. AWS supplies detectors behind one port.", (40, 40, 20)),
+  "We own every position and every rule; every check that protects money or a customer is ours. AWS supplies detectors behind one port.", (40, 40, 20)),
  ("L10", "Failure handling", "Control", "Typed failures, fallbacks, undo paths, honest messages.",
   [("Cross-region inference", "use", "spreads load when a region is busy"), ("ALB / ECS health checks", "use", "")],
   [("tenacity", "list", ""), ("Own resilience wrapper", "use", "one retry budget per turn")],
@@ -161,14 +161,14 @@ C = [
   [("DBOS", "use", "durable waits in our own Aurora"), ("Temporal", "list", "")],
   "Approval and escalation tables, desk API, approval cards to staff",
   "DBOS on PostgreSQL (same code)",
-  "A doctor's sign-off must survive restarts. DBOS keeps it in the database we already run, so it moves clouds unchanged.", (20, 55, 25)),
+  "A warranty or order approval must survive restarts. DBOS keeps it in the database we already run, so it moves clouds unchanged.", (20, 55, 25)),
  ("AV", "Availability & disaster recovery", "Control", "A lost server or zone goes unnoticed; a lost region is rebuilt from code and backups.",
-  [("Multi-AZ ECS + Aurora Multi-AZ", "plan", ""), ("Aurora Global Database", "list", "Mumbai ↔ Hyderabad"),
+  [("Multi-AZ ECS + Aurora Multi-AZ", "plan", ""), ("Aurora Global Database", "list", "Mumbai ↔ Hyderabad; EU pair for Europe"),
    ("Route 53 health checks", "plan", ""), ("AWS Backup", "plan", "")],
   [("Terraform or AWS CDK", "use", "infrastructure as code")],
   "Stateless servers + durable state; a rebuild drill",
   "Zone redundancy, Front Door, Bicep",
-  "Two Indian regions make a DR pair without data leaving the country.", (65, 25, 10)),
+  "Two Indian regions make a DR pair without data leaving the country; European data pairs inside the EU.", (65, 25, 10)),
  # ---- See
  ("L11", "Observability", "See", "Traces, metrics and alerts for every step.",
   [("CloudWatch + Application Signals", "use", "via the ADOT collector"), ("AWS X-Ray", "use", "traces"),
@@ -176,7 +176,7 @@ C = [
    ("CloudWatch generative AI observability", "list", "check current status"),
    ("Managed Prometheus + Grafana", "plan", "")],
   [("OpenTelemetry", "use", "behind one helper"), ("Langfuse", "list", "")],
-  "Spans per step with GenAI attributes, PHI redacted before export, alert rules as code",
+  "Spans per step with GenAI attributes, personal data redacted before export, alert rules as code",
   "OpenTelemetry → App Insights",
   "OpenTelemetry keeps the code cloud-neutral; only the exporter changes.", (55, 35, 10)),
  ("L9", "Determinism & replay", "See", "A past decision can be re-run and explained.",
@@ -184,14 +184,14 @@ C = [
   [("VCR.py", "list", ""), ("Own recorder", "use", "")],
   "Run record + cassettes + config fingerprint",
   "Own recorder (same code)",
-  "\"Why did the agent say that to this patient?\" needs a replay. No cloud offers it, so it is ours.", (0, 85, 15)),
+  "\"Why did the agent say that to this dealer?\" needs a replay. No cloud offers it, so it is ours.", (0, 85, 15)),
  ("L13", "Cost accounting", "See", "Spend measured per unit of business work.",
   [("Bedrock application inference profiles", "use", "one tagged profile per agent = cost per agent"),
    ("AWS Budgets", "use", ""), ("Cost Explorer", "use", ""), ("CUR 2.0 data exports", "plan", "")],
   [("Langfuse cost", "list", ""), ("Own meter", "use", "")],
-  "Meter per turn and per case (cost per appointment booked), hard budget stop",
+  "Meter per turn and per case (cost per warranty claim triaged), hard budget stop",
   "Cost Management + APIM token metric",
-  "AWS tells you cost per agent; only we know cost per discharge summary or per booking.", (35, 55, 10)),
+  "AWS tells you cost per agent; only we know cost per warranty claim or per dealer order.", (35, 55, 10)),
  # ---- Change
  ("L12", "Eval harness", "Change", "Golden sets and graders that gate every release.",
   [("Bedrock model evaluation", "plan", "LLM-as-judge and human review"), ("Bedrock RAG evaluation", "plan", ""),
@@ -199,7 +199,7 @@ C = [
   [("AgentTwin, pytest, pydantic-evals", "use", ""), ("promptfoo, PyRIT", "plan", "red team")],
   "Golden sets owned by clinicians, hard graders, 4 CI gates, model selection run",
   "Foundry evaluation + AgentTwin",
-  "The pretend hospital (AgentTwin) and the hard graders are the same on any cloud; AWS judges are one plug-in.", (25, 45, 30)),
+  "The pretend dealer network and plant (AgentTwin) and the hard graders are the same on any cloud; AWS judges are one plug-in.", (25, 45, 30)),
  ("L15", "Release & config", "Change", "Prompt, model and policy versioned and rolled back together.",
   [("AWS AppConfig", "use", "kill switch, limits, model per job"), ("ECS blue/green deployments", "use", ""),
    ("Amazon ECR", "use", ""), ("CodePipeline", "list", "or GitHub Actions + OIDC")],
@@ -242,34 +242,34 @@ def band(n, x, y, w, label, rows, fill):
 
 
 LIFE = [("Idea & risk tier", "is AI the right fix?"), ("Build", "GitHub Actions"), ("Evaluate", "Bedrock + AgentTwin"),
-        ("Red-team", "PyRIT, promptfoo"), ("Approve", "clinical owner"), ("Release", "ECS blue/green"),
+        ("Red-team", "PyRIT, promptfoo"), ("Approve", "business owner"), ("Release", "ECS blue/green"),
         ("Monitor", "CloudWatch"), ("Learn", "misses → golden set")]
 GOV = [("Organizations", "SCPs, Control Tower"), ("CloudTrail", "who did what"), ("Security Hub", "+ GuardDuty"),
-       ("Identity Center", "access reviews"), ("Residency", "Mumbai, Hyderabad"), ("DPDP Act", "consent, erasure"),
+       ("Identity Center", "access reviews"), ("Residency", "India + EU regions"), ("DPDP + GDPR", "consent, erasure"),
        ("Owner & risk tier", "in the registry"), ("AI council", "signs off high risk")]
 ROWS = [
-    ("End users · who asks", [[("Patients", "Cognito sign-in"), ("Doctors & nurses", "Identity Center"),
-                               ("Front desk & call centre", "staff"), ("TPAs & insurers", "partners")]], WASH["sky"]),
-    ("Channels · where they ask", [[("Web & app chat", "Chatwoot or own"), ("WhatsApp", "End User Messaging"),
+    ("End users · who asks", [[("Dealers", "Cognito / portal"), ("Fleet customers", "Cognito"), ("Consumers", "Cognito"),
+                               ("Plant & quality", "Identity Center"), ("Sales & service", "Identity Center")]], WASH["sky"]),
+    ("Channels · where they ask", [[("Dealer portal chat", "Chatwoot or own"), ("WhatsApp", "End User Messaging"),
                                     ("Email", "Amazon SES"), ("Contact centre", "Amazon Connect"), ("Staff chat", "Teams or Slack")]], WASH["mint"]),
     ("Front door · checks every request", [[("Edge", "CloudFront + WAF"), ("Hidden orders?", "Bedrock Guardrails"),
-                                            ("Health data?", "Comprehend Medical"), ("In scope?", "our router rules"),
+                                            ("Personal data?", "Comprehend PII"), ("In scope?", "our router rules"),
                                             ("Fair share", "API Gateway limits")]], WASH["butter"]),
     ("Orchestration · on ECS Fargate", [[("Router", "our code"), ("A2A hand-off", "A2A over HTTPS"),
                                          ("Agent registry", "Git + owner")]], WASH["lilac"]),
-    ("Vertical agents · hospital group · one ECS service each",
-     [[("Appointment booking", "acts after checks", 1), ("Pre-authorisation", "drafts for TPA desk"),
-       ("Discharge summary", "drafts, doctor signs")],
-      [("Lab report explainer", "answers, no diagnosis"), ("Pharmacy refill", "acts after OK"),
-       ("Doctor's assistant", "suggests only")]], WASH["rose"]),
+    ("Vertical agents · tyre manufacturer · one ECS service each",
+     [[("Dealer assistant", "stock, price, orders: answers", 1), ("Warranty claim triage", "drafts for warranty desk"),
+       ("Plant maintenance", "suggests, from manuals")],
+      [("Quality deviation", "drafts root cause note"), ("B2B order assistant", "acts after OK"),
+       ("Fleet tyre advisor", "answers, from telematics")]], WASH["rose"]),
     ("Horizontal assets · built once on AWS, reused by every agent",
      [[("Model gateway", "LiteLLM → Bedrock"), ("Knowledge", "pgvector on Aurora"), ("Memory & state", "Aurora PostgreSQL"),
        ("Tool / MCP hub", "MCP on Fargate"), ("Channels", "Connect, SES, EUM"), ("Identity", "Cognito, IAM, KMS")],
       [("Guardrails", "Bedrock + our rules"), ("Human desk", "DBOS + Connect"), ("Observability", "CloudWatch, X-Ray"),
        ("Cost control", "profiles, Budgets"), ("Eval library", "Bedrock, AgentTwin"), ("Release", "AppConfig, ECR")]], WASH["peri"]),
     ("Systems of record · via MCP and PrivateLink",
-     [[("HIS / EMR", ""), ("LIS · lab", ""), ("PACS / RIS", ""), ("Pharmacy", ""), ("Billing & TPA", ""), ("CRM", ""),
-       ("ABDM · FHIR", "HealthLake")]], "#F1F1EF"),
+     [[("SAP S/4HANA", "orders, stock, pricing"), ("Dealer management", "DMS"), ("MES", "plant execution"), ("Historian + IoT", "IoT SiteWise")],
+      [("Quality · LIMS", ""), ("Warranty system", ""), ("CRM", ""), ("Supplier portal", "")]], "#F1F1EF"),
 ]
 
 
@@ -294,7 +294,7 @@ def fig_big():
     for i, (a, s) in enumerate(GOV):
         b += cell(n, 870, 34 + i * step, 120, step - 12, a, s, WASH["butter"])
     return svg(n, 1000, H, b, "The agent harness on AWS: lifecycle rail on the left, governance rail on the right, and seven bands: "
-               "end users, channels, front door, orchestration, vertical hospital agents, horizontal assets on AWS, systems of record")
+               "end users, channels, front door, orchestration, vertical tyre-company agents, horizontal assets on AWS, systems of record")
 
 
 # ------------------------------------------------------------------ drawing: x/y/z bars
@@ -354,13 +354,13 @@ DECISIONS = [
      "Pursue: LiteLLM on Fargate", "Open source, multi-provider, and AWS's own guidance uses it. Own gateway only if LiteLLM blocks a rule."),
     ("Where does our code run?", "ECS Fargate · Bedrock AgentCore Runtime · EKS",
      "ECS Fargate: the closest match to Azure Container Apps, no cluster to run.",
-     "Pursue: ECS Fargate", "AgentCore Runtime is worth a pilot later; EKS only if the hospital already runs Kubernetes."),
+     "Pursue: ECS Fargate", "AgentCore Runtime is worth a pilot later; EKS only if the company already runs Kubernetes."),
     ("How do approvals wait?", "DBOS on Aurora · Step Functions task tokens",
      "DBOS: the same code as on Azure, state in the database we already run.",
      "Pursue: DBOS", "Step Functions works, but it is one more service and AWS-only."),
-    ("How do patients sign in?", "Amazon Cognito · federate the hospital's existing patient portal over OIDC",
+    ("How do dealers and customers sign in?", "Amazon Cognito · federate the existing dealer portal over OIDC",
      "Federate the existing portal if it speaks OIDC; Cognito only if there is no portal.",
-     "Pursue: federate", "Patients keep one login; the harness only needs a verified token."),
+     "Pursue: federate", "Dealers keep one login; the harness only needs a verified token."),
 ]
 
 SWAP = [
@@ -368,10 +368,10 @@ SWAP = [
     ("AI gateway", "API Management (AI gateway)", "LiteLLM on ECS Fargate behind API Gateway"),
     ("Models", "Foundry Models", "Amazon Bedrock (Converse API)"),
     ("Where code runs", "Azure Container Apps", "Amazon ECS on Fargate"),
-    ("Sign-in", "Entra ID, External ID", "IAM Identity Center (staff), Cognito or portal OIDC (patients)"),
+    ("Sign-in", "Entra ID, External ID", "IAM Identity Center (staff), Cognito or portal OIDC (dealers, fleets, consumers)"),
     ("Secrets and keys", "Key Vault, managed identity", "Secrets Manager + KMS, IAM task roles"),
     ("Guardrails", "AI Content Safety, Prompt Shields", "Bedrock Guardrails (ApplyGuardrail)"),
-    ("Finding personal data", "AI Language PII", "Comprehend Medical + Comprehend PII, Macie for S3"),
+    ("Finding personal data", "AI Language PII", "Comprehend PII, Macie for S3"),
     ("Database", "Azure Database for PostgreSQL", "Aurora PostgreSQL"),
     ("Queue", "Service Bus", "SQS FIFO"),
     ("Traces and metrics", "Application Insights, Managed Prometheus", "CloudWatch, X-Ray, Managed Prometheus"),
@@ -384,7 +384,7 @@ SWAP = [
 SAME = ["The 22 concerns and the specs (AI Harness Catalog, AI Assurance Catalog, agent specs)",
         "The agent code: router, loop, context assembler, tools, approval flows",
         "The tests: AgentTwin worlds, golden sets, hard graders, the four CI gates",
-        "The rules: every guardrail position and every check that protects a patient",
+        "The rules: every guardrail position and every check that protects money or a customer",
         "The ports: each AWS service sits behind the same interface the Azure one did"]
 
 
@@ -393,45 +393,45 @@ BODY = f"""<main class="wrap">
 <p class="thesis">The same harness, the same specs and the same tests as on Azure. <em>Only the binding changes</em>: each box gets an AWS service, an open-source tool, or our own code.</p></div>
 
 <div class="sd-answer">
-<p><b>The one-minute version.</b> An agent that talks to patients and staff needs much more than a model: sign-in, guardrails, memory, tools, approvals, logging, cost limits, tests. We call that the <b>harness</b>, and we split it into 22 concerns.</p>
-<p>The concerns never name a product. For each cloud we write a <b>binding</b>: which service does each job. This page is the AWS binding, with a hospital group as the example. On average, by our judgement, about a third of each concern comes from AWS (35%), nearly half is shared code we write once (45%), and about a fifth is what each agent team writes (20%).</p>
+<p><b>The one-minute version.</b> An agent that talks to dealers, customers and staff needs much more than a model: sign-in, guardrails, memory, tools, approvals, logging, cost limits, tests. We call that the <b>harness</b>, and we split it into 22 concerns.</p>
+<p>The concerns never name a product. For each cloud we write a <b>binding</b>: which service does each job. This page is the AWS binding, with a tyre manufacturer as the example. On average, by our judgement, about a third of each concern comes from AWS (35%), nearly half is shared code we write once (45%), and about a fifth is what each agent team writes (20%).</p>
 <p>Already seen the Azure version? Compare <a href="{AH}arch-azure.html">the harness on Azure</a> and <a href="{AH}tech.html">the Azure tech stack, concern by concern</a>. Why we work from specs: <a href="/leaders/spec-driven/">spec-driven development</a>.</p>
 </div>
 
 <div class="sd-stat">
 <div><b>22 concerns</b>in five families: think, act, control, see, change</div>
-<div><b>6 hospital agents</b>on one shared platform, each with its own autonomy level</div>
+<div><b>6 agents</b>for dealers, plants, quality and fleets, on one shared platform, each with its own autonomy level</div>
 <div><b>12 horizontal assets</b>built once on AWS, reused by every agent</div>
-<div><b>India only</b>Mumbai and Hyderabad regions; patient data never leaves</div>
+<div><b>India + EU</b>Mumbai and Hyderabad for India, Frankfurt or Ireland for European plants; personal data stays in its region</div>
 </div>
 
 <section><p class="eyebrow">The big picture</p><h2>One request, top to bottom, on AWS</h2>
-<p>Read it as one request: a patient or a doctor asks, through a channel, past the front door, to one vertical agent, which uses the shared assets to reach the hospital's systems. The left rail is the life of every agent; the right rail is governance.</p>
-{fig(fig_big(), "The dark cell is the first agent to build (appointment booking). The vertical-agents band changes per business; every other band is shared. Compare with the same picture on Azure: the boxes do not move, only the names change.")}
+<p>Read it as one request: a dealer or an engineer asks, through a channel, past the front door, to one vertical agent, which uses the shared assets to reach the company's systems. The left rail is the life of every agent; the right rail is governance.</p>
+{fig(fig_big(), "The dark cell is the first agent to build (the dealer assistant). The vertical-agents band changes per business; every other band is shared. Compare with the same picture on Azure: the boxes do not move, only the names change.")}
 <div class="sd-table"><table>
 <tr><th>Band</th><th>What it does on AWS</th></tr>
-<tr><td>End users</td><td>Patients sign in through Cognito or the existing patient portal; doctors, nurses and staff through IAM Identity Center; TPAs and insurers as partners.</td></tr>
+<tr><td>End users</td><td>Dealers, fleet customers and consumers sign in through Cognito or the existing dealer portal; plant, quality, sales and service staff through IAM Identity Center.</td></tr>
 <tr><td>Channels</td><td>Web and app chat, WhatsApp and SMS through AWS End User Messaging, email through SES, and the contact centre through Amazon Connect.</td></tr>
-<tr><td>Front door</td><td>CloudFront and WAF at the edge; Bedrock Guardrails for hidden instructions; Comprehend Medical to find health data; our router rules; API Gateway limits.</td></tr>
+<tr><td>Front door</td><td>CloudFront and WAF at the edge; Bedrock Guardrails for hidden instructions; Comprehend to find personal data; our router rules; API Gateway limits.</td></tr>
 <tr><td>Orchestration</td><td>Our router picks one agent; agents hand work to each other over A2A; a registry in Git names the owner and version of each.</td></tr>
 <tr><td>Vertical agents</td><td>One ECS service per business job. Each has an autonomy level: answers, suggests, drafts for a person, or acts after checks.</td></tr>
 <tr><td>Horizontal assets</td><td>Twelve shared parts every agent reuses (next sections).</td></tr>
-<tr><td>Systems of record</td><td>HIS or EMR, lab, PACS, pharmacy, billing and TPA, CRM and ABDM, reached only through MCP tools with the user's own rights.</td></tr>
+<tr><td>Systems of record</td><td>SAP S/4HANA, the dealer management system, MES, the plant historian and IoT SiteWise, quality and LIMS, warranty, CRM and the supplier portal, reached only through MCP tools with the user's own rights.</td></tr>
 </table></div></section>
 
 <section><p class="eyebrow">Every concern, bound to AWS</p><h2>The 22 concerns, one table</h2>
 <p>For each concern: what AWS offers and whether we use it, the open-source options, what we code once for every agent, what it was on Azure, and why.</p>
 <p class="aw-key"><span class="aw-mark use">use</span> in the design &nbsp; <span class="aw-mark plan">planned</span> next phase &nbsp; <span class="aw-mark list">considered</span> not picked, or newer service to check &nbsp; <span class="aw-mark no">not used</span> and why</p>
 {binding_table()}
-<p class="aw-key">Services marked "check current status" are newer AWS offerings; confirm their availability in the Mumbai and Hyderabad regions before relying on them. Health-data services should be on AWS's HIPAA-eligible list and inside the account's business associate addendum where that applies.</p>
+<p class="aw-key">Services marked "check current status" are newer AWS offerings; confirm their availability in the Mumbai, Hyderabad, Frankfurt and Ireland regions before relying on them.</p>
 </section>
 
 <section><p class="eyebrow">Who builds what</p><h2>What AWS gives, what we build, what each agent writes</h2>
-<p>For each concern, how much does AWS give us, how much do we code once for every agent, and how much does each agent team still write? AWS gives the plumbing. The parts that make an agent safe for patients stay in our code.</p>
+<p>For each concern, how much does AWS give us, how much do we code once for every agent, and how much does each agent team still write? AWS gives the plumbing. The parts that make an agent safe for dealers and customers stay in our code.</p>
 {fig(fig_split(), "Our judgement, not a measurement. Compared with Azure, model invocation moves from AWS to us because AWS has no ready AI gateway; most other concerns are about the same.")}
 <p>The rule that keeps this healthy: when two agents write the same code, it moves into the shared middle (blue). When AWS catches up, it moves to the left (grey).</p></section>
 
-<section><p class="eyebrow">Open decisions</p><h2>Five choices to make with the hospital's team</h2>
+<section><p class="eyebrow">Open decisions</p><h2>Five choices to make with the company's team</h2>
 <div class="sd-table"><table>
 <tr><th>Decision</th><th>Options</th><th>Our recommendation</th><th>Verdict</th><th>Why</th></tr>
 {"".join(f"<tr><td><b>{E(q)}</b></td><td>{E(o)}</td><td>{E(r)}</td><td><b>{E(v)}</b></td><td>{E(w)}</td></tr>" for q, o, r, v, w in DECISIONS)}
