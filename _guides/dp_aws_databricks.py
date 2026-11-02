@@ -521,21 +521,22 @@ ORCH = [
 def gates():
     b = []
     a = b.append
-    G = [("Laptop", "pre-commit", ["shift-left checks", "unit tests (local Spark)"], "#F4F4F2", "seconds"),
-         ("Pull request", "CI", ["shift-left full scan", "unit + contract tests", "contract breaking-change check"], "#E9EDF8", "minutes"),
-         ("Dev workspace", "after merge", ["integration test: one slice", "source → silver → gold", "on a fresh schema"], "#E6F4EC", "15–30 min"),
-         ("DataTwin", "nightly, before release", ["pretend plant, 30 days", "planted faults", "caught? held? accounted?"], "#FFF4D9", "an hour"),
-         ("Production", "every run", ["contract check at silver", "quality rules", "freshness + volume alerts"], "#F8E6EF", "always on")]
+    G = [("Laptop", "pre-commit", ["shift-left checks", "purity check", "unit tests"], "#F4F4F2", "seconds"),
+         ("Pull request", "CI", ["full shift-left scan", "unit + coverage", "contract checks"], "#E9EDF8", "minutes"),
+         ("Dev", "after merge", ["one test per hop", "end to end, synthetic", "fresh schema"], "#E6F4EC", "15–30 min"),
+         ("DataTwin", "nightly", ["pretend plant, 30 days", "planted faults", "caught? held?"], "#FFF4D9", "an hour"),
+         ("Pre-production", "before release", ["real data (clones)", "parallel run vs prod", "profile compare"], "#FBE9DD", "an hour or two"),
+         ("Production", "every run", ["contract check", "quality rules", "freshness alerts"], "#F8E6EF", "always on")]
     for i, (t, when, lines, f, dur) in enumerate(G):
-        x = 20 + i * 208
-        a(rect(x, 30, 188, 186, f) + tx(x + 94, 60, t, 18, "middle") + tx(x + 94, 80, when, 12, "middle", fill="#555"))
+        x = 14 + i * 176
+        a(rect(x, 30, 160, 186, f) + tx(x + 80, 60, t, 17, "middle") + tx(x + 80, 80, when, 12, "middle", fill="#555"))
         for k, ln in enumerate(lines):
-            a(tx(x + 14, 112 + k * 24, "· " + ln, 12.5))
-        a(tx(x + 94, 204, dur, 12, "middle", fill="#555"))
-        if i < 4:
-            a(arr(x + 188, 122, x + 208, 122))
-    a(tx(530, 250, "cheapest and fastest on the left · a problem caught one gate earlier costs a fraction to fix", 14, "middle"))
-    return svg(1060, 262, "".join(b), "Five gates from laptop to production: shift-left checks and unit tests, pull request checks, an integration run in a dev workspace, a DataTwin run with planted faults, and always-on checks in production.")
+            a(tx(x + 12, 112 + k * 24, "· " + ln, 12))
+        a(tx(x + 80, 204, dur, 12, "middle", fill="#555"))
+        if i < 5:
+            a(arr(x + 160, 122, x + 176, 122))
+    a(tx(536, 250, "cheapest and fastest on the left · a problem caught one gate earlier costs a fraction to fix", 14, "middle"))
+    return svg(1072, 262, "".join(b), "Six gates from laptop to production: shift-left checks and unit tests, pull request checks, per-hop integration in dev, a DataTwin run with planted faults, a pre-production run on real data compared with production, and always-on checks in production.")
 
 
 TEST_LAYERS = [
@@ -702,9 +703,10 @@ def page():
 </section>
 
 <section id="testing"><p class="eyebrow">Testing and data contracts</p><h2>Catch it early, prove it before release</h2>
-<p>Most data platforms are tested by looking at the dashboard after go-live. We test in five gates, from the developer's laptop to production, and each gate catches what the earlier ones cannot. All of it is part of the platform from day one, not a project for later.</p>
-<figure class="diagram">{gates()}<figcaption>Five gates. The same tests run for every pipeline, because the pipelines are generated from the same metadata.</figcaption></figure>
+<p>Most data platforms are tested by looking at the dashboard after go-live. We test in six gates, from the developer's laptop to production, and each gate catches what the earlier ones cannot. All of it is part of the platform from day one, not a project for later.</p>
+<figure class="diagram">{gates()}<figcaption>Six gates. The same tests run for every pipeline, because the pipelines are generated from the same metadata.</figcaption></figure>
 {test_table}
+<p><b>The full test strategy</b>, cloud-neutral, is on <a href="/learn/data-platform-architecture/testing/">Test architecture for a data platform</a>.</p>
 <p><b>How this uses what we are building.</b> The <a href="/learn/shift-left/">shift-left bundle</a> and its test kit run at the first two gates; the <a href="/learn/data-platform-sim/problems/">Problem Lab</a> scenarios (duplicates, late data, failure mid-job, schema drift, SCD2 pitfalls) become the unit and integration cases; <a href="/learn/datatwin/">DataTwin</a> is the release gate. Because pipelines are generated from metadata, a new source gets these tests without anyone writing them again.</p>
 
 <h3>DataTwin: a pretend plant with faults planted on purpose</h3>

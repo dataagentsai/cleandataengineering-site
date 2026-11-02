@@ -157,7 +157,7 @@ def page():
 <p class="eyebrow" style="margin-top:22px">Data engineering · free guide · the whole picture</p>
 <h1>Data platform architecture, drawn right</h1>
 <p class="lede">One picture of a whole data platform, from the systems that make data to the dashboards and AI that use it: the layers in the middle, the control plane that runs them, the agents that may only suggest, and the jobs that keep every number honest. Click any box to go one level down, or <a href="/learn/data-platform-sim/">run it in DataTwin Studio</a>.</p>
-<div class="sib" style="display:flex;flex-wrap:wrap;gap:8px;font-size:14px;margin:6px 0 0"><b style="padding:2px 0">Components:</b> <a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a> · <a href="/learn/data-platform-architecture/ingestion/">Ingestion</a> · <a href="/learn/data-platform-architecture/bronze-to-silver/">Bronze to silver</a> · <a href="/learn/data-platform-architecture/gold/">Gold</a></div>
+<div class="sib" style="display:flex;flex-wrap:wrap;gap:8px;font-size:14px;margin:6px 0 0"><b style="padding:2px 0">Components:</b> <a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a> · <a href="/learn/data-platform-architecture/ingestion/">Ingestion</a> · <a href="/learn/data-platform-architecture/bronze-to-silver/">Bronze to silver</a> · <a href="/learn/data-platform-architecture/gold/">Gold</a> · <a href="/learn/data-platform-architecture/testing/">Testing</a></div>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#plain">In plain words</a></li><li><a href="#picture">The whole picture</a></li><li><a href="#control">Control plane and metadata</a></li>
 <li><a href="#services">Three services</a></li><li><a href="#streaming">The streaming lane</a></li><li><a href="#concerns">22 cross-cutting concerns</a></li>
@@ -215,7 +215,7 @@ def page():
 <p><b>The ideas behind the boxes:</b> <a href="/concepts/#data-engineering">key data engineering concepts</a>, one short page each.</p>
 <p><b>On a real stack:</b> <a href="/learn/data-platform-architecture/aws-databricks/">Data platform on AWS + Databricks</a>, and <a href="/leaders/spec-driven/data-platform/">how a team builds it spec-first</a>.</p>
 <p><b>Learn it step by step:</b> <a href="/paths/data-engineering/">the Data Engineering path</a>, on AWS, Azure, Google Cloud, Databricks or open source.</p>
-<p><b>Each component, in detail:</b> <a href="/learn/data-platform-architecture/metadata-store/">metadata store</a> · <a href="/learn/data-platform-architecture/ingestion/">ingestion</a> · <a href="/learn/data-platform-architecture/bronze-to-silver/">bronze to silver (SCD Type 1 and 2)</a> · <a href="/learn/data-platform-architecture/gold/">gold</a>.</p>
+<p><b>Each component, in detail:</b> <a href="/learn/data-platform-architecture/metadata-store/">metadata store</a> · <a href="/learn/data-platform-architecture/ingestion/">ingestion</a> · <a href="/learn/data-platform-architecture/bronze-to-silver/">bronze to silver (SCD Type 1 and 2)</a> · <a href="/learn/data-platform-architecture/gold/">gold</a> · <a href="/learn/data-platform-architecture/testing/">test architecture</a>.</p>
 <p><b>Run it:</b> <a href="/learn/data-platform-sim/">DataTwin Studio</a>: watch one batch go through the whole platform, recorded from a real run, then send the same file again and see what breaks.</p></section>"""
     ld = [
         {"@context": "https://schema.org", "@type": "TechArticle", "headline": "Data platform architecture, drawn right",
