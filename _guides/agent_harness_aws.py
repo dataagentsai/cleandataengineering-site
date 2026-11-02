@@ -567,7 +567,7 @@ def tiers_html():
 IMPL = [
  ("R0", "Binding written down", "clean-ai-engineering/stacks/aws.yaml: every port named with its AWS adapter", "done on paper (19 Oct)"),
  ("R1", "AWS adapters", "In the agent_harness library: agentcore-gateway, rds-postgresql, cognito + our token issuer, secrets-manager, appconfig, otel → ADOT; a contract test per port, the same tests the Azure adapters pass", "done (3 Nov), tested offline; live recordings wait for an AWS account"),
- ("R2", "The FNOL agent on AWS, unchanged", "Add config/aws.yaml to the motor-claims FNOL agent: a new overlay, no change to the agent's code. This proves that only the binding changes", "planned"),
+ ("R2", "The FNOL agent on AWS, unchanged", "Add config/aws.yaml to the motor-claims FNOL agent: a new overlay, no change to the agent's code. This proves that only the binding changes", "done (3 Nov): one profile file, two overlays, keys published at the edge; no agent code changed"),
  ("R3", "Infrastructure as code", "Terraform for H0 to H8 at dev size (one account, budget alarm), checked offline first", "planned"),
  ("R4", "Running on AWS", "Deploy to AWS dev; first claim end to end, traced in X-Ray through ADOT", "planned"),
  ("R5", "Tyre dealer assistant", "The second agent on the same stack: SAP and dealer-system MCP servers against an AgentTwin dealer world", "planned"),
