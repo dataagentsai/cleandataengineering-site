@@ -110,12 +110,127 @@ MOVER_STATUS = [
     ("SiteWise / IoT Core and Kinesis", "Edge set up per plant with the plant's OT team; streams from Terraform", "To build, with the OT team"),
 ]
 
+# ------------------------------------------------------------------ the standard transforms (bronze to silver)
+TRANSFORM_PRINCIPLES = [
+    ("Generic, never domain-specific.", "Every transform from bronze to silver is the same code for every table, switched on and tuned per column in the metadata. Business logic (joining sources, derived measures, totals) belongs after silver, in the integrator and gold."),
+    ("No free-form SQL in this step.", "Only the transforms in the list below. A need they cannot meet is a new generic transform, added once with its own tests, or logic for the integrator or gold."),
+    ("Silver's shape is ours, not the source's.", "Silver holds the columns listed for the dataset, with the names and types we chose. Bronze keeps everything the source sent, so nothing is lost and a column can be added later by replay."),
+    ("A value is never silently lost.", "A value that cannot be converted goes to quarantine, or is set empty and counted, as the column says. It never just becomes empty without a trace."),
+]
+
+STAGES = [
+    ("1 Contract check", "On the bronze columns: every required column present, types compatible (see schema changes below)", "required, data_type, contract version", "To build"),
+    ("2 Select, extract and rename", "Only the listed columns go on, each can be renamed; for JSON payloads, only the listed paths are extracted into typed columns, and arrays of child records become their own silver table", "silver.columns, silver_column_name, source_path, explode_path", "Rename, exclude and flatten built; 'listed only' to build"),
+    ("3 Hygiene", "Trim, collapse spaces, empty text to NULL, strip control characters and byte-order marks, normalise unicode and line endings", "On by default for text; transforms, skip lists", "Built"),
+    ("4 Parse and type", "Convert to the silver type using the column's formats: dates, timestamps, comma or point decimals, epoch numbers, booleans; widen integers; one decimal scale", "silver_data_type, date_format, timestamp_format, decimal_separator, on_cast_failure", "Built; formats and the failure action to add"),
+    ("5 Time", "Convert to UTC from the source's time zone; add the plant's local time beside it", "source_timezone, local_time_zone_from", "UTC built; source zone and local column to add"),
+    ("6 Standardise values", "Upper-case codes; ISO country and currency codes; email and phone formats; unit conversion by factor; code mapping from a lookup table; a default for empty values", "column_role, transforms, unit_from / unit_to, code_map, null_replacement", "Written but not switched on in the engine; units and code mapping to build"),
+    ("7 Personal data", "Tokenise, hash, mask or redact by the column's personal-data class", "pii_class, pii_policy", "Built"),
+    ("8 Row filter", "Drop rows that match a declared condition (test records, a cancelled flag); dropped rows are counted", "row_filter", "To build"),
+    ("9 Quality rules", "Rules from dq_rule; failing rows to quarantine with the reason", "dq_rule", "Built (SQL rules); DQX behind the same port"),
+    ("10 Duplicates", "None, exact, first or latest per business key, or flag only", "dedup.mode, dedup.business_keys, dedup.order_by", "Built"),
+    ("11 Keys", "Business key; conformed key from a mapping table (an unmapped code becomes 'unknown' and raises an alert)", "is_primary_key, key_map", "To build"),
+    ("12 History and deletes", "Append, SCD type 1, SCD type 2 or snapshot; soft deletes; changes in source order", "dataset_kind, history, history_track_columns", "Designed"),
+    ("13 Provenance", "Run id, load time, record hash, source file, batch", "None: always on", "Built"),
+]
+
+COLUMN_SETTINGS = [
+    ("silver.columns (dataset)", "declared, all_except_excluded", "declared", "2"),
+    ("silver_column_name", "a name", "the source name", "2"),
+    ("source_path", "a path into a JSON payload, such as $.order.id", "none (a plain column)", "2"),
+    ("explode_path, parent_keys (dataset)", "the array of child records; the keys carried down", "none", "2"),
+    ("array_strategy", "keep, join_as_text, take_first", "keep", "2"),
+    ("required", "true, false", "true for keys, false otherwise", "1"),
+    ("silver_data_type", "a Spark SQL type", "the bronze type", "4"),
+    ("date_format, timestamp_format", "a pattern such as dd.MM.yyyy", "ISO 8601", "4"),
+    ("decimal_separator", "point, comma", "point", "4"),
+    ("on_cast_failure", "quarantine, null_and_count, stop", "quarantine", "4"),
+    ("source_timezone", "an IANA zone such as Europe/Budapest", "UTC", "5"),
+    ("local_time_zone_from", "the column holding the plant", "none", "5"),
+    ("column_role", "code, identifier, measure, text", "none", "6"),
+    ("transforms", "a list of opt-in transforms", "none", "3, 6"),
+    ("unit_from, unit_to", "units such as lbf and N, F and C", "none", "6"),
+    ("code_map", "the name of a mapping table", "none", "6"),
+    ("null_replacement", "a value", "none", "6"),
+    ("pii_class", "none, name, email, phone, free_text and others", "none", "7"),
+    ("row_filter (dataset)", "a declared condition", "none", "8"),
+    ("is_primary_key, key_map", "true or false; a mapping table", "false; none", "11"),
+    ("dataset_kind (dataset)", "master, transaction, event, snapshot", "required", "12"),
+    ("history (dataset)", "append, scd1, scd2, snapshot", "from dataset_kind", "12"),
+    ("history_track_columns (dataset)", "a list of columns", "all listed columns", "12"),
+]
+
+CAST_FAILURE = [
+    ("quarantine", "The row goes to quarantine with the column, the value's problem and the rule; the rest of the table carries on", "Keys, measures, dates: anything a number depends on (the default)"),
+    ("null_and_count", "The value is set empty and the failures are counted in the quality results", "Descriptive text the business can live without"),
+    ("stop", "The table stops", "Rare: critical reference data where a bad value means the whole extract is wrong"),
+]
+
+SCHEMA_CHANGES = [
+    ("A new column", "Kept (personal-data sources: the file is held)", "Ignored until someone lists it", "'New column seen', low"),
+    ("A listed column is removed", "-", "Required column: the table stops. Optional column: filled with empty values and a warning", "'Schema changed'"),
+    ("A listed column is renamed", "Kept under the new name", "Stops (it looks like a removal). Fixed by mapping the new source name to the same silver name, so silver does not change at all", "'Schema changed'"),
+    ("A type is widened (int to bigint, longer text, more decimals)", "Kept", "Accepted automatically when the silver type can hold it", "None"),
+    ("A type is narrowed or changed (text to number, number to text)", "Kept", "Stops", "'Schema changed'"),
+    ("We add a column to silver", "-", "Filled from the next run; older rows refilled from bronze by a replay", "Release note"),
+    ("We remove a column from silver", "-", "Never at once: it stops being filled for one contract version, then is removed with notice", "Release note"),
+]
+
+JSON_RULES = [
+    ("Bronze keeps the payload whole.", "A JSON payload (an API response, an event) lands in bronze as one column, stored as VARIANT (Databricks' type for semi-structured data, " + CHECK + ") or as text, untouched. Nothing is flattened on the way in, so a field nobody needed today is still there tomorrow."),
+    ("Silver extracts only listed paths.", "Each silver column names its path in the payload (source_path, for example $.order.customer.id) and its type. Paths not listed stay in bronze. This is the same rule as listed columns: the payload's shape is the source's, silver's shape is ours."),
+    ("Arrays of child records become their own table.", "An order with an array of lines gives two silver tables: order headers, and order lines with the order's key. The lines are a second dataset reading the same bronze table, with explode_path naming the array and parent_keys naming the keys it carries down. One row per real thing, at every level."),
+    ("Small arrays of values stay as arrays.", "A list of tags or codes on one record stays an array column, or is joined into text, as the column says (array_strategy). Only arrays of records are split into tables."),
+    ("Payload changes follow the schema rules.", "A new field is a new column (ignored until listed). A listed path that disappears is a removed column (required: stop; optional: empty with a warning). A value of the wrong type follows the column's on_cast_failure."),
+]
+
+JSON_EXAMPLE = """# bronze.dealer_api.orders: one row per API response, payload kept whole
+#   payload = {"order": {"id": "SO-1001", "dealer": {"code": "D-77"},
+#              "date": "31.10.2026", "lines": [{"sku": "205/55R16", "qty": "4"},
+#                                               {"sku": "195/65R15", "qty": "2"}]}}
+
+# silver.dealer_orders  (one row per order)
+columns:
+  - { name: order_id,    source_path: "$.order.id",          type: STRING, is_primary_key: true }
+  - { name: dealer_code, source_path: "$.order.dealer.code", type: STRING, column_role: code }
+  - { name: order_date,  source_path: "$.order.date",        type: DATE,   date_format: dd.MM.yyyy }
+
+# silver.dealer_order_lines  (one row per line: a second dataset on the same bronze table)
+explode_path: "$.order.lines"
+parent_keys:  { order_id: "$.order.id" }
+columns:
+  - { name: sku, source_path: "$.sku", type: STRING, column_role: code, is_primary_key: true }
+  - { name: qty, source_path: "$.qty", type: INT, on_cast_failure: quarantine }"""
+
+HISTORY_KINDS = [
+    ("Master and reference data", "Press, material, dealer, customer, plant, defect codes", "SCD type 2", "Facts join as of the event (a tyre's compound at cure time, the ideal cycle time that month), which needs the old versions"),
+    ("Transactions that change status", "Sales order lines, deliveries, warranty claims, work orders", "SCD type 1; type 2 where the business needs the past state", "Usually only the current state matters, and bronze keeps every change for audit. OTIF needs the date first promised, so that dataset is type 2"),
+    ("Events and readings", "Press events, sensor readings, downtime, test results", "Append", "They never change; duplicates removed by event id"),
+    ("Periodic snapshots", "Daily stock, open orders at month end", "Snapshot: append with the snapshot date", "Each day is its own fact, not a version"),
+]
+
+HISTORY_RULES = [
+    ("Only chosen columns make a new version.", "history_track_columns lists the columns whose change opens a new version; changes to the others (a last-updated stamp, a free-text note) update the current version in place. Without this, noisy columns multiply rows."),
+    ("The kind sets the default.", "dataset_kind (master, transaction, event, snapshot) sets the history, so most datasets need no history setting at all."),
+    ("Changing a dataset's history type is a replay.", "Moving a table from type 1 to type 2 rebuilds it from bronze, which still holds every change, so history is filled in for the past too."),
+]
+
+TRANSFORM_DECISIONS = [
+    ("D1", "Silver takes only the listed columns (silver.columns = declared) by default; 'all except excluded' stays as an opt-in", "Agreed"),
+    ("D2", "A failed conversion never silently becomes empty; the default action is quarantine", "Agreed"),
+    ("D3", "The schema change rules above, with required per column and minor or major contract versions", "Agreed"),
+    ("D4", "No free-form SQL from bronze to silver; only the standard transforms", "Agreed"),
+    ("D5", "The thirteen stages, in this order", "Agreed"),
+    ("D7", "JSON stays whole in bronze; silver extracts only listed paths; arrays of child records become their own silver table", "Proposed"),
+    ("D6", "History by dataset kind: type 2 for master data, type 1 for transactions (type 2 where needed), append for events, snapshot for snapshots; tracked columns only", "Agreed"),
+]
+
 # ------------------------------------------------------------------ the working parts
 PARTS = [
     ("1 Mover", "Brings data from a source to S3 landing (or Kinesis, for streams)", "source_config", "Files in landing under the landing contract", "AWS DMS, AppFlow, Transfer Family, SiteWise and Kinesis, or our puller", "Unique file names; a re-sent file is a new file"),
     ("2 Run controller", "Starts the work: one clock per source, a marker for silver, the wrapper for gold", "dataset_view, schedules, triggers, markers", "master_run_log; the job run", "Lakeflow Jobs, generated from metadata", "Runs queue instead of overlapping; a run with nothing due ends as skipped"),
     ("3 Lander", "Landing to bronze: picks new files from the file log, checks them, tokenises personal data, adds ingest columns, appends; writes the batch-ready marker", "dataset_view, the file log, the suppression list", "Bronze tables, file_log, run_log and step_log rows, the marker", "Our PySpark job, one task per dataset", "The file log says what was read; each batch is appended with a transaction id, so it lands once"),
-    ("4 Silver builder", "Bronze to silver: contract check, the eleven steps, quality rules, history, replacement rules", "Bronze, dq_rule, dataset_config", "Silver tables, quarantine tables, the pipeline event log", "A Declarative Pipeline per business domain, generated, started by markers", "AUTO CDC orders changes by a defined sequence, so reprocessing gives the same result"),
+    ("4 Silver builder", "Bronze to silver: the thirteen standard stages (contract, select, clean, type, time, standardise, personal data, filter, quality, duplicates, keys, history, provenance), replacement rules", "Bronze, dq_rule, dataset_config", "Silver tables, quarantine tables, the pipeline event log", "A Declarative Pipeline per business domain, generated, started by markers", "AUTO CDC orders changes by a defined sequence, so reprocessing gives the same result"),
     ("5 Integrator", "Joins sources into one picture: MES production with SAP orders, materials mapped", "Silver tables, key mappings", "silver.integrated tables", "Materialized views in the same pipeline", "A materialized view is a result, not an append"),
     ("6 Gold builder", "Silver to gold: star schemas, multi-input facts, completeness per window; the only writer of each gold fact", "Silver, integrated silver, corrections, input watermarks", "Gold facts and dimensions", "Materialized views for simple facts; our window-recompute job for multi-input facts", "Each window is replaced whole (replaceWhere on date partitions), never patched, and only one job writes a gold fact"),
     ("7 Metric layer", "Each metric defined once", "Gold", "Nothing stored; answers at query time", "Unity Catalog metric views", "Nothing to run"),
@@ -202,7 +317,7 @@ RUN_STEPS = [
     ("00:15:40  Close the run after the commit.", "After the Delta commit the file log marks the batch loaded, and run_log becomes SUCCEEDED with rows read, written and rejected and the newest commit time as the run's watermark, in one Aurora transaction. If that write fails, the sweeper finishes it later from the evidence in bronze."),
     ("00:15:45  Close the master run and write the marker.", "The closing task runs even after failures. It marks the master run SUCCEEDED, PARTIAL (some datasets failed or are blocked) or FAILED, and writes the batch-ready marker: one row per dataset that loaded (dataset, master run, status) in that source's own marker table (prod_ops.batch_ready_<source>), a Unity Catalog Delta table written with Spark, so each domain's trigger watches only its own sources; blocked datasets get no row. The job itself ends green when every failure was a handled data problem; PARTIAL raises its alert from our log, not from a job failure."),
     ("00:16:00  The marker starts silver.", "The manufacturing wrapper job is triggered by updates to the marker tables of its sources (MES, the press master), not by each bronze table, so it never runs on a half-loaded source. It opens a run_log row, starts the pipeline update itself through the Pipelines API, stores the update id it gets back and the settings fingerprint the pipeline was generated from, and waits for the update to finish."),
-    ("00:16:05  The silver pipeline runs.", "Contract check, the eleven steps, quality rules, AUTO CDC in the defined order, soft deletes."),
+    ("00:16:05  The silver pipeline runs.", "The thirteen standard stages, AUTO CDC in the defined order, soft deletes."),
     ("00:19:30  The wrapper closes the update and starts gold.", "It copies rows, expectation results and errors from the pipeline's event log into our tables, writes each input's bookmark to input_watermark, closes the run, then starts the window-recompute job directly (never on a table trigger, which could fire in the middle of an update)."),
     ("00:20:00  Gold, with completeness.", "The recompute (the only writer of the production fact) takes the hours that changed in any input, plus any queued backfill chunk, rebuilds them whole with corrections laid over silver, and marks each hour complete only if every input's bookmark is past its end. Rebuilt hours that were already published are logged as restatements."),
     ("00:30:00  The ops builder sees it.", "It copies the runtime rows into prod_ops, joins job runs and cost from system tables, reads skipped and queued runs too, and updates freshness from the bookmarks."),
@@ -449,7 +564,7 @@ PART_NAMES = [("mover", "Mover"), ("controller", "Run controller"), ("lander", "
 CLASS_NAMES = [("normal", "Normal day"), ("source_down", "Source down"), ("bad_file", "Bad file"), ("schema_change", "Schema change"),
                ("resend", "Re-sent data"), ("late_or_order", "Late or out of order"), ("delete", "Deletes"), ("crash", "Crash"),
                ("slow_dependency", "Slow dependency"), ("overlap", "Overlapping runs"), ("correction", "Corrections"),
-               ("new_config", "New or changed config"), ("personal_data", "Personal data"), ("stream", "Streaming")]
+               ("new_config", "New or changed config"), ("personal_data", "Personal data"), ("stream", "Streaming"), ("bad_value", "Bad values")]
 
 
 def verdicts(sid):
@@ -463,8 +578,8 @@ def scenario_table():
     rows = []
     for s in SC.SCENARIOS:
         v = verdicts(s["id"])
-        if v is None:
-            res = "not run"
+        if v is None or all(x is None for x in v):
+            res = "added after the last run"
         else:
             st, gp, ct = v.count("STATED"), v.count("GAP"), v.count("CONTRADICTED")
             res = "Passes" if st == len(v) else f"{st} of {len(v)} stated" + (f", {gp} gap" + ("s" if gp != 1 else "") if gp else "") + (f", {ct} contradicted" if ct else "")
@@ -512,6 +627,12 @@ def page():
     lmode_table = table(["Landing", "Lander reads it with", "Remembers what it read in"], LANDER_MODES)
     notv1_table = table(["Not in v1", "Why"], NOT_V1)
     mstat_table = table(["Mover", "Set up how", "Status"], MOVER_STATUS)
+    stages_table = table(["Stage", "What it does", "Set by", "Status"], STAGES)
+    colset_table = table(["Setting", "Values", "Default", "Stage"], COLUMN_SETTINGS)
+    castfail_table = table(["on_cast_failure", "What happens", "Use for"], CAST_FAILURE)
+    schema_table = table(["Source change", "Bronze", "Silver", "Alert"], SCHEMA_CHANGES)
+    scd_table = table(["Kind of data", "Examples", "History", "Why"], HISTORY_KINDS)
+    tdec_table = table(["#", "Decision", "Status"], TRANSFORM_DECISIONS)
     parts_table = table(["Part", "Does", "Reads", "Writes", "Runs as", "Safe to run twice because"], PARTS)
     cols_table = table(["Layer", "Columns added to every row", "So you can tell"], INGEST_COLS)
     order_table = table(["Kind of input", "Order of changes", "Deletes"], ORDERING)
@@ -531,7 +652,7 @@ def page():
 <p class="lede">How the core actually runs: which sources come in and how, the parts that move and shape the data, what starts each one, how one load moves from a source system to a metric, how we know a number is complete, the ids and log rows that tie it together, what happens when something breaks, and how we watch it. The concept pages say what each layer does; this page says how it runs.</p>
 <div class="sib"><a href="{AWS}">↑ The platform on AWS + Databricks</a><a href="{BASE}ingestion/">Ingestion</a><a href="{BASE}bronze-to-silver/">Bronze to silver</a><a href="{BASE}gold/">Gold</a><a href="{BASE}metadata-store/">Metadata store</a></div>
 <nav class="toc"><b>On this page</b><ol>
-<li><a href="#rules">Seven rules</a></li><li><a href="#sources">Sources and ingestion tech</a></li><li><a href="#map">The runtime map</a></li><li><a href="#parts">The ten working parts</a></li>
+<li><a href="#rules">Seven rules</a></li><li><a href="#sources">Sources and ingestion tech</a></li><li><a href="#transforms">The standard transforms</a></li><li><a href="#map">The runtime map</a></li><li><a href="#parts">The ten working parts</a></li>
 <li><a href="#order">Order, deletes, corrections, schema and personal data</a></li><li><a href="#complete">Completeness and freshness</a></li><li><a href="#run">One run, step by step</a></li>
 <li><a href="#jobs">Jobs and triggers</a></li><li><a href="#logs">Ids and log rows</a></li><li><a href="#stream">Streaming</a></li><li><a href="#fail">When something breaks</a></li>
 <li><a href="#rerun">Re-runs, backfills and first loads</a></li><li><a href="#obs">Observability: the working parts</a></li><li><a href="#day">A day in the life</a></li><li><a href="#tested">How this design is tested</a></li><li><a href="#faq">Questions</a></li></ol></nav>
@@ -554,6 +675,34 @@ def page():
 {notv1_table}
 <h3>Where each mover stands</h3>
 {mstat_table}
+</section>
+
+<section id="transforms"><p class="eyebrow">The standard transforms</p><h2>Bronze to silver: thirteen generic stages, set per column</h2>
+<p>All of this happens between bronze and silver: bronze only ever appends what arrived, and silver is where columns are chosen, typed, cleaned, flattened and given history. Bronze keeps what the source sent; silver holds one clean, typed row per real thing, in the shape we chose. Between them sits one fixed list of generic transforms. Nothing in this step knows it is handling tyres: the same code runs for every table, and the metadata says which columns, which types, which formats and which history.</p>
+{rules(TRANSFORM_PRINCIPLES)}
+<h3>The thirteen stages, in order</h3>
+<p>The status column is where each stands in the framework today.</p>
+{stages_table}
+<h3>Example: 100 columns in bronze, 30 in silver</h3>
+<p>A plant's MES table arrives with 100 columns. The dataset lists the 30 it needs; those 30 go on to silver, renamed and typed as listed; the other 70 stay in bronze. If the source adds a 101st column next month, bronze keeps it and silver does not change. If someone later needs one of the 70, they list it and replay from bronze.</p>
+<h3>The column settings</h3>
+<p>Set per column in the dataset's YAML (or per dataset where marked), loaded into the framework's column table. The last column says which stage reads it.</p>
+{colset_table}
+<h3>JSON payloads: flattening happens here, not on the way in</h3>
+{rules(JSON_RULES)}
+{C.code(JSON_EXAMPLE, "A dealer API order: two silver tables from one bronze payload, only the listed paths extracted.")}
+<h3>When a value will not convert</h3>
+{castfail_table}
+<h3>When the source changes shape</h3>
+<p>The rule behind all of these: silver's shape is defined by our column list, not by the source, so most source changes either do not reach silver or are fixed in the metadata without silver changing.</p>
+{schema_table}
+<p>Each column is required or optional, and each contract version is minor (additive) or major (breaking), so consumers can tell which changes affect them.</p>
+<h3>History: SCD type 1 or type 2</h3>
+<p>Both, chosen per dataset. SCD type 1 overwrites a row when it changes (only the current version exists); SCD type 2 keeps every version with its valid-from and valid-to. The kind of data sets the default.</p>
+{scd_table}
+{rules(HISTORY_RULES)}
+<h3>Decisions</h3>
+{tdec_table}
 </section>
 
 <section id="map"><p class="eyebrow">The runtime map</p><h2>Ten parts, three bands</h2>

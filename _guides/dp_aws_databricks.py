@@ -1591,9 +1591,8 @@ def page():
 <figure class="diagram">{two_speeds()}<figcaption>Batch and streaming share one set of layers.</figcaption></figure>
 <h3>What each layer promises</h3>
 {layers_table}
-<h3>Bronze to silver, step by step</h3>
-<p>The same eleven steps run for every dataset, each switched and tuned from the metadata. They are generated as Declarative Pipelines with AUTO CDC; a plain PySpark MERGE is the fallback where a pipeline cannot do the job.</p>
-<div class="rules">{silver_steps}</div>
+<h3>Bronze to silver</h3>
+<p>Thirteen generic stages run for every dataset, set per column in the metadata: contract check, select and rename, hygiene, parse and type, time, standardise values, personal data, row filter, quality rules, duplicates, keys, history (SCD type 1 or 2 by kind of data) and provenance. No business logic and no free-form SQL in this step. The stages, the column settings, the schema change rules and the history choices are on <a href="{BASE}aws-databricks/etl/#transforms">The ETL, end to end</a>.</p>
 <p>Silver keeps one table per source entity, with conformed keys. Joining sources together (SAP orders with MES production, for example) is a separate, named step, not hidden inside a silver table. Each silver table has one quarantine table, which its steward reviews weekly.</p>
 <h3>Common mistakes, and the fix</h3>{mistakes}
 <p>More detail, with one record followed through every layer: <a href="/learn/medallion-architecture/">Medallion architecture, drawn right</a>.</p></section>
