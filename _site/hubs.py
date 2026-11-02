@@ -204,6 +204,9 @@ def assets():
                  [("GitHub", "https://github.com/dataagentsai/agenttwin-lab"), ("Results so far", "/lab/")], peri),
         ]) + group(
         "data", "For data platforms", "Start-from-here code for data engineering.", [
+            card("Shift-left bundle", "/learn/shift-left/", "fail fast on data code (planned)",
+                 "Catch problems in PySpark, Python and Databricks SQL before they run: cost, security, purity, tests, complexity and what a repo is missing, from open-source tools. Plan agreed; the spec comes next.",
+                 [("The guide", "/learn/shift-left/"), ("GitHub", "https://github.com/dataagentsai/shift-left-bundle")], rose),
             card("Data project review", "/learn/technical-anchor/project-review/", "a Claude skill",
                  "Give Claude your project documents: it says what is missing at your stage, technical and delivery, where your documents disagree, and the cheapest test to run this week. 210 checks across business analysis, project management and technical work, any technology.",
                  [("How it works", "/learn/technical-anchor/project-review/"), ("GitHub", "https://github.com/dataagentsai/data-project-review")], rose),
