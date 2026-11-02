@@ -52,12 +52,13 @@ C = [
   [("Amazon Bedrock, Converse API", "use", "Claude, Llama, Mistral, Nova behind one API"),
    ("Cross-region inference profiles", "use", "keep inside the India geography where offered; check per model"),
    ("Bedrock Intelligent Prompt Routing", "no", "picks the model per prompt; not deterministic"),
-   ("API Gateway in front", "plan", "keys, throttling, usage plans")],
-  [("LiteLLM proxy on ECS Fargate", "plan", "the AI gateway AWS itself has no product for"),
+   ("Bedrock AgentCore Gateway (inference endpoint)", "plan", "AWS's managed AI gateway: one door to models, tools and agents; fallback + circuit breaker (Oct 2026); token rate limits"),
+   ("Bedrock application inference profiles", "use", "one per agent, tagged, so cost and quota are per agent")],
+  [("LiteLLM proxy on ECS Fargate", "list", "fallback gateway if AgentCore Gateway lacks a rule we need, or for non-AWS models"),
    ("Pydantic AI", "use", "model layer only")],
   "Our gateway policy: allow-list per job, token budget, one retry budget, token metric per agent",
   "APIM AI gateway → Foundry Models",
-  "AWS has no APIM-style AI gateway, so the door is LiteLLM on Fargate (AWS's own multi-provider guidance) or a thin gateway of ours. The agent never holds a provider key.", (45, 45, 10)),
+  "AgentCore Gateway is AWS's AI gateway, the same job APIM's AI gateway does on Azure: one governed door with identity, rate and token limits, fallback and logging. Our policy (allow-list per job, budgets) sits on top as config. Check region availability and token-limit features before go-live. The agent never holds a provider key.", (55, 35, 10)),
  ("L4", "Control loop", "Think", "Plan, act, check, with step and no-progress limits.",
   [("Bedrock Agents", "no", "the platform would own the loop"),
    ("Bedrock AgentCore Runtime", "list", "could host our own loop; check current status")],
@@ -91,7 +92,7 @@ C = [
   "If the company already runs a contact centre, hand off into it (Connect). Otherwise Chatwoot gives the desk without building one.", (50, 35, 15)),
  ("L3", "Tool layer", "Act", "Actions through typed tools, checked before they run.",
   [("MCP servers on ECS Fargate or Lambda", "use", "one server per system of record"),
-   ("Bedrock AgentCore Gateway", "list", "turns APIs and Lambdas into MCP tools; check current status")],
+   ("Bedrock AgentCore Gateway", "plan", "the same gateway fronts our MCP tool servers: one door for tools and models")],
   [("MCP Python SDK", "use", "client + servers"), ("FastMCP", "list", "")],
   "Gating before every call, idempotency keys, size caps, argument checks with jsonschema",
   "MCP servers on Container Apps",
@@ -105,7 +106,7 @@ C = [
  ("L8", "Concurrency & flow", "Act", "Who gets served first when load spikes.",
   [("Amazon SQS FIFO", "plan", "one message group per conversation keeps order"),
    ("API Gateway usage plans", "use", "rate limits per client"), ("Bedrock quotas", "use", "tokens per minute, the real ceiling")],
-  [("Own semaphores", "list", ""), ("LiteLLM limits", "plan", "per agent, in the gateway")],
+  [("Own semaphores", "list", ""), ("LiteLLM limits", "list", "only if LiteLLM is the gateway")],
   "One turn per conversation (ledger row), priority classes (plant breakdowns before marketing), honest shedding",
   "Service Bus + APIM rate limit",
   "AWS gives the queue and the limits. Which request waits, and what we tell the person, is ours.", (50, 35, 15)),
@@ -263,7 +264,7 @@ ROWS = [
       [("Quality deviation", "drafts root cause note"), ("B2B order assistant", "acts after OK"),
        ("Fleet tyre advisor", "answers, from telematics")]], WASH["rose"]),
     ("Horizontal assets · built once on AWS, reused by every agent",
-     [[("Model gateway", "LiteLLM → Bedrock"), ("Knowledge", "pgvector on Aurora"), ("Memory & state", "Aurora PostgreSQL"),
+     [[("Model gateway", "AgentCore Gateway"), ("Knowledge", "pgvector on Aurora"), ("Memory & state", "Aurora PostgreSQL"),
        ("Tool / MCP hub", "MCP on Fargate"), ("Channels", "Connect, SES, EUM"), ("Identity", "Cognito, IAM, KMS")],
       [("Guardrails", "Bedrock + our rules"), ("Human desk", "DBOS + Connect"), ("Observability", "CloudWatch, X-Ray"),
        ("Cost control", "profiles, Budgets"), ("Eval library", "Bedrock, AgentTwin"), ("Release", "AppConfig, ECR")]], WASH["peri"]),
@@ -333,7 +334,7 @@ def marks(items):
 
 def binding_table():
     out = ['<div class="sd-table wide"><table><tr><th>Concern</th><th>On AWS</th><th>Open source</th>'
-           '<th>Ours, built once, and why</th><th>On Azure it was</th></tr>']
+           '<th>Ours, built once, and why</th><th>For comparison: on Azure</th></tr>']
     for fam, sub in FAMILIES:
         out.append(f'<tr class="aw-fam"><td colspan="5">{fam} <small style="font-family:var(--sans);font-size:14px">· {sub}</small></td></tr>')
         for cid, name, f, does, aws, oss, ours, az, why, _ in C:
@@ -349,9 +350,9 @@ DECISIONS = [
     ("Which model?", "Claude on Bedrock · Llama or Nova on Bedrock · a model outside AWS via the gateway",
      "Claude on Bedrock as the default for every job, behind our gateway. The golden set picks the model per job offline; cheaper models win where they pass.",
      "Pursue: Claude on Bedrock", "Data stays in the AWS account; switching model is one line in AppConfig."),
-    ("Which gateway (the one door to models)?", "LiteLLM proxy on ECS Fargate · our own thin gateway · API Gateway + Lambda",
-     "LiteLLM on Fargate behind API Gateway, with our policy (allow-list, budgets) as its config.",
-     "Pursue: LiteLLM on Fargate", "Open source, multi-provider, and AWS's own guidance uses it. Own gateway only if LiteLLM blocks a rule."),
+    ("Which gateway (the one door to models)?", "Bedrock AgentCore Gateway · LiteLLM proxy on ECS Fargate · API Gateway + Lambda (build it ourselves)",
+     "AgentCore Gateway, with our policy (allow-list, budgets) as its rules; LiteLLM on Fargate kept as the fallback behind the same port.",
+     "Pursue: AgentCore Gateway", "Managed by AWS, the closest match to APIM's AI gateway, and it also fronts MCP tools. LiteLLM only if a rule we need is missing or a non-AWS model is required. Check Mumbai availability first."),
     ("Where does our code run?", "ECS Fargate · Bedrock AgentCore Runtime · EKS",
      "ECS Fargate: the closest match to Azure Container Apps, no cluster to run.",
      "Pursue: ECS Fargate", "AgentCore Runtime is worth a pilot later; EKS only if the company already runs Kubernetes."),
@@ -365,7 +366,7 @@ DECISIONS = [
 
 SWAP = [
     ("Front door", "Azure Front Door + WAF", "CloudFront + AWS WAF"),
-    ("AI gateway", "API Management (AI gateway)", "LiteLLM on ECS Fargate behind API Gateway"),
+    ("AI gateway", "API Management (AI gateway)", "Bedrock AgentCore Gateway (LiteLLM on Fargate as fallback)"),
     ("Models", "Foundry Models", "Amazon Bedrock (Converse API)"),
     ("Where code runs", "Azure Container Apps", "Amazon ECS on Fargate"),
     ("Sign-in", "Entra ID, External ID", "IAM Identity Center (staff), Cognito or portal OIDC (dealers, fleets, consumers)"),
@@ -394,7 +395,7 @@ BODY = f"""<main class="wrap">
 
 <div class="sd-answer">
 <p><b>The one-minute version.</b> An agent that talks to dealers, customers and staff needs much more than a model: sign-in, guardrails, memory, tools, approvals, logging, cost limits, tests. We call that the <b>harness</b>, and we split it into 22 concerns.</p>
-<p>The concerns never name a product. For each cloud we write a <b>binding</b>: which service does each job. This page is the AWS binding, with a tyre manufacturer as the example. On average, by our judgement, about a third of each concern comes from AWS (35%), nearly half is shared code we write once (45%), and about a fifth is what each agent team writes (20%).</p>
+<p>The concerns never name a product. For each cloud we write a <b>binding</b>: which service does each job. This page is the AWS binding, with a tyre manufacturer as the example. On average, by our judgement, about a third of each concern comes from AWS (36%), nearly half is shared code we write once (45%), and about a fifth is what each agent team writes (19%).</p>
 <p>Already seen the Azure version? Compare <a href="{AH}arch-azure.html">the harness on Azure</a> and <a href="{AH}tech.html">the Azure tech stack, concern by concern</a>. Why we work from specs: <a href="/leaders/spec-driven/">spec-driven development</a>.</p>
 </div>
 
