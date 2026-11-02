@@ -296,7 +296,7 @@ FAQ = [
     ("Why Databricks if we already have Glue, EMR and Redshift?", "One engine for batch and streaming, one catalog (Unity Catalog) for access, lineage and audit, and AI/BI with Genie on the same governed data. You do not have to switch everything at once: keep what works and put new work on the lakehouse."),
     ("What is a metric view?", "A definition of a business metric (for example, scrap rate) stored once in Unity Catalog, with its formula, dimensions and filters. Dashboards, Genie and the Conversation UI all use it, so the number is the same everywhere."),
     ("What are horizontal assets?", "Parts built once and reused by every pipeline and data product: ingestion, metadata, quality, cost, testing and the conversation layer. They are what makes the tenth data product much cheaper than the first."),
-    ("How are compound recipes and personal data protected?", "Recipes and formulation data sit in a restricted catalog with tag-based access; personal data of dealers, fleet drivers and consumers is tagged in silver and masked by Unity Catalog column masks and row filters for every reader, not only in dashboards. Indian data stays in Indian regions and European data in EU regions. Access is audited in system tables and CloudTrail."),
+    ("How are compound recipes and personal data protected?", "Recipes and formulation data sit in a restricted catalog with tag-based access; personal data of dealers, fleet drivers and consumers is tagged in silver and masked by Unity Catalog column masks and row filters for every reader, not only in dashboards. All data stays in India (Mumbai, with recovery in Hyderabad); personal data from EU plants and dealers is kept to the minimum, and a separate EU platform is added only if your legal team requires it. Access is audited in system tables and CloudTrail."),
 ]
 
 
@@ -402,6 +402,146 @@ WM_STEPS = [
     ("Late rows", "A look-back overlap (say 2 hours, set in dataset_config) re-reads a little of the last window; the MERGE drops the repeats."),
     ("Files and streams", "Auto Loader and streaming keep their own checkpoints; we record the checkpoint location, not a second watermark. CDC sources use the change position (LSN or SCN); SAP uses its delta token."),
 ]
+
+
+# ---------------------------------------------------------------- bronze to silver steps (tier T2)
+SILVER_STEPS = [
+    ("Read what is new", "Only rows that arrived since the last run (change feed or watermark)."),
+    ("Fix types", "Text to numbers and dates; units made the same (all temperatures in °C, all weights in kg)."),
+    ("Standardise time", "Store UTC, and keep the plant's local time beside it, because shifts are local."),
+    ("Check the contract", "At sources we do not control: the columns and types we were promised."),
+    ("Run the quality rules", "From the metadata store; bad rows to the table's quarantine table with the reason."),
+    ("Remove duplicates", "On the business keys, keeping the latest by a sequence column."),
+    ("Conform keys", "Map each system's own codes to one key: SAP material and MES material become one material key."),
+    ("Keep history", "SCD Type 1 (overwrite) or Type 2 (keep every version), as set per dataset."),
+    ("Handle deletes", "Soft-delete with a flag and the time; never lose the row."),
+    ("Merge and log", "One MERGE, then the run log row and a count reconcile with bronze."),
+    ("Tag", "Personal-data and recipe columns tagged so Unity Catalog masks apply."),
+]
+
+
+# ---------------------------------------------------------------- gold, semantic, AI/BI (tiers T2 gold + T6)
+GOLD_DECISIONS = [
+    ("How gold is modelled", "Star schemas (Kimball): facts at a stated grain, shared dimensions", "Pursue",
+     "Business people read them, BI tools and Genie understand them, and shared dimensions make numbers line up across subjects. Data Vault adds a layer nobody here needs; one big flat table repeats data and breaks on history."),
+    ("How gold is built", "SQL files in Git, run as materialized views in Declarative Pipelines", "Pursue",
+     "Incremental refresh and lineage come with the platform. One model per file, so moving to dbt Core later is a copy, not a rewrite."),
+    ("dbt", "Not now", "Drop for now",
+     "Adopt dbt Core if the team already knows it, if gold passes about 50 models across teams, or if gold must run outside Databricks. Never dbt Cloud or a second metric layer."),
+    ("Where metrics are defined", "Unity Catalog metric views, one per business process", "Pursue",
+     "Defined once, governed by the catalog, read by dashboards, Genie and our Conversation UI alike. A separate semantic tool (Cube, AtScale) only if many tools outside Databricks need the same metrics."),
+    ("Asking in plain words", "Genie for analysts and managers; our Conversation UI inside staff apps and wherever a wrong number is costly", "Pursue",
+     "Genie is already in the platform. The Conversation UI never lets the model write SQL."),
+    ("Existing BI tools", "Read through a serverless SQL warehouse, from metric views (" + CHECK + ") or gold", "Pursue",
+     "Nobody has to throw away reports on day one."),
+    ("Compute for questions", "Separate serverless SQL warehouses for dashboards, Genie and ad hoc work", "Pursue",
+     "Each workload gets the right size, and CostSherlock can show what each one costs."),
+]
+
+BUS = ["Date", "Plant", "Press", "Shift", "Material", "Dealer", "Customer / fleet", "Defect"]
+BUS_MATRIX = [
+    ("Production", "one row per press per hour", "11111000"),
+    ("Downtime", "one row per stop", "11110000"),
+    ("Scrap", "one row per scrapped tyre batch", "11111001"),
+    ("Quality tests", "one row per test result", "11101001"),
+    ("SAP order lines", "one row per order line", "11001110"),
+    ("Dealer sell-out", "one row per dealer per material per day", "10001110"),
+    ("Warranty claims", "one row per claim", "11001111"),
+]
+
+GOLD_SCHEMAS = [
+    ("prod_gold.shared", "The shared dimensions: date (with the April-to-March financial year), plant, press, shift, material, dealer, customer, defect code", "Platform team"),
+    ("prod_gold.manufacturing", "Production, downtime, scrap", "Manufacturing data owner"),
+    ("prod_gold.quality", "Quality tests, warranty claims", "Quality data owner"),
+    ("prod_gold.sales", "SAP order lines, dealer sell-out, dealer stock", "Sales data owner"),
+    ("prod_semantic.*", "Metric views only, one schema per business area; no tables", "Each metric's owner"),
+]
+
+MULTI_INPUT = [
+    ("Give every input a role", "The driver (the events the fact counts), dimensions looked up as of the event time, and contributor facts that add measures."),
+    ("Never lose a row to a missing dimension", "A press that is not in the master yet gets an 'unknown' member, flagged, and fixed when the master catches up. No inner joins to dimensions."),
+    ("Join history as of the event", "A material's compound at the moment the tyre was cured, not today's."),
+    ("Recompute changed windows", "When any input changes, recompute the affected hours or days in full and replace them. Simpler and safer than patching single rows."),
+    ("Check after every run", "Totals reconcile with silver, and the share of 'unknown' members stays under its limit."),
+]
+
+METRICS = [
+    ("OEE", "Availability × performance × quality, each computed from sums (run time over planned time; ideal cycle time × count over run time; good tyres over all tyres)", "Press, shift, plant, day", "Plant operations head"),
+    ("Scrap rate", "Scrapped tyres over tyres cured", "Press, material, defect, day", "Quality head"),
+    ("First-pass yield", "Tyres passing every test the first time, over tyres tested", "Plant, material, day", "Quality head"),
+    ("Downtime hours", "Sum of stop durations, by cause", "Press, cause, shift", "Maintenance head"),
+    ("On-time in-full (OTIF)", "Order lines delivered complete and on the promised date, over all order lines", "Plant, customer, week", "Supply chain head"),
+    ("Sell-out units", "Tyres sold by dealers to end customers", "Dealer, material, region, week", "Sales head"),
+    ("Warranty claim rate", "Claims per 10,000 tyres, counted against the month the tyres were made, not the month of the claim", "Plant, material, production month", "Quality head"),
+]
+
+SEMANTIC_RULES = [
+    ("Metrics read gold only.", "Never silver, never another metric view's output."),
+    ("Ratios are computed at query time, from sums.", "Never store a percentage and never average percentages: the average of three plants' OEE is not the company's OEE."),
+    ("Every metric has an owner, a definition in plain words and a certified tag.", "Changing a definition is a pull request, approved by the owner, and the benchmark questions run again before it merges."),
+    ("Shift metrics use plant local time.", "Stored in UTC, reported in the plant's time, so the night shift is not split across two days."),
+    ("Joins live in the metric view.", "Pre-joined or pre-summed tables only when a dashboard is measured slow or costly, and then as materialized views in gold."),
+    ("Front ends read metric views.", "Direct access to gold is for analysts and data scientists only."),
+]
+
+METRIC_YAML = """# prod_semantic.manufacturing.press_performance   (syntax: """ + CHECK + """)
+version: 0.1
+source: prod_gold.manufacturing.fct_production        # one row per press per hour
+joins:
+  - name: press
+    source: prod_gold.shared.dim_press
+    on: source.press_key = press.press_key
+  - name: material                                    # SCD2: the version valid at cure time
+    source: prod_gold.shared.dim_material
+    on: source.material_key = material.material_key
+dimensions:
+  - name: Plant
+    expr: press.plant_name
+  - name: Press
+    expr: press.press_code
+  - name: Compound family
+    expr: material.compound_family
+  - name: Production date (plant time)
+    expr: source.plant_local_date
+measures:
+  - name: Tyres cured
+    expr: SUM(source.tyres_cured)
+  - name: Scrap rate
+    expr: SUM(source.tyres_scrapped) / NULLIF(SUM(source.tyres_cured), 0)
+  - name: Availability
+    expr: SUM(source.run_minutes) / NULLIF(SUM(source.planned_minutes), 0)"""
+
+GENIE_SPACES = [
+    ("Plant performance", "Plant managers, shift leads", "Press performance, downtime and scrap metric views", "40 questions"),
+    ("Quality and warranty", "Quality engineers", "Scrap, quality tests and warranty metric views", "40 questions"),
+    ("Sales and dealers", "Sales and aftermarket managers", "Order lines, sell-out and dealer stock metric views", "30 questions"),
+    ("Platform ops", "The data team", "Ops gold from the observability section", "20 questions"),
+]
+
+GENIE_RULES = [
+    ("One space per audience, not one for everything.", "A small, curated space answers better than a large one; keep each to the views its audience needs."),
+    ("Metric views first.", "They carry the definitions, so Genie picks a defined metric instead of inventing a formula."),
+    ("Write instructions and example questions.", "Plant names and their short forms, which date to use, what 'last week' means, with worked examples."),
+    ("Benchmark before go-live and after every change.", "A set of questions with known right answers; the space goes live at 90% right or better, and a change that lowers the score does not merge."),
+    ("Read the thumbs-down every week.", "Each wrong answer becomes a fix to the instructions or a new benchmark question."),
+    ("Security comes from the catalog.", "Genie runs as the person asking, so a plant manager sees only that plant's rows."),
+]
+
+
+def star():
+    b = []
+    a = b.append
+    a(rect(360, 120, 220, 110, "#F7E7B4", sw=2.2) + tx(470, 152, "fct_production", 17, "middle", weight="700")
+      + tx(470, 176, "one row per press per hour", 12.5, "middle") + tx(470, 196, "tyres cured, scrapped,", 12, "middle", fill="#555")
+      + tx(470, 214, "run and planned minutes", 12, "middle", fill="#555"))
+    dims = [(60, 20, "dim_date", "financial year Apr-Mar"), (360, 10, "dim_plant", "India and Europe"), (660, 20, "dim_press", "curing press, line"),
+            (60, 250, "dim_shift", "plant local time"), (660, 250, "dim_material", "SCD2: compound as of cure")]
+    for x, y, n, sub in dims:
+        a(rect(x, y, 220, 64, "#fff") + tx(x + 110, y + 28, n, 15, "middle") + tx(x + 110, y + 48, sub, 12, "middle", fill="#555"))
+        cx, cy = x + 110, y + 32
+        a(f'<line x1="{cx}" y1="{cy + (32 if y < 120 else -32)}" x2="470" y2="{120 if y < 120 else 230}" stroke="{INK}" stroke-width="1.5"/>')
+    a(tx(470, 345, "Facts hold the numbers; dimensions hold the words you filter and group by.", 14, "middle"))
+    return svg(940, 360, "".join(b), "A star schema: the production fact in the middle, one row per press per hour, joined to five dimensions: date, plant, press, shift and material, where material keeps history (SCD2).")
 
 
 # ---------------------------------------------------------------- foundation (tier T0)
@@ -819,6 +959,16 @@ def page():
     need_table = table(["Where", "Contract?", "Why"], CONTRACT_NEED)
     parts_table = table(["Part of the contract", "Example", "Enforced by"], CONTRACT_PARTS)
     adf_table = table(["Azure Data Factory part", "On AWS", "On Databricks"], ADF_MAP)
+    silver_steps = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(SILVER_STEPS))
+    gold_dec_table = table(["Choice", "Our pick", "Verdict", "Why"], GOLD_DECISIONS)
+    bus_rows = [(f, g) + tuple("✓" if c == "1" else "" for c in m) for f, g, m in BUS_MATRIX]
+    bus_table = table(["Fact", "Grain"] + BUS, bus_rows)
+    gold_schema_table = table(["Schema", "Holds", "Owner"], GOLD_SCHEMAS)
+    multi_rules = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(MULTI_INPUT))
+    metric_table = table(["Metric", "Definition", "Broken down by", "Owner"], METRICS)
+    sem_rules = '<div class="rules">' + "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(SEMANTIC_RULES)) + "</div>"
+    genie_space_table = table(["Space", "For", "Reads", "Benchmark"], GENIE_SPACES)
+    genie_rules = '<div class="rules">' + "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(GENIE_RULES)) + "</div>"
     found_table = table(["Decision", "Our pick", "Why"], FOUNDATION)
     assume_table = table(["Question", "We assume", "If it is different"], ASSUMPTIONS)
     bucket_table = table(["Bucket", "Holds", "Key", "Rules"], BUCKETS, raw=(0,))
@@ -838,7 +988,7 @@ def page():
 <div class="sib"><a href="{BASE}">↑ The abstract picture</a><a href="/leaders/spec-driven/data-platform/">Spec-driven development for data</a><a href="/learn/medallion-architecture/">Medallion, drawn right</a></div>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li><li><a href="#foundation">The foundation</a></li><li><a href="#metadata">Metadata and ingestion</a></li><li><a href="#quality">Data quality and profiling</a></li><li><a href="#ops">Observability and alerts</a></li><li><a href="#testing">Testing and data contracts</a></li>
-<li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">The right AI/BI</a></li><li><a href="#binding">22 concerns, bound</a></li>
+<li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">Gold, semantic layer and AI/BI</a></li><li><a href="#binding">22 concerns, bound</a></li>
 <li><a href="#aws">AWS native or Databricks</a></li><li><a href="#plan">How we would start</a></li><li><a href="#faq">Questions</a></li></ol></nav>
 
 <section id="minute"><p class="eyebrow">The one-minute version</p><h2>Your account, your data, one catalog</h2>
@@ -1000,17 +1150,46 @@ def page():
 <figure class="diagram">{two_speeds()}<figcaption>Batch and streaming share one set of layers.</figcaption></figure>
 <h3>What each layer promises</h3>
 {layers_table}
+<h3>Bronze to silver, step by step</h3>
+<p>The same eleven steps run for every dataset, each switched and tuned from the metadata. They are generated as Declarative Pipelines with AUTO CDC; a plain PySpark MERGE is the fallback where a pipeline cannot do the job.</p>
+<div class="rules">{silver_steps}</div>
+<p>Silver keeps one table per source entity, with conformed keys. Joining sources together (SAP orders with MES production, for example) is a separate, named step, not hidden inside a silver table. Each silver table has one quarantine table, which its steward reviews weekly.</p>
 <h3>Common mistakes, and the fix</h3>{mistakes}
 <p>More detail, with one record followed through every layer: <a href="/learn/medallion-architecture/">Medallion architecture, drawn right</a>.</p></section>
 
-<section id="aibi"><p class="eyebrow">The right AI/BI</p><h2>The semantic layer first, then the AI</h2>
-<p>Ask three tools for "scrap rate" and you can get three numbers. The fix is to define each metric <b>once</b>, as a metric view in Unity Catalog, and make every front end read it. Then AI on top is safe: the model only chooses which metric, which breakdown and which filter; the engine writes the SQL, and Unity Catalog's row and column rules apply to whoever is asking.</p>
+<section id="aibi"><p class="eyebrow">Gold, the semantic layer and AI/BI</p><h2>Shape it once, define each metric once, then ask in plain words</h2>
+<p>Ask three tools for "scrap rate" and you can get three numbers. That happens when every report shapes the data and writes the formula itself. The fix has two halves: <b>gold</b> shapes the data once, as star schemas the business recognises, and the <b>semantic layer</b> defines each metric once, as a metric view in Unity Catalog. Every front end, from dashboards to Genie, reads those definitions. Then AI on top is safe: the model only chooses which metric, which breakdown and which filter.</p>
+
+<h3>The choices</h3>
+{gold_dec_table}
+
+<h3>Gold: star schemas</h3>
+<p>A <b>star schema</b> puts the numbers (facts) in the middle and the words people filter by (dimensions) around it. Each fact table states its <b>grain</b>: what one row means. Getting the grain right is most of the work.</p>
+<figure class="diagram">{star()}<figcaption>The production fact and its dimensions. Other facts share the same dimensions.</figcaption></figure>
+<p><b>The bus matrix</b> shows which facts share which dimensions. A shared ("conformed") dimension is what lets you put scrap next to warranty claims for the same material and get a sensible answer.</p>
+{bus_table}
+<h3>Where gold lives</h3>
+{gold_schema_table}
+<h3>Facts built from several inputs</h3>
+<p>Some facts need more than one source: production needs MES counts, the press master, the material master and the shift calendar, which arrive at different times. Five rules keep them right.</p>
+<div class="rules">{multi_rules}</div>
+
+<h3>The semantic layer: metric views</h3>
+<p>A <b>metric view</b> is a definition, not a table: which gold fact, which joins, which dimensions, and the formula for each measure. It is stored in Unity Catalog with an owner, so it is governed like a table.</p>
+{C.code(METRIC_YAML, "One metric view for press performance. Formulas are sums divided by sums, computed for whatever slice is asked.")}
+<h3>The starter metrics</h3>
+{metric_table}
+<h3>Six rules for the semantic layer</h3>
+{sem_rules}
+<p class="note">To confirm when building: whether reading a metric view also needs a grant on the gold tables under it, and whether outside BI tools can query metric views directly ({CHECK}).</p>
+
+<h3>From a question to an answer</h3>
 <figure class="diagram">{aibi()}<figcaption>From a question to an answer that shows its own definition.</figcaption></figure>
-<ul>
-<li><b>Genie spaces</b> are curated: a short list of trusted tables or metric views, written instructions, and example questions with their correct answers.</li>
-<li><b>Benchmark questions</b> are run before go-live and after every change, so we know the answers are still right.</li>
-<li><b>Security flows through:</b> a plant manager in one plant sees only that plant's rows, in a dashboard, in Genie and in the Conversation UI alike.</li>
-</ul>
+
+<h3>Genie: one space per audience</h3>
+{genie_space_table}
+{genie_rules}
+
 <h3>Genie or our Conversation UI?</h3>
 {genie_table}</section>
 
