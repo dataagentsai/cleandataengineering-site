@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 import components as C  # noqa: E402
 import dp_aws_databricks as D  # noqa: E402  (drawing helpers, table, CSS)
 import etl_scenarios as SC  # noqa: E402  (the design-test table)
+import etl_settings as ST  # noqa: E402  (the settings registry)
 try:
     import etl_scenario_results as SR  # noqa: E402  (verdict per check, from the latest run)
 except ImportError:
@@ -221,7 +222,7 @@ TRANSFORM_DECISIONS = [
     ("D3", "The schema change rules above, with required per column and minor or major contract versions", "Agreed"),
     ("D4", "No free-form SQL from bronze to silver; only the standard transforms", "Agreed"),
     ("D5", "The thirteen stages, in this order", "Agreed"),
-    ("D7", "JSON stays whole in bronze; silver extracts only listed paths; arrays of child records become their own silver table", "Proposed"),
+    ("D7", "JSON stays whole in bronze; silver extracts only listed paths; arrays of child records become their own silver table", "Agreed"),
     ("D6", "History by dataset kind: type 2 for master data, type 1 for transactions (type 2 where needed), append for events, snapshot for snapshots; tracked columns only", "Agreed"),
 ]
 
@@ -612,6 +613,39 @@ def example_scenario():
     return C.code("\n".join(lines), "One row of the test table. Each THEN line is checked against this page and marked stated, gap or contradicted.")
 
 
+
+# ------------------------------------------------------------------ the settings registry, rendered from etl_settings.py
+LEVELS = [("platform", "Platform (per environment)"), ("source", "Source"), ("dataset", "Dataset"), ("column", "Column"),
+          ("gold_fact", "Gold fact"), ("domain", "Domain")]
+STATUSES = [("exists", "Exists"), ("adapt", "Adapt"), ("new", "New"), ("retire", "Retire")]
+
+
+def settings_summary():
+    rows = []
+    for lv, name in LEVELS:
+        r = [x for x in ST.SETTINGS if x[1] == lv]
+        rows.append((name,) + tuple(str(sum(1 for x in r if x[6] == st)) for st, _ in STATUSES) + (str(len(r)),))
+    tot = ("Total",) + tuple(str(sum(1 for x in ST.SETTINGS if x[6] == st)) for st, _ in STATUSES) + (str(len(ST.SETTINGS)),)
+    return table(["Level"] + [n for _, n in STATUSES] + ["Rows"], rows + [tot])
+
+
+def settings_tables():
+    out = ""
+    for lv, name in LEVELS:
+        r = [x for x in ST.SETTINGS if x[1] == lv]
+        rows = [(k, typ, dft, rd, ", ".join(sc) or "-", st, note) for k, _, typ, dft, rd, sc, st, note in r]
+        out += f"<details><summary><b>{E(name)}</b> ({len(r)} rows)</summary>" + table(["Setting", "Values", "Default", "Read by", "Tested in", "Status", "Note"], rows) + "</details>"
+    return out
+
+
+def settings_checks():
+    unread = [x[0] for x in ST.SETTINGS if x[6] != "retire" and x[4] in ("", "-")]
+    untested = [x[0] for x in ST.SETTINGS if x[6] != "retire" and not x[5]]
+    a = "Every setting in use names the part that reads it." if not unread else "Settings with no reader: " + "; ".join(unread)
+    b = f"{len(untested)} settings in use are not exercised by any test situation yet: " + "; ".join(untested) + "."
+    return f"<p><b>Checks.</b> {E(a)} {E(b)}</p>"
+
+
 # ------------------------------------------------------------------ page
 FAQ = [
     ("Why not one big job from source to gold?", "Because sources arrive at different times. A job per source loads what has arrived; pipelines per domain run when a source has finished a batch. Nothing waits for the slowest source, and completeness tells everyone what has not arrived yet."),
@@ -652,7 +686,7 @@ def page():
 <p class="lede">How the core actually runs: which sources come in and how, the parts that move and shape the data, what starts each one, how one load moves from a source system to a metric, how we know a number is complete, the ids and log rows that tie it together, what happens when something breaks, and how we watch it. The concept pages say what each layer does; this page says how it runs.</p>
 <div class="sib"><a href="{AWS}">↑ The platform on AWS + Databricks</a><a href="{BASE}ingestion/">Ingestion</a><a href="{BASE}bronze-to-silver/">Bronze to silver</a><a href="{BASE}gold/">Gold</a><a href="{BASE}metadata-store/">Metadata store</a></div>
 <nav class="toc"><b>On this page</b><ol>
-<li><a href="#rules">Seven rules</a></li><li><a href="#sources">Sources and ingestion tech</a></li><li><a href="#transforms">The standard transforms</a></li><li><a href="#map">The runtime map</a></li><li><a href="#parts">The ten working parts</a></li>
+<li><a href="#rules">Seven rules</a></li><li><a href="#sources">Sources and ingestion tech</a></li><li><a href="#transforms">The standard transforms</a></li><li><a href="#settings">The settings</a></li><li><a href="#map">The runtime map</a></li><li><a href="#parts">The ten working parts</a></li>
 <li><a href="#order">Order, deletes, corrections, schema and personal data</a></li><li><a href="#complete">Completeness and freshness</a></li><li><a href="#run">One run, step by step</a></li>
 <li><a href="#jobs">Jobs and triggers</a></li><li><a href="#logs">Ids and log rows</a></li><li><a href="#stream">Streaming</a></li><li><a href="#fail">When something breaks</a></li>
 <li><a href="#rerun">Re-runs, backfills and first loads</a></li><li><a href="#obs">Observability: the working parts</a></li><li><a href="#day">A day in the life</a></li><li><a href="#tested">How this design is tested</a></li><li><a href="#faq">Questions</a></li></ol></nav>
@@ -703,6 +737,14 @@ def page():
 {rules(HISTORY_RULES)}
 <h3>Decisions</h3>
 {tdec_table}
+</section>
+
+<section id="settings"><p class="eyebrow">The settings</p><h2>Every setting the runtime reads, and where it comes from</h2>
+<p>The runtime is driven by metadata, so its settings are its real interface. This is the complete list for AWS and Databricks, at six levels: platform (one set per environment), source, dataset, column, gold fact and domain. Each setting names the part that reads it and the test situations that exercise it, and is compared with the framework's registry today: <b>exists</b> (used as is), <b>adapt</b> (exists but Azure-shaped or with a new meaning), <b>new</b>, or <b>retire</b> (Azure Data Factory only). A setting is written once at the level where it belongs, and lower levels may override it (platform, then source, then dataset, then column).</p>
+{settings_summary()}
+{settings_tables()}
+{settings_checks()}
+<p class="note">Source: <code>_guides/etl_settings.py</code>. Several rows group related keys (for example the six profiling settings). The framework's registry (<code>docs/metadata_keys.md</code>) will be updated from this list when building starts.</p>
 </section>
 
 <section id="map"><p class="eyebrow">The runtime map</p><h2>Ten parts, three bands</h2>
