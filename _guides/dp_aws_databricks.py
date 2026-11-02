@@ -302,6 +302,221 @@ FAQ = [
 ]
 
 
+# ---------------------------------------------------------------- metadata store and ingestion on AWS
+MD_TABLES = [
+    ("platform_config", "Settings for the whole platform: default storage paths, default quality action, budget limits", "Platform team, through YAML"),
+    ("source_master", "One row per source system: SAP S/4HANA, MES, historian, quality LIMS, warranty, dealer DMS", "Through YAML"),
+    ("source_config", "Key-value settings per source, grouped (ingestion, quality, cost): connection secret reference, mover, schedule", "Through YAML"),
+    ("dataset_master", "One row per dataset (table) of a source, with its target schema and table", "Through YAML"),
+    ("dataset_config", "Key-value settings per dataset: load mode, keys, history (SCD) type, quality rules, PII tags, owner", "Through YAML"),
+    ("dataset_view", "The one view every pipeline reads: platform, then source, then dataset settings merged into JSON, the most specific winning", "Generated"),
+    ("run_log", "One row per run: dataset, status, row counts, cost, and a fingerprint of the exact settings used", "Pipelines"),
+    ("watermark", "How far each incremental load has got", "Pipelines"),
+]
+
+GIT_VS_DB = [
+    ("What it holds", "Configuration: sources, datasets, load modes, keys, rules, owners, PII tags, budgets",
+     "The same configuration loaded from Git, plus runtime state: watermarks, run log, quality results"),
+    ("Who writes it", "People, and agents, by pull request", "The loader writes configuration; pipelines write runtime state"),
+    ("Why we need it", "Review and approval, full history, easy rollback, the same file promoted dev → test → prod",
+     "Fast lookups, keys between tables, the merged view, many jobs writing at once"),
+    ("Do pipelines read it?", "Never", "Always"),
+]
+
+DB_OPTIONS = [
+    ("Amazon Aurora PostgreSQL Serverless v2", "Managed PostgreSQL with automatic failover, IAM sign-in, backups, and compute that scales down to almost nothing in dev. Strong JSON (jsonb) for the merged view. The same engine the agent harness uses on AWS, so one skill set.",
+     "Pursue: default", "Best fit for the design as written; small, cheap, highly available."),
+    ("Amazon RDS for PostgreSQL", "The same PostgreSQL on a small fixed-size server. Cheaper and simpler; slower failover and no automatic scaling.",
+     "Pursue if cost matters most", "Fine for a single plant or a pilot; move to Aurora when many teams depend on it."),
+    ("Databricks Lakebase (managed PostgreSQL inside Databricks)", "PostgreSQL run by Databricks, governed by Unity Catalog, reachable from serverless compute with no network setup. Generally available on AWS since early 2026 in selected regions.",
+     "Test first", "Attractive because it removes the network hop; check Mumbai availability, cost and backup options before choosing."),
+    ("Aurora MySQL or RDS MySQL", "Works, but JSON handling is weaker than PostgreSQL's and the view would need rewriting.", "Drop", "No gain over PostgreSQL for this design."),
+    ("Amazon DynamoDB", "Key-value store with no joins, so no merged view and no keys between tables.", "Drop", "Wrong shape for relational metadata."),
+    ("Delta tables in Unity Catalog only", "No keys between tables, slow small writes, write conflicts when many jobs log at once.", "Drop as the store", "Keep a copy of run_log in Delta for dashboards and cost reports."),
+]
+
+MOVERS = [
+    ("SAP S/4HANA (sales, stock, procurement, finance)", "Amazon AppFlow (SAP OData), AWS DMS on the database, or an SAP-certified extractor", "Depends on the SAP licence and setup; agree the route with the SAP team first"),
+    ("MES and quality / LIMS databases", "AWS DMS with change capture, or Lakeflow Connect where it has the connector", "Change capture keeps loads small"),
+    ("Plant historian and press / mixer sensors", "AWS IoT SiteWise → Kinesis or S3", "The streaming lane: same layers, continuous"),
+    ("Dealer management system, CRM (SaaS)", "Amazon AppFlow or Lakeflow Connect", "Whichever has a supported connector"),
+    ("Supplier files, raw-material prices", "AWS Transfer Family (SFTP) → S3", "Auto Loader picks the files up"),
+]
+
+ADF_MAP = [
+    ("Copy activity (databases, CDC)", "AWS DMS", "Lakeflow Connect"),
+    ("Copy activity (SaaS, SAP OData)", "Amazon AppFlow", "Lakeflow Connect"),
+    ("Files and SFTP", "AWS Transfer Family, DataSync", "Auto Loader"),
+    ("Data flows (visual ETL)", "Glue Studio", "Notebooks, Declarative Pipelines"),
+    ("Pipelines and triggers", "Step Functions, MWAA (Airflow), Glue Workflows", "Lakeflow Jobs"),
+    ("Lookup + ForEach over a control table", "(build it)", "Our framework reading dataset_view"),
+]
+
+
+SCHEMAS = [
+    ("config", "What to do: platform_config, source_master, source_config, dataset_master, dataset_config, the key registry, quality rules, PII policy, and dataset_view",
+     "Only the loader writes; pipelines read", "Small; changes only through Git"),
+    ("runtime", "What happened: run_log, step_log, error_log, dq_result, watermark, config_snapshot",
+     "Pipelines write; nobody else", "Grows every run; monthly partitions, 13 months kept, older months copied to Delta"),
+    ("audit", "Who changed what: config_load_log (every loader run, Git commit, who approved, what changed)",
+     "Only the loader appends; never updated or deleted", "Small; kept for as long as audit rules require"),
+]
+
+LOG_TABLES = [
+    ("run_log", "One row per run of one dataset", "run_id, dataset_id, Databricks job and run ids, status, started and ended, rows read / written / rejected, config fingerprint, Git commit, estimated cost"),
+    ("step_log", "One row per step inside a run: land, bronze, silver, gold", "run_id, step, status, timings, row counts in and out"),
+    ("error_log", "One row per failure", "run_id, step, error class (source down, schema change, bad data, bug), message, retry number, whether it was retried"),
+    ("dq_result", "One row per quality rule checked", "run_id, rule id, passed or failed, failing row count, action taken (warn, quarantine, stop)"),
+    ("config_snapshot", "The exact merged settings a run used, stored once per fingerprint", "fingerprint, merged JSON; any replay can prove what it ran with"),
+]
+
+RUNTIME_DDL = """
+-- schema runtime: written only by pipelines
+CREATE TABLE runtime.run_log (
+  run_id          uuid PRIMARY KEY,
+  dataset_id      uuid NOT NULL REFERENCES config.dataset_master(dataset_id),
+  job_run_id      text,                    -- Databricks job run id, to join system tables
+  status          text NOT NULL,           -- running, succeeded, failed, skipped
+  started_at      timestamptz NOT NULL,
+  ended_at        timestamptz,
+  window_low      text,                    -- watermark this run started from
+  window_high     text,                    -- watermark this run loaded up to
+  rows_read       bigint, rows_written bigint, rows_rejected bigint,
+  config_fp       text NOT NULL,           -- fingerprint of the merged settings
+  git_commit      text,
+  est_cost_usd    numeric(12,4)
+);
+CREATE TABLE runtime.watermark (
+  dataset_id      uuid PRIMARY KEY REFERENCES config.dataset_master(dataset_id),
+  wm_column       text NOT NULL,           -- e.g. updated_at, change sequence number
+  wm_type         text NOT NULL,           -- timestamp, number, cdc_position, delta_token
+  wm_value        text NOT NULL,           -- last value loaded successfully
+  last_run_id     uuid REFERENCES runtime.run_log(run_id),
+  updated_at      timestamptz NOT NULL DEFAULT now()
+);"""
+
+WM_STEPS = [
+    ("Read", "Read the last good watermark (low) from runtime.watermark."),
+    ("Fix the window", "Fix the upper end (high) at the start, e.g. the source's current maximum, minus a small safety gap. The run loads only rows above low and up to high, so it never chases a moving target."),
+    ("Load safely", "Write to bronze with a key-based MERGE, so loading the same window twice never doubles a row."),
+    ("Commit once", "Only after the data is committed: mark the run succeeded and move the watermark to high, in one database transaction."),
+    ("Crash in between?", "The watermark did not move, so the next run reloads the same window, and the MERGE makes that harmless."),
+    ("Late rows", "A look-back overlap (say 2 hours, set in dataset_config) re-reads a little of the last window; the MERGE drops the repeats."),
+    ("Files and streams", "Auto Loader and streaming keep their own checkpoints; we record the checkpoint location, not a second watermark. CDC sources use the change position (LSN or SCN); SAP uses its delta token."),
+]
+
+
+# ---------------------------------------------------------------- pipeline observability, ops dashboard, alerts
+def ops_flow():
+    b = []
+    a = b.append
+    srcs = [("Our runtime schema", "run, step, error, quality, watermark"), ("Databricks system tables", "job runs, billing, lineage, audit"),
+            ("Lakehouse Monitoring", "data profiles, drift (check status)"), ("Amazon CloudWatch", "DMS, AppFlow, SiteWise, Aurora")]
+    for i, (t, sub) in enumerate(srcs):
+        y = 20 + i * 70
+        a(rect(20, y, 250, 56, "#F4F4F2") + tx(36, y + 24, t, 15) + tx(36, y + 44, sub, 12, fill="#555"))
+        a(arr(270, y + 28, 340, 160))
+    a(rect(340, 110, 210, 100, "#E6F4EC") + tx(445, 145, "Ops gold", 18, "middle") + tx(445, 168, "one run id joins it all", 12.5, "middle")
+      + tx(445, 188, "Lakehouse Federation reads Aurora", 11.5, "middle", fill="#555"))
+    outs = [("Ops dashboard", "AI/BI, one screen", "#E9EDF8"), ("Alerts", "SQL alerts, job alerts, CloudWatch", "#F8E6EF"), ("Ask about ops", "Genie: what failed last night, why?", "#FFF4D9")]
+    for i, (t, sub, f) in enumerate(outs):
+        y = 40 + i * 90
+        a(arr(550, 160, 620, y + 28))
+        a(rect(620, y, 230, 58, f) + tx(636, y + 25, t, 15) + tx(636, y + 45, sub, 12, fill="#555"))
+    a(arr(850, 158, 900, 158))
+    a(rect(900, 110, 150, 100, "#fff") + tx(975, 145, "On-call person", 15, "middle") + tx(975, 168, "owner from config", 12, "middle") + tx(975, 188, "+ runbook link", 12, "middle"))
+    return svg(1070, 300, "".join(b), "Four sources of signals flow into one ops gold layer, which feeds the ops dashboard, the alerts and an ops Genie space; alerts go to the named owner with a runbook.")
+
+
+def ops_board():
+    b = []
+    a = b.append
+    a(rect(10, 10, 1040, 430, "#fff", r=18))
+    a(tx(30, 44, "Platform ops · today", 20) + tx(1030, 44, "all plants · all data products", 12.5, "end", fill="#555"))
+    tiles = [("Runs", "412", "398 ok · 9 failed · 5 running", "#E6F4EC"), ("Fresh on time", "46 / 48", "2 data products late", "#FFF4D9"),
+             ("Quality", "3 rules", "failing; 1,240 rows parked", "#F8E6EF"), ("Cost today", "$186", "92% of daily budget", "#E9EDF8")]
+    for i, (t, big, sub, f) in enumerate(tiles):
+        x = 30 + i * 252
+        a(rect(x, 64, 236, 96, f) + tx(x + 16, 88, t, 13.5, fill="#555") + tx(x + 16, 124, big, 28) + tx(x + 16, 148, sub, 12))
+    a(rect(30, 178, 500, 244, "#fff") + tx(46, 202, "Freshness against target (SLO)", 14.5))
+    rows = [("OEE per plant", "on time", "#BFE8CF"), ("Scrap rate", "on time", "#BFE8CF"), ("Warranty claims", "late 40 min", "#FFD98A"),
+            ("Dealer sell-out", "on time", "#BFE8CF"), ("Demand plan", "late 3 h", "#F2B8CF"), ("Raw-material cost", "on time", "#BFE8CF")]
+    for i, (n, st, f) in enumerate(rows):
+        y = 220 + i * 32
+        a(tx(46, y + 18, n, 13) + rect(330, y + 3, 180, 22, f, r=8, sw=1.2) + tx(420, y + 19, st, 12, "middle"))
+    a(rect(550, 178, 480, 116, "#fff") + tx(566, 202, "Failures by cause (7 days)", 14.5))
+    for i, (n, v) in enumerate([("source down", 11), ("schema changed", 6), ("bad data", 4), ("our bug", 2)]):
+        y = 216 + i * 18
+        a(tx(566, y + 12, n, 12) + f'<rect x="700" y="{y + 2}" width="{v * 24}" height="12" rx="4" fill="#A3B5DF" stroke="{INK}" stroke-width="1"/>' + tx(708 + v * 24, y + 12, str(v), 11.5))
+    a(rect(550, 306, 480, 116, "#fff") + tx(566, 330, "Run time against its usual (p95)", 14.5))
+    pts = [(570, 400), (620, 392), (670, 396), (720, 388), (770, 394), (820, 390), (870, 398), (920, 372), (970, 352), (1010, 346)]
+    a('<polyline fill="none" stroke="#1F1F1F" stroke-width="1.8" points="' + " ".join(f"{x},{y}" for x, y in pts) + '"/>')
+    a('<line x1="570" y1="372" x2="1010" y2="372" stroke="#C0577A" stroke-width="1.4" stroke-dasharray="6 5"/>' + tx(1010, 366, "usual p95", 11, "end", fill="#C0577A"))
+    return svg(1060, 450, "".join(b), "A sketch of the ops dashboard: four tiles (runs, freshness, quality, cost), a freshness table per data product, failures by cause, and run time against its usual.")
+
+
+OPS_SIGNALS = [
+    ("Our runtime schema (Aurora)", "Every run, step, error, quality result and watermark, with the run id", "Read live through Lakehouse Federation, or copied to Delta every 15 minutes"),
+    ("Databricks system tables", "Job and task runs, billing (DBUs and cost), lineage, audit of who read what", "Already in Unity Catalog; joined on the job run id"),
+    ("Lakehouse Monitoring / data profiling", "Profiles and drift of key tables: nulls, distinct counts, distributions", "Check current status and name; behind our profiling port"),
+    ("Amazon CloudWatch", "Health of AWS movers and the database: DMS lag, AppFlow failures, SiteWise ingestion, Aurora load", "CloudWatch alarms for the AWS side; a daily metrics export joins the ops gold"),
+    ("Data contracts and freshness targets", "What each data product promises: by when, how complete, owner", "From dataset_config; the dashboard checks against them"),
+]
+
+OPS_PANELS = [
+    ("Runs today", "Succeeded, failed, running, skipped; drill to the failing task", "System tables: job and task run timelines", "Ops / on-call"),
+    ("Run time", "Duration against the usual 95th percentile; slow runs before they become late runs", "System tables: job run timeline", "Platform engineers"),
+    ("Cost", "Cost per job, warehouse and cluster against budget", "System tables: billing usage × list prices (CostSherlock adds cost per data product)", "Platform lead, finance"),
+    ("Compute and queries", "Busy or idle clusters, slow SQL queries, who ran what", "System tables: compute, query history, audit", "Platform engineers"),
+    ("Lineage", "What feeds each table and what breaks if it fails", "System tables: table and column lineage", "Data engineers, stewards"),
+    ("Failures by cause", "Source down, schema changed, bad data, our bug; trend over 7 and 30 days", "Mixed: failure state from system tables, the cause class from our error_log", "Platform lead"),
+    ("Freshness against target", "Each data product green, amber or red against its promised time", "Ours: targets in dataset_config, last success in run_log", "Data product owners, business"),
+    ("Quality", "Failing rules, rows parked in quarantine, by dataset and plant", "Ours: dq_result (plus pipeline expectation events)", "Data quality lead, stewards"),
+    ("Volumes", "Rows in and out against the usual range; sudden drops are the early warning", "Ours: run_log", "Ops"),
+    ("Watermark lag", "How far behind each incremental source is", "Ours: watermark", "Ops"),
+    ("AWS movers", "DMS replication lag, AppFlow flow failures, sensor stream delay", "Amazon CloudWatch", "Ops"),
+]
+
+ALERTS = [
+    ("Pipeline failed after retries", "run_log status failed and retries used up", "High", "Teams/Slack + email; pager at night for tier-1 data products"),
+    ("Data product late", "Freshness past the promised time in dataset_config", "High for tier 1, Medium otherwise", "Owner of the data product, on-call"),
+    ("Quality rule set to stop failed", "dq_result failed on a rule whose action is stop", "High", "Data quality lead and steward; the load is held"),
+    ("Volume out of range", "Rows written outside the usual band for that dataset and weekday", "Medium", "On-call; often the first sign of a source problem"),
+    ("Schema changed at source", "Contract check finds a new, missing or retyped column", "Medium", "Data engineer for that source; silver is protected by the contract"),
+    ("Run much slower than usual", "Duration above 2 × the usual p95", "Low", "Platform engineers, next working day"),
+    ("Cost over budget", "Daily or monthly cost per pipeline above its budget", "Medium", "Platform lead and finance (CostSherlock)"),
+    ("Source mover unhealthy", "CloudWatch alarm: DMS lag, AppFlow failure, Aurora CPU or storage", "High", "On-call through Amazon SNS"),
+]
+
+ALERT_RULES = [
+    ("Every alert has an owner", "The owner comes from dataset_config, not from a list someone keeps by hand."),
+    ("Every alert has a runbook", "A link in the message to what to check first and how to re-run safely."),
+    ("One alert per incident", "Repeats are grouped by run id and dataset, so a source outage pages once, not 40 times."),
+    ("Severity follows the data product tier", "Tier 1 (for example OEE for the plant morning meeting) can page at night; tier 3 waits for morning."),
+    ("Every alert is reviewed", "A noisy alert is tuned or removed within a week; an alert nobody acts on is deleted."),
+]
+
+SLOS = [
+    ("Freshness", "Data product ready by its promised time", "OEE per plant by 06:30 for the morning meeting, on 99% of days"),
+    ("Success", "Runs that succeed without a person stepping in", "98% of scheduled runs per week"),
+    ("Quality", "Rows passing every rule", "99.5% of rows in silver; zero failures on stop rules"),
+    ("Recovery", "Time from failure to data back on time", "Under 2 hours for tier-1 data products"),
+]
+
+
+ORCH = [
+    ("Lakeflow Jobs (Databricks)", "Runs every Databricks task: lander, silver, gold, quality, refresh of metric views. Schedules, file-arrival and table-update triggers, retries, alerts, run history in system tables. Generated from metadata, deployed with Asset Bundles.",
+     "Pursue: the main orchestrator", "Everything after the landing folder runs in Databricks, so the orchestrator should too; no second tool to run or pay for."),
+    ("Amazon EventBridge (Scheduler and rules)", "Schedules and events on the AWS side: an S3 file arrived, a DMS task finished, a nightly start time.",
+     "Pursue: for AWS-side triggers only", "Small, serverless, cheap; it starts a mover or calls the Databricks Jobs API."),
+    ("AWS Step Functions", "A visual state machine over AWS services: start an AppFlow flow, wait, run a Lambda, then call a Databricks job.",
+     "Use only if a mover needs several AWS steps", "Good glue for AWS services; avoid putting Databricks steps inside it."),
+    ("Amazon MWAA (managed Airflow)", "Airflow as a service, for many systems beyond Databricks.",
+     "Only if the company already runs Airflow", "A strong tool, but a second orchestrator to operate; Lakeflow Jobs covers our needs."),
+    ("AWS Glue Workflows", "Orchestrates Glue jobs and crawlers.", "Drop", "We do not use Glue jobs for transformation."),
+]
+
+
 def page():
     concerns = []
     for cid, name, one, grp, _link in A.CONCERNS:
@@ -313,6 +528,20 @@ def page():
     genie_table = table(["Need", "Genie", "Our Conversation UI", "Pick", "Verdict"], GENIE_ROWS)
     aws_table = table(["Job", "AWS native", "Databricks", "Verdict"], AWS_VS_DB)
     mistakes = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(MISTAKES))
+    md_table = table(["Table", "What it holds", "Written by"], MD_TABLES)
+    git_table = table(["", "YAML in GitHub", "SQL metadata database"], GIT_VS_DB)
+    db_table = table(["Database on AWS", "Fit", "Verdict", "Why"], DB_OPTIONS)
+    mover_table = table(["Source", "Mover (first hop to S3)", "Note"], MOVERS)
+    schema_table = table(["Schema", "Holds", "Who writes", "Size and retention"], SCHEMAS)
+    log_table = table(["Table", "One row per", "Main columns"], LOG_TABLES)
+    wm_rules = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(WM_STEPS))
+    signals_table = table(["Signal source", "What it tells us", "How it reaches the ops layer"], OPS_SIGNALS)
+    panels_table = table(["Panel", "What it shows", "Built from", "Who looks"], OPS_PANELS)
+    alerts_table = table(["Alert", "Fires when", "Severity", "Goes to"], ALERTS)
+    alert_rules = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(ALERT_RULES))
+    slo_table = table(["Target (SLO)", "Measures", "Example"], SLOS)
+    orch_table = table(["Service", "What it does here", "Verdict", "Why"], ORCH)
+    adf_table = table(["Azure Data Factory part", "On AWS", "On Databricks"], ADF_MAP)
     faq = C.faq(FAQ)
 
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="{BASE}">Data platform architecture</a> › On AWS + Databricks</p>
@@ -321,7 +550,7 @@ def page():
 <p class="lede">The same architecture as <a href="{BASE}">the abstract picture</a>, with a product in every box, for a tyre manufacturer that already runs on AWS and wants Databricks. The design stays the same; only the names change.</p>
 <div class="sib"><a href="{BASE}">↑ The abstract picture</a><a href="/leaders/spec-driven/data-platform/">Spec-driven development for data</a><a href="/learn/medallion-architecture/">Medallion, drawn right</a></div>
 <nav class="toc"><b>On this page</b><ol>
-<li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li>
+<li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li><li><a href="#metadata">Metadata and ingestion</a></li><li><a href="#ops">Observability and alerts</a></li>
 <li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">The right AI/BI</a></li><li><a href="#binding">22 concerns, bound</a></li>
 <li><a href="#aws">AWS native or Databricks</a></li><li><a href="#plan">How we would start</a></li><li><a href="#faq">Questions</a></li></ol></nav>
 
@@ -339,6 +568,71 @@ def page():
 <section id="assets"><p class="eyebrow">Horizontal assets</p><h2>Built once, used by every data product</h2>
 <p>A horizontal asset is something every pipeline needs, whatever the subject. Databricks gives the plumbing; these assets are the parts that make the platform trustworthy and cheap to grow. The status column is honest: some are built, some are designed, some are still to build.</p>
 {assets_table}</section>
+
+<section id="metadata"><p class="eyebrow">Metadata and ingestion on AWS</p><h2>One metadata database, one ingestion framework</h2>
+<p>The Common Ingestion Framework is <b>metadata-driven</b>: adding a source is a few lines of YAML, not a new pipeline. It follows the <a href="https://medium.com/@basant.choudhary09/metadata-db-design-for-data-engineering-components-ingestion-processing-data-quality-data-6b355ad5ecb9">Metadata DB Design for Data Engineering Platforms</a>, already built in our framework. Full table definitions, the view and the reader code are on <a href="{BASE}metadata-store/">the metadata store page</a>.</p>
+<h3>The tables</h3>
+{md_table}
+<p class="note">The framework also has a key registry (every allowed setting and its type), per-column settings, quality results and a PII policy table on the same database.</p>
+
+<h3>YAML in GitHub, and a SQL database</h3>
+<p>We need both, for different jobs. People write and approve settings as YAML in GitHub; a loader validates every key and writes them to the database, one database per environment (dev, test, prod) with the same schema. Pipelines only ever read the database.</p>
+{git_table}
+<p><b>Two rules.</b> Nobody edits configuration in the database by hand: the next load would overwrite it and Git would have no record. Runtime state (watermarks, run log) never goes into Git.</p>
+
+<h3>Which database on AWS</h3>
+<p>The metadata store needs keys between tables, fast small reads and writes, safe parallel writes from many jobs, and good JSON for the merged view. That is a relational database, and PostgreSQL fits the design as written.</p>
+{db_table}
+<p><b>Where it sits:</b> in your AWS account, in a private subnet, in the same region as the Databricks workspace (Mumbai for India; Frankfurt or Ireland if EU data needs its own platform). The password lives in AWS Secrets Manager; Databricks classic compute reaches it over the VPC, and serverless compute through a private endpoint. A copy of <code>run_log</code> lands in Delta every day so dashboards and cost reports can join it.</p>
+
+<h3>Three schemas in one database</h3>
+<p>One PostgreSQL database per environment, split into three schemas so that permissions are simple: the loader may write only <code>config</code> and <code>audit</code>, pipelines may write only <code>runtime</code>, and dashboards read everything.</p>
+{schema_table}
+
+<h3>Logging: every run can be followed and replayed</h3>
+<p>Every run writes to the runtime schema. One run id ties the rows together, and it is also stored on the Databricks job run, so the logs join with Databricks system tables (cost, lineage, audit) and with the quality results.</p>
+{log_table}
+
+<h3>The watermark: load only what is new, safely</h3>
+<p>A watermark is a bookmark: the last value loaded from a source (a timestamp, an id, a change position). The next run starts after it. The danger is moving the bookmark before the data is safely written, or never moving it after a crash. These rules prevent both.</p>
+<div class="rules">{wm_rules}</div>
+{C.code(RUNTIME_DDL, "The two runtime tables most people ask about first. The full config schema is on the metadata store page.")}
+
+<h3>Ingestion: movers bring data in, our lander loads it</h3>
+<p>Ingestion has two steps. A <b>mover</b> brings raw data from the source into an S3 landing folder; which mover is a setting in <code>source_config</code>, so it can change without code. Then <b>one lander</b>, our PySpark job on Databricks using Auto Loader, reads its settings from <code>dataset_view</code>, writes bronze with arrival details, records a <code>run_log</code> row and is safe to run twice. Lakeflow Jobs are generated from the metadata and deployed with Databricks Asset Bundles.</p>
+{mover_table}
+
+<h3>Orchestration: which service runs what, and when</h3>
+<p>One rule: <b>one orchestrator owns each pipeline</b>. Lakeflow Jobs owns everything from the landing folder onwards; AWS services only start the movers on the AWS side and hand over. Two schedulers for the same pipeline is the most common cause of runs that overlap or never start.</p>
+{orch_table}
+
+<p><b>Is there an Azure Data Factory on AWS?</b> Not as one tool; its parts are spread across services. We use them only as movers. The framework itself is Python, so it is tested, reviewed and portable, instead of hundreds of hand-built visual pipelines.</p>
+{adf_table}
+</section>
+
+<section id="ops"><p class="eyebrow">Pipeline observability</p><h2>The ops dashboard and alerts</h2>
+<p>Observability means that when a number looks wrong or a dashboard is late, anyone can see within a minute <b>what ran, what failed, why, and what it cost</b>, without opening a notebook. It is built once as a horizontal asset and switched on for every pipeline from the metadata.</p>
+<figure class="diagram">{ops_flow()}<figcaption>Four sources of signals, one ops layer joined on the run id, three ways out: a dashboard, alerts and questions in plain words.</figcaption></figure>
+
+<h3>Where the signals come from</h3>
+{signals_table}
+
+<h3>The ops dashboard</h3>
+<p>One AI/BI dashboard on the ops gold tables, for everyone from the on-call engineer to the plant's data product owner. Numbers in the sketch are made up.</p>
+<figure class="diagram">{ops_board()}<figcaption>Sketch of the ops dashboard. Every tile drills down to the run, the step and the error.</figcaption></figure>
+<p><b>Start with what Databricks already gives.</b> The first five panels come straight from Databricks <b>system tables</b> (read-only tables in Unity Catalog that record jobs, billing, compute, queries, lineage and audit), with no code of ours. Databricks also ships ready-made usage and job-monitoring dashboards to import and adapt (check current status). We add only what system tables cannot know: the business meaning (which data product, which plant, which target), quality results, row counts, watermarks and the cause of a failure. The job run id stored in our run_log is the join key.</p>
+{panels_table}
+
+<h3>Targets first, then alerts</h3>
+<p>An alert only makes sense against a promise. Each data product states its targets in the metadata; the dashboard shows them and the alerts fire when they are missed.</p>
+{slo_table}
+
+<h3>Alerts</h3>
+<p>Databricks SQL alerts and job notifications cover what happens inside Databricks; CloudWatch alarms with Amazon SNS cover the AWS movers and the database. All of them post to the same Teams or Slack channel and, for tier-1 data products, to the on-call pager.</p>
+{alerts_table}
+<div class="rules">{alert_rules}</div>
+<p><b>Later, self-healing:</b> for known causes (a source briefly down, a late file) an agent may propose the fix and re-run in dev; a person approves before anything touches production.</p>
+</section>
 
 <section id="medallion"><p class="eyebrow">The right medallion</p><h2>One medallion, two speeds</h2>
 <p>The medallion is the row of layers in the middle: bronze (raw), silver (clean) and gold (shaped for the business). Streaming does not need a second architecture. Nightly batches and continuous events flow through <b>the same tables</b>, with the same contracts and the same checks; only the speed differs.</p>
