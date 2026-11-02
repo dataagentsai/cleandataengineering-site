@@ -113,7 +113,7 @@ def big_picture():
     a(arr(610, 72, 610, 84))
     # control plane
     a(link(BASE + "metadata-store/", rect(20, 84, W, 66, "#EAF6EF") + tx(40, 108, "Control plane", 20)
-           + tx(40, 132, "Manifest (YAML in Git) → validator → metadata store  ·  Lakeflow Jobs run the pipelines  ·  Databricks Asset Bundles + CI/CD: dev → test → prod", 15)))
+           + tx(40, 132, "YAML in Git → loader → metadata store  ·  Lakeflow Jobs run the pipelines  ·  Databricks Asset Bundles + CI/CD: dev → pre-prod → prod", 15)))
     a(arr(160, 150, 160, 192, dash=True))
     # bracket over bronze..gold
     x0 = 20 + 3 * 149
@@ -156,7 +156,7 @@ def big_picture():
         y = 58 + k * 87
         a(rect(1228, y, 144, 78, "#fff", r=12) + tx(1300, y + 23, title, 15, "middle")
           + "".join(tx(1300, y + 45 + j * 18, s, 13.5, "middle") for j, s in enumerate(sub)))
-    return svg(1400, 860, "".join(b), "Data platform on AWS and Databricks: agent plane and control plane on top; a spine from plant and business sources through ingestion, S3 landing, bronze, silver, gold, semantic and experiences; a streaming lane; a band of nine horizontal assets; the AWS and Databricks foundation; and a governance rail on the right.")
+    return svg(1400, 860, "".join(b), "Data platform on AWS and Databricks: agent plane and control plane on top; a spine from plant and business sources through ingestion, S3 landing, bronze, silver, gold, semantic and experiences; a streaming lane; a band of ten horizontal assets; the AWS and Databricks foundation; and a governance rail on the right.")
 
 
 # ------------------------------------------------------------------ 2. medallion, two speeds
@@ -217,7 +217,7 @@ def table(head, rows, raw=()):
 ASSET_ROWS = [
     ("CostSherlock", "Cost per data product, per pipeline run and per team, from Databricks billing system tables and the AWS Cost and Usage Report, with findings and fixes.", "Ours, on Databricks + AWS", "Separate briefing"),
     ('<a href="/learn/data-platform-architecture/ingestion/">Common Ingestion Framework</a>', "A new source is a YAML entry, not a new notebook. One lander from landing to bronze, with ingest metadata, replay and watermarks.", "Ours, on Databricks; movers behind a port (DMS, Lakeflow Connect, Auto Loader)", "Built; first end-to-end Databricks run in progress"),
-    ('<a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a>', "One place where every source, table, rule, owner and budget is declared. Pipelines read it; nobody configures by hand.", "Ours; a PostgreSQL database (Amazon RDS or Aurora)", "Built (design published, used by the framework)"),
+    ('<a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a>', "One place where every source, table, rule, owner and budget is declared. Pipelines read it; nobody configures by hand.", "Ours; Aurora PostgreSQL", "Built in the framework (design published); the Aurora deployment is to do"),
     ("Data quality framework", "Rules declared per table, run at every hop, bad rows parked in quarantine, all results in one table.", "Databricks expectations and DQX behind one port; rules from the metadata store", "Partly built: rules from metadata run in silver; 66 assurance rules written"),
     ('<a href="/learn/medallion-architecture/">Medallion template</a>', "Bronze, silver and gold built the same way for every source, with the rules that keep each layer honest.", "Lakeflow Declarative Pipelines", "Built for the first slice"),
     ("Semantic model template", "A starter set of metric views (OEE, scrap rate, first-pass yield, warranty claim rate, sell-out) with owners and definitions.", "Unity Catalog Metric Views", "To build"),
@@ -254,22 +254,22 @@ GENIE_ROWS = [
 
 # concern id -> (coverage, Databricks feature, AWS piece, gap and who fills it)
 BIND = {
-    "X1": ("partial", "Asset Bundles, Unity Catalog tags", "RDS or Aurora PostgreSQL for the metadata store", "Manifest → validator → metadata store → generators. Ours (Common Ingestion Framework)."),
+    "X1": ("partial", "Asset Bundles, Unity Catalog tags", "Aurora PostgreSQL for the metadata store", "YAML in Git → loader → metadata store → generated jobs. Ours (Common Ingestion Framework)."),
     "X2": ("full", "Lakeflow Jobs: schedules, file-arrival triggers, retries", "EventBridge for events from outside", "Jobs generated from metadata, not clicked together. Ours."),
     "X3": ("partial", "Delta schema enforcement and evolution; Auto Loader rescued data", "Glue Schema Registry for streams, if used", "Contracts in the open ODCS standard, checked in CI and at run time. Ours."),
-    "X4": ("partial", "Declarative Pipelines expectations; DQX (Databricks Labs)", "Glue Data Quality, if already used", "Rules from metadata, quarantine, one results table. Ours, with DQX behind a port."),
-    "X5": ("partial", "DQX profiler; Lakehouse Monitoring on tier-1 gold; Unity Catalog classification for PII (" + CHECK + ")", "Glue Data Quality, if already used", "Profiling settings per dataset, profile compared with the last one, suggested rules as pull requests, all tied to the run id. Ours."),
+    "X4": ("partial", "Declarative Pipelines expectations; DQX (Databricks Labs)", "-", "Rules from metadata, quarantine, one results table. Ours, with DQX behind a port."),
+    "X5": ("partial", "DQX profiler; Lakehouse Monitoring on tier-1 gold; Unity Catalog classification for PII (" + CHECK + ")", "-", "Profiling settings per dataset, profile compared with the last one, suggested rules as pull requests, all tied to the run id. Ours."),
     "X6": ("none", "-", "-", "Counts and sums from source to gold, per run. Ours."),
-    "X7": ("full", "Unity Catalog table and column lineage", "-", "Lineage before Databricks (DMS, source systems) via OpenLineage; joined to the run id. Ours."),
+    "X7": ("full", "Unity Catalog table and column lineage", "-", "Lineage before Databricks (movers, source systems) from the run log and mover ids; joined to the run id. Ours."),
     "X8": ("partial", "System tables for jobs, queries, pipeline event logs", "CloudWatch for DMS, Kinesis, MSK", "One run log with one run id across both. Ours."),
     "X9": ("partial", "Job duration alerts; freshness checks in monitoring (" + CHECK + ")", "CloudWatch alarms", "A freshness promise per table, declared in metadata and alerted. Ours."),
     "X10": ("partial", "Billing system tables, budget policies, tags", "Cost and Usage Report, Cost Explorer, Budgets", "Cost per data product and per run, with findings. CostSherlock."),
     "X11": ("full", "Unity Catalog grants, row filters, column masks, ABAC (" + CHECK + ")", "IAM roles, KMS, VPC, PrivateLink", "Grants declared in metadata and applied by the pipeline. Ours."),
-    "X12": ("partial", "Column masks, tags, data classification (" + CHECK + ")", "Macie for personal data in S3; Comprehend for personal data in free text such as warranty notes", "Retention and erase-on-request across every layer. Ours."),
+    "X12": ("partial", "Column masks, tags, data classification (" + CHECK + ")", "Macie scans landing buckets for personal data that slipped through; Comprehend finds names in free text such as warranty notes", "Tokenise at the door, the token vault, erasure, suppression and retention jobs. Ours."),
     "X13": ("partial", "Unity Catalog owners, comments, tags; Metric Views", "-", "Glossary and metric ownership workflow. Ours (OpenMetadata optional)."),
     "X14": ("partial", "Audit system tables", "CloudTrail", "Run log with a fingerprint of the config each run used. Ours."),
     "X15": ("partial", "Delta time travel, MERGE, full refresh of pipelines", "S3 versioning", "Backfill plans and watermark resets from metadata, never doubling a number. Ours."),
-    "X16": ("full", "Asset Bundles, Git folders, Terraform provider", "CodePipeline or GitHub Actions; separate accounts per environment", "Templates only. Ours."),
+    "X16": ("full", "Asset Bundles, Git folders, Terraform provider", "GitHub Actions with short-lived OIDC sign-in; separate accounts per environment", "Templates only. Ours."),
     "X17": ("none", "-", "-", "Unit, contract and data tests (pytest), shift-left checks, DataTwin worlds. Ours, open source."),
     "X18": ("partial", "Time travel, deep clone, job retries", "S3 replication, AWS Backup, a second region", "A written, tested restore drill. Ours."),
     "X19": ("full", "Photon, liquid clustering, predictive optimization, serverless", "-", "Checks in CI and cost findings. Shift-left bundle + CostSherlock."),
@@ -283,7 +283,7 @@ AWS_VS_DB = [
     ("Ingest from SAP", "AppFlow or a partner extractor", "SAP Business Data Cloud connector (" + CHECK + ")", "Use an SAP-certified route (Datasphere or a certified extractor) behind one port; never read SAP tables directly."),
     ("Ingest from databases (CDC)", "AWS DMS", "Lakeflow Connect", "Keep DMS where it already runs; Lakeflow Connect for new supported sources. Both sit behind one port."),
     ("Batch and streaming pipelines", "Glue jobs, EMR", "Lakeflow Declarative Pipelines and Jobs", "Pursue Databricks: one engine for batch and streaming, built-in quality rules and lineage."),
-    ("Warehouse for BI", "Redshift", "Databricks SQL warehouse", "If Redshift is heavily used, keep it and read Delta from it (via Lakehouse Federation or Iceberg, " + CHECK + "); new work on Databricks SQL."),
+    ("Warehouse for BI", "Redshift", "Databricks SQL warehouse", "If Redshift is heavily used, keep it and let it read our tables as Iceberg (UniForm) or through Delta Sharing (" + CHECK + "); new work on Databricks SQL. See the migration plan."),
     ("Ad hoc queries on S3", "Athena", "SQL warehouse", "Keep Athena for small one-off queries; it can read the tables as Iceberg (UniForm)."),
     ("Catalog and access", "Glue Catalog, Lake Formation", "Unity Catalog", "Pursue Unity Catalog as the one catalog: lineage, masks and audit in one place. Avoid running two access models."),
     ("ML and AI", "SageMaker, Bedrock", "Mosaic AI: Vector Search, Model Serving", "Use Databricks for ML on lakehouse data; call Bedrock models from Databricks where the company already uses Bedrock."),
@@ -296,7 +296,7 @@ FAQ = [
     ("Why Databricks if we already have Glue, EMR and Redshift?", "One engine for batch and streaming, one catalog (Unity Catalog) for access, lineage and audit, and AI/BI with Genie on the same governed data. You do not have to switch everything at once: keep what works and put new work on the lakehouse."),
     ("What is a metric view?", "A definition of a business metric (for example, scrap rate) stored once in Unity Catalog, with its formula, dimensions and filters. Dashboards, Genie and the Conversation UI all use it, so the number is the same everywhere."),
     ("What are horizontal assets?", "Parts built once and reused by every pipeline and data product: ingestion, metadata, quality, cost, testing and the conversation layer. They are what makes the tenth data product much cheaper than the first."),
-    ("How are compound recipes and personal data protected?", "Recipes and formulation data sit in a restricted catalog with tag-based access; personal data of dealers, fleet drivers and consumers is tagged in silver and masked by Unity Catalog column masks and row filters for every reader, not only in dashboards. All data stays in India (Mumbai, with recovery in Hyderabad); personal data from EU plants and dealers is kept to the minimum, and a separate EU platform is added only if your legal team requires it. Access is audited in system tables and CloudTrail."),
+    ("How are compound recipes and personal data protected?", "Recipes and formulation data sit in a restricted catalog with its own storage and encryption key, readable only by a named group. Personal data of dealers, fleet drivers and consumers is swapped for tokens as it enters the platform; the real values live only in a separate token vault, and erasing a person means deleting their vault entry. Commercial columns such as prices are masked by Unity Catalog for everyone outside finance and sales, in every tool, not only in dashboards. All data stays in India (Mumbai, with recovery in Hyderabad); personal data from the EU travels only as the law allows (see the privacy section), and a separate EU platform is added only if your legal team requires it. Access is audited in system tables and CloudTrail."),
 ]
 
 
@@ -306,7 +306,7 @@ MD_TABLES = [
     ("source_master", "One row per source system: SAP S/4HANA, MES, historian, quality LIMS, warranty, dealer DMS", "Through YAML"),
     ("source_config", "Key-value settings per source, grouped (ingestion, quality, cost): connection secret reference, mover, schedule", "Through YAML"),
     ("dataset_master", "One row per dataset (table) of a source, with its target schema and table", "Through YAML"),
-    ("dataset_config", "Key-value settings per dataset: load mode, keys, history (SCD) type, quality rules, PII tags, owner", "Through YAML"),
+    ("dataset_config", "Key-value settings per dataset: load mode, keys, history (SCD) type, profiling settings, PII purpose and retention, owner and deputy, freshness target and tier. Quality rules have their own table, dq_rule", "Through YAML"),
     ("dataset_view", "The one view every pipeline reads: platform, then source, then dataset settings merged into JSON, the most specific winning", "Generated"),
     ("run_log", "One row per run: dataset, status, row counts, cost, and a fingerprint of the exact settings used", "Pipelines"),
     ("watermark", "How far each incremental load has got", "Pipelines"),
@@ -316,7 +316,7 @@ GIT_VS_DB = [
     ("What it holds", "Configuration: sources, datasets, load modes, keys, rules, owners, PII tags, budgets",
      "The same configuration loaded from Git, plus runtime state: watermarks, run log, quality results"),
     ("Who writes it", "People, and agents, by pull request", "The loader writes configuration; pipelines write runtime state"),
-    ("Why we need it", "Review and approval, full history, easy rollback, the same file promoted dev → test → prod",
+    ("Why we need it", "Review and approval, full history, easy rollback, the same file promoted dev → pre-prod → prod",
      "Fast lookups, keys between tables, the merged view, many jobs writing at once"),
     ("Do pipelines read it?", "Never", "Always"),
 ]
@@ -396,11 +396,11 @@ CREATE TABLE runtime.watermark (
 WM_STEPS = [
     ("Read", "Read the last good watermark (low) from runtime.watermark."),
     ("Fix the window", "Fix the upper end (high) at the start, e.g. the source's current maximum, minus a small safety gap. The run loads only rows above low and up to high, so it never chases a moving target."),
-    ("Load safely", "Write to bronze with a key-based MERGE, so loading the same window twice never doubles a row."),
+    ("Load safely", "Append to bronze, every row stamped with the run id. Bronze is never updated, so replay always works. If a crash means a window lands twice, silver's duplicate step keeps one copy, so no number doubles."),
     ("Commit once", "Only after the data is committed: mark the run succeeded and move the watermark to high, in one database transaction."),
-    ("Crash in between?", "The watermark did not move, so the next run reloads the same window, and the MERGE makes that harmless."),
-    ("Late rows", "A look-back overlap (say 2 hours, set in dataset_config) re-reads a little of the last window; the MERGE drops the repeats."),
-    ("Files and streams", "Auto Loader and streaming keep their own checkpoints; we record the checkpoint location, not a second watermark. CDC sources use the change position (LSN or SCN); SAP uses its delta token."),
+    ("Crash in between?", "The watermark did not move, so the next run reloads the same window, and silver's duplicate step makes that harmless."),
+    ("Late rows", "A look-back overlap (say 2 hours, set in dataset_config) re-reads a little of the last window; silver drops the repeats."),
+    ("Files and streams", "Auto Loader and streaming keep their own checkpoints; we record the checkpoint location, not a second watermark. CDC sources use the change position (LSN or SCN). SAP moves its own delta token when it hands over an extract, so after a failure we never ask SAP again: we replay from landing or bronze."),
 ]
 
 
@@ -416,7 +416,7 @@ SILVER_STEPS = [
     ("Keep history", "SCD Type 1 (overwrite) or Type 2 (keep every version), as set per dataset."),
     ("Handle deletes", "Soft-delete with a flag and the time; never lose the row."),
     ("Merge and log", "One MERGE, then the run log row and a count reconcile with bronze."),
-    ("Tag", "Personal-data and recipe columns tagged so Unity Catalog masks apply."),
+    ("Tag", "Confidential and recipe columns tagged so Unity Catalog masks apply. Personal columns arrive as tokens already and are tagged too, so nobody joins them back to the vault by accident."),
 ]
 
 
@@ -440,7 +440,7 @@ GOLD_DECISIONS = [
 
 BUS = ["Date", "Plant", "Press", "Shift", "Material", "Dealer", "Customer / fleet", "Defect"]
 BUS_MATRIX = [
-    ("Production", "one row per press per hour", "11111000"),
+    ("Production", "one row per press per hour, split by batch type (production or trial)", "11111000"),
     ("Downtime", "one row per stop", "11110000"),
     ("Scrap", "one row per scrapped tyre batch", "11111001"),
     ("Quality tests", "one row per test result", "11101001"),
@@ -467,7 +467,7 @@ MULTI_INPUT = [
 
 METRICS = [
     ("OEE", "Availability × performance × quality, each computed from sums (run time over planned time; ideal cycle time × count over run time; good tyres over all tyres)", "Press, shift, plant, day", "Plant operations head"),
-    ("Scrap rate", "Scrapped tyres over tyres cured", "Press, material, defect, day", "Quality head"),
+    ("Scrap rate", "Scrapped tyres over tyres cured, production batches only. Both counts come from the production fact; the breakdown by defect comes from the scrap fact, whose totals reconcile with it", "Press, material, day; defect through the scrap fact", "Quality head"),
     ("First-pass yield", "Tyres passing every test the first time, over tyres tested", "Plant, material, day", "Quality head"),
     ("Downtime hours", "Sum of stop durations, by cause", "Press, cause, shift", "Maintenance head"),
     ("On-time in-full (OTIF)", "Order lines delivered complete and on the promised date, over all order lines", "Plant, customer, week", "Supply chain head"),
@@ -478,7 +478,7 @@ METRICS = [
 SEMANTIC_RULES = [
     ("Metrics read gold only.", "Never silver, never another metric view's output."),
     ("Ratios are computed at query time, from sums.", "Never store a percentage and never average percentages: the average of three plants' OEE is not the company's OEE."),
-    ("Every metric has an owner, a definition in plain words and a certified tag.", "Changing a definition is a pull request, approved by the owner, and the benchmark questions run again before it merges."),
+    ("Every metric has an owner, a definition in plain words and a certified tag.", "Changing a definition is a pull request approved by the owner, who also updates the expected benchmark answers in the same pull request. Metric views recompute history with the new definition, so the change is logged with its date and shown on dashboards; where last year must stay comparable, the old definition is kept as a second measure for a year. Metrics that share a part (OEE's quality part and scrap rate) share one definition of it."),
     ("Shift metrics use plant local time.", "Stored in UTC, reported in the plant's time, so the night shift is not split across two days."),
     ("Joins live in the metric view.", "Pre-joined or pre-summed tables only when a dashboard is measured slow or costly, and then as materialized views in gold."),
     ("Front ends read metric views.", "Direct access to gold is for analysts and data scientists only."),
@@ -497,6 +497,8 @@ joins:
 dimensions:
   - name: Plant
     expr: press.plant_name
+  - name: Batch type
+    expr: source.batch_type
   - name: Press
     expr: press.press_code
   - name: Compound family
@@ -506,8 +508,10 @@ dimensions:
 measures:
   - name: Tyres cured
     expr: SUM(source.tyres_cured)
-  - name: Scrap rate
-    expr: SUM(source.tyres_scrapped) / NULLIF(SUM(source.tyres_cured), 0)
+  - name: Scrap rate                                  # production batches only
+    expr: SUM(source.tyres_scrapped) FILTER (WHERE source.batch_type = 'production') / NULLIF(SUM(source.tyres_cured) FILTER (WHERE source.batch_type = 'production'), 0)
+  - name: Completeness                                # share of expected press-hours that arrived
+    expr: SUM(source.hours_received) / NULLIF(SUM(source.hours_expected), 0)
   - name: Availability
     expr: SUM(source.run_minutes) / NULLIF(SUM(source.planned_minutes), 0)"""
 
@@ -522,7 +526,8 @@ GENIE_RULES = [
     ("One space per audience, not one for everything.", "A small, curated space answers better than a large one; keep each to the views its audience needs."),
     ("Metric views first.", "They carry the definitions, so Genie picks a defined metric instead of inventing a formula."),
     ("Write instructions and example questions.", "Plant names and their short forms, which date to use, what 'last week' means, with worked examples."),
-    ("Benchmark before go-live and after every change.", "A set of questions with known right answers; the space goes live at 90% right or better, and a change that lowers the score does not merge."),
+    ("Benchmark before go-live and after every change.", "A set of questions with known right answers, run once per role with test identities, so filtered answers are checked too; the space goes live at 90% right or better, and a change that lowers the score does not merge."),
+    ("Say when a filter applied.", "The space instructions make Genie say 'for your plant' when the person's row filter narrowed the answer, so one plant's figure is never read as the company's."),
     ("Read the thumbs-down every week.", "Each wrong answer becomes a fix to the instructions or a new benchmark question."),
     ("Security comes from the catalog.", "Genie runs as the person asking, so a plant manager sees only that plant's rows."),
 ]
@@ -548,18 +553,19 @@ def star():
 SENSITIVITY = [
     ("Internal", "Production counts, OEE, scrap, downtime, stock", "prod_gold, prod_semantic", "Every employee group that needs it; plant staff see their own plant's rows", "Row filter by plant"),
     ("Confidential", "Prices, dealer discounts, margins, cost per tyre", "prod_gold.sales, columns tagged confidential", "Finance and sales groups", "Column mask for everyone else"),
-    ("Personal", "Dealer contacts, fleet drivers, consumers who register a warranty, operator ids on shift logs", "Tokenised at the lander; real values only in the token vault", "Almost nobody needs the real value; the warranty team for a live claim", "Tokens everywhere, mask on the vault, purpose and retention per category"),
-    ("Restricted", "Compound recipes, cure recipes, process settings", "prod_restricted only, its own bucket and key", "The named recipe custodians", "No Genie space, no copies, every read alerted"),
+    ("Personal", "Dealer contacts, fleet drivers, consumers who register a warranty, operator ids on shift logs, names inside free-text warranty notes", "Tokenised at the lander; real values only in the token vault (prod_pii_vault, its own bucket and key)", "Almost nobody needs the real value; the warranty team for a live claim", "Tokens everywhere, mask on the vault, purpose and retention per category"),
+    ("Restricted", "Compound recipes, cure recipes, process settings", "prod_restricted only, its own bucket and key", "The named recipe keepers", "No Genie space, no copies except the encrypted recovery copy, every read alerted"),
 ]
 
 ROLES = [
     ("Platform engineer", "Read and write in dev; read prod_ops", "Deploys only through CI/CD"),
     ("Data engineer", "Read and write in dev; read pre-prod", "Never writes to prod by hand"),
-    ("Analyst, data scientist", "Read prod_gold and prod_semantic", "Personal and confidential columns masked"),
+    ("Analyst, data scientist", "Read prod_gold and prod_semantic", "Personal data only as tokens; confidential columns masked"),
     ("Plant manager, shift lead", "Read prod_semantic; dashboards and the Plant performance Genie space", "Own plant's rows only"),
-    ("Quality engineer", "Read quality and manufacturing gold and metric views", "Personal data in warranty claims masked"),
+    ("Quality engineer", "Read quality and manufacturing gold and metric views", "Personal data only as tokens"),
     ("Sales and finance", "Read sales gold and metric views, confidential columns visible", "Own region's rows for regional managers"),
-    ("Recipe custodian", "Read prod_restricted", "Named people, reviewed monthly"),
+    ("Recipe keeper", "Read prod_restricted", "Named people, reviewed monthly"),
+    ("Privacy case handler", "Read and erase in prod_pii_vault", "The privacy team and, for a live claim, the warranty team; every lookup logged"),
     ("Auditor", "Read audit system tables and the audit schema", "No business data"),
     ("Service principals", "One per pipeline area; write only their own target schemas in prod", "The only identities that write to prod"),
 ]
@@ -569,20 +575,23 @@ ACCESS_MECH = [
     ("Tags set from metadata", "In silver, the pipeline tags each column as personal, confidential or recipe, from dataset_config. Nobody tags by hand."),
     ("Policies on tags", "One policy per tag masks the column for every table that carries it, through attribute-based access control (" + CHECK + "). Where that is not yet available, the pipeline generates a column mask per table from the same tags."),
     ("Row filters by plant and region", "A small mapping table (group to plants, group to regions), loaded from Git like all config, drives one row-filter function used on every fact table."),
-    ("Grants from metadata", "Grants are declared in YAML next to the datasets and applied by the deploy, so the catalog always matches Git and drift is reported."),
+    ("Grants from metadata", "Catalog-level grants live in Terraform; schema and table grants are declared in YAML next to the datasets and applied by the deploy, so the catalog always matches Git and drift is reported."),
 ]
 
 ERASURE = [
     ("Request arrives", "From the privacy team's case system, with the person's identifier."),
-    ("Find the token", "Look up the person's token in the vault (prod_restricted.pii_vault)."),
+    ("Find the token", "Look up the person's token in the vault (prod_pii_vault)."),
     ("Find every place", "Lineage and tags list every table holding that token: silver, gold, quarantine tables."),
-    ("Erase", "Delete the vault row first: from that moment the token points to nobody. Then delete or blank the token's rows in silver, including old SCD2 versions, and rebuild the affected gold windows."),
-    ("Clean old files", "Delta keeps old file versions for 30 days; after VACUUM, the data is gone from storage. Bronze and landing only ever held the token."),
+    ("Erase", "Delete the vault row first: from that moment the token points to nobody. Add a one-way fingerprint of the identifier to the suppression list, so a re-sent extract cannot bring the person back. Then blank the token's rows in silver, including old SCD2 versions, and rebuild the affected gold windows. Where the law requires a claim to be kept (product liability), the claim stays and only the identity goes."),
+    ("Erase the copies", "Run the same erasure on the recovery copies in Hyderabad, and delete the person's files from landing, including old versions."),
+    ("Clean old files", "Delta keeps old file versions for 30 days; after VACUUM, the data is gone from storage. Bronze only ever held the token. No table may be restored to a version from before an erasure; if one is, the erasure log is replayed straight after."),
     ("Record evidence", "Write what was erased, where and when to the audit schema, and close the case."),
 ]
 
 PRIVACY_RULES = [
-    ("Tokenise at the door.", "The lander swaps names, phone numbers and emails for tokens before bronze. Bronze stays append-only and still holds nothing personal, so erasure never fights the replay design."),
+    ("Tokenise at the door.", "The lander swaps names, phone numbers and emails for tokens before bronze, and checks the suppression list. Free-text fields such as warranty notes go through personal-data detection (Amazon Comprehend) and names found are tokenised too. Bronze stays append-only and still holds nothing personal, so erasure never fights the replay design."),
+    ("Real values never wait in landing.", "Files from sources with personal data use their own landing folder, deleted one day after the lander has read them, with old versions expiring the same day. Macie scans landing weekly for personal data in the wrong place."),
+    ("EU personal data leaves the EU only on a legal basis.", "India has no EU adequacy decision, so personal data from EU plants and dealers travels under the company's Standard Contractual Clauses with a transfer impact assessment, or is tokenised in the EU before it leaves. Your legal team picks; until then, EU sources are loaded without personal columns."),
     ("A purpose for every personal column.", "dataset_config records why it is kept (warranty claim handling, dealer payments) and for how long; columns without a purpose are not loaded."),
     ("Retention runs itself.", "A nightly job deletes personal data past its retention period and logs what it removed."),
     ("Consent stays at the source.", "Warranty and dealer systems collect consent; we load the consent flag and filter on it, we never decide it."),
@@ -591,9 +600,10 @@ PRIVACY_RULES = [
 
 AI_GOV = [
     ("Genie and the Conversation UI run as the person asking.", "Row filters and masks apply exactly as in a dashboard."),
-    ("prod_restricted is never added to a Genie space or an agent's tools.", "Recipes are not answerable in plain words, by design."),
+    ("prod_restricted and prod_pii_vault are never added to a Genie space or an agent's tools.", "Recipes and real identities are not answerable in plain words, by design."),
     ("Models run inside the platform or your AWS account.", "Databricks-hosted models or Amazon Bedrock in your account; no data is sent to a public chat service."),
-    ("Every question and answer is logged.", "With the person, the metric used and the SQL the engine ran, kept in prod_ops for review."),
+    ("Every question and answer is logged.", "With the person, the metric used and the SQL the engine ran, in a separate schema (prod_ops.ai_log) that only the space owners and the platform lead can read, because answers carry other plants' figures and prices."),
+    ("Row security is tested, not assumed.", "The gold-to-metrics test runs as a plant-manager test identity and must see one plant only, through every metric view and every Genie space. It is a release gate."),
 ]
 
 GOV_ROLES = [
@@ -623,7 +633,7 @@ DEPLOYS = [
     ("Accounts, network, buckets, keys, workspaces, catalogs", "Terraform", "platform-foundation"),
     ("Jobs, pipelines, dashboards", "Databricks Asset Bundles", "data-platform"),
     ("Sources, datasets, rules, profiling settings", "Our config loader, into the metadata database", "data-platform"),
-    ("Metric views, row filters, masks, grants", "SQL run by the deploy, generated from YAML", "data-platform"),
+    ("Metric views, row filters, masks, schema and table grants", "SQL run by the deploy, generated from YAML", "data-platform"),
     ("Genie spaces", "Their definitions in Git, applied through the Genie API (" + CHECK + ")", "data-platform"),
 ]
 
@@ -632,21 +642,21 @@ PIPE_STAGES = [
     ("Merge to main", "Deploy to dev; per-hop integration tests on fixed fixtures", "Dev workspace, fresh schema per run", "about 20 minutes"),
     ("Release tag", "Deploy to pre-prod; end-to-end on synthetic data, DataTwin faults, real-data run on shallow clones, parallel run against prod, Genie benchmarks", "Pre-prod workspace", "an hour or two"),
     ("Approval", "The release report goes to the data owner of each changed area; one approval per area", "GitHub environment approval", "same day"),
-    ("Prod deploy", "Deployed by the prod service principal; risky changes to one plant first, then all", "Prod workspace", "minutes"),
+    ("Prod deploy", "Deployed by the prod service principal; risky changes to one plant first for one full day, promoted to all only if the smoke checks and reconciliations stay green", "Prod workspace", "minutes, then one day"),
     ("After deploy", "Smoke checks: first runs green, row counts within band, metrics within band", "Prod", "first run"),
 ]
 
 ENVS = [
     ("Dev", "Synthetic data and small samples; no personal data", "Data and platform engineers", "Small serverless; jobs stop after 2 hours; budget alert"),
-    ("Pre-prod", "Shallow clones of prod, personal data already tokens, recipes excluded", "Engineers read; CI writes", "Like prod, for an hour or two per release"),
-    ("Prod", "Real data", "Read through groups; only service principals write", "Sized for the plants' shifts; budget policies per data product"),
+    ("Pre-prod", "Shallow clones of prod, personal data already tokens, recipes and the vault excluded", "CI writes and reads prod; engineers see results", "Like prod, for an hour or two per release; DataTwin's nightly run happens in dev"),
+    ("Prod", "Real data", "Read through groups; only service principals write; personal access tokens off for people", "Sized for the plants' shifts (see sizing); budget policies per data product"),
 ]
 
 CICD_RULES = [
     ("No secrets in CI.", "GitHub Actions signs in to AWS and Databricks with short-lived OIDC tokens (" + CHECK + " for Databricks), not stored keys."),
-    ("A config change is a deploy.", "A new rule or source goes through the same pipeline, with lighter gates when no code changed."),
-    ("Breaking schema changes are versioned.", "Adding a column is automatic; renaming or removing one needs a new contract version, a migration step and a notice to consumers."),
-    ("Rollback is redeploying the last tag.", "If wrong data was written, Delta RESTORE takes the table back to the version before the run; the run id says which version."),
+    ("A config change is a deploy.", "A new rule or source goes through the same pipeline, with lighter gates when no code changed, except changes to quality limits, watermarks and grants, which always take the full gates."),
+    ("Breaking schema changes are versioned.", "A new column passes: it lands in bronze and is ignored until someone maps it. A removed, renamed or narrowed column stops at silver's contract check and needs a new contract version, a migration step and a notice to consumers."),
+    ("Rollback is redeploying the last tag.", "If wrong data was written for one plant, recompute only that plant's windows with the previous tag, so good runs for other plants are kept; watermarks are reset by a backfill plan, not by hand. A whole-table RESTORE only when every later run is also wrong, and never to a version before an erasure. The platform lead decides rollback or fix."),
     ("Small, frequent releases.", "Trunk-based: short branches, merged within a day or two, released weekly or on demand."),
 ]
 
@@ -672,7 +682,7 @@ def cicd_flow():
 # ---------------------------------------------------------------- agents (tier T10)
 AGENTS = [
     ("Triage", "An alert opens an incident", "Collects the evidence: the failed run, the error, recent config and code changes, upstream lineage, CloudWatch for the mover. Writes a diagnosis and the likely cause class into the incident.", "Read only"),
-    ("Fix proposer", "A diagnosed incident with a known cause", "Drafts the fix as a pull request (a widened type, a new rule limit, a watermark reset plan), and proves it in dev by re-running the failed window.", "Pull request + dev"),
+    ("Fix proposer", "A diagnosed incident with a known cause", "Starts only after a person has confirmed the triage diagnosis. Drafts the fix as a pull request (a widened type, a new rule limit, a watermark reset plan), and proves it by re-running the failed window on a shallow clone in pre-prod.", "Pull request + pre-prod clone"),
     ("Rule suggester", "A new profile or a full quarantine table", "Explains what changed in plain words and drafts quality rule changes for the steward.", "Pull request"),
     ("Source onboarder", "A sample file or a database table from a new source", "Drafts the source and dataset YAML, the contract and the first quality rules.", "Pull request"),
     ("Genie curator", "Thumbs-down answers and failed benchmark questions", "Drafts better instructions, example questions and new benchmark questions for the space owner.", "Pull request"),
@@ -683,16 +693,169 @@ AGENTS = [
 AUTONOMY = [
     ("Read", "ops tables, metadata, lineage, code, profiles", "All agents"),
     ("Propose", "Open a pull request; comment on an incident", "All agents"),
-    ("Act in dev", "Deploy a branch to dev and re-run a window there", "Fix proposer only"),
+    ("Act on a test copy", "Deploy a branch and re-run a window on a pre-prod shallow clone", "Fix proposer only"),
     ("Act in prod", "Change data, config or code in prod", "None. Prod changes only through the normal release path, approved by a person"),
 ]
 
 AGENT_RULES = [
-    ("Each agent is its own service principal.", "With read access to prod_ops and the metadata, and no access to prod_restricted or to the token vault: agents see tokens, never personal data."),
+    ("Each agent is its own service principal.", "With read access to prod_ops and the metadata, and no access to prod_restricted or prod_pii_vault: agents see tokens, never personal data."),
     ("Tools are listed, not open.", "Each agent gets a short list of tools (read a run, read lineage, open a pull request); no general SQL on prod."),
     ("Every step is logged.", "Prompts, tool calls and outputs go to prod_ops with the incident id, so a reviewer can see why the agent said what it said."),
-    ("Tested before trusted.", "The DataTwin faults are the agents' exam: the triage agent must name the planted cause for each fault before it is switched on, and again after every change."),
+    ("Tested before trusted, measured after.", "The DataTwin faults are the agents' exam: the triage agent must name the planted cause for each fault before it is switched on, and again after every change. In production, its cause is compared with the cause the person closes the incident with, and the hit rate is on the ops dashboard."),
     ("Models stay in the account.", "Databricks-hosted models or Amazon Bedrock in your AWS account."),
+]
+
+
+
+# ---------------------------------------------------------------- running it (design test fixes)
+SIZING = [
+    ("Plants", "7: five in India, two in Europe; three shifts", "Plant is the first key for clustering, row filters and canary releases"),
+    ("Machines streaming", "About 2,000 curing presses and mixers, 20 signals each, one reading every 5 seconds: about 8,000 readings a second, 700 million a day", "Streaming tables read Kinesis directly; about 10 GB a day once compressed in Delta"),
+    ("Business data", "SAP: about 200,000 order and delivery lines a day; 3,000 dealers sending daily sell-out; about 2,000 warranty claims a day", "Batch every 30 minutes in plant hours, full nightly"),
+    ("Size after five years", "About 25 TB, mostly sensor history", "Bronze sensor data older than 3 years moves to cheaper storage"),
+    ("Freshness", "A reading reaches silver within 5 minutes; press-hour gold within 15 minutes after the hour; OEE ready by 06:30", "These are the tier-1 targets the alerts watch"),
+    ("People asking", "About 400 dashboard users, 50 queries at once at the peak (06:00 to 07:30, morning meetings)", "Dashboards answer in under 5 seconds for 95% of views; Genie in under 30 seconds"),
+    ("What the platform is not", "Machine alarms and safety interlocks stay on the plant floor (SiteWise Edge, the machines' own controls)", "The platform is for analysis and decisions, not for stopping a press"),
+]
+
+STREAM_RULES = [
+    ("One path for sensors.", "SiteWise or IoT Core at the plant edge, Amazon Kinesis Data Streams in Mumbai, a streaming table into bronze, cleaned per minute into silver, hourly gold as a materialized view."),
+    ("Late readings have a limit.", "Streams wait 2 hours for late readings (an event-time watermark). Anything later lands in bronze and is picked up by the gold window recompute, so it is never lost."),
+    ("Replay has a window.", "Kinesis keeps 7 days; bronze keeps everything after that. Checkpoints live in S3 per environment."),
+    ("If the link to AWS drops,", "the edge buffers readings and sends them when the link is back (" + CHECK + " for buffer size); OEE for those hours shows as incomplete until they arrive."),
+]
+
+RECOVERY = [
+    ("Bronze", "S3 cross-region replication to Hyderabad (tokens only)", "15 minutes", "Registered as tables in the Hyderabad catalog"),
+    ("Silver, gold, recipes, token vault", "Incremental Delta deep clone every 4 hours", "4 hours", "Registered on the clones; erasures since the last clone are replayed"),
+    ("Metadata database (Aurora)", "Aurora Global Database with a copy in Hyderabad (" + CHECK + "; otherwise snapshots copied every hour)", "Seconds (or 1 hour)", "Promote the copy; watermarks and run log carry on"),
+    ("Unity Catalog", "Not copied: Hyderabad has its own catalog, built from Git", "Nothing lost", "Terraform builds catalogs and catalog grants; the data-platform deploy adds schema grants, row filters, masks, metric views and Genie spaces"),
+    ("Streams", "Checkpoints are not copied", "Gap filled from the edge buffer", "Streams restart from the last bronze row"),
+    ("Code and config", "In GitHub", "Nothing lost", "Deployed as in any release"),
+]
+
+RECOVERY_STEPS = [
+    ("Declare.", "The head of IT, or their deputy, declares the disaster. Nobody else can."),
+    ("Build.", "Terraform with dr.tfvars builds the workspace and catalogs in Hyderabad. The network path is already in place: the Transit Gateway in Hyderabad is peered and the Direct Connect gateway reaches both regions."),
+    ("Lock, then secure.", "Readers are locked out. The data-platform deploy applies every grant, row filter and mask, then the row-security test runs as plant-manager and analyst test identities."),
+    ("Open by tier.", "Tier-1 data products open first (target: 24 hours), the rest within 72 hours. Dashboards show a banner saying the platform is running from recovery."),
+    ("Fail back.", "When Mumbai returns, clone the changed tables back, reconcile counts, switch the movers, and close the incident with a review."),
+    ("Rehearse.", "Twice a year, against the clock, with the results in the ops dashboard."),
+]
+
+RETENTION = [
+    ("Landing", "30 days; files with personal data 1 day"),
+    ("Bronze", "3 years in standard storage, then archive storage (tokens only)"),
+    ("Silver", "8 years for anything that supports the accounts (as Indian company law asks for books of account); 5 years for the rest"),
+    ("Gold", "10 years, for trends"),
+    ("Quarantine tables", "90 days after the steward's decision"),
+    ("Runtime and ops tables", "13 months live, then summarised"),
+    ("AI question log", "1 year"),
+    ("Audit bucket", "7 years, locked"),
+    ("Token vault", "Per purpose: for warranty, the warranty period plus 3 years; then the entry is deleted and the tokens point to nobody"),
+]
+
+MASTER = [
+    ("Plant: country, time zone, financial calendar", "SAP plant master, plus a small YAML file for time zone", "Plant operations head"),
+    ("Press: line, ideal cycle time per material", "MES press master; ideal cycle times from process engineering (YAML if not in MES)", "Process engineering head"),
+    ("Shift calendar and planned stops", "MES, or a YAML file per plant", "Each plant manager"),
+    ("Material and compound family", "SAP material master", "SAP master data team"),
+    ("Key mappings (SAP and MES material, dealer ids across systems)", "Mapping tables in silver, kept from SAP or YAML", "The steward of that domain; an unmapped key becomes 'unknown' and raises an alert"),
+    ("Defect codes", "The quality system", "Quality head"),
+]
+
+ONBOARD = [
+    ("Network path", "How the source reaches AWS (head office link, plant VPN, SaaS over a private endpoint)."),
+    ("Mover and secret", "Which mover, and its credentials in Secrets Manager."),
+    ("Source and dataset YAML", "Load mode, keys, history type, schedule, freshness target and tier."),
+    ("Contract", "The ODCS file, agreed with the source's owner."),
+    ("People", "Data owner, steward and their deputies, and the CODEOWNERS entry."),
+    ("Personal data", "Which columns, the purpose and retention of each, or a statement that there is none."),
+    ("Quality rules", "The first rules, then profiling switched on to suggest more."),
+    ("Master data", "Key mappings, and for a new plant its time zone, shift calendar and ideal cycle times."),
+    ("Access", "For a new plant, the row-filter mapping (which groups see it)."),
+    ("Tests", "A DataTwin profile for the source, so its faults are tested from the first release."),
+]
+
+BACKFILL = [
+    ("A backfill is a plan in Git.", "Dataset, window, reason, expected cost (from CostSherlock), reviewed like any change."),
+    ("It runs on a clone first.", "In pre-prod, compared with prod, before it touches prod."),
+    ("It never moves a watermark.", "A backfill is its own run type; the normal schedule carries on untouched."),
+    ("It runs when it is cheap.", "Outside the 06:00 to 07:30 peak, with its own budget."),
+    ("It is announced.", "The changed gold windows are logged as a restatement and shown on the dashboards."),
+]
+
+SECRETS = [
+    ("One home.", "AWS Secrets Manager holds every password and key reference; Databricks reads them through a Unity Catalog service credential or an IAM role (" + CHECK + "), never a copy."),
+    ("Rotated without people.", "Database passwords rotate every 90 days automatically."),
+    ("Never in Git.", "The shift-left checks block a pull request that contains a secret."),
+    ("No long-lived keys.", "CI signs in with OIDC; people sign in through your identity provider; personal access tokens are off."),
+]
+
+TEAM = [
+    ("Platform team", "About 6: a lead, three data engineers, a cloud engineer, an analytics engineer", "Runs the platform and the horizontal assets; on-call in a weekly rota of four"),
+    ("Security and privacy", "Part-time, from your existing teams", "Reviews access quarterly, owns erasure and breach response"),
+    ("Data owners", "Business heads (plant operations, quality, sales, finance)", "Decide access, sign off metrics and releases in their area"),
+    ("Stewards", "One per source, about two hours a week", "Rules, quarantine reviews, suggested rules"),
+    ("Data forum", "Owners, stewards and the platform lead, monthly", "Priorities, metric changes, the incident and cost trends. This is the 'centre of excellence' the testing page refers to"),
+]
+
+# ---------------------------------------------------------------- migration, sharing, ML
+MIGRATION = [
+    ("Glue jobs", "Rebuilt as metadata-driven pipelines, one subject at a time, each run in parallel with the old job for two weeks", "Counts and sums reconcile for two weeks; then the Glue job is switched off"),
+    ("Redshift", "Kept for existing reports; new gold on Databricks; Redshift reads our tables as Iceberg (UniForm) or through Delta Sharing while reports move", "The last report has moved; then the cluster is shut down"),
+    ("Glue Catalog and Lake Formation", "Unity Catalog is the one catalog for everything new; old Glue tables are read through catalog federation during the move (" + CHECK + ")", "No new grants are made in Lake Formation from day one"),
+    ("QuickSight", "Existing reports repointed to the SQL warehouse; new ones on AI/BI", "Each report reads gold or metric views"),
+    ("Athena", "Kept for small one-off queries on S3", "Nothing to migrate"),
+]
+
+MIGRATION_RULES = [
+    ("Inventory first.", "Every job, table, report and its users, with an owner and a move-or-retire decision."),
+    ("One subject at a time.", "Production first, then quality, then sales, so each move is small and can be undone."),
+    ("Never write twice.", "During a move the old system reads from the new one, not both from the source."),
+    ("Dates for switching off.", "Every old system has an agreed shut-down date, or it never goes."),
+]
+
+SHARING = [
+    ("Car makers (OEMs)", "Quality and traceability of the tyres fitted to their cars, by batch and DOT code", "Delta Sharing (an open protocol, readable without Databricks) of a gold view, filtered to that car maker", "No personal data; contract and owner per share"),
+    ("Dealers", "Their own sell-out, stock and claim status", "The existing dealer portal reads an API over gold, or a Databricks App", "Each dealer sees only their own rows"),
+    ("Suppliers", "Quality results for the lots they delivered", "Delta Sharing", "Filtered to the supplier"),
+    ("Auditors and regulators", "Evidence packs: access reviews, erasure log, release reports", "Exported on request", "Approved by the data owner"),
+]
+
+ML_ROWS = [
+    ("Features", "Feature tables in gold (prod_gold.features), built and tested like any gold table"),
+    ("Models", "Tracked with MLflow and registered in Unity Catalog, with the same owners and grants"),
+    ("Serving", "Batch scoring for forecasts; Model Serving where an app needs an answer in seconds"),
+    ("First use", "Weekly demand forecast per material and region; later, predicting press breakdowns from sensor history"),
+    ("Checks", "Each model is evaluated against a held-out period before release and watched for drift after (" + CHECK + " for inference tables)"),
+]
+
+# ---------------------------------------------------------------- open decisions and the design test
+OPEN = [
+    ("Can serverless compute reach Aurora and the plant network privately?", "Decides whether the lander runs serverless or on classic compute", "Platform lead", "Before the crawl starts"),
+    ("Do row filters hold through metric views, and can outside BI tools query them?", "The whole Genie and dashboard security rests on it", "Platform lead and analytics engineer, by test", "Crawl, week 2"),
+    ("Are tag-based access policies (ABAC) available in Mumbai?", "If not, the deploy generates a mask per table from the same tags", "Platform lead", "Crawl, week 1"),
+    ("Which route out of SAP?", "Licence and support terms decide it", "SAP team and procurement", "Before the walk phase"),
+    ("What is the legal basis for EU personal data in India?", "Until decided, EU sources load without personal columns", "Legal team", "Before the first EU source"),
+    ("Is Aurora Global Database available in Hyderabad?", "Sets the metadata recovery point: seconds or one hour", "Platform lead", "Before go-live"),
+    ("What are the DPDP Rules timelines for breach notice?", "Fills in the breach runbook", "Legal team", "Before go-live"),
+    ("Can Genie be embedded and driven by API?", "Decides how much of the Conversation UI we build", "Product owner", "Walk phase"),
+]
+
+DESIGN_TEST = [
+    ("A new EU plant's MES must reach OEE within a sprint", "Passes with gaps", "Passes", "EU network path, master data owners, onboarding checklist, EU legal basis"),
+    ("SAP renames a column without warning", "Passes with gaps", "Passes", "Contract check fixed at silver; replay from landing, never re-extract from SAP; freshness shown on every metric"),
+    ("A press goes silent for 3 hours on the night shift", "Fails", "Passes", "Gold writes incomplete rows instead of stopping; a completeness measure; a silent-press alert; paging by tier"),
+    ("A warranty file arrives two days late", "Passes with gaps", "Passes", "Restatements logged and shown; freshness alerts grouped by date; warranty tier and target stated"),
+    ("A consumer in Germany asks to be erased", "Fails", "Passes, once legal picks the basis", "Vault in its own catalog; landing purged in a day; recovery copies erased; suppression list; free text scanned; no restore across an erasure"),
+    ("Scrap rate is redefined to exclude trial batches", "Passes with gaps", "Passes", "One source for scrap rate; batch type in gold; definition changes dated; owner updates benchmarks"),
+    ("A release is wrong for one plant", "Passes with gaps", "Passes", "Recompute that plant only; canary for a full day; business banner; platform lead decides"),
+    ("The Mumbai region is down for a day", "Fails", "Passes", "Recovery per layer with targets; security deployed before readers; metadata database copied; network ready; who declares"),
+    ("A plant manager asks Genie for all plants", "Passes with gaps", "Passes, once the metric-view test is green", "Row security as a release test; 'for your plant' wording; AI log restricted"),
+    ("An engineer joins, a recipe keeper leaves", "Passes with gaps", "Passes", "Owners checked against the identity provider nightly; deputies; personal access tokens off; pre-prod sees results only"),
+    ("The bill doubles overnight", "Passes with gaps", "Passes", "Cost-jump alert on the whole account; runbook to pause and shrink within the hour; cost as a cause"),
+    ("An agent's diagnosis is wrong", "Passes with gaps", "Passes", "A person confirms the diagnosis; proof on a pre-prod clone; full gates for limits and watermarks; hit rate tracked"),
 ]
 
 
@@ -701,8 +864,8 @@ FOUNDATION = [
     ("AWS accounts", "One AWS account per environment: dev, pre-prod, prod. All three sit under your AWS Organization and send logs to your central security and log accounts.",
      "A mistake in dev cannot touch prod, permissions stay simple, and each environment's bill is separate."),
     ("Region", "Mumbai (ap-south-1) is home. Hyderabad (ap-south-2) holds the recovery copy.",
-     "Both are in India, so recovery does not move data out of the country."),
-    ("EU plants", "Plant and production data from EU plants comes to Mumbai too. Personal data about EU people (staff, dealers) is kept to the minimum, masked where possible.",
+     "Both are in India, so recovery does not move data out of the country. The full recovery plan is in the running-it section."),
+    ("EU plants", "Plant and production data from EU plants comes to Mumbai too. Personal data about EU people (staff, dealers, consumers) moves only under the legal basis your legal team picks, and is tokenised on arrival.",
      "Press readings and scrap counts are not personal data. One platform costs half of two. A separate EU platform (Frankfurt) only if your legal team requires it."),
     ("Databricks workspaces", "Three workspaces (dev, pre-prod, prod) on one Unity Catalog. Each catalog is bound to its workspace, so prod tables are visible only in prod.",
      "Databricks allows one Unity Catalog per region, so the three share it; binding keeps the environments apart."),
@@ -721,25 +884,28 @@ FOUNDATION = [
 ASSUMPTIONS = [
     ("Is there already an AWS landing zone (Control Tower or similar)?", "Yes, with central security and log-archive accounts", "If not, we add a minimal one first: an Organization, CloudTrail to a log account, guardrails (SCPs). About a week."),
     ("Which identity provider?", "Microsoft Entra ID", "Okta or another SAML / OIDC provider works the same way; only the Terraform settings change."),
-    ("How do plants reach AWS?", "Direct Connect from the head office, plants on the company network (MPLS or SD-WAN)", "With only VPN, sensor streaming is sized smaller and the plant historian is pulled in batches."),
+    ("How do plants reach AWS?", "Direct Connect from the head office, Indian plants on the company network (MPLS or SD-WAN); EU plants through a site-to-site VPN to the Mumbai Transit Gateway", "With only VPN, sensor streaming is sized smaller and the plant historian is pulled in batches."),
     ("Where does SAP run?", "SAP S/4HANA on AWS (RISE) or in a data centre linked to AWS", "The mover changes (see the ingestion table); the foundation does not."),
-    ("Must EU data stay in the EU?", "Not for plant data; personal data minimised", "If yes for everything, add a fourth workspace in Frankfurt on its own Unity Catalog, and share gold tables back with Delta Sharing."),
+    ("Must EU data stay in the EU?", "Not for plant data; personal data under Standard Contractual Clauses", "If yes for everything, add a fourth workspace in Frankfurt on its own Unity Catalog, and share gold tables back with Delta Sharing."),
 ]
 
 BUCKETS = [
-    ("landing-&lt;env&gt;", "Raw files from the movers, as they arrived", "Environment key", "Files deleted 30 days after they reach bronze; versioning on"),
+    ("landing-&lt;env&gt;", "Raw files from the movers, as they arrived", "Environment key", "Files deleted 30 days after they reach bronze; versioning on, old versions expire with them"),
+    ("landing-pii-&lt;env&gt;", "Raw files from sources with personal data", "Its own key", "Deleted one day after the lander reads them; old versions expire the same day"),
+    ("&lt;env&gt;-pii-vault", "The token vault and the suppression list", "Its own key; only privacy case handlers", "Every lookup logged"),
     ("&lt;env&gt;-bronze, -silver, -gold, -semantic, -ops", "The managed tables of each catalog", "One key per catalog", "Delta handles history; old versions cleaned by VACUUM after 30 days"),
     ("&lt;env&gt;-restricted", "Recipes and compound formulations", "Its own key; only the recipe group can use it", "Access logged and reviewed monthly"),
     ("audit-&lt;env&gt;", "Copies of audit and config change logs", "Environment key", "Object Lock: cannot be changed or deleted for 7 years"),
-    ("dr-* (Hyderabad)", "Copies of prod gold and restricted, for recovery", "Keys in Hyderabad", "S3 replication; restore tested twice a year"),
+    ("dr-* (Hyderabad)", "Recovery copies: bronze, silver, gold, restricted and the vault", "Keys in Hyderabad, same groups", "See the recovery plan; erasures are applied here too; restore tested twice a year"),
 ]
 
 BINDING = [
     ("dev_* catalogs", "Read and write", "Not visible", "Not visible"),
     ("preprod_* catalogs", "Not visible", "Read and write", "Not visible"),
-    ("prod_bronze, prod_silver, prod_gold, prod_semantic", "Not visible", "Read only (for real-data tests and shallow clones)", "Jobs write; people read through grants"),
+    ("prod_bronze, prod_silver, prod_gold, prod_semantic", "Not visible", "Read only, by the CI service principal (for real-data tests and shallow clones); people in pre-prod see the results, not the prod rows", "Jobs write; people read through grants"),
     ("prod_restricted", "Not visible", "Not visible", "Recipe group only"),
-    ("prod_ops", "Not visible", "Read only", "Pipelines write; everyone on the platform reads"),
+    ("prod_pii_vault", "Not visible", "Not visible", "Privacy case handlers only"),
+    ("prod_ops", "Not visible", "Read only", "Pipelines write; everyone on the platform reads, except the ai_log schema"),
 ]
 
 TF_TREE = """foundation/                     # Terraform, one folder per layer, applied in this order
@@ -747,7 +913,7 @@ TF_TREE = """foundation/                     # Terraform, one folder per layer, 
   2-network/      VPC per env, private subnets in 2 zones, endpoints (S3, STS, Kinesis), PrivateLink
   3-storage/      buckets and KMS keys per catalog, IAM roles Databricks may assume
   4-databricks/   workspaces, metastore, catalogs, workspace bindings, external locations
-  5-identity/     SCIM groups, service principals, grants on catalogs
+  5-identity/     service principals, catalog-level grants (groups come from your identity provider)
   envs/           dev.tfvars, preprod.tfvars, prod.tfvars, dr.tfvars   # the only differences"""
 
 
@@ -785,31 +951,29 @@ def foundation_map():
 
 # ---------------------------------------------------------------- data quality and profiling (tier T3)
 DQ_ENGINES = [
-    ("DQX (Databricks Labs)", "Default for every PySpark step: the lander, bronze to silver, the gold recompute jobs",
+    ("DQX (Databricks Labs)", "Every PySpark step: the lander, the gold window-recompute jobs, and any silver table not built as a Declarative Pipeline",
      "Pursue", "Rules as data (YAML or a table), row-level and table-level checks, splits good and bad rows, has a profiler that suggests rules. Open source, so no lock-in. Labs project: " + CHECK + " for support terms."),
     ("Lakeflow expectations", "Inside Declarative Pipelines (silver and gold tables built that way)",
-     "Pursue", "Native to the pipeline, results land in the pipeline event log, no extra code. We generate them from the same rules, so a rule is written once."),
+     "Pursue", "The default for silver and gold built as Declarative Pipelines. Native to the pipeline, results land in the pipeline event log, no extra code. We generate them from the same rules, so a rule is written once."),
     ("Plain Spark SQL", "Fallback: any rule the two above cannot express, such as a reconcile across two tables",
-     "Pursue", "A predicate in SQL: rows where it is true are the bad rows. This is how the framework's rules already work today."),
+     "Pursue", "A predicate in SQL: rows where it is true are the bad rows. This is how the framework's rules already work today; DQX is not yet wired into the framework."),
     ("Great Expectations, Soda", "Not used", "Drop", "Good tools, but a second rule language and a second results store. DQX plus expectations already cover the need inside Databricks."),
     ("AWS Glue Data Quality", "Only if a team already uses it on Glue jobs", "Drop", "Runs outside Databricks; results would not join our run id without extra work."),
 ]
 
 DQ_HOPS = [
-    ("Landing to bronze", "Contract check: expected columns and types, file not empty, row count against the source's count",
-     "Stop on a contract break; nothing else is checked here, bronze keeps the data as it arrived"),
-    ("Bronze to silver", "Row rules: not null, ranges, allowed values, keys unique, references exist (press, plant, material)",
+    ("Landing to bronze", "File checks only: readable, not empty, row count against the source's count. New or unexpected columns are kept (rescued data)",
+     "Stop on an unreadable or empty file; bronze keeps everything else as it arrived, so it can be replayed"),
+    ("Bronze to silver", "First the contract check (promised columns and types), then row rules: not null, ranges, allowed values, keys unique, references exist (press, plant, material)",
      "Bad rows go to the silver table's quarantine table; good rows carry on. Stop only if the bad share passes a limit"),
-    ("Silver to gold", "Table rules: totals reconcile with silver, no gaps in the press-hour grain, share of 'unknown' members under a limit",
-     "Stop: a wrong gold number is worse than a late one"),
-    ("Gold to semantic", "Metric checks: OEE between 0 and 100%, scrap rate against last month's band",
-     "Warn, and flag the metric on the dashboard"),
+    ("Silver to gold", "Table rules: totals reconcile with silver, share of 'unknown' members under a limit, and every expected press-hour present",
+     "Stop if totals do not reconcile: a wrong gold number is worse than a late one. A missing press-hour does not stop the load: it is written as an incomplete row, so the number is on time and says it is incomplete"),
+    ("Gold to semantic", "Metric checks: OEE between 0 and 100%, scrap rate against last month's band, completeness of the period shown",
+     "Warn, and flag the metric on the dashboard; every dashboard and Genie answer shows how complete and how fresh the data is"),
 ]
 
 DQ_TABLES = [
     ("config.dq_rule", "One row per rule: dataset, layer, the check, when it runs, severity, action (warn, quarantine, stop), who wrote it, whether it was suggested by the profiler",
-     "The loader, from YAML in Git"),
-    ("config.profile_setting", "Per dataset: is profiling on, when it runs, which columns, sample size, may it suggest rules",
      "The loader, from YAML in Git"),
     ("runtime.dq_result", "One row per rule per run: passed or failed, failing row count, action taken, time taken",
      "Pipelines"),
@@ -841,7 +1005,7 @@ dataset: mes.press_reading
 layer: silver
 rules:
   - name: press_known
-    check: press_id IN (SELECT press_id FROM prod_silver.mes.press)
+    check: press_id IN (SELECT press_id FROM ${silver}.mes.press)   # ${silver} = dev_silver, preprod_silver or prod_silver
     severity: error
     action: quarantine
   - name: cure_temp_in_range
@@ -926,7 +1090,7 @@ def ops_flow():
         a(rect(620, y, 230, 58, f) + tx(636, y + 25, t, 15) + tx(636, y + 45, sub, 12, fill="#555"))
     a(arr(850, 158, 900, 158))
     a(rect(900, 110, 150, 100, "#fff") + tx(975, 145, "On-call person", 15, "middle") + tx(975, 168, "owner from config", 12, "middle") + tx(975, 188, "+ runbook link", 12, "middle"))
-    return svg(1070, 300, "".join(b), "Four sources of signals flow into one ops gold layer, which feeds the ops dashboard, the alerts and an ops Genie space; alerts go to the named owner with a runbook.")
+    return svg(1070, 300, "".join(b), "Four sources of signals, plus the targets from the metadata, flow into one ops gold layer, which feeds the ops dashboard, the alerts and an ops Genie space; alerts go to the named owner with a runbook.")
 
 
 def ops_board():
@@ -960,7 +1124,7 @@ OPS_SIGNALS = [
     ("Our runtime schema (Aurora)", "Every run, step, error, quality result and watermark, with the run id", "Copied into prod_ops every 15 minutes (see below)"),
     ("Databricks system tables", "Job and task runs, billing (DBUs and cost), lineage, audit of who read what", "Already in Unity Catalog; joined on the job run id"),
     ("Lakehouse Monitoring / data profiling", "Profiles and drift of key tables: nulls, distinct counts, distributions", "Check current status and name; behind our profiling port"),
-    ("Amazon CloudWatch", "Health of AWS movers and the database: DMS lag, AppFlow failures, SiteWise ingestion, Aurora load", "CloudWatch alarms for the AWS side; a daily metrics export joins the ops gold"),
+    ("Amazon CloudWatch", "Health of AWS movers and the database: DMS lag, AppFlow failures, SiteWise ingestion, Aurora load", "CloudWatch alarms for the AWS side; a metric stream lands in prod_ops every 5 minutes"),
     ("Data contracts and freshness targets", "What each data product promises: by when, how complete, owner", "From dataset_config; the dashboard checks against them"),
 ]
 
@@ -982,18 +1146,20 @@ ALERTS = [
     ("Pipeline failed after retries", "run_log status failed and retries used up", "High", "Teams/Slack + email; pager at night for tier-1 data products"),
     ("Data product late", "Freshness past the promised time in dataset_config", "High for tier 1, Medium otherwise", "Owner of the data product, on-call"),
     ("Quality rule set to stop failed", "dq_result failed on a rule whose action is stop", "High", "Data quality lead and steward; the load is held"),
-    ("Volume out of range", "Rows written outside the usual band for that dataset and weekday", "Medium", "On-call; often the first sign of a source problem"),
+    ("Volume out of range", "Rows written outside the usual band for that dataset and weekday; for streams, per 15-minute window", "Medium", "On-call; often the first sign of a source problem"),
+    ("A press went silent", "A press in the press master sent no reading for 30 minutes during a planned shift", "Follows the tier of OEE", "Plant maintenance and on-call; one silent press is too small to move a volume band, so it gets its own check"),
     ("Schema changed at source", "Contract check finds a new, missing or retyped column", "Medium", "Data engineer for that source; silver is protected by the contract"),
     ("Run much slower than usual", "Duration above 2 × the usual p95", "Low", "Platform engineers, next working day"),
-    ("Cost over budget", "Daily or monthly cost per pipeline above its budget", "Medium", "Platform lead and finance (CostSherlock)"),
+    ("Cost over budget", "Daily or monthly cost per pipeline, per SQL warehouse or for the AWS side above its budget", "Medium", "Platform lead and finance (CostSherlock)"),
+    ("Cost jump", "Yesterday's total cost (Databricks and AWS) more than 1.5 × its 7-day average", "High", "Platform lead; the runbook can pause tier-3 schedules and shrink warehouses within the hour"),
     ("Source mover unhealthy", "CloudWatch alarm: DMS lag, AppFlow failure, Aurora CPU or storage", "High", "On-call through Amazon SNS"),
 ]
 
 ALERT_RULES = [
-    ("Every alert has an owner", "The owner comes from dataset_config, not from a list someone keeps by hand."),
+    ("Every alert has an owner and a deputy", "Both come from dataset_config. A nightly check compares every named owner with your identity provider; a leaver is flagged to the data owner the next morning."),
     ("Every alert has a runbook", "A link in the message to what to check first and how to re-run safely."),
     ("One alert per incident", "Repeats are grouped by run id and dataset, so a source outage pages once, not 40 times."),
-    ("Severity follows the data product tier", "Tier 1 (for example OEE for the plant morning meeting) can page at night; tier 3 waits for morning."),
+    ("Severity follows the data product tier", "Paging: a High alert on a tier-1 product pages at any hour; on tier 2 it pages during plant hours; tier 3 and every Medium or Low alert wait for working hours. OEE for the morning meeting is tier 1; warranty claims are tier 2, due 09:00 daily."),
     ("Every alert is reviewed", "A noisy alert is tuned or removed within a week; an alert nobody acts on is deleted."),
 ]
 
@@ -1001,7 +1167,7 @@ SLOS = [
     ("Freshness", "Data product ready by its promised time", "OEE per plant by 06:30 for the morning meeting, on 99% of days"),
     ("Success", "Runs that succeed without a person stepping in", "98% of scheduled runs per week"),
     ("Quality", "Rows passing every rule", "99.5% of rows in silver; zero failures on stop rules"),
-    ("Recovery", "Time from failure to data back on time", "Under 2 hours for tier-1 data products"),
+    ("Recovery from a failed run", "Time from failure to data back on time", "Under 2 hours for tier-1 data products (losing a region is covered by the recovery plan, not this target)"),
 ]
 
 
@@ -1029,9 +1195,10 @@ OPS_MODEL = [
 ]
 
 INCIDENT_RULES = [
-    ("Alerts open incidents; incidents are what people work.", "Several alerts about one cause (a source down, forty datasets late) group into one incident by source and time window."),
+    ("Alerts open incidents; incidents are what people work.", "Several alerts about one cause (a source down, forty datasets late) group into one incident by source and time window. Freshness alerts, which have no run, group by dataset and expected date."),
     ("Every incident has an owner from the metadata.", "The data product's owner and the source's engineer, never a shared mailbox."),
-    ("Close with a cause class.", "Source down, schema change, bad data, our bug, platform, capacity. The trend of causes tells us what to fix next."),
+    ("If business users saw a wrong or late number, tell them.", "A banner on the affected dashboards and a note to the metric owner, from the incident, until it is closed. Recomputed history is logged as a restatement in ops and shown the same way."),
+    ("Close with a cause class.", "Source down, schema change, bad data, our bug, platform, capacity, cost. The trend of causes tells us what to fix next."),
     ("Tier-1 incidents get a short review.", "What happened, why the tests did not catch it, and the new test or rule that will. Each review adds a DataTwin fault."),
 ]
 
@@ -1100,11 +1267,13 @@ TEST_LAYERS = [
     ("Contract tests", "Each contract is valid, and a change does not break consumers (a removed column, a narrowed type, a renamed key)",
      "ODCS schema validation + a breaking-change diff against the last released version", "Pull request"),
     ("Integration tests", "One slice end to end on real Databricks: lander, silver with SCD2, gold, metric view; run twice to prove re-runs change nothing; reconciliation counts and sums agree",
-     "Databricks Asset Bundles deploy to the dev workspace on a fresh schema per pull request; small fixed sample files in S3", "After merge, in dev"),
+     "Databricks Asset Bundles deploy to the dev workspace on a fresh schema per run; small fixed sample files in S3", "After merge, in dev"),
     ("DataTwin", "A pretend plant and business that produce data for 30 simulated days with faults planted on purpose; checks that the platform caught each one, held bad data back, and every number is accounted for",
-     "DataTwin (designed; the DataTwin Studio and Problem Lab are built and run on real Spark and Delta)", "Nightly and before each release"),
+     "DataTwin (designed; the DataTwin Studio and Problem Lab are built and run on real Spark and Delta)", "Nightly in dev, and before each release in pre-prod"),
+    ("Pre-production run", "The release on real data: shallow clones of prod, a parallel run against prod with every difference explained, profiles compared, Genie benchmarks per role",
+     "The pre-prod workspace and the CI service principal", "Every release"),
     ("Production checks", "Contract check at silver, quality rules with warn / quarantine / stop, freshness and volume alerts",
-     "Lakeflow expectations or DQX behind our quality port; rules from dataset_config", "Every run"),
+     "Lakeflow expectations or DQX behind our quality port; rules from config.dq_rule", "Every run"),
 ]
 
 TWIN_FAULTS = [
@@ -1192,6 +1361,22 @@ def page():
     agents_table = table(["Agent", "Starts when", "Does", "May"], AGENTS)
     autonomy_table = table(["Level", "Means", "Who"], AUTONOMY)
     agent_rules = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(AGENT_RULES))
+    sizing_table = table(["What", "We assume", "What it means for the design"], SIZING)
+    stream_rules = '<div class="rules">' + "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(STREAM_RULES)) + "</div>"
+    recovery_table = table(["Layer", "How it is copied", "Most data lost (RPO)", "How it comes back"], RECOVERY)
+    recovery_steps = '<div class="rules">' + "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(RECOVERY_STEPS)) + "</div>"
+    retention_table = table(["Layer", "Kept for"], RETENTION)
+    master_table = table(["Master data", "Comes from", "Owner"], MASTER)
+    onboard_steps = '<div class="rules">' + "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(ONBOARD)) + "</div>"
+    backfill_rules = '<div class="rules">' + "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(BACKFILL)) + "</div>"
+    secret_rules = '<div class="rules">' + "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(SECRETS)) + "</div>"
+    team_table = table(["Who", "Size", "Does"], TEAM)
+    migration_table = table(["What you have", "How it moves", "Done when"], MIGRATION)
+    migration_rules = '<div class="rules">' + "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(MIGRATION_RULES)) + "</div>"
+    sharing_table = table(["Partner", "What they get", "How", "Protection"], SHARING)
+    ml_table = table(["Part", "How"], ML_ROWS)
+    open_table = table(["Open question", "Why it matters", "Who decides", "By when"], OPEN)
+    test_result_table = table(["Situation", "First test", "After fixes", "What changed"], DESIGN_TEST)
     found_table = table(["Decision", "Our pick", "Why"], FOUNDATION)
     assume_table = table(["Question", "We assume", "If it is different"], ASSUMPTIONS)
     bucket_table = table(["Bucket", "Holds", "Key", "Rules"], BUCKETS, raw=(0,))
@@ -1211,8 +1396,8 @@ def page():
 <div class="sib"><a href="{BASE}">↑ The abstract picture</a><a href="/leaders/spec-driven/data-platform/">Spec-driven development for data</a><a href="/learn/medallion-architecture/">Medallion, drawn right</a></div>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#minute">The one-minute version</a></li><li><a href="#picture">The big picture</a></li><li><a href="#assets">Horizontal assets</a></li><li><a href="#foundation">The foundation</a></li><li><a href="#metadata">Metadata and ingestion</a></li><li><a href="#quality">Data quality and profiling</a></li><li><a href="#ops">Observability and alerts</a></li><li><a href="#testing">Testing and data contracts</a></li>
-<li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">Gold, semantic layer and AI/BI</a></li><li><a href="#security">Security and privacy</a></li><li><a href="#cicd">CI/CD and environments</a></li><li><a href="#agents">Agents</a></li><li><a href="#binding">22 concerns, bound</a></li>
-<li><a href="#aws">AWS native or Databricks</a></li><li><a href="#plan">How we would start</a></li><li><a href="#faq">Questions</a></li></ol></nav>
+<li><a href="#medallion">The right medallion</a></li><li><a href="#aibi">Gold, semantic layer and AI/BI</a></li><li><a href="#security">Security and privacy</a></li><li><a href="#cicd">CI/CD and environments</a></li><li><a href="#agents">Agents</a></li><li><a href="#run">Running it</a></li><li><a href="#edges">Migration, sharing and ML</a></li><li><a href="#binding">22 concerns, bound</a></li>
+<li><a href="#aws">AWS native or Databricks</a></li><li><a href="#plan">How we would start</a></li><li><a href="#open">Open decisions</a></li><li><a href="#design-test">How we tested this design</a></li><li><a href="#faq">Questions</a></li></ol></nav>
 
 <section id="minute"><p class="eyebrow">The one-minute version</p><h2>Your account, your data, one catalog</h2>
 <div class="answer">
@@ -1251,7 +1436,7 @@ def page():
 <h3>Built from code</h3>
 <p>The foundation is Terraform in Git, applied in five steps. The environments differ only in one settings file each, so dev, pre-prod and prod are the same platform at different sizes.</p>
 {C.code(TF_TREE, "Folder layout of the foundation code. Pipelines are not here: they are deployed with Asset Bundles.")}
-<p><b>Recovery:</b> if Mumbai is lost, the same Terraform with <code>dr.tfvars</code> builds the workspace in Hyderabad on the copied buckets. Target: gold tables back within a day (an RTO of 24 hours), losing at most a few hours of data. We rehearse it twice a year.</p>
+<p><b>Recovery:</b> if Mumbai is lost, the same Terraform with <code>dr.tfvars</code> builds the workspace in Hyderabad on the copied data, and the data-platform deploy puts back every grant, filter and mask before anyone can read. The full plan, with targets per layer, is in <a href="#run">running it</a>.</p>
 </section>
 
 <section id="metadata"><p class="eyebrow">Metadata and ingestion on AWS</p><h2>One metadata database, one ingestion framework</h2>
@@ -1261,14 +1446,14 @@ def page():
 <p class="note">The framework also has a key registry (every allowed setting and its type), per-column settings, quality results and a PII policy table on the same database.</p>
 
 <h3>YAML in GitHub, and a SQL database</h3>
-<p>We need both, for different jobs. People write and approve settings as YAML in GitHub; a loader validates every key and writes them to the database, one database per environment (dev, test, prod) with the same schema. Pipelines only ever read the database.</p>
+<p>We need both, for different jobs. People write and approve settings as YAML in GitHub; a loader validates every key and writes them to the database, one database per environment (dev, pre-prod, prod) with the same schema. Pipelines only ever read the database.</p>
 {git_table}
 <p><b>Two rules.</b> Nobody edits configuration in the database by hand: the next load would overwrite it and Git would have no record. Runtime state (watermarks, run log) never goes into Git.</p>
 
 <h3>Which database on AWS</h3>
 <p>The metadata store needs keys between tables, fast small reads and writes, safe parallel writes from many jobs, and good JSON for the merged view. That is a relational database, and PostgreSQL fits the design as written.</p>
 {db_table}
-<p><b>Where it sits:</b> in your AWS account, in a private subnet, in the same region as the Databricks workspace (Mumbai for India; Frankfurt or Ireland if EU data needs its own platform). The password lives in AWS Secrets Manager; Databricks classic compute reaches it over the VPC, and serverless compute through a private endpoint. The runtime tables are copied into Delta every 15 minutes so dashboards and cost reports can join them without touching the database.</p>
+<p><b>Where it sits:</b> in your AWS account, in a private subnet, in the same region as the Databricks workspace (Mumbai; Frankfurt only if EU data must have its own platform). The password lives in AWS Secrets Manager; Databricks classic compute reaches it over the VPC, and serverless compute through a private endpoint. The runtime tables are copied into Delta every 15 minutes so dashboards and cost reports can join them without touching the database.</p>
 
 <h3>Three schemas in one database</h3>
 <p>One PostgreSQL database per environment, split into three schemas so that permissions are simple: the loader may write only <code>config</code> and <code>audit</code>, pipelines may write only <code>runtime</code>, and dashboards read everything.</p>
@@ -1328,7 +1513,7 @@ def page():
 
 <section id="ops"><p class="eyebrow">Pipeline observability</p><h2>The ops dashboard and alerts</h2>
 <p>Observability means that when a number looks wrong or a dashboard is late, anyone can see within a minute <b>what ran, what failed, why, and what it cost</b>, without opening a notebook. It is built once as a horizontal asset and switched on for every pipeline from the metadata.</p>
-<figure class="diagram">{ops_flow()}<figcaption>Four sources of signals, one ops layer joined on the run id, three ways out: a dashboard, alerts and questions in plain words.</figcaption></figure>
+<figure class="diagram">{ops_flow()}<figcaption>Four sources of signals plus the targets from the metadata, one ops layer joined on the run id, three ways out: a dashboard, alerts and questions in plain words.</figcaption></figure>
 
 <h3>Where the signals come from</h3>
 {signals_table}
@@ -1379,7 +1564,7 @@ def page():
 <p>A <b>data contract</b> is a written agreement between the team that produces data and the teams that use it: which columns, what they mean, how fresh, how good, and who owns it. It is written as a YAML file in Git using the open standard <b>ODCS</b> (Open Data Contract Standard, version 3), so it is both readable and checkable by machine. The short answer: <b>yes, at the two boundaries, and no, not everywhere.</b></p>
 {need_table}
 {parts_table}
-<p>Nothing new has to be built to enforce them: the contract check in the lander, the quality rules, the freshness and volume alerts and Unity Catalog tags already do it. The contract simply makes the promise explicit and gives every alert an owner. The open-source <code>datacontract</code> command-line tool can lint ODCS files and test them against the data if a team wants it.</p>
+<p>Nothing new has to be built to enforce them: the contract check at silver, the quality rules, the freshness and volume alerts and Unity Catalog tags already do it. The contract simply makes the promise explicit and gives every alert an owner. The open-source <code>datacontract</code> command-line tool lints the ODCS files and tests them in the pull-request gate.</p>
 </section>
 
 <section id="medallion"><p class="eyebrow">The right medallion</p><h2>One medallion, two speeds</h2>
@@ -1448,10 +1633,10 @@ def page():
 <div class="rules">{privacy_rules}</div>
 <h3>When someone asks to be erased</h3>
 <div class="rules">{erasure_steps}</div>
-<p class="note">Tokenising uses the framework's existing <code>pii_policy</code> table (actions: pass through, hash, mask, tokenise, redact, per environment). The salt and the vault key live in AWS Secrets Manager and KMS.</p>
+<p class="note">Tokenising uses the framework's existing <code>pii_policy</code> table (actions: pass through, hash, mask, tokenise, redact, per environment). The vault is its own catalog, <code>prod_pii_vault</code>, with its own bucket and key, readable only by privacy case handlers; recipe keepers cannot read it, and the privacy team cannot read recipes. The salt and the vault key live in AWS Secrets Manager and KMS.</p>
 
 <h3>Recipes</h3>
-<p>Recipes and process settings sit in <code>prod_restricted</code>, in their own bucket with their own key. Gold carries only the compound family, never the recipe. Only the named custodian group can read it, every read raises a notice to the recipe owner, access is reviewed every month, and revoking the key cuts all access at once. It is never added to Genie or to an agent.</p>
+<p>Recipes and process settings sit in <code>prod_restricted</code>, in their own bucket with their own key. Gold carries only the compound family, never the recipe. Only the named recipe keepers can read it, every read raises a notice to the recipe owner, access is reviewed every month, and revoking the key cuts all access at once. It is never added to Genie or to an agent.</p>
 
 <h3>AI on governed data</h3>
 <div class="rules">{ai_rules}</div>
@@ -1490,6 +1675,57 @@ def page():
 <div class="rules">{agent_rules}</div>
 </section>
 
+<section id="run"><p class="eyebrow">Running it</p><h2>Sizing, recovery, retention and the people</h2>
+<p>A design is only finished when it says how big it is, how it comes back after a disaster, how long it keeps things, and who runs it. The numbers below are our assumptions for a typical tyre maker; each one is a setting, so the design holds if they change.</p>
+
+<h3>Sizing and targets</h3>
+{sizing_table}
+
+<h3>Streaming sensor data</h3>
+{stream_rules}
+
+<h3>Recovery: what comes back, how fast, and what can be lost</h3>
+<p>Two words first. The <b>recovery point</b> (RPO) is how much recent data can be lost; the <b>recovery time</b> (RTO) is how long until people can work again. Different layers get different targets, because they cost different amounts to copy.</p>
+{recovery_table}
+{recovery_steps}
+
+<h3>How long each layer is kept</h3>
+<p>Assumed periods; your legal and finance teams confirm them. Retention jobs run nightly and log what they delete.</p>
+{retention_table}
+
+<h3>Master data: who owns the facts everything joins on</h3>
+<p>OEE is only right if each press's ideal cycle time and each plant's shift calendar are right. These are small tables with big effects, so each has a named owner.</p>
+{master_table}
+
+<h3>Adding a source: the checklist</h3>
+<p>"A new source is a YAML entry" is true for the pipeline. The checklist is everything around it; the source onboarder agent drafts most of it as one pull request.</p>
+{onboard_steps}
+
+<h3>Backfills</h3>
+{backfill_rules}
+
+<h3>Secrets</h3>
+{secret_rules}
+
+<h3>The team</h3>
+{team_table}
+</section>
+
+<section id="edges"><p class="eyebrow">Migration, sharing and ML</p><h2>What you already have, who outside needs data, and models</h2>
+
+<h3>Moving from Glue, Redshift and QuickSight</h3>
+{migration_table}
+{migration_rules}
+
+<h3>Sharing with partners</h3>
+<p>Every share is a data product: it has a contract, an owner and a filter to the partner's own rows, and its use is audited and reviewed every quarter.</p>
+{sharing_table}
+
+<h3>Machine learning</h3>
+<p>Models use the same platform, catalog and release path as everything else; nothing is copied out to a separate ML system.</p>
+{ml_table}
+</section>
+
 <section id="binding"><p class="eyebrow">22 concerns, bound</p><h2>What Databricks gives, what AWS gives, what we add</h2>
 <p>For each of the 22 cross-cutting concerns: reuse what Databricks does well, use AWS where the job sits outside Databricks, and fill only the gap. Every concern is switched on and configured from the metadata store, and every product sits behind a port (a fixed interface), so a product can be swapped without touching the pipelines.</p>
 <p><b>Our main value is joining the dots:</b> one run id links the quality results, lineage, run log, cost and audit for every number, even where every piece underneath is Databricks or AWS.</p>
@@ -1502,10 +1738,21 @@ def page():
 
 <section id="plan"><p class="eyebrow">How we would start</p><h2>One thin slice first</h2>
 <div class="steps3">
-<div><h3>Crawl · 4 to 6 weeks</h3><p>One slice end to end in your AWS account: curing-press sensor data and MES production records to silver, one metric view (OEE or scrap rate), one Genie space for plant managers with benchmark questions.</p><p><b>You see:</b> the whole path working, with quality, lineage and cost on from day one.</p></div>
+<div><h3>Crawl · 4 to 6 weeks</h3><p>One slice end to end in your AWS account: curing-press sensor data and MES production records through silver to one gold fact, one metric view (OEE or scrap rate), one Genie space for plant managers with benchmark questions.</p><p><b>You see:</b> the whole path working, with quality, lineage and cost on from day one.</p></div>
 <div><h3>Walk · next quarter</h3><p>Three to five more sources (SAP sales and stock, quality lab, warranty claims, dealer sell-out). The horizontal assets on by default. CostSherlock reporting cost per data product.</p><p><b>You see:</b> each new source added as a YAML entry, not a project.</p></div>
 <div><h3>Run · after that</h3><p>A small platform team owns the assets; domain teams build data products on them. The Conversation UI in staff apps. Agents propose fixes as pull requests.</p><p><b>You see:</b> the tenth data product faster and safer than the first.</p></div>
 </div></section>
+
+<section id="open"><p class="eyebrow">Open decisions</p><h2>What must be settled before or during the first slice</h2>
+<p>Most items marked "check current status" on this page are product details that do not change the design. These eight do: each has a fallback, an owner and a date.</p>
+{open_table}
+</section>
+
+<section id="design-test"><p class="eyebrow">How we tested this design</p><h2>Twelve situations, walked through before anything was built</h2>
+<p>We tested the design on paper first. Two reviewers who had not written it worked from the page alone. One walked twelve real situations through it step by step; the other checked every section against every other and against 25 topics a complete design must cover. They found 3 situations that failed outright, about 30 places where two sections disagreed, and several topics that were missing (sizing, recovery, migration, sharing). Every finding was fixed in the page above.</p>
+{test_result_table}
+<p class="note">Two situations pass only once an open decision is settled: the EU legal basis, and the metric-view security test. Both are in the open decisions above.</p>
+</section>
 
 <section id="faq"><p class="eyebrow">Questions</p><h2>Questions leaders ask</h2>{faq}</section>
 
