@@ -21,8 +21,12 @@ import sys
 sys.path.insert(0, str(ROOT / "_paths"))
 from data import DISCIPLINES, PLATFORMS  # noqa: E402
 
+# Extra links under a role, after its platforms (2 Nov 2026: vertical agents under AI Engineering).
+ROLE_EXTRAS = {"ai-engineering": [("Vertical agents", "/ai-engineering/vertical-agents/")]}
+
 # One entry per role path (1 Nov 2026, the owner asked to show the roles in Learn), each opening to its platforms.
-ROLES = [(d["name"], f"/paths/{d['id']}/", [(PLATFORMS[p], f"/paths/{d['id']}/{p}/") for p in d["platforms"]])
+ROLES = [(d["name"], f"/paths/{d['id']}/", [(PLATFORMS[p], f"/paths/{d['id']}/{p}/") for p in d["platforms"]]
+          + ROLE_EXTRAS.get(d["id"], []))
          for d in DISCIPLINES]
 
 # (group, [(name, href, [(child, href), ...]), ...])

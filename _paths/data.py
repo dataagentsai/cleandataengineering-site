@@ -219,6 +219,7 @@ READ = {
     "first30": ("Your first 30 days", "/mindset/first-30-days/"),
     "certs": ("Certification prep on this site", "/certifications/"),
     "lab": ("The AgentTwin Lab", "/lab/"),
+    "vertical": ("Vertical agents, by industry", "/ai-engineering/vertical-agents/"),
 }
 
 # Certifications are optional. Names change; check the exam code before booking.
@@ -280,7 +281,7 @@ DISCIPLINES = [
         "who": "You build products and agents where a model does part of the work, safely.",
         "why": "Most of an AI system is ordinary software around a small model call: the tools, the checks, the state, the evaluation and the bill. AI engineers build that harness so the product holds up after the demo.",
         "platforms": ["aws", "azure", "gcp", "databricks", "open"],
-        "read": ["universe", "harness", "series", "evalh", "certs"],
+        "read": ["universe", "harness", "series", "evalh", "vertical", "certs"],
         "levels": {
             "crawl": {"weeks": "6 weeks", "goal": "Call a model, get checked structured output, and give it a few safe tools.",
                       "topics": [("Python and APIs", "HTTP, JSON, async, tests; read an API's docs", ["language", "app_host"]),
