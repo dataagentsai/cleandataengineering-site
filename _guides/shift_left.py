@@ -400,11 +400,11 @@ TESTS
 
 
 def the_bundle():
-    body = f"""<section id="status"><p class="eyebrow">Where it stands</p><h2>Status: plan agreed, no code yet</h2>
-<p>The plan and the reuse check are done, and the eight starting decisions are agreed. Next is the spec: about 60 checks with ids that name no product, each linked to the data assurance obligations it gives evidence for. Then a sample repo with planted problems and a hidden answer key, so catch rates are measured, not claimed. The repo is open: <a href="{REPO}">github.com/dataagentsai/shift-left-bundle</a>.</p>
+    body = f"""<section id="status"><p class="eyebrow">Where it stands</p><h2>Status: the spec is written, no runner yet</h2>
+<p>The plan, the reuse check and the eight starting decisions are done, and so is the spec: 90 checks in 12 families, with ids that name no product, each linked to the data assurance obligations it gives evidence for. 19 block from day one, 55 warn and 16 only report. For Databricks, 54 of the 90 are found by rules that already exist, 33 we write, and 3 tools are on trial. The full list is in the repo's <a href="{REPO}/blob/main/catalog/INDEX.md">catalog index</a>. Then a sample repo with planted problems and a hidden answer key, so catch rates are measured, not claimed. The repo is open: <a href="{REPO}">github.com/dataagentsai/shift-left-bundle</a>.</p>
 {table(["Tier", "What", "Status"], [
         ("0", "Ground: reuse check, decisions, plan, open repo, this guide", "done"),
-        ("1", "Spec v0.1: about 60 checks in 12 families, purity lists, gate policy, Databricks binding, a linter for the catalog", "next"),
+        ("1", "Spec v0.1: 90 checks in 12 families, purity lists, gate policy, Databricks binding, a linter for the catalog", "done"),
         ("2", "Proof material: a sample repo with planted problems, false-alarm traps and a hidden answer key", "next"),
         ("3", "Off-the-shelf tools through one runner, findings as SARIF, gate and baseline, first measured run", "later"),
         ("4", "Cost rules plugged in; young PySpark linters tried; missing plan rules added", "later"),
@@ -456,7 +456,7 @@ def the_bundle():
 <p>Short-lived branches merge into a protected main through pull requests, with the bundle's pull-request job as a required check. Teams pin a version tag of the bundle, so a new rule never breaks them by surprise.</p></section>"""
     qa = [("Do I need SonarQube for a PySpark project?", "No. Ruff, Opengrep, SQLFluff, gitleaks, pip-audit and coverage tools cover the same ground with no server, and SARIF output shows findings on the pull request. SonarQube also has no Spark cost rules."),
           ("What is spec-driven about this bundle?", "The checks are written once, with ids and reasons and no product names. Each platform gets a binding that maps checks to tools, so adding Azure or another platform is a new binding, not new checks."),
-          ("Can I use it today?", "Not yet. The plan and decisions are done; the spec and a measured sample come next. Follow the GitHub repo.")]
+          ("Can I use it today?", "Not yet. The spec is written (90 checks); a measured sample and the runner come next. Follow the GitHub repo.")]
     return "the-bundle", "The shift-left bundle for PySpark and Databricks: spec, bindings and adapters, check families, tools with verdicts, why not SonarQube, git layout and status.", body, qa
 
 
