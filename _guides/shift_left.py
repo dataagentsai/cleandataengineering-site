@@ -31,6 +31,7 @@ PAGES = [
     ("syntax-trees", "Syntax trees", "Every language already has a syntax tree", "Linters read code as a tree. Python, SQL, PySpark and Databricks each have a mature parser."),
     ("pure-functions", "Pure functions", "Pure functions in PySpark: possible, and how we detect them", "Most data logic can be pure. How a tool tells pure, impure and unknown apart."),
     ("tests-and-coverage", "Tests, coverage, complexity", "Unit tests, coverage and complexity for PySpark", "coverage.py, its three blind spots, mutation testing, and a complexity score."),
+    ("data-tests", "Testing data logic offline", "Testing SCD2, idempotency, duplicates and dropped rows without a cluster", "History tracking, reruns, duplicate keys, lost records and cartesian joins, all caught on a laptop."),
     ("clean-code", "Clean code", "Clean-code checks: early return and the rest", "Nested ifs, long functions, dead code. Ruff already has the rules; you switch them on."),
     ("security-and-cost", "Security and cost", "Security, secrets, vulnerable libraries and cost", "What can be caught without running anything, from leaked tokens to cartesian joins."),
     ("whats-missing", "What is missing", "The gap report: what a repo is missing", "Point it at a repo; it lists missing tests, missing checks and missing setup."),
@@ -165,7 +166,7 @@ def how_software_solved_it():
         ("Static analysis in review, low noise", "Show findings on the pull request, on the changed line, and drop any rule developers mostly mark as wrong.", "SARIF format, shown by GitHub code scanning or the Azure DevOps SARIF tab"),
         ("Same checks everywhere", "The laptop and CI run the same configuration.", "pre-commit"),
         ("Ratchet", "Record today's findings; block only new ones; tighten over time.", "a baseline file"),
-        ("Supply-chain hygiene", "Pinned libraries, known-vulnerability scans, no secrets, a scored checklist of repo practices.", "pip-audit, gitleaks, OpenSSF Scorecard")])}</section>
+        ("Supply-chain hygiene", "Pinned libraries, known-vulnerability scans, no secrets, a scored checklist of repo practices.", "osv-scanner, gitleaks, OpenSSF Scorecard")])}</section>
 
 <section id="lesson"><p class="eyebrow">The lesson that matters most</p><h2>Developers ignore noisy tools</h2>
 <p>Large companies that run static analysis at scale learned the same thing: a check is only useful if developers act on it. Findings must appear in the code review, on the line that changed, with a clear fix, and the rate of wrong findings must stay low. A tool with a thousand findings on day one gets switched off.</p>
@@ -297,6 +298,64 @@ COMPLEXITY  gold/kpis.py:build_daily_kpis  cognitive 31, cyclomatic 18, untested
     return "tests-and-coverage", "Unit tests for PySpark as a table of cases, coverage.py and its blind spots, coverage on changed lines, mutation testing, and complexity scores.", body, qa
 
 
+def data_tests():
+    ex = f"{REPO}/tree/main/examples/scd2"
+    body = f"""<section id="plain"><p class="eyebrow">In plain words</p><h2>Yes, without a cluster, if the logic is a pure function</h2>
+<p>"Without running it" means without a cluster, real tables or real data. The code still runs, on a local Spark session with a few hand-made rows. That takes seconds. The trick is the one from {link("pure-functions", "pure functions")}: write SCD2 as <i>history and batch in, new history out</i>. Then the MERGE or overwrite is a thin shell, and every rule is testable.</p>
+<p>The working example is in the repo: <a href="{ex}">examples/scd2</a>. It ran on 2 Nov 2026 on Spark 3.5.1: <b>27 tests passed in about 26 seconds</b> on a laptop.</p></section>
+
+<section id="scd2"><p class="eyebrow">The cases</p><h2>SCD2 as a table of cases</h2>
+<p>Each row is a batch and the history we expect afterwards. These eight cases are where SCD2 code usually breaks:</p>
+{table(["Case", "What must happen"], [
+        ("New customer", "A current version is added"),
+        ("Row with no real change", "Nothing changes"),
+        ("City changed", "The old version is closed on the new date; the new one is current"),
+        ("Two changes for one customer in one batch", "Two versions, in time order; only the last is current"),
+        ("Same row twice in a batch", "Counted once"),
+        ("Row older than the current version (late)", "Not applied, and reported as late, never lost silently"),
+        ("Batch replayed", "Nothing changes"),
+        ("Value changes back to an earlier one", "That is a new version")])}</section>
+
+<section id="properties"><p class="eyebrow">Beyond single cases</p><h2>Five checks that run on every case</h2>
+<p>Hand-written cases check specific answers. These checks hold for <i>every</i> input, so the test kit runs them on each case automatically:</p>
+{table(["Question", "Check", "How"], [
+        ("Is it idempotent?", "assert_idempotent", "Apply the batch, then apply it again to the result. The second run must change nothing."),
+        ("Any duplicates?", "assert_unique", "One current row per customer; no two versions with the same start date."),
+        ("Any records dropped?", "assert_nothing_dropped", "Every input key is in the output or in an explicit rejects list. An inner join that loses orders with no matching store fails this."),
+        ("Did a join multiply rows?", "assert_no_fanout", "Rows out are not more than rows in for a lookup join. A duplicate key in the lookup fails this."),
+        ("Cartesian join?", "assert_no_cartesian", "Read the plan with empty inputs. A join with no key, or an always-true condition, fails this.")])}
+{code("""@pytest.mark.parametrize("name, batch, expected", CASES, ids=IDS)
+def test_scd2_properties(spark, name, batch, expected):
+    hist, b = spark.createDataFrame(BASE, H), spark.createDataFrame(batch, B)
+    out = scd2(hist, b)
+    kit.assert_idempotent(scd2, hist, b)                         # run twice, nothing changes
+    kit.assert_unique(out, ["customer_id"], where="is_current")  # one current version per key
+    kit.assert_unique(out, ["customer_id", "valid_from"])        # no duplicate versions
+    kit.assert_nothing_dropped(b, out, "customer_id", rejects=late_rows(hist, b))
+    kit.assert_no_cartesian(scd2(kit.schema_only(hist), kit.schema_only(b)))""", "From examples/scd2/test_scd2.py.")}
+<p><b>Does the kit catch real bugs?</b> The example plants them: an append-only "SCD2" that never closes versions fails the idempotency and one-current-row checks. An inner join that loses orders fails the dropped-records check. A join with no key fails the cartesian check. A test kit that can't fail is worth nothing, so these planted bugs are part of the tests.</p>
+<p class="warn"><b>A trap we hit.</b> Building the empty inputs with <code>df.limit(0)</code> let Spark notice they were empty and fold the whole join away, so the cartesian product never appeared in the plan. Empty inputs must come from an empty RDD, which Spark can't see through. The kit's <code>schema_only()</code> does that.</p></section>
+
+<section id="draft"><p class="eyebrow">Existing code with no tests</p><h2>Can tests be written backwards from the code?</h2>
+<p>Yes, in three ways, from cheapest to best:</p>
+<ol><li><b>Snapshot tests</b> (syrupy): run the pure function on a small sample and save the output as the expected answer. It pins today's behaviour so a refactor can't change it by accident. It does not say today's behaviour is right.</li>
+<li><b>Property skeletons</b> (Hypothesis ghostwriter): generates test outlines from the function's signature; we add a helper that turns a schema into generated rows with nulls, duplicates and edge dates.</li>
+<li><b>Drafted case tables</b>: Claude reads each untested pure function from the purity report and drafts a table of cases. A drafted test is kept only if mutation testing shows it catches deliberate bugs, so the model never decides on its own that code is tested.</li></ol>
+<p>Pynguin, a research tool that generates unit tests automatically, is on trial; it is unlikely to do well with DataFrame code.</p></section>
+
+<section id="where"><p class="eyebrow">Where it runs</p><h2>Laptop, container, CI: the same tests</h2>
+{table(["Where", "What runs", "Needs"], [
+        ("Laptop", "pre-commit on commit; pytest when you choose", "Java 17, Python, pinned pyspark"),
+        ("Dev container", "The same, in a container with Java 17, Python 3.11 and the pinned libraries", "Docker or a cloud dev environment"),
+        ("CI on GitHub or Azure DevOps", "pre-commit on the changed files, all tests, coverage on changed lines (80%)", "The template pipeline")])}
+<p>Two settings matter everywhere: pin pyspark to the cluster's Spark version, and set <code>PYSPARK_PYTHON</code> to the test's own Python, always. On our machine a shell setting started workers on a different Python and every test failed. The templates are in the repo; they are written but not yet run in a pipeline.</p></section>"""
+    qa = [("Can SCD type 2 logic be unit tested without a cluster?", "Yes. Write it as a pure function (history and batch in, new history out) and test it on a local Spark session with a few rows: new key, no change, change, two changes in one batch, duplicate row, late row, replay, change back. The MERGE that writes the result stays a thin shell."),
+          ("How do I test that a PySpark job is idempotent?", "Apply the batch to the state, then apply the same batch to the result. The second result must equal the first. Run it on every test case, not just one."),
+          ("How do I catch rows silently dropped by a join?", "Check that every input key appears in the output or in an explicit rejects set. An inner join on a lookup with a missing key fails this check; a left join with a rejects list passes."),
+          ("Can I detect a cartesian join in a test without data?", "Yes. Build empty inputs from an empty RDD with the real schema, run the transform and read the physical plan for CartesianProduct or BroadcastNestedLoopJoin. Don't use limit(0): Spark folds empty inputs away and hides the problem.")]
+    return "data-tests", "Unit testing SCD2, idempotency, duplicates, dropped records and cartesian joins in PySpark without a cluster, with a test kit, drafted tests, and CI.", body, qa
+
+
 def clean_code():
     body = f"""<section id="plain"><p class="eyebrow">In plain words</p><h2>Early return beats nesting</h2>
 <p>Each level of nesting is one more condition a reader must hold in their head. Returning early for the simple cases keeps the main path flat.</p>
@@ -347,7 +406,7 @@ def security_and_cost():
         ("Unsafe calls", "eval, pickle.loads, SSL verification turned off, subprocess with shell=True", "Ruff S rules (from Bandit)", "block"),
         ("Secret printed to a log", "print(dbutils.secrets.get(...))", "Opengrep rule", "block"),
         ("Secret in the repo or its history", "a token, key or connection string", "gitleaks", "block"),
-        ("Library with a known vulnerability", "an old requests or urllib3", "pip-audit (osv-scanner for other languages)", "block on high"),
+        ("Library with a known vulnerability", "an old requests or urllib3", "osv-scanner (pip-audit as fallback)", "block on high"),
         ("Unpinned libraries, no lockfile", "pyspark>=3", "the gap report", "warn"),
         ("Infrastructure misconfiguration", "open storage, no encryption in Terraform", "Checkov", "block")])}
 {code('''# Unsafe: the value becomes part of the SQL text
@@ -401,10 +460,11 @@ TESTS
 
 def the_bundle():
     body = f"""<section id="status"><p class="eyebrow">Where it stands</p><h2>Status: the spec is written, no runner yet</h2>
-<p>The plan, the reuse check and the eight starting decisions are done, and so is the spec: 90 checks in 12 families, with ids that name no product, each linked to the data assurance obligations it gives evidence for. 19 block from day one, 55 warn and 16 only report. For Databricks, 54 of the 90 are found by rules that already exist, 33 we write, and 3 tools are on trial. The full list is in the repo's <a href="{REPO}/blob/main/catalog/INDEX.md">catalog index</a>. Then a sample repo with planted problems and a hidden answer key, so catch rates are measured, not claimed. The repo is open: <a href="{REPO}">github.com/dataagentsai/shift-left-bundle</a>.</p>
+<p>The plan, the reuse check and the eight starting decisions are done, and so is the spec: 131 checks in 13 families, with ids that name no product, each linked to the data assurance obligations it gives evidence for. They cover Python, PySpark, notebooks, SQL, dbt, materialized views and metric views. 20 block from day one, 82 warn and 29 only report. For Databricks, 76 of the 131 are found by rules that already exist, 50 we write, and 5 tools are on trial. The full list is in the repo's <a href="{REPO}/blob/main/catalog/INDEX.md">catalog index</a>. Then a sample repo with planted problems and a hidden answer key, so catch rates are measured, not claimed. The repo is open: <a href="{REPO}">github.com/dataagentsai/shift-left-bundle</a>.</p>
 {table(["Tier", "What", "Status"], [
         ("0", "Ground: reuse check, decisions, plan, open repo, this guide", "done"),
         ("1", "Spec v0.1: 90 checks in 12 families, purity lists, gate policy, Databricks binding, a linter for the catalog", "done"),
+        ("1b", "Spec 0.2: notebooks, dbt, materialized views, metric views, clean code on 404 Ruff rules, an SCD2 example with a test kit, CI and container templates", "done"),
         ("2", "Proof material: a sample repo with planted problems, false-alarm traps and a hidden answer key", "next"),
         ("3", "Off-the-shelf tools through one runner, findings as SARIF, gate and baseline, first measured run", "later"),
         ("4", "Cost rules plugged in; young PySpark linters tried; missing plan rules added", "later"),
@@ -433,7 +493,7 @@ def the_bundle():
         ("Tests and coverage", "pytest, assertDataFrameEqual, coverage.py, diff-cover, Hypothesis, mutmut", "Pursue", "Standard"),
         ("Complexity", "Ruff C901, complexipy", "Pursue", "radon and wily are stale"),
         ("Architecture rule", "import-linter", "Pursue", "The core never imports the IO code"),
-        ("Secrets, vulnerabilities, infrastructure", "gitleaks, pip-audit, Checkov", "Pursue", "Standard and light"),
+        ("Secrets, vulnerabilities, infrastructure", "gitleaks, osv-scanner, Checkov", "Pursue", "Standard and light"),
         ("Gap report", "repo-review, OpenSSF Scorecard", "Pursue", "Frameworks exist"),
         ("Showing findings", "SARIF on GitHub or Azure DevOps", "Pursue", "No server to run"),
         ("Young PySpark linters", "pyspark-antipattern, SparkDoctor", "Trial", "From 2026, one maintainer each; keep only what they add"),
@@ -456,11 +516,11 @@ def the_bundle():
 <p>Short-lived branches merge into a protected main through pull requests, with the bundle's pull-request job as a required check. Teams pin a version tag of the bundle, so a new rule never breaks them by surprise.</p></section>"""
     qa = [("Do I need SonarQube for a PySpark project?", "No. Ruff, Opengrep, SQLFluff, gitleaks, pip-audit and coverage tools cover the same ground with no server, and SARIF output shows findings on the pull request. SonarQube also has no Spark cost rules."),
           ("What is spec-driven about this bundle?", "The checks are written once, with ids and reasons and no product names. Each platform gets a binding that maps checks to tools, so adding Azure or another platform is a new binding, not new checks."),
-          ("Can I use it today?", "Not yet. The spec is written (90 checks); a measured sample and the runner come next. Follow the GitHub repo.")]
+          ("Can I use it today?", "Not yet. The spec is written (131 checks) and the SCD2 example runs; a measured sample and the runner come next. Follow the GitHub repo.")]
     return "the-bundle", "The shift-left bundle for PySpark and Databricks: spec, bindings and adapters, check families, tools with verdicts, why not SonarQube, git layout and status.", body, qa
 
 
-FUNCS = [basics, how_software_solved_it, syntax_trees, pure_functions, tests_and_coverage, clean_code, security_and_cost, whats_missing, the_bundle]
+FUNCS = [basics, how_software_solved_it, syntax_trees, pure_functions, tests_and_coverage, data_tests, clean_code, security_and_cost, whats_missing, the_bundle]
 
 
 def render(slug, desc, body, qa):
