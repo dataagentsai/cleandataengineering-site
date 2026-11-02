@@ -459,15 +459,15 @@ TESTS
 
 
 def the_bundle():
-    body = f"""<section id="status"><p class="eyebrow">Where it stands</p><h2>Status: the spec is written, no runner yet</h2>
+    body = f"""<section id="status"><p class="eyebrow">Where it stands</p><h2>Status: the spec is written and the runner works</h2>
 <p>The plan, the reuse check and the eight starting decisions are done, and so is the spec: 131 checks in 13 families, with ids that name no product, each linked to the data assurance obligations it gives evidence for. They cover Python, PySpark, notebooks, SQL, dbt, materialized views and metric views. 20 block from day one, 82 warn and 29 only report. For Databricks, 76 of the 131 are found by rules that already exist, 50 we write, and 5 tools are on trial. The full list is in the repo's <a href="{REPO}/blob/main/catalog/INDEX.md">catalog index</a>. Then a sample repo with planted problems and a hidden answer key, so catch rates are measured, not claimed. The repo is open: <a href="{REPO}">github.com/dataagentsai/shift-left-bundle</a>.</p>
 {table(["Tier", "What", "Status"], [
         ("0", "Ground: reuse check, decisions, plan, open repo, this guide", "done"),
         ("1", "Spec v0.1: 90 checks in 12 families, purity lists, gate policy, Databricks binding, a linter for the catalog", "done"),
         ("1b", "Spec 0.2: notebooks, dbt, materialized views, metric views, clean code on 404 Ruff rules, an SCD2 example with a test kit, CI and container templates", "done"),
         ("2", "Proof material: a sample shop with 101 planted problems, 16 false-alarm traps and a hidden answer key. Ruff alone catches 17 of 101 with no false alarms; the rest is what the next tiers build", "done"),
-        ("3", "Off-the-shelf tools through one runner, findings as SARIF, gate and baseline, first measured run", "next"),
-        ("4", "Cost rules plugged in; young PySpark linters tried; missing plan rules added", "later"),
+        ("3", "One runner over eight open-source tools, findings as SARIF on the pull request, block or warn, baseline for existing code. First measured run: 34 of 101 planted problems caught, no false alarms, under 8 seconds", "done"),
+        ("4", "Cost rules plugged in; young PySpark linters tried; missing plan rules added", "next"),
         ("5", "What we build: purity report, test-time purity check, empty-table plan check, gap report", "later"),
         ("6", "A real repo: cut the noise, feed gaps back into the spec", "later"),
         ("7", "Teach and release: this guide kept current, a Claude skill, CI templates, version 0.1", "alongside"),
@@ -516,7 +516,7 @@ def the_bundle():
 <p>Short-lived branches merge into a protected main through pull requests, with the bundle's pull-request job as a required check. Teams pin a version tag of the bundle, so a new rule never breaks them by surprise.</p></section>"""
     qa = [("Do I need SonarQube for a PySpark project?", "No. Ruff, Opengrep, SQLFluff, gitleaks, pip-audit and coverage tools cover the same ground with no server, and SARIF output shows findings on the pull request. SonarQube also has no Spark cost rules."),
           ("What is spec-driven about this bundle?", "The checks are written once, with ids and reasons and no product names. Each platform gets a binding that maps checks to tools, so adding Azure or another platform is a new binding, not new checks."),
-          ("Can I use it today?", "Not yet. The spec is written (131 checks) and the SCD2 example runs; a measured sample and the runner come next. Follow the GitHub repo.")]
+          ("Can I use it today?", "Partly. The runner works today (`shiftleft scan . --stage pr`, or as a pre-commit hook) with the open-source tools; the cost, purity, test-kit and metric checks come in the next tiers. Follow the GitHub repo.")]
     return "the-bundle", "The shift-left bundle for PySpark and Databricks: spec, bindings and adapters, check families, tools with verdicts, why not SonarQube, git layout and status.", body, qa
 
 
