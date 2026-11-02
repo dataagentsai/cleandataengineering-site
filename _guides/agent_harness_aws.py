@@ -517,6 +517,21 @@ REUSE = [
 ]
 
 
+
+AGENTCORE = [
+ ("Gateway", "Use", "The one door to models and MCP tools: any provider, fallback, request and token limits per user, guardrails at the door.", "Our gateway policy (allow-list per job, budgets) rides on it"),
+ ("Policy", "Use", "Cedar rules on who may call which tool; Bedrock Guardrails at the gateway for detector-type checks.", "Rules from our guardrail catalog that are detector-shaped"),
+ ("Observability", "Use", "Shows our OpenTelemetry traces in CloudWatch; nothing to install in our code.", "Our telemetry helper + ADOT"),
+ ("Evaluations", "Use, as a plug-in", "One more evaluator provider inside our eval framework, including online evaluation of live traces.", "evalharness decides what runs where"),
+ ("Identity", "Not now", "Token vault and OAuth to third-party tools. Add it when a SaaS tool needs a user's consent.", "Our on-behalf-of token issuer for SAP and the dealer system"),
+ ("Memory", "No", "Our memory must follow our retention and erasure rules and sit next to the approvals.", "Memory tables in RDS PostgreSQL"),
+ ("Runtime", "Not now", "Managed hosting for agent containers; worth a pilot later.", "ECS on Fargate"),
+ ("Managed harness", "No", "AWS runs the loop, memory and evaluation for you.", "Our loop, the part we keep on every cloud"),
+ ("Code Interpreter, Browser", "No", "No tyre-company job needs them yet.", "—"),
+ ("Agent Registry", "No", "Not offered in Mumbai.", "Catalogue file in Git"),
+]
+
+
 # ------------------------------------------------------------------ tables
 def marks(items):
     return "<ul>" + "".join(f'<li><span class="aw-mark {m}">{MARK[m]}</span>{E(nm)}' + (f" <small>{E(w)}</small>" if w else "") + "</li>"
@@ -668,6 +683,12 @@ BODY = f"""<main class="wrap">
 <p>The whole binding on one page: for each concern, only what we picked. AWS services and open-source tools marked <i>planned</i> are chosen but not yet switched on; everything else in the tables above was considered and left out.</p>
 {final_table()}
 </section>
+
+<section id="agentcore"><p class="eyebrow">AgentCore, part by part</p><h2>Which AgentCore parts we use</h2>
+<p>AgentCore is AWS's set of building blocks for agents. We take the parts that are plumbing and keep the parts that make our agents ours.</p>
+<div class="sd-table wide"><table><tr><th>AgentCore part</th><th>Verdict</th><th>Why</th><th>What of ours sits there</th></tr>
+{"".join(f"<tr><td><b>{E(a)}</b></td><td><b>{E(v)}</b></td><td>{E(w)}</td><td>{E(o)}</td></tr>" for a, v, w, o in AGENTCORE)}
+</table></div></section>
 
 <section id="reuse"><p class="eyebrow">Reuse, don't rebuild</p><h2>What we already built, and how it lands on AWS</h2>
 <div class="sd-table wide"><table><tr><th>Asset</th><th>What it is</th><th>On AWS</th></tr>
