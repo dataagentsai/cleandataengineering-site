@@ -52,7 +52,7 @@ C = [
   [("Amazon Bedrock, Converse API", "use", "Claude, Llama, Mistral, Nova behind one API"),
    ("Cross-region inference profiles", "use", "keep inside the India geography where offered; check per model"),
    ("Bedrock Intelligent Prompt Routing", "no", "picks the model per prompt; not deterministic"),
-   ("Bedrock AgentCore Gateway (inference endpoint)", "plan", "AWS's managed AI gateway: one door to models, tools and agents; fallback + circuit breaker (Oct 2026); token rate limits"),
+   ("Bedrock AgentCore Gateway, inference targets", "use", "any provider incl. OpenAI-compatible ones like Groq; translates OpenAI, Anthropic and Bedrock dialects; model fallback with circuit breaker; request and token-per-minute limits per user, model or target; Bedrock Guardrails in gateway policy (checked 3 Nov 2026)"),
    ("Bedrock application inference profiles", "use", "one per agent, tagged, so cost and quota are per agent")],
   [("LiteLLM proxy on ECS Fargate", "list", "fallback gateway if AgentCore Gateway lacks a rule we need, or for non-AWS models"),
    ("Pydantic AI", "use", "model layer only")],
@@ -61,7 +61,8 @@ C = [
   "AgentCore Gateway is AWS's AI gateway, the same job APIM's AI gateway does on Azure: one governed door with identity, rate and token limits, fallback and logging. Our policy (allow-list per job, budgets) sits on top as config. Check region availability and token-limit features before go-live. The agent never holds a provider key.", (55, 35, 10)),
  ("L4", "Control loop", "Think", "Plan, act, check, with step and no-progress limits.",
   [("Bedrock Agents", "no", "the platform would own the loop"),
-   ("Bedrock AgentCore Runtime", "list", "could host our own loop; check current status")],
+   ("Bedrock AgentCore Runtime", "list", "could host our own loop; pilot later"),
+   ("AgentCore managed harness", "no", "AWS's own harness (CreateHarness, GA 2026): AWS runs the loop, memory and evaluation; our loop is the kept delta")],
   [("Strands Agents", "no", "AWS's open SDK; fine for simple agents"), ("LangGraph", "no", "workflow-shaped agents only"),
    ("Claude Agent SDK", "no", "Claude-only, loop hidden")],
   "Hand-written loop, about 400 lines; budgets of 12 steps, 60 s and a cost cap per turn",
@@ -158,7 +159,7 @@ C = [
   "APIM backend pools + own wrapper",
   "Retries without a budget hide outages. One retry budget per turn is ours on any cloud.", (25, 55, 20)),
  ("L14", "Human-in-the-loop", "Control", "Approvals and hand-offs the agent cannot grant itself.",
-  [("Step Functions task tokens", "list", "a managed wait; one more service to run"),
+  [("Step Functions task tokens", "list", "a managed wait, now callable as an MCP tool through the Gateway; but a second state store, and AWS-only"),
    ("Amazon Connect", "plan", "hand-off to a person with history")],
   [("DBOS", "use", "durable waits in our own PostgreSQL"), ("Temporal", "list", "")],
   "Approval and escalation tables, desk API, approval cards to staff",
@@ -198,7 +199,7 @@ C = [
  # ---- Change
  ("L12", "Eval harness", "Change", "Golden sets and graders that gate every release.",
   [("Bedrock model evaluation", "plan", "LLM-as-judge and human review"), ("Bedrock RAG evaluation", "plan", ""),
-   ("AgentCore Evaluations", "list", "check current status")],
+   ("AgentCore Evaluations", "plan", "one more evaluator provider inside our eval framework (includes DeepEval evaluators; online evaluation of live traces)")],
   [("AgentTwin, pytest, pydantic-evals", "use", ""), ("promptfoo, PyRIT", "plan", "red team")],
   "Golden sets owned by quality, warranty and dealer-service leads, hard graders, 4 CI gates, model selection run",
   "Foundry evaluation + AgentTwin",
@@ -503,6 +504,19 @@ IMPL = [
 ]
 
 
+
+REUSE = [
+ ("Agent harness library (agent_harness)", "Loop, context assembler, tool gating, DBOS approvals, telemetry helper, ports and adapters, the four offline gates with AgentTwin",
+  "Unchanged. Add the AWS adapters (model, state, identity, secrets, config, telemetry); each passes the contract tests the Azure ones pass. Offline gates run in GitHub Actions and need no cloud."),
+ ("Guardrail catalog", "Every check, with its id, what it catches and where it may run",
+  "The catalog stays the source of truth. Each rule is bound to a place: our code inside the loop (most rules), Bedrock Guardrails at the gateway for detector-type checks (prompt attack, harmful content, PII), the eval framework for online and release checks. Same rule id everywhere, so one report covers all places."),
+ ("Eval framework (evalharness)", "Evaluator, TraceSource, Judge and ResultSink ports; domain patterns; cost rules; five positions",
+  "Add AWS adapters: a trace source that reads OpenTelemetry spans from CloudWatch, Bedrock Guardrails and AgentCore Evaluations as evaluator providers, Bedrock as a judge model, and a result sink that writes scores back as OpenTelemetry evaluation events to CloudWatch. Nightly online run as a scheduled ECS task."),
+ ("Trace viewer (the LangSmith job)", "We never built our own; local dev uses self-hosted Langfuse",
+  "Production: CloudWatch generative AI observability, fed by the same ADOT pipeline, with our scores written next to the traces. Langfuse on ECS is an optional second destination for teams that want prompt playground and annotation queues; adding it is a collector config change."),
+]
+
+
 # ------------------------------------------------------------------ tables
 def marks(items):
     return "<ul>" + "".join(f'<li><span class="aw-mark {m}">{MARK[m]}</span>{E(nm)}' + (f" <small>{E(w)}</small>" if w else "") + "</li>"
@@ -654,6 +668,12 @@ BODY = f"""<main class="wrap">
 <p>The whole binding on one page: for each concern, only what we picked. AWS services and open-source tools marked <i>planned</i> are chosen but not yet switched on; everything else in the tables above was considered and left out.</p>
 {final_table()}
 </section>
+
+<section id="reuse"><p class="eyebrow">Reuse, don't rebuild</p><h2>What we already built, and how it lands on AWS</h2>
+<div class="sd-table wide"><table><tr><th>Asset</th><th>What it is</th><th>On AWS</th></tr>
+{"".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b_)}</td><td>{E(c)}</td></tr>" for a, b_, c in REUSE)}
+</table></div>
+<p>AWS's gateway gives the door: any model, fallback, rate and token limits per user, guardrails at the door. It does not give spend in money per turn or per business case, a retry budget per turn, rules at exact positions inside the loop, or replay. Those stay ours.</p></section>
 
 <section id="impl"><p class="eyebrow">From design to running code</p><h2>The reference implementation</h2>
 <p>The same path the motor-claims FNOL agent took on Azure: write the binding, write the adapters, add a configuration overlay, build the infrastructure, run it, then add the next agent. The agent's code and tests do not change.</p>
