@@ -25,13 +25,32 @@ STATUS = {
     "planned": ("Planned", "#fff", "Designed at a high level. Nobody has started it yet."),
 }
 
+# How a developer gets a test system, best first. Checked 2 Nov 2026 from vendor docs and
+# third-party listings; recheck before relying on one.
+SANDBOX = {
+    "open": ("Open sandbox", "--mint-wash", "Free and self-serve: sign up and start today."),
+    "trial": ("Free trial", "--peri-wash", "A free trial with an end date."),
+    "request": ("On request", "--butter-wash", "Free, but someone has to approve or set it up first."),
+    "partner": ("Partners only", "--rose-wash", "Needs a partner agreement, sometimes paid."),
+    "customer": ("Customers only", "--surface-2", "No developer sandbox found. Needs a customer who runs it."),
+}
+VERDICT = {
+    "first": ("Build first", "We can build and test against it now."),
+    "apply": ("Apply now", "Start the sign-up now, because approval takes time."),
+    "later": ("Later", "Wait for a partner deal or a customer who runs it."),
+}
+
 # Each industry: id, name, one-line why, the products we connect to, and the agents.
+# Product: (name, what it is, sandbox, sandbox note, verdict, source url, is an alternative)
+# Alternatives are open products added where the market leaders keep their sandboxes closed.
 # Agent: (name, what it does, who it helps, status, note)
 INDUSTRIES = [
     {"id": "hotels", "name": "Hotels and hospitality",
      "why": "Guests ask the same questions all day, and every answer lives in the property management system (PMS). An agent can answer them, and it hands anything to do with money or promises to staff.",
-     "products": [("Oracle OPERA Cloud", "through the Oracle Hospitality Integration Platform (OHIP)"),
-                  ("Apaleo", "open API, cloud PMS"), ("Mews", "open API, cloud PMS")],
+     "products": [("Apaleo", "cloud PMS, open API", "open", "Free developer account with a sandbox of sample data you can reset. You make your own API keys.", "first", "https://apaleo.dev/guides/api/overview.html", False),
+                  ("Mews", "cloud PMS, open API", "open", "Public demo environment with shared test tokens. Production keys come after Mews certifies the app.", "first", "https://docs.mews.com/connector-api/guidelines/environments", False),
+                  ("Oracle OPERA Cloud", "through the Oracle Hospitality Integration Platform (OHIP)", "request", "Register on the OHIP partner developer portal to get a partner sandbox. Oracle charges per API call; check current terms.", "apply", "https://docs.oracle.com/en/industries/hospitality/integration-platform/ohipu/t_quick_start_for_partners_using_the_partner_sandbox.htm", False),
+                  ("Cloudbeds", "cloud PMS for small hotels", "request", "Email the integrations team for a partner account and a test property with dummy data.", "apply", "https://developers.cloudbeds.com/docs/getting-started-as-a-partner-in-5-steps", True)],
      "agents": [
          ("Guest concierge", "Answers hotel questions and cites the source. Asks for late checkout and room preferences, but promises nothing until staff confirm.", "Guests, front desk", "built",
           "Passes all its tests. Connectors for OPERA, Apaleo and Mews are written and tested against simulated systems, not yet against live ones."),
@@ -42,8 +61,10 @@ INDUSTRIES = [
      ]},
     {"id": "insurance", "name": "Insurance",
      "why": "Claims and policy servicing are long chains of forms, documents and status questions. Agents take the paperwork, and people keep the decisions about payouts and cover.",
-     "products": [("Guidewire", "ClaimCenter, PolicyCenter, BillingCenter"), ("Duck Creek", "claims, policy and billing"),
-                  ("Sapiens", "including the former Majesco suite")],
+     "products": [("Guidewire", "ClaimCenter, PolicyCenter, BillingCenter", "partner", "No self-serve sandbox found. Access comes through PartnerConnect, which is by invitation.", "later", "https://supergood.ai/api-report-card/guidewire", False),
+                  ("Duck Creek", "claims, policy and billing", "partner", "Developer portal (duckcreek.dev) is for licensed customers and certified partners.", "later", "https://apitracker.io/a/duckcreek", False),
+                  ("Sapiens", "including the former Majesco suite", "partner", "No public developer sandbox found.", "later", "", False),
+                  ("Socotra", "cloud insurance core", "trial", "Free 30-day trial with a full working environment, plus a free evaluation licence.", "first", "https://info.socotra.com/hubfs/Socotra%20Overview%202-Pager.pdf", True)],
      "agents": [
          ("Claims intake (first notice of loss)", "Takes the first report of a loss, collects documents, reports claim and policy status, and pays only after a claims handler approves.", "Policyholders, claims desk", "built",
           "Built and deployed once on Azure, on its own sample claims system. Not yet connected to any of the three products."),
@@ -54,8 +75,10 @@ INDUSTRIES = [
      ]},
     {"id": "pharma", "name": "Pharma and life sciences",
      "why": "Clinical and safety work is full of careful checking that must leave a trail for inspectors. Agents do the first pass and record every step, and qualified people sign off.",
-     "products": [("Veeva Vault", "Clinical, Safety, QualityDocs, RIM"), ("Medidata Rave", "electronic data capture (EDC) for trials"),
-                  ("Oracle Argus Safety", "drug safety case management")],
+     "products": [("Medidata Rave", "electronic data capture (EDC) for trials", "request", "Free Developer Central membership includes a Rave test environment, usually within two business days.", "first", "https://www.mdsol.com/en/developer-central", False),
+                  ("Veeva Vault", "Clinical, Safety, QualityDocs, RIM", "partner", "A Vault application sandbox comes with the Veeva AI Partner Program. Apply to join.", "apply", "https://www.veeva.com/resources/veeva-launches-ai-partner-program/", False),
+                  ("Oracle Argus Safety", "drug safety case management", "customer", "No developer sandbox found. Runs in each customer's own environment.", "later", "", False),
+                  ("OpenClinica", "open-source EDC", "open", "Free community edition you run yourself. A stand-in for Rave while access is pending.", "first", "https://www.openclinica.com/", True)],
      "agents": [
          ("Clinical data review", "Checks trial data for missing, odd or inconsistent values, and drafts queries for site staff. A data manager approves each query.", "Clinical data managers", "built",
           "Version 1 is built on sample study data. Connectors to the three products are not built yet."),
@@ -66,7 +89,10 @@ INDUSTRIES = [
      ]},
     {"id": "banking", "name": "Banking",
      "why": "Banks run on core systems that hold every account and payment. Agents take routine casework, and fixed rules and people guard every movement of money.",
-     "products": [("Temenos", "Transact and Infinity"), ("Infosys Finacle", "core banking"), ("FIS", "core and card platforms")],
+     "products": [("Temenos", "Transact and Infinity", "open", "Free developer sandbox with an API key after registering on the Temenos Community.", "first", "https://developer.temenos.com/article/welcome-developers", False),
+                  ("FIS", "core and card platforms", "open", "Free Code Connect account with unlimited trial calls to a mock sandbox. Live test data needs an FIS account manager.", "first", "https://codeconnect.fisglobal.com/app/livesupport", False),
+                  ("Infosys Finacle", "core banking", "open", "A public Open Bank Project sandbox hosted by Finacle, found only in third-party listings. Confirm it first.", "apply", "https://apitracker.io/a/infosys-finacle", False),
+                  ("Mambu", "cloud core banking", "partner", "Sandbox tenants go to partners and paying customers.", "later", "https://support.mambu.com/docs/developer", True)],
      "agents": [
          ("Card dispute handler", "Collects the facts of a disputed payment, checks the scheme rules and builds the chargeback file for an officer.", "Customers, disputes team", "planned", ""),
          ("KYC refresh", "Chases customers for out-of-date identity documents, checks what comes back and flags anything that needs a person.", "Compliance operations", "planned", ""),
@@ -75,7 +101,9 @@ INDUSTRIES = [
      ]},
     {"id": "retail", "name": "Retail and e-commerce",
      "why": "Shops get the same order, return and stock questions at scale. This is where our reference support agent was born, so it is the shortest path to a working agent.",
-     "products": [("Shopify", "store and orders API"), ("Salesforce Commerce Cloud", "orders and service"), ("SAP Commerce Cloud", "orders and catalog")],
+     "products": [("Shopify", "store and orders API", "open", "Free development stores for developers, with full API access.", "first", "https://shopify.dev/docs/apps/build/dev-dashboard/development-stores", False),
+                  ("Salesforce Commerce Cloud", "B2C Commerce", "partner", "No self-serve sandbox. ISV partners get a trial partner org and request sandboxes from it.", "later", "https://trailhead.salesforce.com/content/learn/modules/b2c-on-demand-sandbox", False),
+                  ("SAP Commerce Cloud", "orders and catalog", "customer", "No official developer trial found.", "later", "", False)],
      "agents": [
          ("Customer support", "Order status, cancellations, and returns and refunds behind human approval.", "Shoppers, support team", "built",
           "The open reference agent, running on a simulated shop. Store connectors are not built yet."),
@@ -85,7 +113,9 @@ INDUSTRIES = [
      ]},
     {"id": "healthcare", "name": "Hospitals and clinics",
      "why": "Front-office and admin work takes clinicians' time. Agents can book, chase and draft, but they never make clinical decisions.",
-     "products": [("Epic", "electronic health record"), ("Oracle Health", "formerly Cerner"), ("athenahealth", "athenaOne")],
+     "products": [("Epic", "electronic health record", "open", "Free Epic on FHIR sandbox and app registration at fhir.epic.com.", "first", "https://fhir.epic.com/Developer", False),
+                  ("Oracle Health", "formerly Cerner", "open", "Open FHIR R4 sandbox (read-only, no login) and a secure sandbox after registering.", "first", "https://fhir.cerner.com/", False),
+                  ("athenahealth", "athenaOne", "open", "Free self-service Preview sandbox with dummy patients, from the Developer Console.", "first", "https://github.com/athenahealth/mdp", False)],
      "agents": [
          ("Appointment scheduler", "Books, moves and reminds, following each clinic's rules, in the patient's language.", "Patients, front office", "planned", ""),
          ("Prior authorization", "Gathers the clinical notes an insurer needs and drafts the request for staff to send.", "Billing and admin staff", "planned", ""),
@@ -93,7 +123,10 @@ INDUSTRIES = [
      ]},
     {"id": "manufacturing", "name": "Manufacturing",
      "why": "Plants lose hours waiting for parts, answers and paperwork. Agents read the ERP and shop-floor systems, chase people and draft documents. Machines stay under human control.",
-     "products": [("SAP S/4HANA", "ERP, maintenance and quality"), ("Siemens Opcenter", "manufacturing execution"), ("Microsoft Dynamics 365", "supply chain and ERP")],
+     "products": [("SAP S/4HANA", "ERP, maintenance and quality", "open", "Sandbox APIs with test data on the SAP Business Accelerator Hub, using a personal API key. A 14-day S/4HANA Cloud trial also exists.", "first", "https://developers.sap.com/tutorials/hcp-abh-getting-started/", False),
+                  ("Microsoft Dynamics 365", "supply chain and ERP", "trial", "Free trial per app. The free Power Apps developer plan does not include Dynamics 365 apps.", "apply", "https://learn.microsoft.com/en-us/power-platform/developer/plan", False),
+                  ("Siemens Opcenter", "manufacturing execution", "customer", "API access is tied to an Opcenter licence.", "later", "", False),
+                  ("Odoo", "open-source ERP with manufacturing", "open", "Free community edition you run yourself. Popular with small plants.", "first", "https://www.odoo.com/", True)],
      "agents": [
          ("Maintenance troubleshooter", "Helps a technician find the cause of a fault from manuals and past work orders, then drafts the work order.", "Maintenance technicians", "planned", ""),
          ("Supplier delay chaser", "Watches open purchase orders, chases suppliers who are late and warns planners early.", "Planners, buyers", "planned", ""),
@@ -101,7 +134,10 @@ INDUSTRIES = [
      ]},
     {"id": "logistics", "name": "Logistics and freight",
      "why": "Every shipment produces exceptions: delays, damage, missing paperwork. Agents spot them early and handle the routine ones.",
-     "products": [("SAP Transportation Management", "planning and freight"), ("Oracle Transportation Management", "planning and freight"), ("Blue Yonder", "warehouse and transport")],
+     "products": [("SAP Transportation Management", "planning and freight", "customer", "No TM sandbox found on the SAP Business Accelerator Hub.", "later", "", False),
+                  ("Oracle Transportation Management", "planning and freight", "customer", "No developer sandbox found.", "later", "", False),
+                  ("Blue Yonder", "warehouse and transport", "customer", "Sandbox instances are sold to existing customers.", "later", "https://info.blueyonder.com/blue-yonder-platform/what-is-blue-yonder-connect-additional-instance", False),
+                  ("EasyPost", "shipping and tracking API", "open", "Free test-mode API keys with simulated labels and tracking.", "first", "https://docs.easypost.com/", True)],
      "agents": [
          ("Shipment exception handler", "Spots late or stuck shipments, tells the customer, and proposes a fix for the planner to approve.", "Planners, customers", "planned", ""),
          ("Proof-of-delivery checker", "Reads delivery documents and photos, matches them to the order and flags gaps before invoicing.", "Billing team", "planned", ""),
@@ -109,7 +145,9 @@ INDUSTRIES = [
      ]},
     {"id": "telecom", "name": "Telecom",
      "why": "Billing questions, plan changes and outages fill telecom call centres. Agents answer from the billing and network records.",
-     "products": [("Amdocs", "billing and customer management"), ("Salesforce Communications Cloud", "customer service"), ("ServiceNow", "telecom service management")],
+     "products": [("ServiceNow", "telecom service management", "open", "Free personal developer instance.", "first", "https://developer.servicenow.com/", False),
+                  ("Salesforce Communications Cloud", "customer service", "trial", "Free Communications Cloud trial org, no credit card.", "first", "https://developer.salesforce.com/free-trials/comparison/communications-cloud", False),
+                  ("Amdocs", "billing and customer management", "customer", "No public developer programme found.", "later", "", False)],
      "agents": [
          ("Bill explainer and disputes", "Explains each line of a bill and raises a dispute within set credit limits.", "Customers, care team", "planned", ""),
          ("Plan change advisor", "Suggests a better plan from actual usage and switches it after the customer agrees.", "Customers", "planned", ""),
@@ -117,7 +155,10 @@ INDUSTRIES = [
      ]},
     {"id": "property", "name": "Property management",
      "why": "Landlords and property managers handle repairs, renewals and rent questions all year. Agents keep tenants informed and work moving.",
-     "products": [("Yardi", "Voyager and Breeze"), ("AppFolio", "property manager"), ("MRI Software", "residential and commercial")],
+     "products": [("Yardi", "Voyager and Breeze", "partner", "Sandbox after joining the paid Standard Interface Partner Program (an annual fee per interface).", "later", "https://www.yardi.com/?p=359162", False),
+                  ("AppFolio", "property manager", "partner", "Sandbox comes with the AppFolio Stack partner program. Apply to join.", "apply", "https://www.appfolio.com/stack/partners", False),
+                  ("MRI Software", "residential and commercial", "customer", "No public developer terms found.", "later", "", False),
+                  ("Buildium", "property management, open API", "request", "Open API; a sandbox is available on request.", "first", "https://www.buildium.com/", True)],
      "agents": [
          ("Maintenance request intake", "Takes repair requests with photos, sorts them by urgency and books an approved contractor.", "Tenants, property managers", "planned", ""),
          ("Lease renewal assistant", "Reminds tenants before the lease ends, offers terms within set limits and prepares the paperwork.", "Leasing team", "planned", ""),
@@ -140,7 +181,7 @@ CSS = """
   .va-card h3 { font-size:24px; margin:0 0 6px; line-height:1.15; }
   .va-card p { margin:6px 0; font-size:15px; }
   .va-card .lbl { display:block; font-size:11.5px; font-weight:700; letter-spacing:.12em; text-transform:uppercase; color:var(--faint); }
-  .va-badge { display:inline-block; font-size:12.5px; font-weight:700; padding:1px 10px; border:1.5px solid var(--ink); border-radius:999px; margin-right:4px; }
+  .va-badge { display:inline-block; font-size:12.5px; font-weight:700; padding:1px 10px; border:1.5px solid var(--ink); border-radius:999px; margin-right:4px; white-space:nowrap; }
   .va-table { overflow-x:auto; margin:10px 0 0; }
   .va-table table { border-collapse:collapse; width:100%; font-size:15px; }
   .va-table th, .va-table td { border-bottom:1px solid var(--rule-firm); padding:9px 10px; text-align:left; vertical-align:top; }
@@ -204,6 +245,36 @@ def fig(ind=None):
     return f'<figure class="va-fig">{"".join(g)}<figcaption>{E(caption)}</figcaption></figure>'
 
 
+def sb_badge(k):
+    name, wash, _ = SANDBOX[k]
+    return f'<span class="va-badge" style="background:var({wash})">{name}</span>'
+
+
+VORDER = {"first": 0, "apply": 1, "later": 2}
+SORDER = {k: n for n, k in enumerate(SANDBOX)}
+
+
+def product_rows(prods, industry=None):
+    rows = []
+    for name, what, sb, note, verdict, url, alt in sorted(prods, key=lambda p: (VORDER[p[4]], SORDER[p[2]])):
+        src = f' <a href="{E(url)}" rel="nofollow">source</a>' if url else ""
+        label = E(name) + (' <small>(alternative)</small>' if alt else "")
+        ind = f'<td><a href="{BASE}{industry["id"]}/">{E(industry["name"])}</a></td>' if industry else ""
+        rows.append(f"<tr><td><b>{label}</b><small>{E(what)}</small></td>{ind}<td>{sb_badge(sb)}</td>"
+                    f"<td>{E(note)}{src}</td><td><b>{VERDICT[verdict][0]}</b></td></tr>")
+    return rows
+
+
+def sandbox_legend():
+    sb = "".join(f"<li>{sb_badge(k)} {E(v[2])}</li>" for k, v in SANDBOX.items())
+    vd = "".join(f"<li><b>{v[0]}:</b> {E(v[1])}</li>" for v in VERDICT.values())
+    return f'<ul class="va-fine" style="list-style:none;padding:0;margin-top:14px">{sb}{vd}</ul>'
+
+
+CHECKED = ('<p class="va-fine">Sandbox terms checked on 2 November 2026 from vendor documentation and, where vendors '
+           'say little, third-party listings (follow each source link). Vendors change these often, so confirm before starting a build.</p>')
+
+
 def counts(agents):
     c = {k: sum(1 for a in agents if a[3] == k) for k in STATUS}
     return " ".join(f"{badge(k)}{c[k]}" for k in STATUS if c[k])
@@ -232,24 +303,34 @@ def hub():
     built = sum(1 for a in all_agents if a[3] == "built")
     cards = []
     for i in INDUSTRIES:
-        prods = " · ".join(p[0] for p in i["products"])
+        prods = " · ".join(p[0] for p in i["products"] if not p[6])
         cards.append(f'<a class="va-card" href="{BASE}{i["id"]}/"><h3>{E(i["name"])}</h3>'
                      f'<p><span class="lbl">Products</span>{E(prods)}</p>'
                      f'<p><span class="lbl">Agents</span>{counts(i["agents"])}</p>'
                      f'<p>{E(i["why"].split(". ")[0])}.</p></a>')
     legend = "".join(f"<li>{badge(k)} {E(v[2])}</li>" for k, v in STATUS.items())
+    allp = [(p, i) for i in INDUSTRIES for p in i["products"]]
+    allp.sort(key=lambda x: (VORDER[x[0][4]], SORDER[x[0][2]], x[1]["name"]))
+    n_first = sum(1 for p, _ in allp if p[4] == "first")
+    n_apply = sum(1 for p, _ in allp if p[4] == "apply")
+    target = []
+    for v in VERDICT:
+        rows = [r for p, i in allp if p[4] == v for r in product_rows([p], i)]
+        target.append(f'<h3>{VERDICT[v][0]} <small class="va-fine">({len(rows)}) · {E(VERDICT[v][1])}</small></h3>'
+                      '<div class="va-table"><table><tr><th>Product</th><th>Industry</th><th>Sandbox</th>'
+                      '<th>How to get in</th><th>Verdict</th></tr>' + "".join(rows) + "</table></div>")
     title = "Vertical agents, by industry"
     desc = (f"Agents for {len(INDUSTRIES)} industries, built on one shared harness, each with connectors to the "
             "three main products in its industry: hotels, insurance, pharma, banking, retail and more.")
     body = f"""<main class="wrap">
 <div class="hero"><p class="eyebrow">AI Engineering · vertical agents</p><h1>{title}</h1>
-<p class="thesis">A <em>vertical agent</em> does one real job in one industry, like checking in a hotel guest or taking a car insurance claim. It works inside the software that industry already runs on. For each industry we pick the three products most businesses use and build agents that connect to all three.</p></div>
+<p class="thesis">A <em>vertical agent</em> does one real job in one industry, like checking in a hotel guest or taking a car insurance claim. It works inside the software that industry already runs on. For each industry we pick the products most businesses use and build agents that connect to them, starting with the ones that give developers a sandbox (see the <a href="#targets">target list</a>).</p></div>
 
 <div class="va-stat">
 <div><b>{len(INDUSTRIES)}</b>industries</div>
 <div><b>{len(all_agents)}</b>agents listed</div>
 <div><b>{built}</b>built and tested</div>
-<div><b>3</b>products per industry</div>
+<div><b>{n_first}</b>products we can build against now</div>
 </div>
 
 <div class="va-note"><p><b>Most of this list is still a plan.</b> {built} agents are built and tested. The rest are planned, and we will build them one industry at a time. Each page says exactly where every agent stands.</p></div>
@@ -264,6 +345,13 @@ def hub():
 </div>
 <ul class="va-fine" style="list-style:none;padding:0;margin-top:18px">{legend}</ul></section>
 
+<section id="targets"><p class="eyebrow">Target list</p><h2>Which products to build against first</h2>
+<p>An agent is only as testable as the system it talks to. So we rank every product by how easily a developer can get a <b>sandbox</b>: a test copy of the product with fake data, where nothing real can break.</p>
+<div class="va-note"><p><b>{n_first} products we can build against now, {n_apply} to apply for today, the rest later.</b> Healthcare, banking, hotels and telecom are wide open. Insurance, logistics and property keep their sandboxes for partners, so there we start on an open alternative and move to the market leader with the first customer who runs it.</p></div>
+{"".join(target)}
+{sandbox_legend()}
+{CHECKED}</section>
+
 {HOW}
 {join_section("Vertical%20agents", "Businesses:")}
 </main>
@@ -276,7 +364,15 @@ def industry_page(i):
     for name, does, who, st, note in i["agents"]:
         rows.append(f"<tr><td><b>{E(name)}</b></td><td>{E(does)}{f'<small>{E(note)}</small>' if note else ''}</td>"
                     f"<td>{E(who)}</td><td>{badge(st)}</td></tr>")
-    prods = "".join(f"<div><b>{E(p)}</b>{E(d)}</div>" for p, d in i["products"])
+    leaders = [p for p in i["products"] if not p[6]]
+    prods = "".join(f"<div><b>{E(p[0])}</b>{E(p[1])}<br>{sb_badge(p[2])}</div>" for p in leaders)
+    first = [p[0] for p in sorted(i["products"], key=lambda p: (VORDER[p[4]], SORDER[p[2]])) if p[4] == "first"]
+    alts = [p[0] for p in i["products"] if p[6]]
+    alt_line = (f" Where the leaders keep their sandboxes closed, we add an open alternative ({', '.join(alts)}) "
+                "so we can build and test now.") if alts else ""
+    start = f"<p><b>Start with {' and '.join(first)}.</b>{E(alt_line)}</p>" if first else ""
+    sb_table = ('<div class="va-table"><table><tr><th>Product</th><th>Sandbox</th><th>How to get in</th><th>Verdict</th></tr>'
+                + "".join(product_rows(i["products"])) + "</table></div>")
     title = f"Vertical agents for {i['name'].lower()}"
     desc = (f"{len(i['agents'])} agents for {i['name'].lower()}, each connecting to "
             f"{', '.join(p[0] for p in i['products'][:-1])} and {i['products'][-1][0]}.")
@@ -285,9 +381,15 @@ def industry_page(i):
 <div class="hero"><p class="eyebrow"><a href="{BASE}">Vertical agents</a> · {E(i['name'])}</p><h1>{E(title[0].upper() + title[1:])}</h1>
 <p class="thesis">{E(i['why'])}</p></div>
 
-<section><p class="eyebrow">Products we connect to</p><h2>The three products</h2>
-<p>Most businesses in this industry run on one of these. Each agent below gets a connector for all three.</p>
-<div class="va-prod">{prods}</div></section>
+<section><p class="eyebrow">Products we connect to</p><h2>The products</h2>
+<p>Most businesses in this industry run on one of these. Each agent gets a connector for each of them, and we build first against the products that give developers a sandbox, meaning a test copy of the product we can use without a customer.</p>
+<div class="va-prod">{prods}</div>
+{start}</section>
+
+<section><p class="eyebrow">Which product first</p><h2>Sandbox check</h2>
+{sb_table}
+{sandbox_legend()}
+{CHECKED}</section>
 
 <section><p class="eyebrow">The agents</p><h2>What each agent does</h2>
 <div class="va-table"><table>
