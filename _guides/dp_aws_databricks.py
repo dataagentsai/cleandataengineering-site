@@ -1488,7 +1488,7 @@ def page():
 
 <h3>Ingestion: movers bring data in, our lander loads it</h3>
 <p>The full list of sources, the five ingestion technologies and the landing contract are on <a href="{BASE}aws-databricks/etl/#sources">The ETL, end to end</a>.</p>
-<p>Ingestion has two steps. A <b>mover</b> brings raw data from the source into an S3 landing folder; which mover is a setting in <code>source_config</code>, so it can change without code. Then <b>one lander</b>, our PySpark job on Databricks using Auto Loader, reads its settings from <code>dataset_view</code>, writes bronze with arrival details, records a <code>run_log</code> row and is safe to run twice. Lakeflow Jobs are generated from the metadata and deployed with Databricks Asset Bundles.</p>
+<p>Ingestion has two steps. A <b>mover</b> brings raw data from the source into an S3 landing folder; which mover is a setting in <code>source_config</code>, so it can change without code. Then <b>one lander</b>, our PySpark job on Databricks that reads exactly the new files listed in its file log, reads its settings from <code>dataset_view</code>, writes bronze with arrival details, records a <code>run_log</code> row and is safe to run twice. Lakeflow Jobs are generated from the metadata and deployed with Databricks Asset Bundles.</p>
 {mover_table}
 
 <h3>Orchestration: which service runs what, and when</h3>
