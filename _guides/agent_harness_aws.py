@@ -23,7 +23,7 @@ ROOT = SD.ROOT
 OUT = ROOT / "learn" / "agent-harness-aws" / "index.html"
 TITLE = "The agent harness on AWS"
 DESC = ("The same agent harness, specs and tests as on Azure, bound to AWS: the big picture for a tyre manufacturer "
-        "group, every one of the 22 concerns mapped to an AWS service, open source or our own code, and the open decisions.")
+        "group, every one of the 22 concerns mapped to an AWS service, open source or our own code, the end-to-end design tier by tier, and the plan for the reference implementation.")
 URL = "https://cleandataengineering.ai/learn/agent-harness-aws/"
 AH = "/learn/agent-harness/"
 
@@ -68,15 +68,16 @@ C = [
   "Hand-written loop (same code)",
   "Agents that touch orders, warranties and money need every step testable and checks at exact positions. Our own loop runs on any model and any cloud.", (0, 80, 20)),
  ("L5", "State & memory", "Think", "What is kept, for how long, and for whom.",
-  [("Aurora PostgreSQL Serverless v2", "use", "HA, backups, IAM login, scales to near zero in dev"),
+  [("Amazon RDS for PostgreSQL, Multi-AZ", "use", "HA, backups, IAM login; one instance holds state, DBOS waits and pgvector"),
+   ("Aurora PostgreSQL", "list", "when one RDS instance is not enough; Serverless v2 never pauses while DBOS holds a connection"),
    ("DynamoDB", "list", "not picked"), ("ElastiCache for Valkey", "list", "caches only"),
    ("AgentCore Memory", "list", "check current status")],
   [("psycopg + pool", "use", "driver")],
   "5 agent tables + DBOS state in the same database; retention and erase per person",
   "Azure Database for PostgreSQL",
-  "One managed store that also holds the approval engine and, later, pgvector: no extra infrastructure.", (40, 45, 15)),
+  "Plain RDS PostgreSQL, the same engine as on Azure. One managed store that also holds the approval engine and, later, pgvector: no extra infrastructure.", (40, 45, 15)),
  ("18", "Knowledge & retrieval", "Think", "Finds sourced passages, filtered by what this user may see.",
-  [("pgvector on the same Aurora", "plan", "chosen"), ("Bedrock Knowledge Bases", "list", "managed RAG; less control of filters"),
+  [("pgvector on the same RDS PostgreSQL", "plan", "chosen"), ("Bedrock Knowledge Bases", "list", "managed RAG; less control of filters"),
    ("OpenSearch Serverless", "list", "if the corpus outgrows pgvector"), ("S3 Vectors", "list", "cheap cold vectors; check current status")],
   [("pgvector", "plan", "chosen"), ("Qdrant on ECS", "list", "alternative")],
   "Entitlement filter as SQL: a plant engineer sees machine manuals, a dealer sees only their own orders and price lists",
@@ -132,9 +133,9 @@ C = [
   "Principal → dealer, customer or staff identity; on-behalf-of: the agent acts with the user's rights, never its own",
   "Entra ID, managed identity, Key Vault",
   "Checking a token is local and cloud-neutral. Ports make leaving Cognito a configuration change.", (70, 20, 10)),
- ("PV", "Privacy & data protection", "Control", "Personal data of dealers, fleet drivers and consumers used only for this case, kept in its region (India or EU), masked, and forgotten on request.",
+ ("PV", "Privacy & data protection", "Control", "Personal data of dealers, fleet drivers and consumers used only for this case, kept in its country, masked, and forgotten on request.",
   [("Comprehend PII", "plan", "names, phone, ids in text"),
-   ("Amazon Macie", "plan", "finds personal data in S3"), ("Mumbai, Hyderabad; Frankfurt, Ireland", "use", "India data in India, EU data in the EU"),
+   ("Amazon Macie", "plan", "finds personal data in S3"), ("Mumbai (Hyderabad for DR)", "use", "India data stays in India"), ("Frankfurt", "plan", "a second copy of the stack, only when EU personal data arrives"),
    ("KMS, PrivateLink", "use", "")],
   [("Presidio", "list", "Aadhaar, PAN, GSTIN and vehicle numbers need custom recognisers anyway")],
   "redact() in telemetry (Aadhaar, PAN, phone, vehicle number), no_pii_echo rule, forget() + retention per the DPDP Act and GDPR",
@@ -159,27 +160,28 @@ C = [
  ("L14", "Human-in-the-loop", "Control", "Approvals and hand-offs the agent cannot grant itself.",
   [("Step Functions task tokens", "list", "a managed wait; one more service to run"),
    ("Amazon Connect", "plan", "hand-off to a person with history")],
-  [("DBOS", "use", "durable waits in our own Aurora"), ("Temporal", "list", "")],
+  [("DBOS", "use", "durable waits in our own PostgreSQL"), ("Temporal", "list", "")],
   "Approval and escalation tables, desk API, approval cards to staff",
   "DBOS on PostgreSQL (same code)",
   "A warranty or order approval must survive restarts. DBOS keeps it in the database we already run, so it moves clouds unchanged.", (20, 55, 25)),
  ("AV", "Availability & disaster recovery", "Control", "A lost server or zone goes unnoticed; a lost region is rebuilt from code and backups.",
-  [("Multi-AZ ECS + Aurora Multi-AZ", "plan", ""), ("Aurora Global Database", "list", "Mumbai ↔ Hyderabad; EU pair for Europe"),
+  [("Multi-AZ ECS + RDS Multi-AZ", "use", ""), ("RDS cross-region read replica", "plan", "Mumbai → Hyderabad, promoted in a disaster"),
    ("Route 53 health checks", "plan", ""), ("AWS Backup", "plan", "")],
   [("Terraform or AWS CDK", "use", "infrastructure as code")],
   "Stateless servers + durable state; a rebuild drill",
   "Zone redundancy, Front Door, Bicep",
-  "Two Indian regions make a DR pair without data leaving the country; European data pairs inside the EU.", (65, 25, 10)),
+  "Two Indian regions make a DR pair without data leaving the country. Target: back within 4 hours, at most 15 minutes of data lost.", (65, 25, 10)),
  # ---- See
  ("L11", "Observability", "See", "Traces, metrics and alerts for every step.",
-  [("CloudWatch + Application Signals", "use", "via the ADOT collector"), ("AWS X-Ray", "use", "traces"),
+  [("AWS Distro for OpenTelemetry (ADOT) collector", "use", "a sidecar in every ECS task; receives OTLP from our code, sends traces to X-Ray, metrics and logs to CloudWatch"),
+   ("CloudWatch + Application Signals", "use", "dashboards, SLOs, alarms"), ("AWS X-Ray", "use", "traces, read through the OTLP endpoint"),
    ("Bedrock model invocation logging", "use", "to S3, for evidence"),
    ("CloudWatch generative AI observability", "list", "check current status"),
    ("Managed Prometheus + Grafana", "plan", "")],
-  [("OpenTelemetry", "use", "behind one helper"), ("Langfuse", "list", "")],
-  "Spans per step with GenAI attributes, personal data redacted before export, alert rules as code",
+  [("OpenTelemetry SDK + GenAI semantic conventions", "use", "the only telemetry API our code calls"), ("Langfuse", "list", "takes OTLP too, if a team wants an LLM trace viewer")],
+  "One telemetry helper on the OpenTelemetry SDK: spans per step with GenAI attributes, personal data redacted before export, alert rules as code",
   "OpenTelemetry → App Insights",
-  "OpenTelemetry keeps the code cloud-neutral; only the exporter changes.", (55, 35, 10)),
+  "OpenTelemetry is the one standard from code to collector: the code never imports an AWS SDK for telemetry. On Azure the same spans go to Application Insights; on AWS the ADOT collector sends them to X-Ray and CloudWatch. Moving clouds changes the collector's config file, not the code.", (55, 35, 10)),
  ("L9", "Determinism & replay", "See", "A past decision can be re-run and explained.",
   [("(nothing on AWS)", "list", "invocation logs help, but do not replay")],
   [("VCR.py", "list", ""), ("Own recorder", "use", "")],
@@ -246,7 +248,7 @@ LIFE = [("Idea & risk tier", "is AI the right fix?"), ("Build", "GitHub Actions"
         ("Red-team", "PyRIT, promptfoo"), ("Approve", "business owner"), ("Release", "ECS blue/green"),
         ("Monitor", "CloudWatch"), ("Learn", "misses → golden set")]
 GOV = [("Organizations", "SCPs, Control Tower"), ("CloudTrail", "who did what"), ("Security Hub", "+ GuardDuty"),
-       ("Identity Center", "access reviews"), ("Residency", "India + EU regions"), ("DPDP + GDPR", "consent, erasure"),
+       ("Identity Center", "access reviews"), ("Residency", "India first; EU later"), ("DPDP + GDPR", "consent, erasure"),
        ("Owner & risk tier", "in the registry"), ("AI council", "signs off high risk")]
 ROWS = [
     ("End users · who asks", [[("Dealers", "Cognito / portal"), ("Fleet customers", "Cognito"), ("Consumers", "Cognito"),
@@ -264,9 +266,9 @@ ROWS = [
       [("Quality deviation", "drafts root cause note"), ("B2B order assistant", "acts after OK"),
        ("Fleet tyre advisor", "answers, from telematics")]], WASH["rose"]),
     ("Horizontal assets · built once on AWS, reused by every agent",
-     [[("Model gateway", "AgentCore Gateway"), ("Knowledge", "pgvector on Aurora"), ("Memory & state", "Aurora PostgreSQL"),
+     [[("Model gateway", "AgentCore Gateway"), ("Knowledge", "pgvector on RDS"), ("Memory & state", "RDS PostgreSQL"),
        ("Tool / MCP hub", "MCP on Fargate"), ("Channels", "Connect, SES, EUM"), ("Identity", "Cognito, IAM, KMS")],
-      [("Guardrails", "Bedrock + our rules"), ("Human desk", "DBOS + Connect"), ("Observability", "CloudWatch, X-Ray"),
+      [("Guardrails", "Bedrock + our rules"), ("Human desk", "DBOS + Connect"), ("Observability", "OpenTelemetry → ADOT"),
        ("Cost control", "profiles, Budgets"), ("Eval library", "Bedrock, AgentTwin"), ("Release", "AppConfig, ECR")]], WASH["peri"]),
     ("Systems of record · via MCP and PrivateLink",
      [[("SAP S/4HANA", "orders, stock, pricing"), ("Dealer management", "DMS"), ("MES", "plant execution"), ("Historian + IoT", "IoT SiteWise")],
@@ -326,6 +328,181 @@ def fig_split():
     return svg(n, 920, H, b, "Stacked bars per concern: grey is what AWS gives, blue is what we code once, pink is what each agent team writes")
 
 
+
+# ------------------------------------------------------------------ end-to-end design, tier by tier (all decided)
+# (id, name, plain, [(decision, we use, not used, why)])
+TIERS = [
+ ("H0", "Foundation", "The plot of land: accounts, region, private network, keys, and the code that builds it all.", [
+  ("Accounts", "AWS Organizations + Control Tower: agents-dev, agents-test, agents-prod, plus shared security, log-archive, network and shared-services accounts",
+   "one account for everything", "Agents face the internet; a problem in one account cannot reach another. The data platform has its own accounts in the same organisation."),
+  ("Region", "Mumbai (ap-south-1) primary, Hyderabad (ap-south-2) for disaster recovery; a policy (SCP) blocks every other region except us-east-1 for global services",
+   "active-active across regions", "Indian personal data stays in India. A Frankfurt copy is the same Terraform with another region, built only when EU personal data arrives."),
+  ("Network", "One VPC per account across 2 zones, private subnets only; the load balancer is the only public part; Transit Gateway in the network account; outbound only through Network Firewall with a domain allow-list",
+   "open NAT egress", "One way in, one way out, both inspected."),
+  ("Private paths", "VPC endpoints for Bedrock, AgentCore, STS, KMS, Secrets Manager, CloudWatch Logs, X-Ray, ECR, SQS, AppConfig; S3 gateway endpoint",
+   "public AWS endpoints", "No call to the model or to a secret crosses the internet."),
+  ("Keys", "KMS customer keys per kind of data: agent state, logs and transcripts, knowledge", "one key for all", "Erasing or rotating one kind of data leaves the others alone."),
+  ("Blueprint", "Terraform for everything, shared modules with the data platform", "AWS CDK", "One tool for AWS and Databricks (it has a Terraform provider)."),
+ ]),
+ ("H1", "Model door", "Every model call goes through one governed door, so models can be swapped and spend can be capped.", [
+  ("Gateway", "Bedrock AgentCore Gateway in front of Bedrock; LiteLLM on Fargate as the fallback behind the same port", "agents calling Bedrock directly",
+   "The counterpart of APIM's AI gateway: identity, limits, fallback and logging in one place. The agent never holds a model key."),
+  ("Models", "Claude on Bedrock: Sonnet for reasoning, Haiku for routing and short jobs; the model per job lives in AppConfig. The reference implementation's dev setup uses a free open-weight model (Groq) behind the same gateway",
+   "Intelligent Prompt Routing", "Picking the model is a decision we test offline with the golden set, not one the platform makes per prompt."),
+  ("Residency", "Calls carrying Indian personal data run in Mumbai; no Asia-Pacific cross-region profile for them", "APAC cross-region inference for personal data",
+   "That profile can route to Tokyo, Singapore or Sydney."),
+  ("Spend", "One application inference profile per agent (tagged), a token budget per turn, prompt caching on the fixed part of the context", "",
+   "Cost per agent comes from AWS; cost per business case comes from our meter (H7)."),
+ ]),
+ ("H2", "Runtime and loop", "Where our code runs, and the loop that plans, acts and checks.", [
+  ("Compute", "ECS on Fargate: one service for the router, one per agent, one per MCP tool server", "AgentCore Runtime, EKS, Lambda",
+   "No cluster to run, the closest match to Container Apps. AgentCore Runtime gets a pilot later; Lambda's cold starts and limits fit a 60-second turn badly."),
+  ("Loop", "Our hand-written loop (about 400 lines): 12 steps, 60 seconds and a cost cap per turn; Pydantic AI only as the model layer", "Bedrock Agents, Strands, LangGraph",
+   "The loop is where every check has an exact position; it stays ours on every cloud."),
+  ("Model layer", "Pydantic AI under our loop: typed calls, structured output and one interface for Bedrock and Groq", "Claude Agent SDK, raw boto3 Converse",
+   "The Agent SDK is Claude-only and runs its own loop out of sight. Calling boto3 directly would mean rebuilding typing, retries and output checks. Pydantic AI helps without taking over the loop."),
+  ("Front", "Production: CloudFront + WAF → Application Load Balancer. Dev: API Gateway HTTP API, with the channel's webhook answered before the turn runs", "",
+   "API Gateway caps a request at 30 seconds, below the 60-second turn."),
+  ("Flow", "SQS FIFO with one message group per conversation; one turn per conversation at a time; priority classes", "", "Order is kept per conversation; a plant breakdown goes before a marketing question."),
+  ("Registry", "A catalogue file in Git: agent, version, owner, autonomy level", "AWS Agent Registry", "Not offered in Mumbai; Git is enough."),
+ ]),
+ ("H3", "State, memory, knowledge", "What the agent keeps, for how long, for whom, and where it finds sourced answers.", [
+  ("Database", "Amazon RDS for PostgreSQL, Multi-AZ: one instance, schemas agent_state, dbos and knowledge; one database role per app", "Aurora Serverless v2, DynamoDB",
+   "PostgreSQL, the same engine as on Azure. Serverless v2 never pauses while DBOS holds a connection, so plain RDS is cheaper and simpler."),
+  ("Memory", "Conversation and case tables; retention per data class; erase per person (DPDP Act)", "AgentCore Memory", "Memory must follow our retention and erasure rules."),
+  ("Knowledge", "pgvector in the same database, Bedrock embeddings; the entitlement filter is a SQL WHERE clause", "Bedrock Knowledge Bases, OpenSearch",
+   "A dealer sees only their own price list and orders; one store, one backup, one access model."),
+  ("When to outgrow it", "Stay on pgvector (HNSW index) up to roughly 10 million passages or when searches start slowing turns; then move knowledge to OpenSearch Serverless or S3 Vectors behind the same retrieval port", "", "State and memory are ordinary rows and stay in PostgreSQL; only knowledge search would move."),
+  ("Recovery", "Automated backups + AWS Backup; a read replica in Hyderabad, promoted in a disaster (back within 4 hours, at most 15 minutes lost)", "Aurora Global Database", "Enough for the stated targets at a fraction of the cost."),
+ ]),
+ ("H4", "Tools to systems of record", "How agents reach SAP, the dealer system, the plants and the data platform, with the user's own rights.", [
+  ("Tool servers", "One MCP server per system on Fargate: SAP S/4HANA, dealer management, MES and historian, warranty, CRM. Read tools first; write tools only behind an approval", "agents calling systems directly",
+   "The protocol is open, so the servers move clouds unchanged."),
+  ("Gating", "Before every call: argument check (JSON Schema), scope check (this dealer's records only), idempotency key, size cap", "", "Protects orders, prices and warranties; ours on every cloud."),
+  ("On behalf of", "Our token issuer mints a 5-minute token for the far system on behalf of the user, signed with a KMS key; tool servers check it against our published keys (JWKS)", "AgentCore Identity",
+   "The same pattern as the Azure FNOL agent; Cognito has no on-behalf-of exchange."),
+  ("SAP", "SAP's OData APIs over Direct Connect or VPN through Transit Gateway", "reading SAP's database", "SAP's own rules and locks stay in force."),
+  ("Data platform", "One MCP tool over a Databricks SQL warehouse (Metric Views) through PrivateLink, with the user's Unity Catalog rights", "reading raw S3 files", "Numbers come from the governed semantic layer."),
+ ]),
+ ("H5", "Identity, privacy, guardrails", "Who is asking, what data the turn may use, and the checks on the way in and out.", [
+  ("People", "Cognito user pool for dealers, fleets and consumers, federating the dealer portal over OIDC; staff through IAM Identity Center", "", "Dealers keep one login; the harness only needs a verified token."),
+  ("Services", "IAM task roles; secrets in Secrets Manager encrypted with KMS", "keys in code or environment", "Nothing to leak."),
+  ("Way in", "Bedrock Guardrails through the ApplyGuardrail API (prompt attacks, denied topics) on user input and on tool results", "NeMo Guardrails", "One detector port; works with any model."),
+  ("Way out", "Our 30 positioned rules (no price or warranty outside policy, no order changed without OK, a dealer's own records only) + contextual grounding check", "", "Every rule that protects money or a customer is ours."),
+  ("Personal data", "Comprehend PII plus our recognisers for Aadhaar, PAN, GSTIN and vehicle numbers, redacting before telemetry; Macie on the buckets", "", "Telemetry and logs never carry raw personal data."),
+ ]),
+ ("H6", "Channels and the human desk", "How people reach the agent, and how a person takes over or approves.", [
+  ("Web chat", "Our chat page inside the dealer portal", "", "Simple, and the portal already has the sign-in."),
+  ("Other channels", "WhatsApp and SMS through AWS End User Messaging; email through SES; one conversation id across channels", "", "Dealers in India live on WhatsApp."),
+  ("Desk", "Chatwoot on Fargate as the human desk; Amazon Connect adapter when a contact centre exists", "building our own desk", "A desk with the full history, without building one."),
+  ("Approvals", "DBOS durable waits in the same PostgreSQL; an approval card to the sales or warranty desk; autonomy level per agent", "Step Functions task tokens", "Survives restarts, same code as on Azure, no extra service."),
+ ]),
+ ("H7", "Observability, replay, cost", "What we can see, prove and pay for. Everything goes through OpenTelemetry.", [
+  ("Telemetry standard", "OpenTelemetry SDK in our code, one helper, GenAI semantic conventions; personal data redacted before export", "AWS SDK calls for telemetry",
+   "The code never changes between clouds; only the collector's config does."),
+  ("Collector", "AWS Distro for OpenTelemetry (ADOT) as a sidecar in every ECS task: traces to X-Ray, metrics and logs to CloudWatch", "", "AWS's supported build of the OpenTelemetry collector."),
+  ("Dashboards and alerts", "CloudWatch Application Signals for SLOs; alarms as code (Terraform) to SNS email and chat", "", "Turn latency at the 95th percentile, error rate, guardrail blocks, cost per hour."),
+  ("Evidence", "Bedrock model invocation logging to S3 in the log-archive account (1 year); CloudTrail for who changed what", "", "Answers an auditor's question months later."),
+  ("Replay", "Run record + cassettes + config fingerprint in S3", "", "\"Why did the agent tell this dealer that price?\" needs a replay; no cloud offers one."),
+  ("Cost", "Inference profile tags + Budgets + CUR 2.0; our meter per turn and per case with a hard budget stop", "", "Cost per warranty claim triaged, not just per agent."),
+ ]),
+ ("H8", "Evaluation and release", "How a change is proven safe and rolled out, and rolled back.", [
+  ("CI", "GitHub Actions with OIDC into AWS (no stored keys); four gates: AgentTwin world, golden sets, red team (PyRIT, promptfoo), cost and latency", "CodePipeline", "The same gates as on Azure."),
+  ("Images", "Amazon ECR, scanned on push", "public registries in production", "Private images, close to Fargate."),
+  ("Release", "One release bundle (prompt + model + policy + config fingerprint); ECS blue/green through CodeDeploy with alarms that roll back", "", "Prompt, model and policy change together and roll back together."),
+  ("Runtime config", "AWS AppConfig: kill switch per agent, limits, model per job, read before every turn", "", "A bad behaviour is switched off in seconds, without a deploy."),
+  ("Online evaluation", "Each night a sample of live turns is graded; Bedrock evaluation is one judge plug-in; misses go to the golden set", "", "The golden set keeps learning from production."),
+ ]),
+]
+
+WALK = [
+ ("Dealer", "A dealer in Pune asks in the portal chat: \"Can I get 40 of 205/55 R16 by Friday, and at what price?\" The portal's sign-in gives a token (Cognito, federated)."),
+ ("Edge", "CloudFront and WAF filter the request; the load balancer passes it to the router on ECS."),
+ ("Router", "Checks the token, runs the input guardrail (ApplyGuardrail), opens the turn in PostgreSQL (one turn per conversation) and picks the dealer assistant."),
+ ("Context", "The assembler builds the turn: recent conversation from PostgreSQL, the dealer's own price list passages from pgvector."),
+ ("Model", "The loop calls the model through AgentCore Gateway to Claude on Bedrock in Mumbai; the gateway checks the allow-list and the token budget."),
+ ("Tools", "The model asks for check_stock and get_price. Gating checks the arguments and the dealer scope; our issuer mints a 5-minute token on the dealer's behalf; the SAP MCP server calls SAP over Direct Connect."),
+ ("Way out", "Our rules check the reply: the price comes from this dealer's list, the date from SAP's confirmed stock. The grounding check confirms nothing was invented."),
+ ("Reply", "The dealer gets stock, price and date. \"Place the order\" would start an approval: a DBOS wait and a card to the sales desk."),
+ ("Trace", "Every step was an OpenTelemetry span sent to the ADOT sidecar, then on to X-Ray and CloudWatch; the model call is logged to S3; the meter wrote the cost of the turn."),
+]
+
+
+def fig_deploy():
+    n = 23
+    b = ""
+    b += t(80, 22, "PEOPLE AND CHANNELS", 12, bold=True)
+    for i, (a, sub) in enumerate([("Dealer portal chat", "our page"), ("WhatsApp, SMS", "End User Messaging"), ("Email", "Amazon SES"),
+                                  ("Contact centre", "Connect (optional)"), ("Staff", "Identity Center")]):
+        b += cell(n, 10, 40 + i * 62, 140, 48, a, sub, WASH["sky"])
+    b += cell(n, 172, 150, 120, 52, "CloudFront + WAF", "the one way in", WASH["butter"])
+    b += cell(n, 172, 240, 120, 52, "Cognito", "portal OIDC", WASH["butter"])
+    for i in range(5):
+        b += arrow(n, f"M152 {64 + i * 62} L168 176")
+    # region
+    b += f'<rect x="312" y="30" width="458" height="560" rx="16" fill="{WASH["peri"]}" stroke="{INK}" stroke-width="1.6" stroke-dasharray="7 5"/>'
+    b += t(326, 52, "agents-prod account · Mumbai · private VPC, 2 zones", 13, bold=True, anchor="start")
+    b += cell(n, 330, 66, 200, 44, "Load balancer", "the only public part", "#fff")
+    b += arrow(n, "M294 176 C310 150 315 100 328 90")
+    b += f'<rect x="326" y="124" width="428" height="168" rx="12" fill="{WASH["lilac"]}"/>'
+    b += t(338, 144, "ECS on Fargate", 15, hand=True, anchor="start")
+    b += cell(n, 336, 154, 200, 46, "Router + 6 agents", "our loop, Pydantic AI", "#fff", dark=True)
+    b += cell(n, 546, 154, 198, 46, "ADOT collector", "OpenTelemetry sidecar", "#fff")
+    b += cell(n, 336, 214, 200, 46, "Token issuer", "on-behalf-of, KMS key", "#fff")
+    b += cell(n, 546, 214, 198, 46, "MCP tool servers", "SAP, DMS, MES, warranty", "#fff")
+    b += t(540, 280, "Chatwoot desk runs here too", 12, fill="#444")
+    b += arrow(n, "M430 112 L430 152")
+    b += arrow(n, "M500 202 L590 212")
+    b += cell(n, 330, 308, 200, 52, "RDS for PostgreSQL", "state · DBOS · pgvector", WASH["mint"])
+    b += cell(n, 546, 308, 208, 52, "SQS FIFO", "one group per conversation", WASH["mint"])
+    b += t(330, 392, "Private endpoints (PrivateLink)", 13, bold=True, anchor="start")
+    b += cell(n, 330, 402, 200, 52, "AgentCore Gateway", "→ Bedrock (Claude)", WASH["rose"])
+    b += cell(n, 546, 402, 208, 52, "Bedrock Guardrails", "+ Comprehend PII", WASH["rose"])
+    b += cell(n, 330, 470, 130, 48, "Secrets + KMS", "", "#fff")
+    b += cell(n, 470, 470, 130, 48, "AppConfig", "kill switch", "#fff")
+    b += cell(n, 610, 470, 144, 48, "X-Ray + CloudWatch", "via OTLP", "#fff")
+    b += t(540, 548, "Network Firewall: outbound only to an allow-list", 12, fill="#444")
+    b += t(540, 568, "everything built by Terraform", 12, fill="#444")
+    b += arrow(n, "M746 182 C772 230 772 440 712 468")
+    b += arrow(n, "M334 190 C316 260 316 380 328 425")
+    # right side
+    b += t(890, 52, "OUTSIDE THE ACCOUNT", 12, bold=True)
+    b += cell(n, 790, 66, 200, 46, "Transit Gateway", "network account", WASH["butter"])
+    b += cell(n, 790, 124, 200, 60, "Plants and SAP", "Direct Connect / VPN", "#F1F1EF")
+    b += cell(n, 790, 200, 200, 52, "Data platform account", "Databricks SQL, PrivateLink", WASH["mint"])
+    b += cell(n, 790, 300, 200, 52, "Hyderabad", "RDS replica for DR", WASH["sky"])
+    b += cell(n, 790, 380, 200, 52, "Log-archive account", "CloudTrail, model logs", WASH["sky"])
+    b += cell(n, 790, 460, 200, 52, "Shared services", "GitHub OIDC, ECR", WASH["sky"])
+    b += arrow(n, "M746 230 C766 170 760 100 788 90")
+    b += arrow(n, "M890 114 L890 122")
+    b += arrow(n, "M746 240 L788 228")
+    b += arrow(n, "M440 362 C520 384 720 384 788 330", dash=True)
+    return svg(n, 1000, 600, b, "Deployment on AWS: channels and people on the left, through CloudFront and WAF into the agents-prod account in Mumbai, "
+               "which runs the router, agents, ADOT collector, MCP servers and token issuer on ECS Fargate, with RDS PostgreSQL, SQS, and private endpoints to "
+               "AgentCore Gateway, Bedrock Guardrails, secrets, AppConfig, X-Ray and CloudWatch; on the right Transit Gateway to plants and SAP, the data platform, "
+               "the Hyderabad replica, log-archive and shared services")
+
+
+def tiers_html():
+    out = []
+    for tid, name, plain, rows in TIERS:
+        out.append(f'<h3 id="{tid.lower()}">{tid} · {E(name)}</h3><p>{E(plain)}</p>'
+                   '<div class="sd-table wide"><table><tr><th>Decision</th><th>We use</th><th>Not used</th><th>Why</th></tr>')
+        out += [f"<tr><td><b>{E(d)}</b></td><td>{E(u)}</td><td>{E(nu) or '—'}</td><td>{E(w)}</td></tr>" for d, u, nu, w in rows]
+        out.append("</table></div>")
+    return "".join(out)
+
+
+IMPL = [
+ ("R0", "Binding written down", "clean-ai-engineering/stacks/aws.yaml: every port named with its AWS adapter", "done on paper (19 Oct)"),
+ ("R1", "AWS adapters", "In the agent_harness library: agentcore-gateway, rds-postgresql, cognito + our token issuer, secrets-manager, appconfig, otel → ADOT; a contract test per port, the same tests the Azure adapters pass", "next"),
+ ("R2", "The FNOL agent on AWS, unchanged", "Add config/aws.yaml to the motor-claims FNOL agent: a new overlay, no change to the agent's code. This proves that only the binding changes", "planned"),
+ ("R3", "Infrastructure as code", "Terraform for H0 to H8 at dev size (one account, budget alarm), checked offline first", "planned"),
+ ("R4", "Running on AWS", "Deploy to AWS dev; first claim end to end, traced in X-Ray through ADOT", "planned"),
+ ("R5", "Tyre dealer assistant", "The second agent on the same stack: SAP and dealer-system MCP servers against an AgentTwin dealer world", "planned"),
+]
+
+
 # ------------------------------------------------------------------ tables
 def marks(items):
     return "<ul>" + "".join(f'<li><span class="aw-mark {m}">{MARK[m]}</span>{E(nm)}' + (f" <small>{E(w)}</small>" if w else "") + "</li>"
@@ -371,12 +548,12 @@ DECISIONS = [
     ("Where does our code run?", "ECS Fargate · Bedrock AgentCore Runtime · EKS",
      "ECS Fargate: the closest match to Azure Container Apps, no cluster to run.",
      "Pursue: ECS Fargate", "AgentCore Runtime is worth a pilot later; EKS only if the company already runs Kubernetes."),
-    ("How do approvals wait?", "DBOS on Aurora · Step Functions task tokens",
-     "DBOS: the same code as on Azure, state in the database we already run.",
+    ("How do approvals wait?", "DBOS on RDS PostgreSQL · Step Functions task tokens",
+     "DBOS: the same code as on Azure, state in the PostgreSQL we already run.",
      "Pursue: DBOS", "Step Functions works, but it is one more service and AWS-only."),
     ("How do dealers and customers sign in?", "Amazon Cognito · federate the existing dealer portal over OIDC",
-     "Federate the existing portal if it speaks OIDC; Cognito only if there is no portal.",
-     "Pursue: federate", "Dealers keep one login; the harness only needs a verified token."),
+     "Cognito user pool, federating the dealer portal over OIDC.",
+     "Pursue: Cognito + portal federation", "Dealers keep one login; the harness only needs a verified token."),
 ]
 
 SWAP = [
@@ -388,9 +565,9 @@ SWAP = [
     ("Secrets and keys", "Key Vault, managed identity", "Secrets Manager + KMS, IAM task roles"),
     ("Guardrails", "AI Content Safety, Prompt Shields", "Bedrock Guardrails (ApplyGuardrail)"),
     ("Finding personal data", "AI Language PII", "Comprehend PII, Macie for S3"),
-    ("Database", "Azure Database for PostgreSQL", "Aurora PostgreSQL"),
+    ("Database", "Azure Database for PostgreSQL", "Amazon RDS for PostgreSQL"),
     ("Queue", "Service Bus", "SQS FIFO"),
-    ("Traces and metrics", "Application Insights, Managed Prometheus", "CloudWatch, X-Ray, Managed Prometheus"),
+    ("Traces and metrics", "OpenTelemetry → Application Insights", "OpenTelemetry → ADOT collector → X-Ray + CloudWatch"),
     ("Runtime config, kill switch", "App Configuration", "AWS AppConfig"),
     ("Cost", "Cost Management, APIM token metric", "Budgets, Cost Explorer, Bedrock inference-profile tags"),
     ("Evaluation", "Foundry evaluation, AI Red Teaming Agent", "Bedrock evaluations, PyRIT, promptfoo"),
@@ -418,7 +595,7 @@ BODY = f"""<main class="wrap">
 <div><b>22 concerns</b>in five families: think, act, control, see, change</div>
 <div><b>6 agents</b>for dealers, plants, quality and fleets, on one shared platform, each with its own autonomy level</div>
 <div><b>12 horizontal assets</b>built once on AWS, reused by every agent</div>
-<div><b>India + EU</b>Mumbai and Hyderabad for India, Frankfurt or Ireland for European plants; personal data stays in its region</div>
+<div><b>India first</b>Mumbai, with Hyderabad for disaster recovery; a Frankfurt copy of the same stack only when EU personal data arrives</div>
 </div>
 
 <section><p class="eyebrow">The big picture</p><h2>One request, top to bottom, on AWS</h2>
@@ -435,11 +612,21 @@ BODY = f"""<main class="wrap">
 <tr><td>Systems of record</td><td>SAP S/4HANA, the dealer management system, MES, the plant historian and IoT SiteWise, quality and LIMS, warranty, CRM and the supplier portal, reached only through MCP tools with the user's own rights.</td></tr>
 </table></div></section>
 
+<section id="design"><p class="eyebrow">End to end</p><h2>The design, from account to release</h2>
+<p>This is a reference architecture, so every choice below is made. The tyre maker is only the example. Read the drawing first, then follow one request through it, then the nine design tiers (H0 to H8).</p>
+{fig(fig_deploy(), "The production account in Mumbai. The dark box is our code: the router, the loop and the agents. Everything telemetry-related flows through OpenTelemetry into the ADOT sidecar, then on to X-Ray and CloudWatch. Dashed arrow: the replica in Hyderabad.")}
+<h3>One request, step by step</h3>
+<div class="sd-table"><table><tr><th>#</th><th>Where</th><th>What happens</th></tr>
+{"".join(f"<tr><td>{i}</td><td><b>{E(w)}</b></td><td>{E(d)}</td></tr>" for i, (w, d) in enumerate(WALK, 1))}
+</table></div>
+{tiers_html()}
+</section>
+
 <section><p class="eyebrow">Every concern, bound to AWS</p><h2>The 22 concerns, one table</h2>
 <p>For each concern: what AWS offers and whether we use it, the open-source options, and what we code once for every agent, and why.</p>
 <p class="aw-key"><span class="aw-mark use">use</span> in the design &nbsp; <span class="aw-mark plan">planned</span> next phase &nbsp; <span class="aw-mark list">considered</span> not picked, or newer service to check &nbsp; <span class="aw-mark no">not used</span> and why</p>
 {binding_table()}
-<p class="aw-key">Services marked "check current status" are newer AWS offerings; confirm their availability in the Mumbai, Hyderabad, Frankfurt and Ireland regions before relying on them.</p>
+<p class="aw-key">Services marked "check current status" are newer AWS offerings; confirm their availability in Mumbai and Hyderabad (and Frankfurt, if the EU copy is built) before relying on them.</p>
 </section>
 
 <section><p class="eyebrow">Who builds what</p><h2>What AWS gives, what we build, what each agent writes</h2>
@@ -447,9 +634,9 @@ BODY = f"""<main class="wrap">
 {fig(fig_split(), "Our judgement, not a measurement. AWS gives the plumbing (gateway, identity, storage, logging); the parts that make an agent trustworthy stay in our code.")}
 <p>The rule that keeps this healthy: when two agents write the same code, it moves into the shared middle (blue). When AWS catches up, it moves to the left (grey).</p></section>
 
-<section><p class="eyebrow">Open decisions</p><h2>Five choices to make with the company's team</h2>
+<section><p class="eyebrow">The five big choices</p><h2>Decided, with the options we dropped</h2>
 <div class="sd-table"><table>
-<tr><th>Decision</th><th>Options</th><th>Our recommendation</th><th>Verdict</th><th>Why</th></tr>
+<tr><th>Decision</th><th>Options</th><th>We chose</th><th>Verdict</th><th>Why</th></tr>
 {"".join(f"<tr><td><b>{E(q)}</b></td><td>{E(o)}</td><td>{E(r)}</td><td><b>{E(v)}</b></td><td>{E(w)}</td></tr>" for q, o, r, v, w in DECISIONS)}
 </table></div></section>
 
@@ -467,6 +654,12 @@ BODY = f"""<main class="wrap">
 <p>The whole binding on one page: for each concern, only what we picked. AWS services and open-source tools marked <i>planned</i> are chosen but not yet switched on; everything else in the tables above was considered and left out.</p>
 {final_table()}
 </section>
+
+<section id="impl"><p class="eyebrow">From design to running code</p><h2>The reference implementation</h2>
+<p>The same path the motor-claims FNOL agent took on Azure: write the binding, write the adapters, add a configuration overlay, build the infrastructure, run it, then add the next agent. The agent's code and tests do not change.</p>
+<div class="sd-table"><table><tr><th>Step</th><th>What</th><th>How</th><th>State</th></tr>
+{"".join(f"<tr><td>{a}</td><td><b>{E(b_)}</b></td><td>{E(c)}</td><td>{E(d)}</td></tr>" for a, b_, c, d in IMPL)}
+</table></div></section>
 
 <section><p class="eyebrow">Read next</p><h2>Go deeper</h2>
 <p><a href="{AH}">Agent harness tutorial</a> (every concern explained, on the Azure example) · <a href="/leaders/spec-driven/">Spec-driven development</a> · <a href="/learn/data-platform-architecture/">Data platform architecture</a> · <a href="/learn/agent-guardrails/">Guardrail catalog</a> · <a href="/learn/agenttwin/">AgentTwin</a>.</p>
