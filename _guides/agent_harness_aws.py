@@ -484,6 +484,76 @@ def fig_deploy():
                "the Hyderabad replica, log-archive and shared services")
 
 
+def fig_libs():
+    n = 24
+    b = ""
+    # agents
+    b += t(40, 22, "AGENTS · domain code only", 12, bold=True, anchor="start")
+    b += cell(n, 40, 32, 190, 52, "claims_fnol", "motor claims agent (built)", WASH["rose"])
+    b += cell(n, 240, 32, 190, 52, "dealer assistant", "tyre maker (next)", WASH["rose"])
+    b += cell(n, 440, 32, 200, 52, "config/<env>.yaml", "local · azure · aws (new)", WASH["butter"])
+    # specs
+    b += t(690, 22, "SPECS AND CATALOGS · data, not code", 12, bold=True, anchor="start")
+    b += cell(n, 690, 32, 130, 52, "Guardrail catalog", "rule ids, places", "#F1F1EF")
+    b += cell(n, 830, 32, 130, 52, "AOAS · AHC · AAC", "what must be true", "#F1F1EF")
+    b += cell(n, 690, 92, 270, 36, "stacks/azure.yaml · stacks/aws.yaml", "", "#F1F1EF")
+    # harness
+    b += f'<rect x="40" y="150" width="600" height="190" rx="14" fill="{WASH["peri"]}" stroke="{INK}" stroke-width="2"/>'
+    b += t(56, 174, "agent-harness · the core library (unchanged)", 16, hand=True, anchor="start")
+    mods = ["loop", "context", "tools + gating", "policy", "approvals", "cost meter", "telemetry", "watch", "replay"]
+    for i, m in enumerate(mods):
+        b += cell(n, 54 + (i % 5) * 116, 184 + (i // 5) * 46, 108, 36, m, "", "#fff")
+    b += f'<rect x="54" y="282" width="572" height="46" rx="10" fill="{WASH["lilac"]}" stroke="{INK}" stroke-width="1.4" stroke-dasharray="5 4"/>'
+    b += t(340, 300, "ports (adapters/): model · state · identity · secrets · config", 12, bold=True)
+    b += t(340, 318, "telemetry · waits · tools · records · cost ledger", 12, bold=True)
+    # evalharness + agenttwin
+    b += f'<rect x="690" y="150" width="270" height="118" rx="14" fill="{WASH["mint"]}" stroke="{INK}" stroke-width="2"/>'
+    b += t(704, 174, "evalharness · eval framework", 16, hand=True, anchor="start")
+    b += t(825, 198, "ports: Evaluator · TraceSource", 12)
+    b += t(825, 216, "Judge · ResultSink", 12)
+    b += t(825, 240, "domain patterns · cost rules", 12, fill="#444")
+    b += t(825, 256, "five positions, input to release", 12, fill="#444")
+    b += f'<rect x="690" y="284" width="270" height="56" rx="14" fill="#fff" stroke="{INK}" stroke-width="1.6" stroke-dasharray="6 5"/>'
+    b += t(825, 306, "agenttwin · pretend worlds", 14, bold=True)
+    b += t(825, 324, "tests and gates only", 12, fill="#444")
+    # arrows: agents -> harness, harness -> evalharness, agent -.-> agenttwin, specs -> things
+    b += arrow(n, "M135 86 L135 148")
+    b += arrow(n, "M335 86 L335 148")
+    b += arrow(n, "M540 86 C540 120 560 260 560 280")
+    b += arrow(n, "M642 210 L688 210")
+    b += arrow(n, "M400 86 C450 132 665 118 665 200 L665 288 C665 302 674 310 688 312", dash=True)
+    b += arrow(n, "M720 86 C700 120 650 130 610 182")
+    b += arrow(n, "M760 86 L760 148")
+    b += arrow(n, "M688 110 C668 106 660 70 644 62")
+    # open source
+    b += t(40, 376, "OPEN SOURCE UNDERNEATH", 12, bold=True, anchor="start")
+    oss = [("Pydantic AI", "model layer"), ("DBOS", "durable waits"), ("MCP SDK", "tools"), ("OpenTelemetry", "SDK + OTLP"),
+           ("psycopg", "PostgreSQL"), ("Pydantic", "contracts"), ("Starlette", "HTTP edge")]
+    for i, (a, sub) in enumerate(oss):
+        b += cell(n, 40 + i * 132, 386, 124, 46, a, sub, WASH["sky"])
+    b += arrow(n, "M340 342 L340 384")
+    # extras
+    b += t(40, 470, "CLOUD EXTRAS · pip install agent-harness[azure] or [aws], evalharness[azure] or [aws]", 12, bold=True, anchor="start")
+    b += f'<rect x="40" y="480" width="440" height="118" rx="14" fill="#F1F1EF" stroke="{INK}" stroke-width="1.4"/>'
+    b += t(56, 502, "[azure] · built", 15, hand=True, anchor="start")
+    for i, line in enumerate(["model → APIM AI gateway", "state → Azure PostgreSQL · sign-in → Entra ID",
+                              "secrets → Key Vault · config → App Configuration", "telemetry → Azure Monitor · guardrails → Content Safety",
+                              "evals → Azure AI evaluation, App Insights traces"]):
+        b += t(56, 522 + i * 16, E(line), 12, anchor="start")
+    b += f'<rect x="520" y="480" width="440" height="118" rx="14" fill="{WASH["butter"]}" stroke="{INK}" stroke-width="2.4"/>'
+    b += t(536, 502, "[aws] · new, step R1", 15, hand=True, anchor="start")
+    for i, line in enumerate(["model → AgentCore Gateway → Bedrock", "state → RDS PostgreSQL · sign-in → Cognito + our issuer",
+                              "secrets → Secrets Manager · config → AppConfig", "telemetry → OTLP → ADOT · guardrails → Bedrock Guardrails",
+                              "evals → AgentCore Evaluations, CloudWatch traces"]):
+        b += t(536, 522 + i * 16, E(line), 12, anchor="start")
+    b += arrow(n, "M168 330 L168 478", dash=True)
+    b += arrow(n, "M564 330 L564 478")
+    b += arrow(n, "M900 270 C985 360 985 440 900 478")
+    return svg(n, 1000, 610, b, "Library dependencies: agents depend on the agent-harness core library, which depends on evalharness and on open-source "
+               "libraries; agenttwin is used by tests only; specs and the guardrail catalog feed the harness and the eval framework; "
+               "cloud extras [azure] (built) and [aws] (new) bind the ports to cloud services")
+
+
 def tiers_html():
     out = []
     for tid, name, plain, rows in TIERS:
@@ -682,6 +752,11 @@ BODY = f"""<main class="wrap">
 <section id="final"><p class="eyebrow">Finally</p><h2>What we are using</h2>
 <p>The whole binding on one page: for each concern, only what we picked. AWS services and open-source tools marked <i>planned</i> are chosen but not yet switched on; everything else in the tables above was considered and left out.</p>
 {final_table()}
+</section>
+
+<section id="libs"><p class="eyebrow">How the code fits</p><h2>Library dependencies</h2>
+<p>Agents hold only their domain code. Everything else comes from two libraries we own and a handful of open-source ones. Moving to AWS adds one install option, <code>[aws]</code>, to each library: new adapters behind the same ports, nothing else.</p>
+{fig(fig_libs(), "Solid arrows: depends on. Dashed from the agent to agenttwin: tests only, never at run time. Dashed into [azure]: the extra we built. The yellow box is the only new code for AWS.")}
 </section>
 
 <section id="agentcore"><p class="eyebrow">AgentCore, part by part</p><h2>Which AgentCore parts we use</h2>
