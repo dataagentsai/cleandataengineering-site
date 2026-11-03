@@ -224,6 +224,7 @@ TRANSFORM_DECISIONS = [
     ("D5", "The thirteen stages, in this order", "Agreed"),
     ("D7", "JSON stays whole in bronze; silver extracts only listed paths; arrays of child records become their own silver table", "Agreed"),
     ("D6", "History by dataset kind: type 2 for master data, type 1 for transactions (type 2 where needed), append for events, snapshot for snapshots; tracked columns only", "Agreed"),
+    ("D8", "One PySpark engine for every table: the same code runs the thirteen stages for any dataset, driven only by its metadata; a new table is new metadata rows, never new code. It runs on Spark (Databricks), not on local Python Delta libraries; the framework's processors are rewritten as Spark functions", "Agreed"),
 ]
 
 # ------------------------------------------------------------------ the working parts
