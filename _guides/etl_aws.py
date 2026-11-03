@@ -778,8 +778,18 @@ def page():
 <p>Follow one load: changes to the press events table in the plant's MES database, picked up at 00:15 and in gold by 00:20. Times are illustrative.</p>
 {rules(RUN_STEPS)}</section>
 
-<section id="jobs"><p class="eyebrow">Jobs and triggers</p><h2>What starts what</h2>
-<p>Each source has exactly one clock. Silver starts when a source has finished a batch, and gold starts when silver has finished. Nothing polls for no reason, and nothing starts on a half-written input.</p>
+<section id="jobs"><p class="eyebrow">Orchestration: jobs and triggers</p><h2>What starts what</h2>
+<p>Lakeflow Jobs is the one orchestrator, and every job in it is generated from metadata. Each source has exactly one clock. Silver starts when a source has finished a batch, and gold starts when silver has finished. Nothing polls for no reason, and nothing starts on a half-written input.</p>
+<h3>Why there is no second orchestrator</h3>
+<p>Everything that runs (the puller, the lander, the silver engine, gold and the ops jobs) runs on Databricks, so Lakeflow Jobs already sees each run's status, cost and lineage in one place. Airflow (MWAA), Step Functions or Glue workflows would be one more system to run, secure and pay for, without solving a problem we have. The only steps that start outside Databricks are a source finishing on the AWS side, and those reach a job through EventBridge, a Lambda or a file arriving, as the table below shows.</p>
+<h3>Four rules every job follows</h3>
+<ul>
+<li><b>Runs queue, never overlap.</b> A run with nothing new to do ends as skipped, not failed.</li>
+<li><b>Each run starts from its bookmark.</b> It takes exactly the batches it has not processed yet, so a late run or a re-run neither skips nor doubles anything.</li>
+<li><b>A failure stays with its dataset.</b> That dataset is blocked; the rest of the source carries on.</li>
+<li><b>Big loads have their own jobs.</b> First loads, reloads and backfills never sit in the daily path.</li>
+</ul>
+<h3>The triggers</h3>
 {trig_table}
 <h3>The jobs the generator writes</h3>
 {jobs_table}
