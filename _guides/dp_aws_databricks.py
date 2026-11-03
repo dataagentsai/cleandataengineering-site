@@ -336,7 +336,7 @@ DB_OPTIONS = [
 MOVERS = [
     ("SAP S/4HANA (sales, stock, procurement, finance)", "Amazon AppFlow, SAP OData connector, on released CDS views and extractors with delta", "Never SAP tables directly; Datasphere or Business Data Cloud only if already licensed"),
     ("MES and quality / LIMS databases", "AWS DMS with change capture", "Change capture keeps loads small and brings deletes"),
-    ("Small and reference tables, databases without CDC", "Our puller (the framework's built connectors) as a Databricks job", "Full copy or watermark, into landing like everything else"),
+    ("Small and reference tables, databases without CDC", "Our puller (the framework's built connectors) as a Databricks job", "Full copy or watermark, straight to bronze through the same lander steps (no landing)"),
     ("Plant historian and press / mixer sensors", "AWS IoT SiteWise → Kinesis or S3", "The streaming lane: same layers, continuous"),
     ("Dealer management system, CRM (SaaS)", "Amazon AppFlow; our puller's REST connector where AppFlow has none", "Lakeflow Connect is not used in v1"),
     ("Supplier files, raw-material prices", "AWS Transfer Family (SFTP) → S3", "The lander reads the new files listed in its file log"),
