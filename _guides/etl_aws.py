@@ -121,7 +121,7 @@ TRANSFORM_PRINCIPLES = [
 
 STAGES = [
     ("1 Contract check", "On the bronze columns: every required column present, types compatible (see schema changes below)", "required, data_type, contract version", "To build"),
-    ("2 Select, extract and rename", "Only the listed columns go on, each can be renamed; for JSON payloads, only the listed paths are extracted into typed columns, and arrays of child records become their own silver table", "silver.columns, silver_column_name, source_path, explode_path", "Rename, exclude and flatten built; 'listed only' to build"),
+    ("2 Column projection, extract and rename", "All columns go on by default (minus any excluded); a dataset can instead list only the columns it needs; each can be renamed; for JSON payloads, only the listed paths are extracted into typed columns, and arrays of child records become their own silver table", "silver.columns, silver_column_name, source_path, explode_path", "Rename, exclude and flatten built; 'listed only' to build"),
     ("3 Hygiene", "Trim, collapse spaces, empty text to NULL, strip control characters and byte-order marks, normalise unicode and line endings", "On by default for text; transforms, skip lists", "Built"),
     ("4 Parse and type", "Convert to the silver type using the column's formats: dates, timestamps, comma or point decimals, epoch numbers, booleans; widen integers; one decimal scale", "silver_data_type, date_format, timestamp_format, decimal_separator, on_cast_failure", "Built; formats and the failure action to add"),
     ("5 Time", "Convert to UTC from the source's time zone; add the plant's local time beside it", "source_timezone, local_time_zone_from", "UTC built; source zone and local column to add"),
@@ -136,7 +136,7 @@ STAGES = [
 ]
 
 COLUMN_SETTINGS = [
-    ("silver.columns (dataset)", "declared, all_except_excluded", "declared", "2"),
+    ("silver.columns (dataset)", "all_except_excluded, declared", "all_except_excluded", "2"),
     ("silver_column_name", "a name", "the source name", "2"),
     ("source_path", "a path into a JSON payload, such as $.order.id", "none (a plain column)", "2"),
     ("explode_path, parent_keys (dataset)", "the array of child records; the keys carried down", "none", "2"),
@@ -168,7 +168,7 @@ CAST_FAILURE = [
 ]
 
 SCHEMA_CHANGES = [
-    ("A new column", "Kept (personal-data sources: the file is held)", "Ignored until someone lists it; for a dataset in the opt-in all_except_excluded mode it reaches silver", "'New column seen', low"),
+    ("A new column", "Kept (personal-data sources: the file is held)", "Reaches silver by default; ignored for a dataset that lists its columns (declared)", "'New column seen', low"),
     ("A listed column is removed", "-", "Required column: the table stops. Optional column: filled with empty values and a warning", "'Schema changed'"),
     ("A listed column is renamed", "Kept under the new name", "Stops (it looks like a removal). Fixed by mapping the new source name to the same silver name, so silver does not change at all", "'Schema changed'"),
     ("A type is widened (int to bigint, longer text, more decimals)", "Kept", "Accepted automatically when the silver type can hold it", "None"),
@@ -217,7 +217,7 @@ HISTORY_RULES = [
 ]
 
 TRANSFORM_DECISIONS = [
-    ("D1", "Silver takes only the listed columns (silver.columns = declared) by default; 'all except excluded' stays as an opt-in", "Agreed"),
+    ("D1", "Silver takes all columns by default (silver.columns = all_except_excluded); a dataset can list only the columns it needs (declared). Changed 3 Nov: was declared by default", "Agreed"),
     ("D2", "A failed conversion never silently becomes empty; the default action is quarantine", "Agreed"),
     ("D3", "The schema change rules above, with required per column and minor or major contract versions", "Agreed"),
     ("D4", "No free-form SQL from bronze to silver; only the standard transforms", "Agreed"),

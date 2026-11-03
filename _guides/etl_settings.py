@@ -82,7 +82,7 @@ SETTINGS = [
     ("delete_rule", "dataset", "dms_op, sap_change_mode, snapshot_compare, replace_slice, none", "set by the mover", "silver", ["S02", "S09"], "new", ""),
     ("replacement_scope", "dataset", "list of columns", "none", "silver", ["S07"], "new", "partner files: what a re-sent file replaces"),
     ("mass_delete_limit_pct", "dataset", "percent", "the platform's", "lander", ["S08"], "new", "override"),
-    ("silver.columns", "dataset", "declared, all_except_excluded", "declared", "silver", ["S23"], "new", ""),
+    ("silver.columns", "dataset", "all_except_excluded, declared", "all_except_excluded", "silver", ["S23"], "new", "all by default; declared = projection to listed columns"),
     ("row_filter", "dataset", "a declared condition", "none", "silver", ["S32"], "new", ""),
     ("quarantine_max_pct", "dataset", "percent", "2", "silver", ["S32"], "new", "stop the table past this share of bad rows"),
     ("dedup.mode, dedup.business_keys, dedup.order_by", "dataset", "as today", "none", "silver", ["S27"], "exists", ""),
@@ -102,7 +102,7 @@ SETTINGS = [
     # ---------------------------------------------------------------- column
     ("column_name, data_type, is_nullable, ordinal_position", "column", "as today", "from discovery", "silver", ["S23"], "exists", ""),
     ("is_primary_key", "column", "true, false", "false", "silver", ["S27"], "exists", ""),
-    ("is_excluded", "column", "true, false", "false", "silver", ["S35"], "exists", "only with silver.columns = all_except_excluded"),
+    ("is_excluded", "column", "true, false", "false", "silver", ["S35"], "exists", "used with the default silver.columns = all_except_excluded"),
     ("required", "column", "true, false", "true for keys", "silver", ["S25"], "new", ""),
     ("silver_column_name", "column", "a name", "the source name", "silver", ["S23", "S25"], "exists", ""),
     ("source_path", "column", "a JSON path", "none", "silver", ["S28"], "exists", ""),
