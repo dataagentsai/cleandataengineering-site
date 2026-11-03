@@ -46,11 +46,11 @@ def rules(rows):
 
 # ------------------------------------------------------------------ the principles
 PRINCIPLES = [
-    ("Push lands in S3; pull goes straight to bronze through the same steps.", "AWS services and source-side extractors bring files to S3 landing, and our one lander takes it from there. Our puller reads the source directly and runs the same lander steps in-process (contract check, personal-data tokenising, mass-delete guard, file and batch log), so pull needs no landing. Every batch source passes the same checks, and a source outage never stops the other sources. Sensor streams are the one stated exception: Kinesis is their landing and the streaming table their lander, because readings carry no personal data and need seconds, not files."),
+    ("Push lands in S3; pull goes straight to bronze through the same steps.", "AWS services and source-side extractors bring files to S3 landing, and our one lander takes it from there. Our puller reads the source directly and runs the same lander steps in-process (contract check, personal-data tokenising, mass-delete guard, file and batch log), so pull needs no landing. Every batch source passes the same checks, and a source outage never stops the other sources. Sensor streams are the one stated exception: Kinesis is their landing and the streaming table their lander, because readings carry no personal data and Kinesis already keeps them in order for 7 days, ready to be read again."),
     ("Everything is a run, and every run leaves the same rows.", "A file load, a pipeline update and a 15-minute slice of a stream all get a run id and the same log rows, so one dashboard and one set of alerts cover all of them."),
     ("Every step can run twice.", "Re-running a step after a crash gives the same tables as running it once. That is what makes retries, re-runs and backfills safe without a person checking."),
     ("A number is complete only when every input has caught up.", "Each input carries its own bookmark: how far in source time it has been loaded. A gold hour is complete only when every input's bookmark is past the end of that hour. Otherwise it is published as incomplete, never as right."),
-    ("One clock per source; Lakeflow runs the work.", "Each source has exactly one thing that says 'new data is ready': a schedule, or for AppFlow and partner uploads the AWS event that the transfer finished. Everything that processes batch data runs in Lakeflow Jobs; the streaming pipelines run continuously and are watched by the ops builder. Two clocks on one path is how runs overlap, wait or never start."),
+    ("One clock per source; Lakeflow runs the work.", "Each source has exactly one thing that says 'new data is ready': a schedule, or for AppFlow and partner uploads the AWS event that the transfer finished. Everything that processes batch data runs in Lakeflow Jobs; the streaming pipelines run on a schedule too, every 15 minutes, taking what has arrived and stopping, and nothing runs continuously. Two clocks on one path is how runs overlap, wait or never start."),
     ("Jobs are generated, never hand-built.", "Jobs, pipelines and mover settings are generated from the metadata and deployed with Asset Bundles and Terraform. Adding a dataset changes YAML, not a job."),
     ("Log before you work; nothing waits forever.", "A run that cannot write its start row does not start. Every call to the log database and every job has a timeout, so a slow database fails loudly instead of freezing quietly."),
 ]
@@ -63,7 +63,7 @@ SOURCES = [
     ("SaaS applications with an AppFlow connector", "CRM (for example Salesforce), IT service desk", "Amazon AppFlow", "Rows changed since the last run", "Parquet plus a manifest written when the flow finishes", "Hourly"),
     ("APIs without an AppFlow connector", "Dealer management system API, natural-rubber price feed, weather", "Our puller: the framework's built REST connector", "Pages since the last cursor or date", "JSON lines plus a manifest", "On a schedule"),
     ("Files from partners", "Dealer sell-out, supplier certificates of analysis, logistics partners", "AWS Transfer Family (SFTP), one login and folder per partner", "New files; a correction is a new file", "As received (CSV, Excel, XML), renamed on arrival to a unique key", "On arrival"),
-    ("Machines and sensors", "Curing presses, mixers, live historian tags", "AWS IoT SiteWise Edge or IoT Core at the plant, into Amazon Kinesis Data Streams (7 days kept)", "Events, one per reading", "No files: the Kinesis stream is the landing", "Continuous"),
+    ("Machines and sensors", "Curing presses, mixers, live historian tags", "AWS IoT SiteWise Edge or IoT Core at the plant, into Amazon Kinesis Data Streams (7 days kept)", "Events, one per reading", "No files: the Kinesis stream is the landing", "Every 15 minutes, trigger-once (readings are sent all the time and wait in Kinesis)"),
     ("Historian history", "Years of past press and mixer data, once", "The historian's own export to S3 through Transfer Family (" + CHECK + " for the historian's tools)", "One-off backfill", "Parquet or CSV", "Once, through the bulk job"),
     ("Spreadsheets people keep", "Ideal cycle times not in MES, targets, mappings", "YAML in Git first; otherwise an upload to a Unity Catalog volume by the named owner", "A new version of the file; a correction says from which date it applies", "As uploaded", "On upload"),
 ]
@@ -91,7 +91,7 @@ LANDING_CONTRACT = [
 LANDER_MODES = [
     ("Files (DMS, AppFlow, SFTP, uploads)", "The lander lists only the date folders that can hold new files, takes the files that are new or checked (never loaded, rejected or held ones), checks the new ones (readable, header, row count) and reads exactly that list with a plain batch read. A batch keeps its number until it is loaded, so a re-run reads the same batch with the same transaction id and it cannot land twice. A dataset takes at most a set number of files or gigabytes per run, so a large first load spreads over several runs and never holds back the other datasets. Nothing lists the folder on its own, so nothing unchecked can slip in between the check and the read", "The file log. Each batch is appended with a transaction id (the dataset and the batch number from the file log), so a batch committed before a crash is never appended twice"),
     ("DMS change files", "As files, read in commit order, keeping operation flag, commit time and change sequence as columns; silver applies them with AUTO CDC", "As above; a bad file blocks the dataset (see failures)"),
-    ("Kinesis streams", "A streaming table reading Kinesis directly, always on", "Stream checkpoint and Kinesis sequence numbers"),
+    ("Kinesis streams", "A streaming table reading Kinesis directly, run trigger-once every 15 minutes: each run takes what has arrived since its checkpoint and stops", "Stream checkpoint and Kinesis sequence numbers"),
 ]
 
 NOT_V1 = [
@@ -236,7 +236,7 @@ PARTS = [
     ("5 Conformer", "Conforms sources on the way into gold, because silver stays source-aligned: MES production with SAP orders, materials mapped through mapping tables", "Source-aligned silver, key mappings", "Shared gold dimensions and inputs to gold facts", "The common gold harness", "Conforming happens once, in gold; silver is never joined across sources"),
     ("6 Gold builder", "Silver to gold: star schemas, multi-input facts, completeness per window; the only writer of each gold fact", "Source-aligned silver, mapping tables, corrections, input watermarks", "Gold facts and dimensions", "Materialized views for simple facts; our window-recompute job for multi-input facts", "Each window is replaced whole (replaceWhere on date partitions), never patched, and only one job writes a gold fact"),
     ("7 Metric layer", "Each metric defined once", "Gold", "Nothing stored; answers at query time", "Unity Catalog metric views", "Nothing to run"),
-    ("8 Run recorder", "The one library every part calls to log", "-", "runtime: master_run_log, run_log, step_log, file_log, error_log, dq_result, input_watermark, config_snapshot", "Our Python library, writing to Aurora, with timeouts", "Rows are keyed by run id and step; writing the same row twice updates it"),
+    ("8 Run recorder", "The one library every part calls to log", "-", "runtime: master_run_log, run_log, step_log, file_log, error_log, dq_result, input_watermark, config_snapshot", "Our Python library, writing to Lakebase through the stored procedures, with timeouts", "Rows are keyed by run id and step; writing the same row twice updates it"),
     ("9 Ops builder", "Every 15 minutes: copies runtime rows, joins system tables and CloudWatch, works out freshness, sweeps stuck runs, raises alerts", "runtime schema, system tables, CloudWatch landing", "prod_ops tables, alerts, incidents", "A small Lakeflow job", "It recomputes the last hour each time, so a missed run is caught up by the next"),
     ("10 Heartbeat", "Proves the whole path is alive, even when no source sends anything, and is watched without our database", "A tiny synthetic source", "A row in every layer every 15 minutes; a Databricks SQL alert watches the newest one", "A generated dataset like any other", "Same as any dataset"),
 ]
@@ -291,9 +291,9 @@ ALERTS = [
     ("Freshness missed", "A dataset's bookmark is behind its target", "From the data product's tier", "Data product owner and on-call"),
     ("Schema changed", "A contract check stopped a table", "Medium", "The source owner named in the contract"),
     ("Mass delete stopped", "The guard stopped a full copy", "High", "The source's engineer"),
-    ("Stream down", "A streaming pipeline stopped, or windows marked DOWN", "High", "On-call; per-press alerts held back meanwhile"),
+    ("Stream down", "A scheduled streaming run failed or did not run, or windows marked DOWN", "High", "On-call; per-press alerts held back meanwhile"),
     ("Press silent", "No reading from one press for 30 minutes in a planned shift", "High (OEE is tier 1)", "Plant maintenance and on-call"),
-    ("Heartbeat missing", "No heartbeat row for 30 minutes (a Databricks SQL alert, independent of Aurora)", "High", "Platform on-call"),
+    ("Heartbeat missing", "No heartbeat row for 30 minutes (a Databricks SQL alert, independent of Lakebase)", "High", "Platform on-call"),
     ("Job slow or failed", "Databricks job health rules and failure notifications", "High", "Platform on-call"),
     ("Runs swept", "The sweeper closed stuck runs", "Low", "Platform team, next working day"),
     ("New column seen", "An added column kept as rescued data", "Low", "The steward"),
@@ -316,7 +316,7 @@ RUN_STEPS = [
     ("00:15:02  Open the master run.", "The first task writes the master_run_log row (RUNNING), reads dataset_view for every enabled MES dataset, stores the merged settings once in config_snapshot, and lists datasets with files not yet loaded. If none has, it moves each dataset's bronze bookmark by its quiet rule (a stopped DMS task keeps it frozen) and closes the master run as SKIPPED."),
     ("00:15:05  One task per dataset, eight at a time.", "Each opens its run_log row (STARTED) with the master run id, job run id and task run id."),
     ("00:15:06  Check the files, then load exactly those.", "The new files are checked (readable, expected header) and written to file_log as one numbered batch, status checked. The lander reads exactly that list, tokenises personal columns, adds the ingest columns and appends to bronze with the batch's transaction id."),
-    ("00:15:40  Close the run after the commit.", "After the Delta commit the file log marks the batch loaded, and run_log becomes SUCCEEDED with rows read, written and rejected and the newest commit time as the run's watermark, in one Aurora transaction. If that write fails, the sweeper finishes it later from the evidence in bronze."),
+    ("00:15:40  Close the run after the commit.", "After the Delta commit the file log marks the batch loaded, and run_log becomes SUCCEEDED with rows read, written and rejected and the newest commit time as the run's watermark, in one Lakebase (PostgreSQL) transaction. If that write fails, the sweeper finishes it later from the evidence in bronze."),
     ("00:15:45  Close the master run and write the marker.", "The closing task runs even after failures. It marks the master run SUCCEEDED, PARTIAL (some datasets failed or are blocked) or FAILED, and writes the batch-ready marker: one row per dataset that loaded (dataset, master run, status) in that source's own marker table (prod_ops.batch_ready_<source>), a Unity Catalog Delta table written with Spark, so each domain's trigger watches only its own sources; blocked datasets get no row. The job itself ends green when every failure was a handled data problem; PARTIAL raises its alert from our log, not from a job failure."),
     ("00:16:00  The marker starts silver.", "The manufacturing wrapper job is triggered by updates to the marker tables of its sources (MES, the press master), not by each bronze table, so it never runs on a half-loaded source. It opens a run_log row, starts the pipeline update itself through the Pipelines API, stores the update id it gets back and the settings fingerprint the pipeline was generated from, and waits for the update to finish."),
     ("00:16:05  The silver pipeline runs.", "The thirteen standard stages, AUTO CDC in the defined order, soft deletes."),
@@ -331,7 +331,7 @@ TRIGGERS = [
     ("Upload copied", "Partner files and uploads: the Transfer Family workflow's Lambda step starts the lander after copying the file to landing", "The lander job of that source"),
     ("Table update on the marker", "Silver: runs when one of its sources has finished a batch", "The source's wrapper job, which starts that source's pipeline update through the API"),
     ("Called by the wrapper, the stream hour job or the ops builder", "Gold multi-input facts: after a pipeline update, after a sensor hour closes, or when bookmarks pass incomplete hours", "The window-recompute job, queued, never two at once"),
-    ("Continuous", "Sensor streams", "The streaming pipeline, always on"),
+    ("Schedule, every 15 minutes", "Sensor streams", "The streaming pipeline, trigger-once: each run reads what has arrived since its checkpoint and stops"),
     ("Manual or API, queued", "Re-runs, first loads, backfill plans, the heartbeat test", "A queued run of the lander or recompute job, or the bulk job for first loads, with a run type that says why"),
 ]
 
@@ -340,7 +340,7 @@ JOBS = [
     ("Bulk job", "One per source without DMS", "First loads and full reloads for puller, AppFlow, historian and file sources, in segments; it writes to the same file log, so the lander job carries on exactly where it stopped. DMS tables use DMS's own full load instead, whose rows carry an operation flag and sort before that load's own changes", "Manual or API"),
     ("Source wrapper and pipeline", "One per source (silver is source-aligned)", "A small job that starts the source's Declarative Pipeline update (its silver tables, defined in a loop from metadata) through the API, records it, and calls gold. One run at a time, queued (Databricks refuses a second update of a running pipeline). Each run takes every marker row newer than the last one it processed, stored on its run row, so a marker that lands during an update is picked up by the next queued run, no sooner than min_gap_minutes", "Table update on its sources' markers"),
     ("Window-recompute job", "One per multi-input gold fact; the only writer of that fact", "Changed windows from the last update, plus one chunk of any queued backfill plan; corrections laid over silver; completeness; reconcile; record", "Called by the domain pipeline's wrapper; queued, never two at once"),
-    ("Streaming pipeline", "One per stream family (press sensors, mixer sensors)", "Kinesis to bronze to silver per minute", "Continuous"),
+    ("Streaming pipeline", "One per stream family (press sensors, mixer sensors)", "Kinesis to bronze to silver, trigger-once: each run takes what has arrived since its checkpoint and stops", "Every 15 minutes, on a schedule"),
     ("Stream hour job", "One per stream family", "Sensor aggregates for the closed hour and a re-check of the last 2 days (an input to gold); then calls the window recompute", "Hourly, at 15 minutes past"),
     ("Ops builder", "One", "Copy runtime rows, join system tables and CloudWatch, freshness, sweep stuck runs, alerts", "Every 15 minutes"),
     ("Personal-data purge", "One", "Deletes personal-data landing files loaded more than 23 hours ago, and held files past 7 days", "Hourly"),
@@ -410,14 +410,14 @@ RECORDER_CALLS = [
     ("step(name, rows_in, rows_out)", "One step row, measured for you. Step and quality rows are buffered and retried; a failure to log a step never fails the data work."),
     ("error(exc)", "Classifies the error (source timeouts, network errors and busy clusters are passing; bad data, schema changes and bugs are not), scrubs the message of data values and secret values, writes error_log, and says whether it is passing (retry) or not (end as handled)."),
     ("quality(results)", "Writes dq_result rows from DQX or the pipeline's expectations."),
-    ("close_run(status, counts, watermark)", "Marks the run and stores its watermark in one Aurora transaction, after the Delta commit. If it cannot, the sweeper finishes the run later from the evidence in bronze."),
+    ("close_run(status, counts, watermark)", "Marks the run and stores its watermark in one Lakebase (PostgreSQL) transaction, after the Delta commit. If it cannot, the sweeper finishes the run later from the evidence in bronze."),
 ]
 
 # ------------------------------------------------------------------ streaming
 STREAM_RUNTIME = [
-    ("There are no runs, so we cut windows, and always write one.", "Every 15 minutes the ops builder writes one run_log row per stream per window from the pipeline's progress: rows, lag, errors. If there was no progress and the pipeline is not running, the row says DOWN; a stopped stream is never just a missing row."),
-    ("The checkpoint plays the file log's role.", "The stream's checkpoint and Kinesis' sequence numbers decide what is read. input_watermark records the newest event time per press in silver, which is what freshness and completeness use."),
-    ("Outages are bounded.", "Kinesis keeps 7 days, so a stream down for less than that loses nothing; on restart it reads from its checkpoint."),
+    ("Every scheduled run is a run, and a missing one is never silent.", "Every 15 minutes the streaming pipeline runs trigger-once: it reads what has arrived in Kinesis since its checkpoint, writes bronze and silver, and stops. Each run gets one run_log row per stream with rows, lag and errors, like any other run. If a scheduled run failed or did not happen, the ops builder writes that window's row as DOWN; a stopped stream is never just a missing row."),
+    ("The checkpoint plays the file log's role.", "The stream's checkpoint and Kinesis' sequence numbers decide what each run reads. input_watermark records the newest event time per press in silver, which is what freshness and completeness use."),
+    ("Outages are bounded.", "Kinesis keeps 7 days, so a stream whose runs fail for less than that loses nothing; the next run that succeeds reads from its checkpoint."),
     ("Streams feed gold; they do not write it.", "At 15 minutes past each hour the stream job builds the hourly sensor aggregates for the closed hour (an input to gold, kept in silver), re-checks the last 2 days for late readings, moves the per-press bookmarks, and calls the window-recompute job, which alone writes the production fact."),
     ("Silent machines, but not alarm storms.", "A per-press check (no reading for 30 minutes in a planned shift) catches one quiet press. While the whole stream is down, the per-press check is held back, and one stream alert fires instead of hundreds."),
 ]
@@ -434,7 +434,7 @@ FAILURES = [
     ("A full copy comes back short", "Lander, mass-delete guard", "Nothing is appended to bronze; the files are held and the dataset BLOCKED; 'mass delete stopped' alert", "Check the source; re-pull; then release or reject the held files"),
     ("A partner re-sends a corrected file", "Lander and silver", "Lands as a new file with a unique name; silver replaces the slice the contract names (dealer and month) with the newest file; gold rebuilds the affected windows, of any age, as restatements", "Nothing"),
     ("Job or cluster dies halfway", "Lakeflow task failure", "Retried up to 2 times (only passing errors reach Lakeflow); the batch's transaction id stops a second append", "Nothing, unless retries run out"),
-    ("Aurora is slow or down", "Run recorder timeouts; job timeouts and duration health rules", "Jobs fail fast at their first task instead of hanging; stuck runs are finished by the sweeper", "Platform on-call, alerted by Databricks job alerts and the heartbeat alert, neither of which needs Aurora"),
+    ("Lakebase is slow or down", "Run recorder timeouts; job timeouts and duration health rules", "Jobs fail fast at their first task instead of hanging; stuck runs are finished by the sweeper", "Platform on-call, alerted by Databricks job alerts and the heartbeat alert, neither of which needs Lakebase"),
     ("A bug in our code", "Any stage", "Fails; cause class 'our bug'; no retry", "Fix, release, then re-run the failed runs"),
 ]
 
@@ -461,14 +461,14 @@ NEW_DATASET = [
 
 # ------------------------------------------------------------------ observability working parts
 OBS_PARTS = [
-    ("Run recorder", "Every part logs the same way, through six calls, with timeouts", "Built in the framework (Azure SQL today); the Aurora adapter and timeouts are to do"),
+    ("Run recorder", "Every part logs the same way, through six calls, with timeouts", "Built in the framework (Azure SQL today); the Lakebase adapter and timeouts are to do"),
     ("File log", "Every landing file: checked, loaded or rejected, by which run", "To build"),
     ("Input watermarks", "How far each input is loaded, in source time: completeness and freshness", "To build"),
     ("Ingest columns", "Rows say which run and file wrote them, and their order in the source", "Partly built: bronze columns exist; DMS and SAP order columns to add"),
     ("Pipeline wrapper", "Makes a Declarative Pipeline update look like any other run, and starts gold", "To build"),
     ("Ops builder and sweeper", "prod_ops every 15 minutes; finishes stuck runs", "To build; the health views exist in the framework for Azure"),
     ("Health views", "One row per dataset: last run, status, bookmark against target, rows against the usual band, failing rules", "Built for Azure SQL (v_dataset_health); to port"),
-    ("Heartbeat", "A synthetic dataset through every layer every 15 minutes, watched by a Databricks SQL alert that does not need Aurora", "Designed in the framework (PL_HEARTBEAT); to build on Databricks"),
+    ("Heartbeat", "A synthetic dataset through every layer every 15 minutes, watched by a Databricks SQL alert that does not need Lakebase", "Designed in the framework (PL_HEARTBEAT); to build on Databricks"),
     ("Job health rules", "Duration and failure alerts from Databricks itself, for when our own logging is the problem", "To generate with the jobs"),
     ("Doctor", "A healthcheck before every deploy and on demand: database, secrets, buckets, grants, triggers, DMS tasks", "Built in the framework (lake-ingest doctor); AWS probes to add"),
 ]
@@ -492,8 +492,7 @@ LEFT JOIN ops.files_today f       USING (dataset_id)
 LEFT JOIN ops.cost_today c        USING (dataset_id);"""
 
 DAY = [
-    ("Continuous", "Press and mixer sensors stream into bronze and silver"),
-    ("Every 15 min", "MES changes land and load; the manufacturing pipeline follows on the marker; gold windows recompute; the ops builder refreshes bookmarks and freshness and sweeps; the heartbeat passes through"),
+    ("Every 15 min", "Press and mixer sensor readings: the streaming pipeline runs once, takes what arrived in Kinesis into bronze and silver, and stops; MES changes land and load; the manufacturing pipeline follows on the marker; gold windows recompute; the ops builder refreshes bookmarks and freshness and sweeps; the heartbeat passes through"),
     ("Hourly, at :15", "The stream job builds the closed hour's sensor aggregates and calls the window recompute"),
     ("Hourly", "The personal-data purge deletes landing files loaded more than 23 hours ago"),
     ("Every 30 min, 06:00-22:00", "SAP orders and deliveries: AppFlow runs, then its lander"),
@@ -513,7 +512,7 @@ def runtime_map():
     b = []
     a = b.append
     a(rect(20, 20, 1100, 52, "#E6EAF7") + tx(570, 42, "Run controller: Lakeflow Jobs generated from the metadata. One clock per source; silver on the batch-ready marker; gold called by silver", 13.5, "middle")
-      + tx(570, 62, "reads dataset_view in Aurora · writes master_run_log · queues, never overlaps", 12, "middle", fill="#555"))
+      + tx(570, 62, "reads dataset_view in Lakebase · writes master_run_log · queues, never overlaps", 12, "middle", fill="#555"))
     cols = [("Sources", ["SAP", "MES database", "Quality lab, warranty", "Dealer files", "Press sensors"], "#F4F4F2"),
             ("Movers", ["DMS, AppFlow,", "Transfer Family,", "Kinesis, our puller"], "#FFF4D9"),
             ("Landing (S3)", ["unique file names", "the landing contract"], "#F3E3D3"),
@@ -532,11 +531,11 @@ def runtime_map():
             a(arr(x + w / 2, 72, x + w / 2, 110, dash=True))
     a(tx(20 + 2 * 160 + 70, 280, "the lander never talks to a source", 11.5, "middle", fill="#555"))
     a(rect(20, 300, 1100, 56, "#E0F1F7") + tx(570, 324, "Run recorder: run, step, file, error, quality and bookmark rows with the same ids, with timeouts", 14.5, "middle")
-      + tx(570, 344, "Aurora runtime schema → ops builder every 15 minutes (and the sweeper) → prod_ops: dashboard, alerts, incidents", 12, "middle", fill="#555"))
+      + tx(570, 344, "Lakebase runtime schema → ops builder every 15 minutes (and the sweeper) → prod_ops: dashboard, alerts, incidents", 12, "middle", fill="#555"))
     for i in range(3, 6):
         x = 20 + i * 160 + 70
         a(arr(x, 260, x, 300, dash=True))
-    return svg(1140, 370, "".join(b), "The runtime map: sources, movers, S3 landing, our lander, the silver builder pipeline, the gold builder and metric views in a row. Above, the run controller gives each source one clock, starts silver from a batch-ready marker and gold from silver. Below, the run recorder takes the same log rows from every part into Aurora, and the ops builder copies them to prod_ops.")
+    return svg(1140, 370, "".join(b), "The runtime map: sources, movers, S3 landing, our lander, the silver builder pipeline, the gold builder and metric views in a row. Above, the run controller gives each source one clock, starts silver from a batch-ready marker and gold from silver. Below, the run recorder takes the same log rows from every part into Lakebase, and the ops builder copies them to prod_ops.")
 
 
 def log_tree():
@@ -810,7 +809,7 @@ def page():
 {rules(SWEEPER)}</section>
 
 <section id="stream"><p class="eyebrow">Streaming</p><h2>Sensors fit the same model</h2>
-<p>A stream never ends, so it has no runs of its own. These five rules make it look like everything else to on-call and to the dashboard.</p>
+<p>A stream never ends, but our streaming pipelines never run continuously: they run trigger-once on a schedule, every 15 minutes, so each run has a clear start and end. These five rules make streams look like everything else to on-call and to the dashboard.</p>
 {rules(STREAM_RUNTIME)}</section>
 
 <section id="fail"><p class="eyebrow">When something breaks</p><h2>Each failure has one place it is caught</h2>

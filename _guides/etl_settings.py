@@ -24,7 +24,7 @@ SETTINGS = [
     ("landing_pii_bucket", "platform", "S3 bucket", "landing-pii-<env>", "mover, lander", ["S21"], "new", ""),
     ("secrets_backend", "platform", "aws_secrets_manager", "aws_secrets_manager", "mover, lander", ["S29"], "new", "replaces key_vault_uri"),
     ("secret_prefix", "platform", "text", "dp/<env>/", "mover, lander", ["S29"], "new", ""),
-    ("metadata_db_endpoint", "platform", "Aurora endpoint and database", "none", "recorder, controller", ["S13"], "adapt", "was metadata_db_server (Azure SQL)"),
+    ("metadata_db_endpoint", "platform", "Lakebase (Databricks managed PostgreSQL) instance and database", "none", "recorder, controller", ["S13"], "adapt", "was metadata_db_server (Azure SQL)"),
     ("recorder_timeout_seconds", "platform", "integer", "10", "recorder", ["S13"], "new", ""),
     ("recorder_retries", "platform", "integer", "2", "recorder", ["S13"], "new", ""),
     ("job_timeout_minutes", "platform", "integer", "30", "controller", ["S13", "S14"], "new", "every generated job; the sweeper uses it too"),
@@ -48,7 +48,7 @@ SETTINGS = [
     # ---------------------------------------------------------------- source
     ("source_type", "source", "sql_server, oracle, postgres, mysql, sap, saas, rest_api, partner_files, stream, upload", "none", "controller, mover", ["S01", "S02"], "adapt", "typed on source_master; adds sap, partner_files, stream, upload"),
     ("mover", "source", "dms, appflow, transfer_family, kinesis, puller, upload", "none", "mover, controller, deploy", ["S01", "S02", "S06", "S10"], "new", ""),
-    ("clock", "source", "schedule, appflow_finished, upload_copied, continuous", "set by the mover", "controller", ["S01", "S02", "S04"], "new", "one clock per source"),
+    ("clock", "source", "schedule, appflow_finished, upload_copied", "set by the mover", "controller", ["S01", "S02", "S04"], "new", "one clock per source; streams use schedule (every 15 minutes, trigger-once), never a continuous run"),
     ("schedule_cron, schedule_timezone", "source", "cron; time zone", "every 15 minutes; UTC", "controller", ["S01", "S04"], "adapt", "moves from dataset to source: the lander job is per source"),
     ("auth_method, connection_secret_name", "source", "as today; the secret is a Secrets Manager name", "none", "mover", ["S30"], "adapt", "kv:// references become Secrets Manager names"),
     ("connect_timeout_seconds, rate_limit_rps", "source", "integers", "30; none", "mover", ["S30"], "exists", "puller and REST"),

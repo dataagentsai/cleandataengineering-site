@@ -130,7 +130,7 @@ def big_picture():
             a(arr(x + 136, 321, x + 149, 321))
     # streaming lane
     a(link("#medallion", rect(20, 460, W, 40, "#fff", dash=True)
-           + tx(36, 485, "Streaming lane: press and mixer sensor data through the same layers, run continuously. SiteWise, Kinesis or MSK → bronze streaming tables → silver → gold incremental. Same contracts, same checks.", 14)))
+           + tx(36, 485, "Streaming lane: press and mixer sensor data through the same layers, run trigger-once every 15 minutes. SiteWise, Kinesis or MSK → bronze streaming tables → silver → gold incremental. Same contracts, same checks.", 14)))
     # horizontal assets
     a(rect(20, 516, W, 200, "#FFF4D9"))
     a(tx(40, 544, "Horizontal assets: built once, reused by every pipeline and every data product", 20))
@@ -173,7 +173,7 @@ def two_speeds():
     a(arr(190, 58, 260, 88) + arr(190, 158, 260, 128, dash=True))
     a(arr(820, 108, 860, 108))
     a(rect(860, 70, 150, 76, "#F8EBF1") + tx(935, 104, "Semantic", 18, "middle") + tx(935, 126, "Metric Views", 13, "middle"))
-    a(tx(520, 210, "solid line: runs on a schedule · dashed line: runs continuously · same contracts and checks on both", 14, "middle"))
+    a(tx(520, 210, "solid line: batch on a schedule · dashed line: stream, trigger-once every 15 minutes · same contracts and checks on both", 14, "middle"))
     return svg(1030, 222, "".join(b), "Batch and event sources both flow into the same bronze, silver and gold tables; only the speed differs.")
 
 
@@ -217,7 +217,7 @@ def table(head, rows, raw=()):
 ASSET_ROWS = [
     ("CostSherlock", "Cost per data product, per pipeline run and per team, from Databricks billing system tables and the AWS Cost and Usage Report, with findings and fixes.", "Ours, on Databricks + AWS", "Separate briefing"),
     ('<a href="/learn/data-platform-architecture/ingestion/">Common Ingestion Framework</a>', "A new source is a YAML entry, not a new notebook. One lander from landing to bronze, with ingest metadata, replay and watermarks.", "Ours, on Databricks; movers behind a port (DMS, AppFlow, Transfer Family, Kinesis, our puller)", "Built; first end-to-end Databricks run in progress"),
-    ('<a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a>', "One place where every source, table, rule, owner and budget is declared. Pipelines read it; nobody configures by hand.", "Ours; Aurora PostgreSQL", "Built in the framework (design published); the Aurora deployment is to do"),
+    ('<a href="/learn/data-platform-architecture/metadata-store/">Metadata store</a>', "One place where every source, table, rule, owner and budget is declared. Pipelines read it; nobody configures by hand.", "Ours; Lakebase (Databricks managed PostgreSQL)", "Built in the framework (design published); the Lakebase deployment is to do"),
     ("Data quality framework", "Rules declared per table, run at every hop, bad rows parked in quarantine, all results in one table.", "Databricks expectations and DQX behind one port; rules from the metadata store", "Partly built: rules from metadata run in silver; 66 assurance rules written"),
     ('<a href="/learn/medallion-architecture/">Medallion template</a>', "Bronze, silver and gold built the same way for every source, with the rules that keep each layer honest.", "Lakeflow Declarative Pipelines", "Built for the first slice"),
     ("Semantic model template", "A starter set of metric views (OEE, scrap rate, first-pass yield, warranty claim rate, sell-out) with owners and definitions.", "Unity Catalog Metric Views", "To build"),
@@ -254,7 +254,7 @@ GENIE_ROWS = [
 
 # concern id -> (coverage, Databricks feature, AWS piece, gap and who fills it)
 BIND = {
-    "X1": ("partial", "Asset Bundles, Unity Catalog tags", "Aurora PostgreSQL for the metadata store", "YAML in Git → loader → metadata store → generated jobs. Ours (Common Ingestion Framework)."),
+    "X1": ("partial", "Asset Bundles, Unity Catalog tags, Lakebase (Databricks managed PostgreSQL) for the metadata store", "-","YAML in Git → loader → metadata store → generated jobs. Ours (Common Ingestion Framework)."),
     "X2": ("full", "Lakeflow Jobs: schedules, file-arrival triggers, retries", "EventBridge for events from outside", "Jobs generated from metadata, not clicked together. Ours."),
     "X3": ("partial", "Delta schema enforcement and evolution; Auto Loader rescued data", "Glue Schema Registry for streams, if used", "Contracts in the open ODCS standard, checked in CI and at run time. Ours."),
     "X4": ("partial", "Declarative Pipelines expectations; DQX (Databricks Labs)", "-", "Rules from metadata, quarantine, one results table. Ours, with DQX behind a port."),
@@ -322,12 +322,12 @@ GIT_VS_DB = [
 ]
 
 DB_OPTIONS = [
-    ("Amazon Aurora PostgreSQL Serverless v2", "Managed PostgreSQL with automatic failover, IAM sign-in, backups, and compute that scales down to almost nothing in dev. Strong JSON (jsonb) for the merged view. The same engine the agent harness uses on AWS, so one skill set.",
-     "Pursue: default", "Best fit for the design as written; small, cheap, highly available."),
+    ("Databricks Lakebase (managed PostgreSQL inside Databricks)", "PostgreSQL run by Databricks, governed by Unity Catalog, reachable from serverless compute with no network setup, with point-in-time restore. Strong JSON (jsonb) for the merged view, as in any PostgreSQL. Generally available on AWS since early 2026 in selected regions.",
+     "Pursue: chosen (4 Nov)", "Chosen over Aurora PostgreSQL to drop one AWS service and the network hop; stored procedures stay the only way in. Confirm Mumbai availability before go-live (" + CHECK + ")."),
+    ("Amazon Aurora PostgreSQL Serverless v2", "Managed PostgreSQL with automatic failover, IAM sign-in, backups, and compute that scales down to almost nothing in dev. Strong JSON (jsonb) for the merged view.",
+     "Considered, not chosen", "The default until 4 Nov and a good fit for the design, but one more AWS service to run, connect privately and back up; Lakebase gives the same PostgreSQL inside the platform."),
     ("Amazon RDS for PostgreSQL", "The same PostgreSQL on a small fixed-size server. Cheaper and simpler; slower failover and no automatic scaling.",
-     "Pursue if cost matters most", "Fine for a single plant or a pilot; move to Aurora when many teams depend on it."),
-    ("Databricks Lakebase (managed PostgreSQL inside Databricks)", "PostgreSQL run by Databricks, governed by Unity Catalog, reachable from serverless compute with no network setup. Generally available on AWS since early 2026 in selected regions.",
-     "Test first", "Attractive because it removes the network hop; check Mumbai availability, cost and backup options before choosing."),
+     "Drop", "Same drawback as Aurora: one more AWS service to run, with no gain over Lakebase."),
     ("Aurora MySQL or RDS MySQL", "Works, but JSON handling is weaker than PostgreSQL's and the view would need rewriting.", "Drop", "No gain over PostgreSQL for this design."),
     ("Amazon DynamoDB", "Key-value store with no joins, so no merged view and no keys between tables.", "Drop", "Wrong shape for relational metadata."),
     ("Delta tables in Unity Catalog only", "No keys between tables, slow small writes, write conflicts when many jobs log at once.", "Drop as the store", "Keep a copy of run_log in Delta for dashboards and cost reports."),
@@ -337,7 +337,7 @@ MOVERS = [
     ("SAP S/4HANA (sales, stock, procurement, finance)", "Amazon AppFlow, SAP OData connector, on released CDS views and extractors with delta", "Never SAP tables directly; Datasphere or Business Data Cloud only if already licensed"),
     ("MES and quality / LIMS databases", "AWS DMS with change capture", "Change capture keeps loads small and brings deletes"),
     ("Small and reference tables, databases without CDC", "Our puller (the framework's built connectors) as a Databricks job", "Full copy or watermark, straight to bronze through the same lander steps (no landing)"),
-    ("Plant historian and press / mixer sensors", "AWS IoT SiteWise → Kinesis or S3", "The streaming lane: same layers, continuous"),
+    ("Plant historian and press / mixer sensors", "AWS IoT SiteWise → Kinesis or S3", "The streaming lane: same layers, trigger-once every 15 minutes"),
     ("Dealer management system, CRM (SaaS)", "Amazon AppFlow; our puller's REST connector where AppFlow has none", "Lakeflow Connect is not used in v1"),
     ("Supplier files, raw-material prices", "AWS Transfer Family (SFTP) → S3", "The lander reads the new files listed in its file log"),
 ]
@@ -722,16 +722,16 @@ AGENT_RULES = [
 # ---------------------------------------------------------------- running it (design test fixes)
 SIZING = [
     ("Plants", "7: five in India, two in Europe; three shifts", "Plant is the first key for clustering, row filters and canary releases"),
-    ("Machines streaming", "About 2,000 curing presses and mixers, 20 signals each, one reading every 5 seconds: about 8,000 readings a second, 700 million a day", "Streaming tables read Kinesis directly; about 10 GB a day once compressed in Delta"),
+    ("Machines streaming", "About 2,000 curing presses and mixers, 20 signals each, one reading every 5 seconds: about 8,000 readings a second, 700 million a day", "Streaming tables read Kinesis directly, trigger-once every 15 minutes; about 10 GB a day once compressed in Delta"),
     ("Business data", "SAP: about 200,000 order and delivery lines a day; 3,000 dealers sending daily sell-out; about 2,000 warranty claims a day", "Batch every 30 minutes in plant hours, full nightly"),
     ("Size after five years", "About 25 TB, mostly sensor history", "Bronze sensor data older than 3 years moves to cheaper storage"),
-    ("Freshness", "A reading reaches silver within 5 minutes; press-hour gold within 15 minutes after the hour; OEE ready by 06:30", "These are the tier-1 targets the alerts watch"),
+    ("Freshness", "A reading reaches silver within 30 minutes (it waits at most one 15-minute run, plus the run itself); press-hour gold within 15 minutes after the hour; OEE ready by 06:30", "These are the tier-1 targets the alerts watch"),
     ("People asking", "About 400 dashboard users, 50 queries at once at the peak (06:00 to 07:30, morning meetings)", "Dashboards answer in under 5 seconds for 95% of views; Genie in under 30 seconds"),
     ("What the platform is not", "Machine alarms and safety interlocks stay on the plant floor (SiteWise Edge, the machines' own controls)", "The platform is for analysis and decisions, not for stopping a press"),
 ]
 
 STREAM_RULES = [
-    ("One path for sensors.", "SiteWise or IoT Core at the plant edge, Amazon Kinesis Data Streams in Mumbai, a streaming table into bronze, cleaned per minute into silver; each closed hour's sensor aggregates feed the window-recompute job, the only writer of the production fact."),
+    ("One path for sensors.", "SiteWise or IoT Core at the plant edge, Amazon Kinesis Data Streams in Mumbai, a streaming table into bronze and on into silver, run trigger-once every 15 minutes (each run takes what has arrived since its checkpoint and stops; nothing runs continuously); each closed hour's sensor aggregates feed the window-recompute job, the only writer of the production fact."),
     ("Late readings have a limit.", "Streams wait 2 hours for late readings (an event-time watermark). Anything later lands in bronze and is picked up by the gold window recompute, so it is never lost."),
     ("Replay has a window.", "Kinesis keeps 7 days; bronze keeps everything after that. Checkpoints live in S3 per environment."),
     ("If the link to AWS drops,", "the edge buffers readings and sends them when the link is back (" + CHECK + " for buffer size); OEE for those hours shows as incomplete until they arrive."),
@@ -741,7 +741,7 @@ RECOVERY = [
     ("Landing", "S3 cross-region replication, same expiry rules (personal-data files still deleted after a day)", "15 minutes", "Lets the lander replay the last minutes that had not reached bronze"),
     ("Bronze", "S3 cross-region replication to Hyderabad (tokens only)", "15 minutes", "Registered at the last version whose files have all arrived (replication does not keep order), then silver and gold catch up from bronze by run id"),
     ("Silver, gold, recipes, token vault", "Incremental Delta deep clone every 4 hours", "4 hours", "Registered on the clones; erasures since the last clone are replayed"),
-    ("Metadata database (Aurora)", "Aurora Global Database with a copy in Hyderabad (" + CHECK + "; otherwise snapshots copied every hour)", "Seconds (or 1 hour)", "Promote the copy; watermarks and run log carry on"),
+    ("Metadata database (Lakebase)", "Lakebase's own point-in-time restore in Mumbai; for tier-1, a read replica in Hyderabad (" + CHECK + ")", "Seconds with the replica; without it, configuration is reloaded from Git and bookmarks are rebuilt from bronze", "Promote the replica, or reload from Git; watermarks and run log carry on"),
     ("Unity Catalog", "Not copied: Hyderabad has its own catalog, built from Git", "Nothing lost", "Terraform builds catalogs and catalog grants; the data-platform deploy adds schema grants, row filters, masks, metric views and Genie spaces"),
     ("Streams", "Checkpoints are not copied; a Kinesis stream in Hyderabad is built in advance", "Gap filled from the edge buffer", "The edges switch to the Hyderabad stream; streams start from the last bronze row"),
     ("Secrets", "Secrets Manager replicates every secret to Hyderabad", "Nothing lost", "Movers and the lander find their credentials in place"),
@@ -751,7 +751,7 @@ RECOVERY = [
 RECOVERY_STEPS = [
     ("Declare.", "The head of IT, or their deputy, declares the disaster. Nobody else can."),
     ("Build.", "Terraform with dr.tfvars builds the workspace, catalogs, Kinesis stream and mover definitions in Hyderabad. The network path is already in place: the Transit Gateway in Hyderabad is peered, the Direct Connect gateway reaches both regions, and the EU plants' VPN tunnels to Hyderabad are configured but idle."),
-    ("Reset the bookmarks.", "Aurora's copy is seconds behind, but bronze can be up to 15 minutes behind, so each watermark is set back to the highest window actually present in Hyderabad bronze, minus the usual overlap. The lander then replays the gap from the copied landing files; nothing is marked loaded that is not there."),
+    ("Reset the bookmarks.", "The Lakebase replica is seconds behind, but bronze can be up to 15 minutes behind, so each watermark is set back to the highest window actually present in Hyderabad bronze, minus the usual overlap. The lander then replays the gap from the copied landing files; nothing is marked loaded that is not there."),
     ("Lock, then secure.", "Readers are locked out. The data-platform deploy applies column tags from dataset_config first, then every grant, row filter and mask; the security test then checks one row filter and one masked column as plant-manager and analyst test identities. Nobody reads until it passes."),
     ("Open by tier.", "Tier-1 data products open first (target: 24 hours), the rest within 72 hours. Dashboards show a banner saying the platform is running from recovery."),
     ("Fail back.", "When Mumbai returns, clone the changed tables back, reconcile counts, switch the movers, and close the incident with a review."),
@@ -848,14 +848,14 @@ ML_ROWS = [
 
 # ---------------------------------------------------------------- open decisions and the design test
 OPEN = [
-    ("Can serverless compute reach Aurora and the plant network privately?", "Decides whether the lander runs serverless or on classic compute", "Platform lead", "Before the crawl starts"),
+    ("Can serverless compute reach the plant network privately?", "Decides whether the puller runs serverless or on classic compute (the metadata store, on Lakebase, needs no network setup)", "Platform lead", "Before the crawl starts"),
     ("Do row filters hold through metric views, and can outside BI tools query them?", "The whole Genie and dashboard security rests on it", "Platform lead and analytics engineer, by test", "Crawl, week 2"),
     ("Are tag-based access policies (ABAC) available in Mumbai?", "If not, the deploy generates a mask per table from the same tags", "Platform lead", "Crawl, week 1"),
     ("Which route out of SAP?", "Licence and support terms decide it", "SAP team and procurement", "Before the walk phase"),
     ("What is the legal basis for EU personal data in India?", "Until decided, EU sources load without personal columns", "Legal team", "Before the first EU source"),
     ("Does Databricks run in Hyderabad (ap-south-2)?", "The recovery plan builds the workspace there. If not, the data copies stay in Hyderabad and compute is rebuilt in the nearest supported region, with legal sign-off for data leaving India", "Platform lead and legal team", "Before go-live"),
     ("Which personal-data detector reads German free text?", "Until decided, EU warranty notes are held out of bronze", "Privacy lead and platform lead", "Before the first EU source"),
-    ("Is Aurora Global Database available in Hyderabad?", "Sets the metadata recovery point: seconds or one hour", "Platform lead", "Before go-live"),
+    ("Is Lakebase available in Mumbai, with a read replica in Hyderabad?", "Sets where the metadata store runs and its recovery point: seconds with the replica, or a reload from Git and bronze without it", "Platform lead", "Before go-live"),
     ("What are the DPDP Rules timelines for breach notice?", "Fills in the breach runbook", "Legal team", "Before go-live"),
     ("Can Genie be embedded and driven by API?", "Decides how much of the Conversation UI we build", "Product owner", "Walk phase"),
 ]
@@ -949,9 +949,8 @@ def foundation_map():
         a(rect(x, 120, 220, 290, f))
         a(tx(x + 14, 144, f"AWS account: {e}", 15, weight="700"))
         a(rect(x + 12, 156, 196, 92, "#fff", r=10) + tx(x + 24, 178, "VPC, 2 zones, no public IPs", 12.5)
-          + tx(x + 24, 198, "compute (classic, if needed)", 11.5, fill="#555") + tx(x + 24, 216, "Aurora metadata database", 11.5, fill="#555")
-          + tx(x + 24, 234, "endpoints: S3, STS, Kinesis", 11.5, fill="#555"))
-        a(rect(x + 12, 258, 196, 62, "#fff", r=10) + tx(x + 24, 282, f"Workspace: {e}", 13.5)
+          + tx(x + 24, 198, "compute (classic, if needed)", 11.5, fill="#555") + tx(x + 24, 216, "endpoints: S3, STS, Kinesis", 11.5, fill="#555"))
+        a(rect(x + 12, 258, 196, 62, "#fff", r=10) + tx(x + 24, 282, f"Workspace + Lakebase: {e}", 13.5)
           + tx(x + 24, 302, f"sees {e.replace('-', '')}_* catalogs only", 11.5, fill="#555"))
         a(rect(x + 12, 330, 196, 68, "#fff", r=10) + tx(x + 24, 352, "S3: landing + a bucket", 12.5)
           + tx(x + 24, 370, "per catalog, each with", 12.5) + tx(x + 24, 388, "its own KMS key", 12.5))
@@ -963,7 +962,7 @@ def foundation_map():
     a(arr(920, 265, 950, 265))
     a(rect(950, 200, 170, 130, "#F8E6EF", dash=True) + tx(966, 224, "Hyderabad (recovery)", 14) + tx(966, 246, "bronze to gold, recipes, vault", 11.5, fill="#555")
       + tx(966, 264, "replicated and cloned", 11.5, fill="#555") + tx(966, 286, "workspace rebuilt", 11.5, fill="#555") + tx(966, 304, "from Terraform", 11.5, fill="#555"))
-    return svg(1140, 445, "".join(b), "The foundation: your login system syncs groups to one Databricks account in Mumbai with one Unity Catalog. Below it, three AWS accounts (dev, pre-prod, prod), each with a private VPC in two zones, its own workspace that sees only its own catalogs, and S3 buckets with a key per catalog, reached over PrivateLink. Plants and SAP connect over Direct Connect. Pre-prod reads prod read-only. Prod data from bronze to gold, the recipes and the vault are copied to Hyderabad for recovery.")
+    return svg(1140, 445, "".join(b), "The foundation: your login system syncs groups to one Databricks account in Mumbai with one Unity Catalog. Below it, three AWS accounts (dev, pre-prod, prod), each with a private VPC in two zones, its own workspace that sees only its own catalogs (the metadata store runs beside it on Lakebase, inside Databricks, not in the VPC), and S3 buckets with a key per catalog, reached over PrivateLink. Plants and SAP connect over Direct Connect. Pre-prod reads prod read-only. Prod data from bronze to gold, the recipes and the vault are copied to Hyderabad for recovery.")
 
 
 # ---------------------------------------------------------------- data quality and profiling (tier T3)
@@ -1093,13 +1092,13 @@ def ops_flow():
     b = []
     a = b.append
     srcs = [("Our runtime schema", "run, step, error, quality, watermark"), ("Databricks system tables", "job runs, billing, lineage, audit"),
-            ("Lakehouse Monitoring", "data profiles, drift (check status)"), ("Amazon CloudWatch", "DMS, AppFlow, SiteWise, Aurora")]
+            ("Lakehouse Monitoring", "data profiles, drift (check status)"), ("Amazon CloudWatch", "DMS, AppFlow, SiteWise, Kinesis")]
     for i, (t, sub) in enumerate(srcs):
         y = 20 + i * 70
         a(rect(20, y, 250, 56, "#F4F4F2") + tx(36, y + 24, t, 15) + tx(36, y + 44, sub, 12, fill="#555"))
         a(arr(270, y + 28, 340, 160))
     a(rect(340, 110, 210, 100, "#E6F4EC") + tx(445, 145, "Ops gold", 18, "middle") + tx(445, 168, "one run id joins it all", 12.5, "middle")
-      + tx(445, 188, "Lakehouse Federation reads Aurora", 11.5, "middle", fill="#555"))
+      + tx(445, 188, "Lakebase read through Unity Catalog", 11.5, "middle", fill="#555"))
     outs = [("Ops dashboard", "AI/BI, one screen", "#E9EDF8"), ("Alerts", "SQL alerts, job alerts, CloudWatch", "#F8E6EF"), ("Ask about ops", "Genie: what failed last night, why?", "#FFF4D9")]
     for i, (t, sub, f) in enumerate(outs):
         y = 40 + i * 90
@@ -1138,10 +1137,10 @@ def ops_board():
 
 
 OPS_SIGNALS = [
-    ("Our runtime schema (Aurora)", "Every run, step, error, quality result and watermark, with the run id", "Copied into prod_ops every 15 minutes (see below)"),
+    ("Our runtime schema (Lakebase)", "Every run, step, error, quality result and watermark, with the run id; Lakebase's own health (load, connections, storage) comes from Databricks' Lakebase monitoring (" + CHECK + " for what system tables expose)", "Copied into prod_ops every 15 minutes (see below)"),
     ("Databricks system tables", "Job and task runs, billing (DBUs and cost), lineage, audit of who read what", "Already in Unity Catalog; joined on the job run id"),
     ("Lakehouse Monitoring / data profiling", "Profiles and drift of key tables: nulls, distinct counts, distributions", "Check current status and name; behind our profiling port"),
-    ("Amazon CloudWatch", "Health of AWS movers and the database: DMS lag, AppFlow failures, SiteWise ingestion, Aurora load", "CloudWatch alarms for the AWS side; a metric stream lands in prod_ops every 5 minutes"),
+    ("Amazon CloudWatch", "Health of the AWS movers: DMS lag, AppFlow failures, SiteWise ingestion, Kinesis delay", "CloudWatch alarms for the AWS side; a metric stream lands in prod_ops every 5 minutes"),
     ("Data contracts and freshness targets", "What each data product promises: by when, how complete, owner", "From dataset_config; the dashboard checks against them"),
 ]
 
@@ -1169,7 +1168,8 @@ ALERTS = [
     ("Run much slower than usual", "Duration above 2 × the usual p95", "Low", "Platform engineers, next working day"),
     ("Cost over budget", "Daily or monthly cost per pipeline, per SQL warehouse or for the AWS side above its budget", "Medium", "Platform lead and finance (CostSherlock)"),
     ("Cost jump", "Yesterday's total cost (Databricks and AWS) more than 1.5 × its 7-day average", "High", "Platform lead; the runbook can pause tier-3 schedules and shrink warehouses within the hour"),
-    ("Source mover unhealthy", "CloudWatch alarm: DMS lag, AppFlow failure, Aurora CPU or storage", "High", "On-call through Amazon SNS"),
+    ("Source mover unhealthy", "CloudWatch alarm: DMS lag, AppFlow failure, Kinesis delay", "High", "On-call through Amazon SNS"),
+    ("Metadata store unhealthy", "Lakebase load, connections or storage past their limits, from Databricks' Lakebase monitoring (" + CHECK + "); recorder timeouts in error_log", "High", "Platform on-call; the heartbeat and job alerts do not need Lakebase"),
 ]
 
 ALERT_RULES = [
@@ -1189,11 +1189,11 @@ SLOS = [
 
 
 OPS_LANDING = [
-    ("Our runtime schema (Aurora)", "A small job reads it through Lakehouse Federation every 15 minutes and MERGEs new rows into prod_ops", "15 minutes",
-     "Dashboards never query Aurora directly, so a busy dashboard can never slow the pipelines that write to it"),
+    ("Our runtime schema (Lakebase)", "Lakebase is registered in Unity Catalog as a catalog, so a small job reads it directly every 15 minutes and MERGEs new rows into prod_ops", "15 minutes",
+     "Dashboards never query Lakebase directly, so a busy dashboard can never slow the pipelines that write to it"),
     ("Databricks system tables", "Read in place; nothing to copy", "Minutes to an hour, table by table (" + CHECK + ")",
      "Kept by Databricks for a limited time; ops gold keeps 13 months of the summaries we need"),
-    ("Amazon CloudWatch metrics", "A metric stream sends DMS, AppFlow, Kinesis, SiteWise and Aurora metrics through Firehose to S3; Auto Loader reads them into prod_ops", "About 5 minutes",
+    ("Amazon CloudWatch metrics", "A metric stream sends DMS, AppFlow, Kinesis and SiteWise metrics through Firehose to S3; Auto Loader reads them into prod_ops", "About 5 minutes",
      "Only the metrics we name are streamed, so the cost stays small"),
     ("CloudWatch alarms", "Alarm state changes go through EventBridge to the same S3 path", "Seconds to minutes", "So AWS-side alarms join the same incident list as Databricks alerts"),
     ("Pipeline event logs (Declarative Pipelines)", "Read from each pipeline's event log: expectation results, flow progress", "Per update", "Expectation results merge into the same quality fact as DQX results"),
@@ -1206,7 +1206,7 @@ OPS_MODEL = [
     ("ops.fct_step", "One row per step of a run", "Land, bronze, silver, gold: timings and rows in and out"),
     ("ops.fct_quality", "One row per rule per run", "DQX results and pipeline expectation results together"),
     ("ops.fct_freshness", "One row per data product per day", "Promised time, actual time, met or missed, minutes late"),
-    ("ops.fct_mover_health", "One row per mover per 5 minutes", "DMS lag, AppFlow failures, stream delay, Aurora load, from CloudWatch"),
+    ("ops.fct_mover_health", "One row per mover per 5 minutes", "DMS lag, AppFlow failures, stream delay, from CloudWatch; Lakebase load from Databricks"),
     ("ops.fct_incident", "One row per incident", "Opened, owner, severity, cause class, acknowledged, resolved, linked runs and alerts, agent diagnosis"),
     ("ops.fct_access", "One row per read of sensitive data", "From audit system tables and CloudTrail; feeds the quarterly access review"),
 ]
@@ -1333,7 +1333,7 @@ def page():
     mistakes = "".join(f'<div class="rule"><b class="n">{i + 1}</b><div><b>{E(t)}</b> {E(d)}</div></div>' for i, (t, d) in enumerate(MISTAKES))
     md_table = table(["Table", "What it holds", "Written by"], MD_TABLES)
     git_table = table(["", "YAML in GitHub", "SQL metadata database"], GIT_VS_DB)
-    db_table = table(["Database on AWS", "Fit", "Verdict", "Why"], DB_OPTIONS)
+    db_table = table(["Database", "Fit", "Verdict", "Why"], DB_OPTIONS)
     mover_table = table(["Source", "Mover (first hop to S3)", "Note"], MOVERS)
     schema_table = table(["Schema", "Holds", "Who writes", "Size and retention"], SCHEMAS)
     log_table = table(["Table", "One row per", "Main columns"], LOG_TABLES)
@@ -1471,7 +1471,7 @@ def page():
 <h3>Which database on AWS</h3>
 <p>The metadata store needs keys between tables, fast small reads and writes, safe parallel writes from many jobs, and good JSON for the merged view. That is a relational database, and PostgreSQL fits the design as written.</p>
 {db_table}
-<p><b>Where it sits:</b> in your AWS account, in a private subnet, in the same region as the Databricks workspace (Mumbai; Frankfurt only if EU data must have its own platform). The password lives in AWS Secrets Manager; Databricks classic compute reaches it over the VPC, and serverless compute through a private endpoint. The runtime tables are copied into Delta every 15 minutes so dashboards and cost reports can join them without touching the database.</p>
+<p><b>Where it sits:</b> on Lakebase, inside the Databricks platform, in the same region as the workspace (Mumbai; Frankfurt only if EU data must have its own platform). It was chosen over Aurora PostgreSQL on 4 Nov so that there is one AWS service fewer to run, connect and back up. Serverless and classic compute reach it with no extra network setup, and it is registered in Unity Catalog as a catalog. Stored procedures remain the only way in. The runtime tables are copied into Delta every 15 minutes so dashboards and cost reports can join them without touching the database.</p>
 
 <h3>Three schemas in one database</h3>
 <p>One PostgreSQL database per environment, split into three schemas so that permissions are simple: the loader may write only <code>config</code> and <code>audit</code>, pipelines may write only <code>runtime</code>, and dashboards read everything.</p>
@@ -1516,7 +1516,7 @@ def page():
 {C.code(DQ_RULES_YAML, "Rules and profiling settings for curing-press readings in silver. Ranges are examples; the plant's process engineer owns the real ones.")}
 
 <h3>Where the rules and results live</h3>
-<p>In the same metadata database, split by the three schemas: rules and settings in <code>config</code> (changed only through Git), results in <code>runtime</code>. These tables already exist in our framework; on AWS they move to Aurora PostgreSQL.</p>
+<p>In the same metadata database, split by the three schemas: rules and settings in <code>config</code> (changed only through Git), results in <code>runtime</code>. These tables already exist in our framework; on AWS and Databricks they move to Lakebase (Databricks managed PostgreSQL).</p>
 {dq_tables}
 
 <h3>Profiling: three tools, each where it pays</h3>
@@ -1560,7 +1560,7 @@ def page():
 {slo_table}
 
 <h3>Alerts</h3>
-<p>Databricks SQL alerts and job notifications cover what happens inside Databricks; CloudWatch alarms with Amazon SNS cover the AWS movers and the database. All of them post to the same Teams or Slack channel and, for tier-1 data products, to the on-call pager.</p>
+<p>Databricks SQL alerts and job notifications cover what happens inside Databricks; CloudWatch alarms with Amazon SNS cover the AWS movers. The metadata database runs on Lakebase, so its health is watched from Databricks, not CloudWatch. All of them post to the same Teams or Slack channel and, for tier-1 data products, to the on-call pager.</p>
 {alerts_table}
 <div class="rules">{alert_rules}</div>
 <h3>From alert to incident</h3>
@@ -1587,7 +1587,7 @@ def page():
 </section>
 
 <section id="medallion"><p class="eyebrow">The right medallion</p><h2>One medallion, two speeds</h2>
-<p>The medallion is the row of layers in the middle: bronze (raw), silver (clean) and gold (shaped for the business). Streaming does not need a second architecture. Nightly batches and continuous events flow through <b>the same tables</b>, with the same contracts and the same checks; only the speed differs.</p>
+<p>The medallion is the row of layers in the middle: bronze (raw), silver (clean) and gold (shaped for the business). Streaming does not need a second architecture. Nightly batches and sensor events flow through <b>the same tables</b>, with the same contracts and the same checks; only the speed differs. Streams run trigger-once on a schedule, every 15 minutes, never continuously.</p>
 <figure class="diagram">{two_speeds()}<figcaption>Batch and streaming share one set of layers.</figcaption></figure>
 <h3>What each layer promises</h3>
 {layers_table}
