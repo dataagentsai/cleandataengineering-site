@@ -725,7 +725,7 @@ SIZING = [
     ("Machines streaming", "About 2,000 curing presses and mixers, 20 signals each, one reading every 5 seconds: about 8,000 readings a second, 700 million a day", "Streaming tables read Kinesis directly, trigger-once every 15 minutes; about 10 GB a day once compressed in Delta"),
     ("Business data", "SAP: about 200,000 order and delivery lines a day; 3,000 dealers sending daily sell-out; about 2,000 warranty claims a day", "Batch every 30 minutes in plant hours, full nightly"),
     ("Size after five years", "About 25 TB, mostly sensor history", "Bronze sensor data older than 3 years moves to cheaper storage"),
-    ("Freshness", "A reading reaches silver within 30 minutes (it waits at most one 15-minute run, plus the run itself); press-hour gold within 15 minutes after the hour; OEE ready by 06:30", "These are the tier-1 targets the alerts watch"),
+    ("Freshness", "A reading reaches silver within one hour (the manifest's target; in practice one 15-minute run plus the run itself); press-hour gold within 15 minutes after the hour; OEE ready by 06:30", "These are the tier-1 targets the alerts watch"),
     ("People asking", "About 400 dashboard users, 50 queries at once at the peak (06:00 to 07:30, morning meetings)", "Dashboards answer in under 5 seconds for 95% of views; Genie in under 30 seconds"),
     ("What the platform is not", "Machine alarms and safety interlocks stay on the plant floor (SiteWise Edge, the machines' own controls)", "The platform is for analysis and decisions, not for stopping a press"),
 ]
