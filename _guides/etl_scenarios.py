@@ -390,7 +390,7 @@ SCENARIOS = [{'id': 'S01',
   'classes': ['overlap'],
   'given': 'The manufacturing domain watches the MES and press-master markers; min_gap_minutes = 15',
   'when': 'MES finishes at 00:15:45 and the press master at 00:18:00',
-  'then': ['The domain wrapper starts one pipeline update after the first marker',
+  'then': ['The source wrapper starts one pipeline update after the first marker',
            'The second marker is not lost: it is picked up by the next update, no earlier than the minimum gap',
            'Two updates of the same domain never run at once']},
 ]
