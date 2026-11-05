@@ -36,6 +36,9 @@ PAGES = [
     ("security-and-cost", "Security and cost", "Security, secrets, vulnerable libraries and cost", "What can be caught without running anything, from leaked tokens to cartesian joins."),
     ("whats-missing", "What is missing", "The gap report: what a repo is missing", "Point it at a repo; it lists missing tests, missing checks and missing setup."),
     ("the-bundle", "The bundle", "The shift-left bundle: design, tools and status", "Check families, tools with verdicts, why not SonarQube, git layout, and where the work stands."),
+    ("how-it-is-built", "How it is built", "How the shift-left bundle is built, and how we know it works", "Catalog, binding, one runner, gates, the baseline, noise rules, and the measured catch rate."),
+    ("all-checks", "All the checks", "Every shift-left check, filterable", "The full catalog: filter by family, gate, stage, language, tool and cost impact."),
+    ("open-source-and-ours", "Open source and ours", "Open source we use, and what we added", "Every tool with its licence and the checks it finds, what was dropped, and our delta."),
 ]
 SHORT = {s: sh for s, sh, _, _ in PAGES}
 TITLE = {s: t for s, _, t, _ in PAGES}
@@ -520,7 +523,247 @@ def the_bundle():
     return "the-bundle", "The shift-left bundle for PySpark and Databricks: spec, bindings and adapters, check families, tools with verdicts, why not SonarQube, git layout and status.", body, qa
 
 
-FUNCS = [basics, how_software_solved_it, syntax_trees, pure_functions, tests_and_coverage, data_tests, clean_code, security_and_cost, whats_missing, the_bundle]
+# ------------------------------------------------------------------ the check data (from shift_left_export.py)
+import json as _json  # noqa: E402
+from collections import Counter as _Counter  # noqa: E402
+
+_DATA = _json.loads((Path(__file__).parent / "shift_left_checks.json").read_text())
+CHECKS = _DATA["checks"]
+N_CHECKS = len(CHECKS)
+KIND_LABEL = {"open": "Open-source tool's own rule", "ours": "Written by us", "trial": "On trial", "platform": "The platform's own command"}
+KIND_FILL = {"open": "#DCEBFA", "ours": "#DDF0E4", "trial": "#FFF1C2", "platform": "#EDE3F7"}
+STAGE_LABEL = {"commit": "On commit", "pr": "Pull request", "nightly": "Nightly", "predeploy": "Before deploy"}
+
+
+def architecture_drawing():
+    b = box(10, 20, 190, 92, "The catalog", f"{N_CHECKS} checks, why and fix,\nno product names", "butter")
+    b += arrow(202, 66, 242, 66)
+    b += box(244, 20, 190, 92, "The binding", "which tool and rule\nfinds each check", "peri")
+    b += arrow(436, 66, 476, 66)
+    b += box(478, 20, 190, 92, "One runner", "shiftleft scan\n--stage pr", "lilac")
+    b += arrow(573, 114, 573, 150)
+    b += '<rect x="250" y="152" width="646" height="132" rx="16" fill="#FFFFFF" stroke="#1F1F1F" stroke-width="1.6" stroke-dasharray="7 5"/>'
+    b += text(573, 176, "adapters: one per tool, so a tool can be swapped without touching the checks", 14, fill="#1F1F1F")
+    b += box(266, 190, 300, 82, "Open-source tools", "Ruff, SQLFluff, SparkDoctor, gitleaks,\nosv-scanner, dbt-bouncer, jscpd ...", "sky")
+    b += box(580, 190, 300, 82, "Our rules and reports", "cost rules, pattern rules, purity,\nplan check, metric views, repo checks", "mint")
+    b += arrow(573, 286, 573, 318) + text(590, 307, "findings", 13, anchor="start")
+    steps = [("Noise rules", "drop or lower known\nfalse alarms, counted", "grey"), ("Stage and gate", "block, warn\nor report", "rose"),
+             ("Allowed with a reason", "shiftleft: allow\n<id> -- <reason>", "butter"), ("Baseline", "old findings never\nblock; new ones do", "peri"),
+             ("Reports", "markdown, SARIF on the\nPR, summary, health page", "mint")]
+    x = 10
+    for i, (t, s, f) in enumerate(steps):
+        b += box(x, 320, 196, 84, t, s, f)
+        if i < len(steps) - 1:
+            b += arrow(x + 198, 362, x + 218, 362)
+        x += 220
+    return svg(1110, 418, b, "The catalog lists the checks, the binding maps each to a tool and rule, one runner calls the adapters for open-source tools and our own rules, and the findings pass through noise rules, the gate, allowed exceptions and the baseline into reports.")
+
+
+RUNS = [("run 0", "Ruff alone", 17, 101), ("run 1", "eight tools through one runner", 34, 101), ("run 2", "plus our cost rules and SparkDoctor", 64, 101),
+        ("run 5", "plus purity, plan check, dbt and metric views", 88, 101), ("run 6", "plus our own pattern rules", 97, 101),
+        ("run 8", "plus five checks found by comparing with Sonar", 102, 106), ("run 12", "plus two more checks after real repos", 104, 108)]
+
+
+def runs_drawing():
+    b, y = "", 14
+    for name, what, got, of in RUNS:
+        w = int(560 * got / of)
+        b += text(10, y + 22, name, 15, anchor="start", fill="#1F1F1F")
+        b += f'<rect x="80" y="{y}" width="560" height="32" rx="8" fill="#F3F3F1" stroke="#1F1F1F" stroke-width="1.2"/>'
+        b += f'<rect x="80" y="{y}" width="{w}" height="32" rx="8" fill="#DDF0E4" stroke="#1F1F1F" stroke-width="1.2"/>'
+        b += text(88 + w, y + 22, f"{got} of {of}", 15, anchor="start", fill="#1F1F1F") if w < 470 else text(72 + w, y + 22, f"{got} of {of}", 15, anchor="end", fill="#1F1F1F")
+        b += text(660, y + 22, what, 14, anchor="start")
+        y += 44
+    b += text(10, y + 18, "False alarms on the traps planted to catch over-eager rules: none in any run (0 of 16, later 0 of 19).", 14, anchor="start", fill="#1F1F1F")
+    return svg(1080, y + 34, b, "Planted problems caught on the sample repo, run by run: 17 of 101 with Ruff alone, rising to 104 of 108, with no false alarms in any run.")
+
+
+def coverage_drawing():
+    fams = sorted({c["family"] for c in CHECKS})
+    cnt = {f: _Counter(c["provider_kind"] for c in CHECKS if c["family"] == f) for f in fams}
+    b, y = "", 34
+    order = ["open", "ours", "trial", "platform"]
+    x0 = 10
+    for i, k in enumerate(order):
+        b += f'<rect x="{x0 + i * 230}" y="4" width="16" height="16" rx="3" fill="{KIND_FILL[k]}" stroke="#1F1F1F"/>' + text(x0 + i * 230 + 24, 17, KIND_LABEL[k], 14, anchor="start", fill="#1F1F1F")
+    for f in fams:
+        b += text(150, y + 21, f, 15, anchor="end", fill="#1F1F1F")
+        x = 160
+        for k in order:
+            n = cnt[f].get(k, 0)
+            if n:
+                w = n * 24
+                b += f'<rect x="{x}" y="{y}" width="{w}" height="30" fill="{KIND_FILL[k]}" stroke="#1F1F1F" stroke-width="1.1"/>'
+                b += text(x + w / 2, y + 21, str(n), 13, fill="#1F1F1F")
+                x += w
+        y += 38
+    return svg(980, y + 8, b, "Checks per family, split by who provides them: open-source tools' own rules, our own rules, tools on trial, and the platform's own command.")
+
+
+def how_it_is_built():
+    stages = [(STAGE_LABEL["commit"], "under 10 seconds", "changed files only", sum(c["stage"] == "commit" for c in CHECKS)),
+              (STAGE_LABEL["pr"], "under 5 minutes", "the whole change; the merge waits until it passes", sum(c["stage"] == "pr" for c in CHECKS)),
+              (STAGE_LABEL["nightly"], "no limit", "the whole repository and its history; slow checks live here", sum(c["stage"] == "nightly" for c in CHECKS)),
+              (STAGE_LABEL["predeploy"], "under 1 minute", "job, compute and deployment configuration", sum(c["stage"] == "predeploy" for c in CHECKS))]
+    g = _Counter(c["gate"] for c in CHECKS)
+    body = f"""<section id="idea"><p class="eyebrow">The idea</p><h2>Write each check once, run it with whatever tool finds it best</h2>
+<p>Shift left means finding a problem while the code is still on a laptop or in a pull request, not after it has run on a cluster. The bundle does that with three parts that are kept apart on purpose. The <b>catalog</b> says what to check and why, in plain words, with no product names. The <b>binding</b> says, for one platform, which tool and which of its rules finds each check. The <b>runner</b> calls the tools, turns everything they say into one kind of finding, and decides what blocks a merge.</p>
+<p>Keeping them apart pays off twice. A tool can be swapped by writing one adapter (a small piece of code that calls the tool and translates its output), without touching the checks. And the checks stay the same on another platform: only the binding changes.</p>
+{fig(architecture_drawing(), "From the catalog to a report. Every finding carries the check id, the file, the line, why it matters and how to fix it.")}</section>
+
+<section id="stages"><p class="eyebrow">When checks run</p><h2>Four stages, each with a time budget</h2>
+<p>Each check names the first stage where it runs, and it runs again at every later stage. Fast checks run on commit; slow ones, such as mutation testing (changing the code on purpose to see whether a test notices), run nightly.</p>
+{table(["Stage", "Time budget", "What it looks at", "Checks that start here"], [(a, b2, c, str(n)) for a, b2, c, n in stages])}</section>
+
+<section id="gate"><p class="eyebrow">Block or warn</p><h2>How a finding becomes a block</h2>
+<p>Each check has a starting gate, set in the catalog: <b>block</b> ({g['block']} checks) means the change can't merge or deploy until the finding is fixed or accepted; <b>warn</b> ({g['warn']}) shows on the pull request, on the changed line, without stopping the merge; <b>report</b> ({g['report']}) only lists it, for counts and trends. A team can lower or raise any gate in its own config.</p>
+<p>A check moves from warn to block only after at least four weeks as a warning, and only if developers marked no more than one in ten of its findings as wrong. Noise is the main reason teams switch checks off, so the bundle starts gentle.</p>
+<p>Two ways keep an existing codebase from being blocked by its past. The <b>baseline</b> records the findings that existed when the bundle was adopted; they never block, only new ones do. Each is fingerprinted by the check id, the file and a hash of the code at the finding with whitespace removed, so moving code around doesn't make an old finding look new. And a single line can be <b>allowed with a reason</b>: a comment <code>shiftleft: allow SL-SEC-01 -- table name from config</code> on the line or the line above. A marker with no reason is ignored.</p>
+<p><b>Noise rules</b> run before the gate. Each one looks at a finding and the code around it and either drops it (the tool is wrong there) or lowers it to report (right, but not worth stopping a pull request). Every drop is counted in the run notes, never hidden. For SQL built from strings, a small source trace follows each value put into the SQL back to where it came from: a widget, the command line, a table or config. Untrusted input stays a block and the message names its source; config only reports.</p></section>
+
+<section id="proof"><p class="eyebrow">How it is proven</p><h2>A sample repo with planted problems and a hidden answer key</h2>
+<p>Claims about catch rates are easy to make, so the bundle measures them. A sample project, a small shop with PySpark, SQL, notebooks, dbt and bundle config, has problems planted on purpose and a hidden answer key listing each one. It also has traps: code that looks wrong but is fine, to catch rules that fire too eagerly. A scoring script compares each run's findings with the key.</p>
+{fig(runs_drawing(), "Each bar is one measured run on the sample. The planted set grew from 101 to 108 as new checks were added.")}
+<p>Then real repositories, to cut the noise. On the first, 13 Databricks notebooks, ten noise rules cut 276 findings to 172 and the blocking ones from 19 to 4, all four correct; tracing where SQL values come from then left one. On the second, a streaming framework, four more noise rules cut 228 findings to 117, and the 3 blockers left are correct. A rule-by-rule comparison with Sonar's Python and PySpark rules added five PySpark checks, such as a window ordered with no explicit frame and a join with no join type.</p></section>
+
+<section id="status"><p class="eyebrow">Where it stands</p><h2>The work, tier by tier</h2>
+{table(["Tier", "What", "Status"], [
+        ("0", "Ground: the reuse check, the starting decisions, the plan, the open repo and this guide", "done"),
+        ("1 and 1b", f"The spec: now {N_CHECKS} checks in {len({c['family'] for c in CHECKS})} families, with notebooks, dbt, materialized views and metric views; an SCD2 example with a test kit; CI and container templates", "done"),
+        ("2", "The sample repo with planted problems, traps and the hidden answer key", "done"),
+        ("3", "One runner over the open-source tools, SARIF on the pull request, block or warn, the baseline", "done"),
+        ("4", "The cost rules plugged in, and a trial of the young PySpark linters", "done"),
+        ("5", "What nobody ships: the purity report, the empty-table plan check, metric view and dbt checks, test drafts, our own pattern rules", "done"),
+        ("6", "Real repositories: cut the noise and feed gaps back into the spec", "in progress"),
+        ("7", "Teach and release: this guide, a Claude skill, version 0.1", "alongside"),
+        ("8", "An Azure binding", "later")])}
+<p>The commands today: <code>shiftleft scan . --stage pr</code> (with <code>--md</code>, <code>--sarif</code>, <code>--summary</code> and <code>--html</code> for the reports), <code>shiftleft baseline .</code>, <code>shiftleft purity .</code> and <code>shiftleft draft-tests .</code>. The repo layout and the git flow are on {link("the-bundle")}; the full list of checks is on {link("all-checks")}.</p></section>"""
+    qa = [("How do you stop a linter from blocking an old codebase?", "Record a baseline when you adopt it. Findings in the baseline never block; only new ones do. Fingerprint them by check, file and a whitespace-free hash of the code, not by line number, so moving code doesn't create new findings."),
+          ("How do you know a set of code checks actually works?", "Plant problems in a sample repo with a hidden answer key and score each run. Add traps, code that looks wrong but is fine, so rules that fire too eagerly show up as false alarms."),
+          ("Why keep the checks separate from the tools?", "So a tool can be swapped by writing one adapter, and the same checks can be bound to another platform. The checks name no product; only the binding does.")]
+    return "how-it-is-built", "How the shift-left bundle is built: a catalog of checks, a platform binding, one runner with adapters, gates, a baseline, noise rules and reports, and how its catch rate is measured.", body, qa
+
+
+def all_checks():
+    data = _json.dumps([{k: c[k] for k in ("id", "title", "family", "family_name", "level", "stage", "gate", "found_by", "applies_to", "cost", "statement", "why", "fix", "dac", "provider", "provider_kind", "rules", "how", "runs")} for c in CHECKS], ensure_ascii=False).replace("</", "<\\/")
+    body = f"""<section id="list"><p class="eyebrow">The catalog</p><h2>All {N_CHECKS} checks</h2>
+<p>Every check in the bundle, generated from its catalog and Databricks binding. Filter by any column; the filters stay in the page address, so a filtered list can be shared. Open a row to see what the check says, why it matters, how to fix it, which tool and rule finds it, and which data assurance obligations it gives evidence for.</p>
+<p class="note"><b>Who provides it</b> means the tool whose rule finds the check, or "written by us". <b>How it runs</b> says whether the runner calls it today, or it comes from the CI template, the test kit or a repo-review plugin, or it is not wired yet.</p>
+<div class="slf">
+<input id="slq" type="search" placeholder="Search id, title, statement, tool or rule" aria-label="Search checks">
+<div id="slsel"></div>
+<p class="slcount"><b id="sln"></b> <button type="button" id="slclear">Clear filters</button></p>
+</div>
+<div class="tw"><table class="t slt"><thead><tr><th>Check</th><th>Gate</th><th>Stage</th><th>Who provides it</th></tr></thead><tbody id="slbody"></tbody></table></div>
+<script id="sldata" type="application/json">{data}</script>
+<script>{CHECKS_JS}</script></section>"""
+    qa = [("How many checks does the shift-left bundle have?", f"{N_CHECKS} today, in {len({c['family'] for c in CHECKS})} families: cost in code, plans and config; security, secrets and dependencies; purity, tests and complexity; clean code and style; metric views; and repository setup."),
+          ("How many of the checks come from existing open-source tools?", f"{sum(c['provider_kind'] == 'open' for c in CHECKS)} are an open-source tool's own rule, configured; {sum(c['provider_kind'] == 'ours' for c in CHECKS)} are written by us; the rest are on trial or use the platform's own command.")]
+    return "all-checks", f"Every shift-left check for PySpark, Python, SQL, notebooks, dbt and Databricks: {N_CHECKS} checks with gate, stage, the tool that finds each, and why, filterable.", body, qa
+
+
+CHECKS_JS = r"""
+(function(){
+var D=JSON.parse(document.getElementById('sldata').textContent);
+var F=[['family','Family',function(c){return [c.family]}],['gate','Gate',function(c){return [c.gate]}],['stage','Stage',function(c){return [c.stage]}],
+ ['level','Level',function(c){return [c.level]}],['applies','Applies to',function(c){return c.applies_to}],['kind','Provided by',function(c){return [c.provider_kind]}],
+ ['provider','Tool',function(c){return [c.provider]}],['runs','How it runs',function(c){return [c.runs]}],['cost','Cost impact',function(c){return [c.cost]}]];
+var KL={open:"open-source tool",ours:"written by us",trial:"on trial",platform:"platform command"};
+var SL={commit:"on commit",pr:"pull request",nightly:"nightly",predeploy:"before deploy"};
+var st={q:''};F.forEach(function(f){st[f[0]]=''});
+function rd(){var h=location.hash.slice(1);if(!h)return;h.split('&').forEach(function(p){var kv=p.split('=');if(kv[0] in st)st[kv[0]]=decodeURIComponent(kv[1]||'')});}
+function wr(){var p=[];for(var k in st){if(st[k])p.push(k+'='+encodeURIComponent(st[k]))}history.replaceState(null,'',p.length?'#'+p.join('&'):location.pathname);}
+function lab(k,v){if(k==='kind')return KL[v]||v;if(k==='stage')return SL[v]||v;return v;}
+function ok(c,skip){if(st.q){var t=(c.id+' '+c.title+' '+c.statement+' '+c.why+' '+c.provider+' '+c.rules.join(' ')).toLowerCase();if(t.indexOf(st.q.toLowerCase())<0)return false;}
+ for(var i=0;i<F.length;i++){var f=F[i];if(f[0]===skip||!st[f[0]])continue;if(f[2](c).indexOf(st[f[0]])<0)return false;}return true;}
+function esc(s){return String(s).replace(/[&<>"]/g,function(m){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]})}
+function sel(){var h='';F.forEach(function(f){var cnt={};D.forEach(function(c){if(!ok(c,f[0]))return;f[2](c).forEach(function(v){cnt[v]=(cnt[v]||0)+1})});
+ var all={};D.forEach(function(c){f[2](c).forEach(function(v){all[v]=1})});
+ var o='<label>'+f[1]+'<select data-k="'+f[0]+'"><option value="">All</option>';
+ Object.keys(all).sort().forEach(function(v){o+='<option value="'+esc(v)+'"'+(st[f[0]]===v?' selected':'')+'>'+esc(lab(f[0],v))+' ('+(cnt[v]||0)+')</option>'});
+ h+=o+'</select></label>'});document.getElementById('slsel').innerHTML=h;
+ Array.prototype.forEach.call(document.querySelectorAll('#slsel select'),function(s){s.onchange=function(){st[s.dataset.k]=s.value;go()}});}
+function rows(){var r=D.filter(function(c){return ok(c,null)});document.getElementById('sln').textContent=r.length+' of '+D.length+' checks';
+ var h='';r.forEach(function(c){
+ h+='<tr class="slr" data-id="'+c.id+'"><td><b>'+c.id+'</b><br>'+esc(c.title)+'</td><td><span class="slg g-'+c.gate+'">'+c.gate+'</span></td><td>'+esc(SL[c.stage]||c.stage)+'</td><td>'+esc(c.provider)+'<br><span class="note">'+esc(c.runs)+'</span></td></tr>'+
+ '<tr class="sld" id="d-'+c.id+'" hidden><td colspan="4"><p><b>Check.</b> '+esc(c.statement)+'</p><p><b>Why.</b> '+esc(c.why)+'</p><p><b>Fix.</b> '+esc(c.fix)+'</p>'+
+ '<p class="note">'+esc(c.family_name)+' · '+c.level+' · found by '+esc(c.found_by)+' · applies to '+esc(c.applies_to.join(', '))+' · cost impact '+esc(c.cost)+
+ ' · '+esc(c.how)+(c.rules.length?' · rules: '+esc(c.rules.join(', ')):'')+(c.dac.length?' · data assurance obligations: '+esc(c.dac.join(', ')):'')+'</p></td></tr>'});
+ document.getElementById('slbody').innerHTML=h||'<tr><td colspan="4">No check matches these filters.</td></tr>';
+ Array.prototype.forEach.call(document.querySelectorAll('tr.slr'),function(t){t.onclick=function(){var d=document.getElementById('d-'+t.dataset.id);d.hidden=!d.hidden}});}
+function go(){wr();sel();rows();}
+rd();var q=document.getElementById('slq');q.value=st.q;q.oninput=function(){st.q=q.value;go()};
+document.getElementById('slclear').onclick=function(){for(var k in st)st[k]='';q.value='';go()};
+go();})();
+"""
+
+CHECKS_CSS = """<style>
+.slf input[type=search]{width:100%;max-width:520px;padding:9px 12px;font-size:16px;border:1.6px solid #1F1F1F;border-radius:10px;margin:6px 0 10px;box-sizing:border-box}
+#slsel{display:flex;flex-wrap:wrap;gap:8px 12px}#slsel label{display:flex;flex-direction:column;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+#slsel select{font-size:14px;padding:5px 6px;border:1.4px solid #1F1F1F;border-radius:8px;background:#fff;max-width:240px;text-transform:none;letter-spacing:0;color:var(--ink)}
+.slcount{margin:12px 0 4px}.slcount button{margin-left:10px;font-size:13px;border:1.4px solid #1F1F1F;border-radius:999px;background:#fff;padding:2px 12px;cursor:pointer}
+tr.slr{cursor:pointer}tr.slr:hover td{background:var(--butter-wash)}tr.sld td{background:#FAFAF8}tr.sld p{margin:4px 0 8px}
+.slg{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12.5px;font-weight:600;border:1.3px solid #1F1F1F}
+.g-block{background:#FCE4EC}.g-warn{background:#FFF1C2}.g-report{background:#ECEEF1}
+</style>"""
+
+
+def open_source_and_ours():
+    tools = _DATA["tools"]
+    open_rows = [(t["tool"], t["licence"], t["what"], str(t["checks"]) if t["checks"] else "none yet", t["runs"])
+                 for t in tools if t["kind"] in ("open", "platform")]
+    open_rows += [("sqlglot", "MIT", "SQL syntax tree with a Databricks dialect; our SQL and cost rules are written on it", "the base of our SQL rules", "Runner"),
+                  ("Python's own ast", "built in", "Python syntax tree; our pattern rules, purity report and cost rules read it", "the base of our Python rules", "Runner"),
+                  ("Spark's own planner", "Apache-2.0", "EXPLAIN on local Spark gives the real plan of DataFrame code; our plan check reads it", "the base of our plan check", "Runner")]
+    around = [("pre-commit", "MIT", "runs the same hooks on the laptop and in CI from one file"),
+              ("pytest and pyspark.testing", "built into Spark 3.5", "unit tests on tiny DataFrames; assertDataFrameEqual needs no extra library"),
+              ("Hypothesis", "MPL-2.0", "property-based tests, the best fit for pure functions"),
+              ("syrupy", "MIT", "snapshot tests that pin an untested function's behaviour before a refactor"),
+              ("SARIF", "open standard", "findings shown on the pull request in GitHub or Azure DevOps, with no server to run")]
+    dropped = [("SonarQube", "needs a server and a database; pull-request analysis is in paid editions; knows nothing about Spark cost. Our SARIF output can be imported into it."),
+               ("MegaLinter", "an image of several gigabytes; we borrow its idea of one config for many tools"),
+               ("Bandit", "Ruff's S rules cover most of it"),
+               ("Semgrep registry rules", "their licence allows internal use only, so they can't ship in an open bundle; we write our own rules"),
+               ("detect-secrets, radon, wily", "no recent releases"),
+               ("chispa", "Spark 3.5 has DataFrame equality built in"),
+               ("cylint", "every finding on the sample duplicated SparkDoctor or pyspark-antipattern")]
+    mine = [(t["tool"], t["what"], str(t["checks"]), t["runs"]) for t in tools if t["kind"] == "ours" and t["checks"]]
+    n_open = sum(c["provider_kind"] == "open" for c in CHECKS)
+    n_ours = sum(c["provider_kind"] == "ours" for c in CHECKS)
+    body = f"""<section id="split"><p class="eyebrow">The split</p><h2>{n_open} checks come from open-source tools, {n_ours} we wrote</h2>
+<p>The rule from the start was to reuse what the industry already trusts and build only what nobody ships. So most of the general checks, such as Python lint, security, secrets, vulnerable libraries and SQL style, are other people's rules that we switch on and configure. What we wrote is mostly specific to data work: cost in Spark code, plans and job config; whether logic is pure and tested; metric views; and what a data repository is missing.</p>
+{fig(coverage_drawing(), "Each bar is one family of checks. Blue is an open-source tool's own rule; green is ours.")}</section>
+
+<section id="open"><p class="eyebrow">Open source</p><h2>The open-source tools behind the checks</h2>
+{table(["Tool", "Licence", "What it does here", "Checks it finds", "How it runs"], open_rows)}
+<p>Two young PySpark linters from 2026 were tried against the sample before adoption. SparkDoctor is adopted for the rules that map to our checks; pyspark-antipattern for two rules only, because many of its others are opinions that hit our traps.</p>
+<h3>Used around the checks</h3>
+{table(["Tool", "Licence", "What it does here"], around)}
+<h3>Considered and not used</h3>
+{table(["Tool", "Why not"], dropped)}</section>
+
+<section id="ours"><p class="eyebrow">Our delta</p><h2>What we added</h2>
+<p><b>Rules and reports, by where they live:</b></p>
+{table(["Part", "What it does", "Checks", "How it runs"], mine)}
+<p><b>And the parts that are not checks:</b></p>
+{table(["Part", "Why it matters"], [
+        ("The catalog", f"{N_CHECKS} checks written once, with an id that names no product, the reason, the fix, the stage, the gate, the cost impact and links to data assurance obligations"),
+        ("The binding", "maps each check to a tool and rule for one platform, so another platform is a new binding, not new checks"),
+        ("One runner and gate", "calls every tool through an adapter, turns all output into one kind of finding, and decides block, warn or report"),
+        ("The baseline and allowed exceptions", "an existing codebase isn't blocked by its past, and every exception carries a reason"),
+        ("Noise rules and the source trace", "fourteen rules learned on real repositories, plus tracing where each value put into SQL comes from"),
+        ("The sample repo and answer key", "planted problems, traps and a scoring script, so catch rates are measured"),
+        ("The SCD2 example and test kit", "standard test tables for history tracking, de-duplication, incremental loads and late data"),
+        ("Test drafts and the health page", "starter tests for pure functions with none, a pull-request summary and a repository health page with a trend"),
+        ("Templates", "pre-commit, GitHub Actions, Azure Pipelines, a dev container, and Ruff profiles of 404 and 600 rules")])}
+<p>The cost rules came from earlier cost-analysis work and plug in as one adapter; nothing was rebuilt. Everything here is open: <a href="{REPO}">the repo on GitHub</a>.</p></section>"""
+    qa = [("Which open-source tools does a shift-left setup for PySpark need?", "Ruff for Python lint, clean code and security; SQLFluff and sqlglot for SQL; gitleaks for secrets; osv-scanner for vulnerable libraries; coverage.py and diff-cover for tests on changed lines; and a PySpark linter such as SparkDoctor for Spark-specific patterns."),
+          ("What do the open-source tools not cover for data engineering?", "Spark cost in code, plans and job config; whether logic is written as pure functions and tested; plan problems found on empty tables; metric views; and what a data repository is missing.")]
+    return "open-source-and-ours", "The open-source tools behind the shift-left checks, with licences and what each finds, the tools considered and dropped, and what we built on top.", body, qa
+
+
+FUNCS = [basics, how_software_solved_it, syntax_trees, pure_functions, tests_and_coverage, data_tests, clean_code, security_and_cost, whats_missing, the_bundle,
+         how_it_is_built, all_checks, open_source_and_ours]
 
 
 def render(slug, desc, body, qa):
@@ -539,7 +782,8 @@ def render(slug, desc, body, qa):
 <p><a href="{BASE}">↑ All of shift left</a> · <a href="{REPO}">The repo on GitHub</a> · <a href="/learn/technical-anchor/project-review/">Data project review</a></p>
 {siblings(slug)}</section>"""
     crumbs = [("Learn", f"{SITE}/learn/"), ("Shift left", f"{SITE}{BASE}"), (SHORT[slug], url)]
-    return wb.page(title, R.short_desc(desc), url, full, CSS + R.ld(title, desc, url, qa, crumbs))
+    extra = CHECKS_CSS if slug == "all-checks" else ""
+    return wb.page(title, R.short_desc(desc), url, full, CSS + extra + R.ld(title, desc, url, qa, crumbs))
 
 
 def hub():
