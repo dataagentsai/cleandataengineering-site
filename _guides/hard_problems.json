@@ -1,0 +1,1701 @@
+{
+ "layers": [
+  {
+   "id": "source",
+   "order": 1,
+   "title": "Source systems",
+   "purpose": "Know exactly what each source promises and how it changes, before reading a single row.",
+   "components": [
+    "data contracts",
+    "metadata store",
+    "puller",
+    "lander"
+   ],
+   "hop": false,
+   "challenges": [
+    {
+     "id": "SRC-01",
+     "title": "No contract with the source",
+     "goes_wrong": "The source team renames or drops a column without telling anyone; loads break or quietly load the wrong thing.",
+     "example": "Day 7, one plant's lab system renames defect_code to defect.",
+     "solution": "One data contract per source dataset (columns, types, keys, personal-data class, freshness), checked at every load; a change outside the contract stops the batch and names the column.",
+     "verdict": "assist",
+     "status": "built",
+     "dac": [
+      "SCH-01",
+      "SCH-02",
+      "GATE-02"
+     ],
+     "adr": [],
+     "world_day": 7,
+     "checks": [
+      "SL-CLEAN-29",
+      "SL-COST-CODE-12"
+     ],
+     "n_checks": 2
+    },
+    {
+     "id": "SRC-02",
+     "title": "Deletes are not signalled",
+     "goes_wrong": "Rows vanish at the source and nothing downstream knows, so deleted orders keep counting.",
+     "example": "Day 4, five order lines deleted in the order system; day 9, a nightly full copy arrives 40% short.",
+     "solution": "Change feeds carry a delete marker; full copies are compared with what silver holds now, and a copy that would delete more than the declared share is held, not loaded.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "DEL-01",
+      "DEL-04"
+     ],
+     "adr": [
+      {
+       "id": "ADR-016",
+       "title": "History kind follows dataset kind; deletes are soft"
+      }
+     ],
+     "world_day": 4,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "SRC-03",
+     "title": "Full copies versus change feeds",
+     "goes_wrong": "Reading a full copy every run is slow and hides deletes; reading a change feed without a starting copy misses history.",
+     "example": "Materials arrive as a nightly full copy; order lines as a change feed.",
+     "solution": "Each dataset declares how it is extracted (full copy, change feed, stream, paged interface) and how history is handed over to incremental loads.",
+     "verdict": "assist",
+     "status": "built",
+     "dac": [
+      "ING-01",
+      "HIST-03"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "SRC-04",
+     "title": "Time zones and business dates",
+     "goes_wrong": "Timestamps without a zone, or a day cut at midnight UTC, put production on the wrong business day.",
+     "example": "Plants in India and Hungary record press readings in local time.",
+     "solution": "Each source declares its time zone; the business date per plant is computed once in gold from a shared calendar.",
+     "verdict": "solve",
+     "status": "gap",
+     "dac": [
+      "LATE-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-CLEAN-16"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "SRC-05",
+     "title": "Paged interfaces and rate limits",
+     "goes_wrong": "A page fails halfway or the interface throttles, and the load either stops or skips records.",
+     "example": "The dealer interface serves 200 records a page; a new dealer appears late (days 11 and 12).",
+     "solution": "One batch per page with a cursor bookmark; retries only for passing failures; a reload of a paged interface is logged as a no-op because bronze is the replay point.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "ORCH-02",
+      "IDEMP-01"
+     ],
+     "adr": [
+      {
+       "id": "ADR-002",
+       "title": "Push lands files; pull goes straight to bronze through the lander steps"
+      }
+     ],
+     "world_day": 11,
+     "checks": [
+      "SL-PURE-03"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "SRC-06",
+     "title": "Files resent or late",
+     "goes_wrong": "A partner sends the same file twice under a new name, or sends last month's file weeks late.",
+     "example": "Day 5, dealer D-0042's October file arrives late; day 6, it is resent.",
+     "solution": "The batch key is the file's content checksum, so a resend is refused; each file drop declares how many deliveries a period expects, so lateness is visible from the due day.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "DUP-01",
+      "LATE-01"
+     ],
+     "adr": [],
+     "world_day": 6,
+     "checks": [
+      "SL-CLEAN-16",
+      "SL-SEM-04",
+      "SL-TEST-07",
+      "SL-TEST-09"
+     ],
+     "n_checks": 4
+    },
+    {
+     "id": "SRC-07",
+     "title": "Personal data at the source",
+     "goes_wrong": "Contact details flow into every layer in clear text.",
+     "example": "Dealer contact email and phone, lab inspector ids.",
+     "solution": "The contract marks each column's personal-data class; restricted columns are tokenised before they are first stored.",
+     "verdict": "assist",
+     "status": "built",
+     "dac": [
+      "PII-01",
+      "SEC-01"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-SEC-07",
+      "SL-SEC-09"
+     ],
+     "n_checks": 2
+    }
+   ],
+   "anti_patterns": [
+    {
+     "title": "Trusting the source to announce its changes",
+     "why": "Changes arrive unannounced; the first sign is a wrong number in a report.",
+     "instead": "Check every load against a written contract and stop on a change."
+    },
+    {
+     "title": "Copying the whole source every run when a change feed exists",
+     "why": "Slow and costly, and deletes stay invisible unless every copy is compared.",
+     "instead": "Declare the extraction kind per dataset; use change feeds where offered and guard full copies."
+    }
+   ]
+  },
+  {
+   "id": "ingestion",
+   "order": 2,
+   "title": "Ingestion",
+   "purpose": "Bring every delivery in exactly once, with a recorded outcome, through one set of entry steps.",
+   "components": [
+    "lander",
+    "puller",
+    "metadata store",
+    "observability"
+   ],
+   "hop": false,
+   "challenges": [
+    {
+     "id": "ING-01",
+     "title": "Push and pull behave differently",
+     "goes_wrong": "Files pushed by a source and data pulled by the platform go through different code, so the same problem is caught on one path and missed on the other.",
+     "example": "Partner files are pushed; the order database is pulled.",
+     "solution": "Pushed files land and go through the lander; pulled data runs the same lander steps in the same process, straight to bronze.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "ING-01"
+     ],
+     "adr": [
+      {
+       "id": "ADR-002",
+       "title": "Push lands files; pull goes straight to bronze through the lander steps"
+      }
+     ],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "ING-02",
+     "title": "Reruns that double the data",
+     "goes_wrong": "A retried load appends the same rows again.",
+     "example": "A failed run is restarted halfway through a day.",
+     "solution": "Every batch has a key; bronze writes replace by batch key, and a run restarts after the last batch the file log shows as loaded.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "DUP-02",
+      "IDEMP-01",
+      "ORCH-03"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-PURE-03"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "ING-03",
+     "title": "Duplicate deliveries",
+     "goes_wrong": "The same content arrives twice and is counted twice.",
+     "example": "Day 6, the partner file resent under a new name.",
+     "solution": "The content checksum is the batch key; the landing area refuses a second write of the same delivery.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "DUP-01"
+     ],
+     "adr": [],
+     "world_day": 6,
+     "checks": [
+      "SL-SEM-04",
+      "SL-TEST-07",
+      "SL-TEST-09"
+     ],
+     "n_checks": 3
+    },
+    {
+     "id": "ING-04",
+     "title": "Partial or empty deliveries",
+     "goes_wrong": "A half-written file or an empty batch is loaded as if complete.",
+     "example": "A lab file arrives with three rows on a day that normally has hundreds.",
+     "solution": "A declared volume band per dataset; empty and out-of-band batches are held with the reason in the file log; every file ends with a recorded outcome.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "DQ-04",
+      "FILE-01"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "ING-05",
+     "title": "Large history loads and backfills",
+     "goes_wrong": "Loading years of history through the daily path overwhelms it, or the handover to daily loads loses or repeats a day.",
+     "example": "Backfilling a month of order lines.",
+     "solution": "Reload and backfill are declared run types with a plan in the metadata store; the handover point is recorded.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "HIST-03",
+      "HIST-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "ING-06",
+     "title": "Credentials in code",
+     "goes_wrong": "Passwords in notebooks or repositories leak and cannot be rotated.",
+     "example": "Database and interface credentials for four sources.",
+     "solution": "Secrets resolved at run time from the secret store, per environment; never in the repository.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "REL-05",
+      "REL-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-CLEAN-07",
+      "SL-SEC-06",
+      "SL-SECRET-01",
+      "SL-SECRET-02",
+      "SL-SECRET-03",
+      "SL-SETUP-04"
+     ],
+     "n_checks": 6
+    },
+    {
+     "id": "ING-07",
+     "title": "Schema drift at the door",
+     "goes_wrong": "A changed column loads into the wrong place or as nulls.",
+     "example": "Day 7, the renamed lab column.",
+     "solution": "The contract check stops the batch and names the column; new columns are kept aside or stop the batch, as the dataset declares.",
+     "verdict": "assist",
+     "status": "built",
+     "dac": [
+      "SCH-01",
+      "SCH-02"
+     ],
+     "adr": [],
+     "world_day": 7,
+     "checks": [
+      "SL-CLEAN-29",
+      "SL-COST-CODE-12"
+     ],
+     "n_checks": 2
+    }
+   ],
+   "anti_patterns": [
+    {
+     "title": "Overwriting a file of the same name in landing",
+     "why": "If a resend overwrites a file, we cannot tell what was loaded, and a replay gives a different answer.",
+     "instead": "Give every delivery a unique name, list it in the manifest, and send corrections as new files."
+    },
+    {
+     "title": "Reading landing files from anything but the lander",
+     "why": "A job that reads raw files skips tokenising, contract checks and the file log, so its output has no lineage.",
+     "instead": "Read bronze, which holds every record as received with full provenance."
+    },
+    {
+     "title": "Hard-coded settings in notebooks",
+     "why": "Paths, thresholds and keys buried in code differ between copies, and nobody can see or audit them.",
+     "instead": "Put the value in YAML at the right level (platform, source, dataset or column) and read it from the metadata store."
+    },
+    {
+     "title": "A copy-pasted pipeline per table",
+     "why": "A fix must be made fifty times, and the copies drift apart.",
+     "instead": "Add the table as metadata to the common pipeline or harness."
+    }
+   ]
+  },
+  {
+   "id": "bronze",
+   "order": 3,
+   "title": "Bronze",
+   "purpose": "Keep every record exactly as delivered, traceable to its delivery, so anything later can be rebuilt.",
+   "components": [
+    "lander",
+    "metadata store"
+   ],
+   "hop": false,
+   "challenges": [
+    {
+     "id": "BRZ-01",
+     "title": "Changing data on the way in",
+     "goes_wrong": "Cleaning or removing duplicates in bronze destroys the evidence needed to rebuild or audit.",
+     "example": "Stream replays and late readings are kept and flagged, not dropped.",
+     "solution": "Bronze is append-only and raw; cleaning starts in silver.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "RAW-01"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "BRZ-02",
+     "title": "Rows that cannot be traced",
+     "goes_wrong": "Nobody can say which file or run a row came from.",
+     "example": "Every bronze row carries its batch key, run id, source file and window.",
+     "solution": "Load metadata on every row, and every run recorded with its configuration.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "OPS-03",
+      "CFG-03"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "BRZ-03",
+     "title": "Personal data stored in clear text",
+     "goes_wrong": "The rawest layer becomes the biggest privacy risk.",
+     "example": "Dealer contact columns.",
+     "solution": "Restricted columns are tokenised before the first write; the token key lives outside code.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "PII-01"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "BRZ-04",
+     "title": "Replays and late events",
+     "goes_wrong": "Dropping them hides problems; keeping them unflagged doubles counts downstream.",
+     "example": "Day 3, 188 readings up to 90 seconds late; day 13, a 45-minute stream replay.",
+     "solution": "Kept as delivered with arrival time and position; silver applies event time and de-duplication.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "DUP-04",
+      "LATE-03"
+     ],
+     "adr": [],
+     "world_day": 13,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "BRZ-05",
+     "title": "Table layout decay",
+     "goes_wrong": "Thousands of small files make every read slow.",
+     "example": "Many small lab files a day.",
+     "solution": "Automatic clustering and maintenance declared once in the binding, not hand-written jobs.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "PERF-05"
+     ],
+     "adr": [
+      {
+       "id": "ADR-011",
+       "title": "Table layout: automatic clustering and automatic maintenance"
+      }
+     ],
+     "world_day": null,
+     "checks": [
+      "SL-COST-CODE-09",
+      "SL-COST-CODE-15",
+      "SL-COST-CODE-16",
+      "SL-COST-PLAN-04"
+     ],
+     "n_checks": 4
+    }
+   ],
+   "anti_patterns": [
+    {
+     "title": "Cleaning or removing duplicates in bronze",
+     "why": "A cleaned bronze no longer shows what the source sent, so a cleaning bug can never be undone by replay.",
+     "instead": "Keep bronze raw and do every cleaning step in the bronze-to-silver engine."
+    },
+    {
+     "title": "Personal data in clear text in bronze",
+     "why": "Bronze is kept for a long time as the source for replays, so anything personal stored there in clear text stays exposed.",
+     "instead": "Tokenise in the lander and keep the clear value only in the token vault."
+    },
+    {
+     "title": "Partitioning and hand-written OPTIMIZE jobs",
+     "why": "Partitions picked by hand often create many small files, and maintenance jobs are extra code to run.",
+     "instead": "Use automatic clustering and leave upkeep to the platform's automatic optimization."
+    }
+   ]
+  },
+  {
+   "id": "bronze_to_silver",
+   "order": 4,
+   "title": "Bronze to silver",
+   "purpose": "Make one source faithful (typed, de-duplicated, history kept, deletes marked) with the same steps for every source.",
+   "components": [
+    "silver engine",
+    "data expectation services",
+    "metadata store"
+   ],
+   "hop": true,
+   "challenges": [
+    {
+     "id": "B2S-01",
+     "title": "A different pipeline per table",
+     "goes_wrong": "Every table gets its own hand-written code, so each fixes the same problems differently.",
+     "example": "Nine tyre datasets, one engine.",
+     "solution": "One engine with thirteen standard stages driven by settings; stages are pure functions and reads and writes happen only at the edges.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "ENG-01",
+      "PURE-01"
+     ],
+     "adr": [
+      {
+       "id": "ADR-007",
+       "title": "Thirteen standard stages from bronze to silver"
+      },
+      {
+       "id": "ADR-013",
+       "title": "IO only at the edges; stages are pure functions"
+      }
+     ],
+     "world_day": null,
+     "checks": [
+      "SL-PURE-06"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "B2S-02",
+     "title": "Changes arriving out of order",
+     "goes_wrong": "An older change applied after a newer one overwrites the current value.",
+     "example": "Day 8, a promised-date change from earlier arrives after a newer one.",
+     "solution": "History is ordered by the source's own sequence, never by arrival; the late change is inserted in its place.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "SCD-02"
+     ],
+     "adr": [],
+     "world_day": 8,
+     "checks": [
+      "SL-TEST-09"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "B2S-03",
+     "title": "Deletes",
+     "goes_wrong": "Deleted rows are either lost from history or still counted.",
+     "example": "Day 4, five order lines deleted.",
+     "solution": "Deletes are soft (marked, kept joinable) and flow through to derived tables.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "DEL-01",
+      "DEL-03"
+     ],
+     "adr": [
+      {
+       "id": "ADR-016",
+       "title": "History kind follows dataset kind; deletes are soft"
+      }
+     ],
+     "world_day": 4,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "B2S-04",
+     "title": "Duplicates inside the source and replayed events",
+     "goes_wrong": "The same reading or row counted twice.",
+     "example": "Day 13, 19,440 replayed readings.",
+     "solution": "De-duplicate by the declared key (for example the reading id) with a declared rule for which copy wins.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "DUP-03",
+      "DUP-04"
+     ],
+     "adr": [],
+     "world_day": 13,
+     "checks": [
+      "SL-CLEAN-32"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "B2S-05",
+     "title": "A bad full copy",
+     "goes_wrong": "A short copy marks hundreds of records deleted.",
+     "example": "Day 9, 720 of 1,800 materials missing.",
+     "solution": "The mass-delete guard compares the copy with silver's current keys and holds the batch above the declared share.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "DEL-04"
+     ],
+     "adr": [],
+     "world_day": 9,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "B2S-06",
+     "title": "Bad values",
+     "goes_wrong": "Values that fail a rule are silently nulled or dropped, or one bad row stops the whole load.",
+     "example": "An impossible cure temperature in a press reading.",
+     "solution": "Rules in configuration with a severity that sets the action (warn, quarantine, block); quarantined rows are reviewed and released through the same checks.",
+     "verdict": "solve",
+     "status": "designed",
+     "dac": [
+      "DQ-02",
+      "DQ-03",
+      "SEV-01",
+      "QUAR-01"
+     ],
+     "adr": [
+      {
+       "id": "ADR-009",
+       "title": "Quality severity sets the action"
+      }
+     ],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "B2S-07",
+     "title": "A bad load that got through",
+     "goes_wrong": "Found days later, after good loads built on it; restoring old versions throws the good loads away.",
+     "example": "The day-9 short copy slipping past the guard.",
+     "solution": "Void the batch, rebuild the silver table from bronze, rerun the gold windows that use it; recon and known answers prove it.",
+     "verdict": "solve",
+     "status": "designed",
+     "dac": [
+      "HIST-04",
+      "TEST-05"
+     ],
+     "adr": [
+      {
+       "id": "ADR-025",
+       "title": "Recover a bad load by voiding it and rerunning from bronze"
+      }
+     ],
+     "world_day": null,
+     "checks": [
+      "SL-COST-CODE-21",
+      "SL-PURE-03"
+     ],
+     "n_checks": 2
+    },
+    {
+     "id": "B2S-08",
+     "title": "Columns lost on the way",
+     "goes_wrong": "A hand-picked column list silently drops a column a consumer needs.",
+     "example": "A new contract column never reaches silver.",
+     "solution": "Every contract column reaches silver unless a selection is declared.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "PROJ-01"
+     ],
+     "adr": [
+      {
+       "id": "ADR-008",
+       "title": "Silver takes all columns by default"
+      }
+     ],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    }
+   ],
+   "anti_patterns": [
+    {
+     "title": "Free-form SQL in bronze to silver",
+     "why": "Hand-written SQL per table brings back the copy-paste pipelines the engine replaced, and it cannot be unit-tested.",
+     "instead": "Declare the need as a setting; if no setting fits, add a tested stage option to the engine for everyone."
+    },
+    {
+     "title": "Silently dropping or nulling bad values",
+     "why": "Rows that vanish quietly make gold totals wrong with no trace of why.",
+     "instead": "Quarantine the row with its reason and let a steward release it once fixed."
+    },
+    {
+     "title": "Joining sources or adding business logic in silver",
+     "why": "Silver is source-aligned; mixing sources there blurs ownership and breaks replays per source.",
+     "instead": "Combine sources in gold, inside a fact's pure build() function."
+    },
+    {
+     "title": "A copy-pasted pipeline per table",
+     "why": "A fix must be made fifty times, and the copies drift apart.",
+     "instead": "Add the table as metadata to the common pipeline or harness."
+    }
+   ]
+  },
+  {
+   "id": "silver",
+   "order": 5,
+   "title": "Silver",
+   "purpose": "Hold each source's truth, cleaned and with history, without mixing sources yet.",
+   "components": [
+    "silver engine",
+    "data expectation services",
+    "observability"
+   ],
+   "hop": false,
+   "challenges": [
+    {
+     "id": "SLV-01",
+     "title": "Conforming too early",
+     "goes_wrong": "Joining sources in silver ties them together, so one late source blocks another and changes ripple everywhere.",
+     "example": "Orders and dealers stay separate in silver.",
+     "solution": "Silver is source-aligned; conforming and joining happen in gold. Data flows one way through the layers.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "FLOW-01"
+     ],
+     "adr": [
+      {
+       "id": "ADR-001",
+       "title": "Silver is source-aligned; conforming happens in gold"
+      }
+     ],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "SLV-02",
+     "title": "The wrong kind of history",
+     "goes_wrong": "History kept where it is not needed, or lost where it is.",
+     "example": "Dealer region keeps history; a phone number is simply overwritten.",
+     "solution": "History kind per dataset (and per attribute where needed) is declared; the engine applies it.",
+     "verdict": "assist",
+     "status": "built",
+     "dac": [
+      "SCD-02"
+     ],
+     "adr": [
+      {
+       "id": "ADR-016",
+       "title": "History kind follows dataset kind; deletes are soft"
+      }
+     ],
+     "world_day": null,
+     "checks": [
+      "SL-TEST-09"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "SLV-03",
+     "title": "Late stream events",
+     "goes_wrong": "Late readings land in the wrong hour or are dropped.",
+     "example": "Day 3, 188 late readings.",
+     "solution": "Event time with a declared late allowance; readings counted in their event hour.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "LATE-03"
+     ],
+     "adr": [],
+     "world_day": 3,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "SLV-04",
+     "title": "Drift nobody sees",
+     "goes_wrong": "A column's values shift slowly and nothing notices until a report is wrong.",
+     "example": "Scrap reason codes changing mix.",
+     "solution": "Every dataset is profiled on load and drift is visible and alertable.",
+     "verdict": "solve",
+     "status": "designed",
+     "dac": [
+      "PROF-01"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "SLV-05",
+     "title": "Writes that are not repeatable",
+     "goes_wrong": "A rerun adds rows or versions.",
+     "example": "Rerunning day 8.",
+     "solution": "Merge on a row key computed from the data; the bookmark records which bronze batches each run consumed.",
+     "verdict": "solve",
+     "status": "built",
+     "dac": [
+      "IDEMP-01",
+      "DUP-02"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-PURE-03"
+     ],
+     "n_checks": 1
+    }
+   ],
+   "anti_patterns": [
+    {
+     "title": "Joining sources or adding business logic in silver",
+     "why": "Silver is source-aligned; mixing sources there blurs ownership and breaks replays per source.",
+     "instead": "Combine sources in gold, inside a fact's pure build() function."
+    },
+    {
+     "title": "Chaining layers by clock time",
+     "why": "Starting silver at 03:00 because bronze usually ends by 02:30 breaks the first night bronze runs late, and nobody notices.",
+     "instead": "Trigger on data readiness: the batch-ready marker for silver, input bookmarks for gold."
+    },
+    {
+     "title": "Partitioning and hand-written OPTIMIZE jobs",
+     "why": "Partitions picked by hand often create many small files, and maintenance jobs are extra code to run.",
+     "instead": "Use automatic clustering and leave upkeep to the platform's automatic optimization."
+    }
+   ]
+  },
+  {
+   "id": "silver_to_gold",
+   "order": 6,
+   "title": "Silver to gold",
+   "purpose": "Make several sources agree on keys, grain, time and meaning, without losing or doubling a row.",
+   "components": [
+    "gold harness",
+    "metadata store",
+    "data expectation services",
+    "observability"
+   ],
+   "hop": true,
+   "challenges": [
+    {
+     "id": "S2G-01",
+     "title": "Rows dropped in joins",
+     "goes_wrong": "An inner join to a missing dealer or material silently drops sales.",
+     "example": "Sales naming a dealer not yet in the dealer table.",
+     "solution": "Left join plus an unknown member; rows in must equal rows out, with unmatched rows and duplicate keys counted separately so they cannot cancel out.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "LATE-02",
+      "PUB-01"
+     ],
+     "adr": [
+      {
+       "id": "ADR-004",
+       "title": "Deterministic hash surrogate keys with reserved members -1 and -2"
+      }
+     ],
+     "world_day": null,
+     "checks": [
+      "SL-CLEAN-31"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "S2G-02",
+     "title": "Conforming keys across sources",
+     "goes_wrong": "The same customer has different codes in different systems, so totals split or double.",
+     "example": "An order-system customer code, a dealer interface id and a name in partner files.",
+     "solution": "Mapping tables kept by a steward, with suggested matches; deterministic hash surrogate keys.",
+     "verdict": "assist",
+     "status": "designed",
+     "dac": [
+      "KEY-01"
+     ],
+     "adr": [
+      {
+       "id": "ADR-004",
+       "title": "Deterministic hash surrogate keys with reserved members -1 and -2"
+      }
+     ],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "S2G-03",
+     "title": "Grain and double counting",
+     "goes_wrong": "Joining one to many multiplies quantities.",
+     "example": "Order lines joined to deliveries.",
+     "solution": "Grain declared per fact and tested unique; joins aggregated to the fact's grain first; fan-out detected from captured query plans.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "DES-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-CLEAN-31",
+      "SL-CLEAN-32"
+     ],
+     "n_checks": 2
+    },
+    {
+     "id": "S2G-04",
+     "title": "Which version of history applies",
+     "goes_wrong": "A sale is joined to today's dealer region instead of the region on the day of the sale.",
+     "example": "A dealer moving region mid-month.",
+     "solution": "Joins as of the event date on history tables.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "SCD-04"
+     ],
+     "adr": [
+      {
+       "id": "ADR-005",
+       "title": "History dimensions are joined as of the event"
+      }
+     ],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "S2G-05",
+     "title": "Completeness across sources",
+     "goes_wrong": "Four of six inputs have arrived; publishing gives partial numbers that look final.",
+     "example": "Lab results four hours late; partner files a day late.",
+     "solution": "Inputs declared per fact, a completeness signal per input, and a declared policy per fact (wait, publish provisional, or wait then provisional with a maximum wait); every window carries a complete flag.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "ORCH-01",
+      "SERV-02"
+     ],
+     "adr": [
+      {
+       "id": "ADR-018",
+       "title": "A gold window is complete only when every input has caught up"
+      }
+     ],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "S2G-06",
+     "title": "Late facts and restatements",
+     "goes_wrong": "October's numbers change in November, or late rows are ignored.",
+     "example": "Day 5, dealer D-0042's October file.",
+     "solution": "Recompute exactly the windows the new data touched (replace, never append) and log the restatement.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "LATE-01",
+      "GOLD-01"
+     ],
+     "adr": [
+      {
+       "id": "ADR-006",
+       "title": "Facts are tables built by window recompute; materialised views only for simple aggregates"
+      }
+     ],
+     "world_day": 5,
+     "checks": [
+      "SL-CLEAN-16"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "S2G-07",
+     "title": "Late reference data",
+     "goes_wrong": "A fact arrives before its dealer exists and is dropped or keyed wrong.",
+     "example": "Days 11 and 12, new dealer D-9001.",
+     "solution": "Unknown member first, re-keyed when the dealer arrives.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "LATE-02"
+     ],
+     "adr": [],
+     "world_day": 11,
+     "checks": [
+      "SL-CLEAN-31"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "S2G-08",
+     "title": "Corrections",
+     "goes_wrong": "The source fixes a past value and old reports silently change, or never change.",
+     "example": "Day 10, twelve promised dates corrected.",
+     "solution": "Corrections live in their own table and reach gold only for the windows their plan names, logged as a restatement.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "HIST-05"
+     ],
+     "adr": [
+      {
+       "id": "ADR-017",
+       "title": "Corrections live in their own table and reach gold through a backfill plan"
+      }
+     ],
+     "world_day": 10,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "S2G-09",
+     "title": "Deletes reaching gold",
+     "goes_wrong": "A deleted line still counts.",
+     "example": "The day-4 deleted order lines.",
+     "solution": "Gold reads current, non-deleted rows when windows recompute.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "DEL-03"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "S2G-10",
+     "title": "Time zones and business calendars",
+     "goes_wrong": "Days cut at the wrong hour; fiscal periods computed differently in each report.",
+     "example": "Plants in India and Hungary.",
+     "solution": "Business date per plant and one shared calendar, declared once.",
+     "verdict": "solve",
+     "status": "gap",
+     "dac": [
+      "LATE-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-CLEAN-16"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "S2G-11",
+     "title": "Recompute cost",
+     "goes_wrong": "Rebuilding everything every night is slow and costly.",
+     "example": "Fourteen days of order lines.",
+     "solution": "Only the windows the new data touched are recomputed.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "GOLD-01"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "S2G-12",
+     "title": "Functional join mistakes in hand-written queries",
+     "goes_wrong": "Inner instead of left, a wrong key, a many-to-many join; the query runs and the numbers are wrong.",
+     "example": "Two dealers missing and one duplicated, so the net row count looks almost normal.",
+     "solution": "Declared join shapes checked against captured plans and observed counts of unmatched rows and duplicate keys.",
+     "verdict": "solve",
+     "status": "designed",
+     "dac": [
+      "DES-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-CLEAN-31",
+      "SL-CLEAN-32"
+     ],
+     "n_checks": 2
+    },
+    {
+     "id": "S2G-13",
+     "title": "Proving gold is right",
+     "goes_wrong": "A quiet two percent error goes unnoticed for months.",
+     "example": "OTIF south November must equal 0.8961.",
+     "solution": "Known answers from the synthetic world in tests; reconciliation from silver to gold in production.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "REC-01",
+      "SIM-01"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-CLEAN-30"
+     ],
+     "n_checks": 1
+    }
+   ],
+   "anti_patterns": [
+    {
+     "title": "Inner join from fact to dimension",
+     "why": "Rows whose dimension has not arrived simply vanish, and totals quietly drop.",
+     "instead": "Left join, give missing matches surrogate key -1, measure the orphan rate and re-key on the next recompute."
+    },
+    {
+     "title": "Joining incremental to incremental",
+     "why": "Joining only the new rows of one input to only the new rows of another misses every match that arrived in a different batch.",
+     "instead": "Detect changed windows incrementally, then read every input in full for those windows."
+    },
+    {
+     "title": "Appending to gold facts",
+     "why": "Every retry or late file double-counts.",
+     "instead": "Replace the whole window, or MERGE on the grain key."
+    },
+    {
+     "title": "Joining an SCD2 dimension to its current row only",
+     "why": "Last year's sales get this year's customer region, so history is rewritten.",
+     "instead": "Join where event time is between valid_from and valid_to."
+    },
+    {
+     "title": "One giant SQL notebook mixing IO and logic",
+     "why": "It cannot be unit-tested, reused or reviewed in parts.",
+     "instead": "Write a pure build(inputs) function and let the harness do reads and writes."
+    },
+    {
+     "title": "Publishing before inputs are complete",
+     "why": "Users see half a day and make decisions on it.",
+     "instead": "Publish a window only when every input bookmark has passed its end."
+    },
+    {
+     "title": "Fixing data by hand in gold",
+     "why": "The fix is overwritten on the next rebuild and leaves no audit trail.",
+     "instead": "Add a row to the corrections table and run the backfill plan."
+    }
+   ]
+  },
+  {
+   "id": "gold",
+   "order": 7,
+   "title": "Gold",
+   "purpose": "Model the business correctly (grain, fact type, shared dimensions, history) and publish only what passed its checks.",
+   "components": [
+    "gold harness",
+    "metadata store",
+    "data expectation services"
+   ],
+   "hop": false,
+   "challenges": [
+    {
+     "id": "GLD-01",
+     "title": "Undeclared grain",
+     "goes_wrong": "Nobody can say what one row means, so numbers cannot be added up safely.",
+     "example": "Is OTIF per order line or per delivery?",
+     "solution": "Grain declared per fact and tested unique; a grain is suggested from key profiling and confirmed by the modeller.",
+     "verdict": "assist",
+     "status": "building",
+     "dac": [
+      "DES-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-CLEAN-31",
+      "SL-CLEAN-32"
+     ],
+     "n_checks": 2
+    },
+    {
+     "id": "GLD-02",
+     "title": "The wrong fact type",
+     "goes_wrong": "Snapshots summed over time, or an order's current stage impossible to answer.",
+     "example": "Sales are transactions; inventory is a periodic snapshot; order to delivery is an accumulating snapshot.",
+     "solution": "Fact type declared per fact; the harness builds the matching pattern.",
+     "verdict": "assist",
+     "status": "designed",
+     "dac": [
+      "DES-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-CLEAN-31",
+      "SL-CLEAN-32"
+     ],
+     "n_checks": 2
+    },
+    {
+     "id": "GLD-03",
+     "title": "Dimensions that do not conform",
+     "goes_wrong": "Two dashboards disagree on the same region.",
+     "example": "One plant dimension shared by OTIF and scrap.",
+     "solution": "Shared dimensions declared once; the bus matrix (which facts share which dimensions) generated from the declarations.",
+     "verdict": "assist",
+     "status": "designed",
+     "dac": [
+      "SERV-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "GLD-04",
+     "title": "History per attribute",
+     "goes_wrong": "Sales move to a new region retroactively, or history that matters is lost.",
+     "example": "Dealer region keeps history; phone does not.",
+     "solution": "History type declared per attribute; joins as of the event.",
+     "verdict": "assist",
+     "status": "building",
+     "dac": [
+      "SCD-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "GLD-05",
+     "title": "Roles, bridges and facts about absence",
+     "goes_wrong": "Order date and delivery date confused; a dealer in two groups counted twice; nothing counts what did not happen.",
+     "example": "One date dimension used as order, promised and delivery date.",
+     "solution": "Role-playing dimensions, bridge tables with weights and factless facts declared and generated; which absences matter is a business decision.",
+     "verdict": "people_decide",
+     "status": "designed",
+     "dac": [
+      "DES-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-CLEAN-31",
+      "SL-CLEAN-32"
+     ],
+     "n_checks": 2
+    },
+    {
+     "id": "GLD-06",
+     "title": "Keys that change on every rebuild",
+     "goes_wrong": "Identity or sequence keys differ after a rerun, breaking every join and saved report.",
+     "example": "Rebuilding gold after a correction.",
+     "solution": "Deterministic hash surrogate keys with reserved members for unknown and not applicable.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "KEY-01"
+     ],
+     "adr": [
+      {
+       "id": "ADR-004",
+       "title": "Deterministic hash surrogate keys with reserved members -1 and -2"
+      }
+     ],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "GLD-07",
+     "title": "Publishing unchecked numbers",
+     "goes_wrong": "A broken build reaches dashboards before anyone looks.",
+     "example": "A gold window with orphan rows above the limit.",
+     "solution": "Checks before publish (keys, totals against the build, orphan rate); a failure publishes nothing.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "PUB-01"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    }
+   ],
+   "anti_patterns": [
+    {
+     "title": "Undeclared grain",
+     "why": "Nobody can tell a duplicate from a valid row, and measures get summed twice.",
+     "instead": "Declare the grain in metadata and check uniqueness before publish."
+    },
+    {
+     "title": "One wide table as the only gold",
+     "why": "A single wide table repeats dimension values, is hard to change, and hides grain.",
+     "instead": "Build a star schema; add a wide view or a semantic-layer view on top when a use case needs it."
+    },
+    {
+     "title": "Identity or sequence surrogate keys",
+     "why": "Keys change on every rebuild and differ between environments, breaking joins and comparisons.",
+     "instead": "Hash of source + business key (+ valid_from for SCD type 2)."
+    },
+    {
+     "title": "Quality checks only in silver",
+     "why": "Joins and aggregates create their own errors (orphans, double counts) that silver checks can never see.",
+     "instead": "Check grain, orphan rate, reconciliation and completeness in gold too."
+    },
+    {
+     "title": "Materialized views for everything",
+     "why": "Multi-input materialized views give no control over windows, completeness or quality, and can cost more to refresh.",
+     "instead": "Use a table written by the window recompute job."
+    },
+    {
+     "title": "Dropping business keys from facts",
+     "why": "Without them, re-keying orphans and tracing a row back to the source are impossible.",
+     "instead": "Keep both the business key and the surrogate key."
+    }
+   ]
+  },
+  {
+   "id": "gold_to_semantic",
+   "order": 8,
+   "title": "Gold to semantic",
+   "purpose": "Turn gold into numbers people use, each defined once, aggregated correctly and honest about completeness.",
+   "components": [
+    "semantic layer generators",
+    "metadata store"
+   ],
+   "hop": true,
+   "challenges": [
+    {
+     "id": "G2S-01",
+     "title": "Aggregating ratios wrongly",
+     "goes_wrong": "Averaging OTIF percentages across plants gives the wrong total; inventory summed over months is meaningless.",
+     "example": "OTIF by region.",
+     "solution": "Each measure declares whether it is additive, semi-additive or non-additive; ratios are built from their parts.",
+     "verdict": "solve",
+     "status": "designed",
+     "dac": [
+      "SERV-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "G2S-02",
+     "title": "One number, many definitions",
+     "goes_wrong": "The dashboard, the conversation interface and a spreadsheet each compute OTIF differently.",
+     "example": "OTIF counting or not counting cancelled lines.",
+     "solution": "One certified definition per metric, generated from the manifest, as the only source for every consumer.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "SERV-04",
+      "SERV-06"
+     ],
+     "adr": [
+      {
+       "id": "ADR-022",
+       "title": "Metrics are certified before conversation interfaces and agents use them"
+      }
+     ],
+     "world_day": null,
+     "checks": [
+      "SL-SEM-07"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "G2S-03",
+     "title": "Comparing across facts",
+     "goes_wrong": "OTIF and sales by region cannot be compared because the regions differ.",
+     "example": "Region from the dealer table versus region from the plant table.",
+     "solution": "Conformed dimensions declared once and reused by every metric.",
+     "verdict": "solve",
+     "status": "designed",
+     "dac": [
+      "SERV-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "G2S-04",
+     "title": "Time intelligence",
+     "goes_wrong": "Year to date and fiscal periods computed differently each time.",
+     "example": "Fiscal year starting in April.",
+     "solution": "One shared calendar with business dates and fiscal periods.",
+     "verdict": "solve",
+     "status": "gap",
+     "dac": [
+      "LATE-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-CLEAN-16"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "G2S-05",
+     "title": "Incomplete windows inside a ratio",
+     "goes_wrong": "Lines not yet due count as missed, so the ratio looks worse than the truth.",
+     "example": "OTIF counted every line of the month; over complete windows it is 0.8961.",
+     "solution": "Ratios count complete windows only; counts of rows still cover every row.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "SERV-02"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    }
+   ],
+   "anti_patterns": [
+    {
+     "title": "Business logic in BI tools or views",
+     "why": "The same metric gets computed differently in each dashboard, and nobody can test it.",
+     "instead": "Put calculations in gold build() or in the semantic layer's metric definitions."
+    },
+    {
+     "title": "One wide table as the only gold",
+     "why": "A single wide table repeats dimension values, is hard to change, and hides grain.",
+     "instead": "Build a star schema; add a wide view or a semantic-layer view on top when a use case needs it."
+    }
+   ]
+  },
+  {
+   "id": "semantic",
+   "order": 9,
+   "title": "Semantic layer",
+   "purpose": "Keep every business definition in one governed place that people, tools and agents all read.",
+   "components": [
+    "semantic layer generators",
+    "metadata store"
+   ],
+   "hop": false,
+   "challenges": [
+    {
+     "id": "SEM-01",
+     "title": "Definitions nobody agreed",
+     "goes_wrong": "Two teams certify different OTIF formulas.",
+     "example": "Partial deliveries counted or not.",
+     "solution": "The tool versions, certifies and tests definitions and flags two that disagree; the definition itself is a business decision.",
+     "verdict": "people_decide",
+     "status": "building",
+     "dac": [
+      "SERV-04"
+     ],
+     "adr": [
+      {
+       "id": "ADR-022",
+       "title": "Metrics are certified before conversation interfaces and agents use them"
+      }
+     ],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "SEM-02",
+     "title": "Definitions that change silently",
+     "goes_wrong": "Last year's number changes and nobody knows why.",
+     "example": "OTIF definition changed in January.",
+     "solution": "Versioned definitions with a restatement note.",
+     "verdict": "solve",
+     "status": "designed",
+     "dac": [
+      "SERV-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "SEM-03",
+     "title": "Words people actually use",
+     "goes_wrong": "Questions in plain language miss because people say sell-through, sell-out or sales.",
+     "example": "Synonyms for OTIF.",
+     "solution": "Synonyms and descriptions declared with each metric; new synonyms suggested from questions asked.",
+     "verdict": "assist",
+     "status": "building",
+     "dac": [
+      "SERV-06"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-SEM-07"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "SEM-04",
+     "title": "Security inside metrics",
+     "goes_wrong": "A regional manager sees other regions' totals through an aggregate.",
+     "example": "Region-level sales.",
+     "solution": "Row filters declared once and applied in every metric.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "SEC-02"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-SEC-01",
+      "SL-SEC-02",
+      "SL-SEC-03",
+      "SL-SEC-04",
+      "SL-SEC-05",
+      "SL-SEC-08"
+     ],
+     "n_checks": 7
+    },
+    {
+     "id": "SEM-05",
+     "title": "Provisional numbers that look final",
+     "goes_wrong": "A partial window is read as final.",
+     "example": "Sales while one dealer's file is missing.",
+     "solution": "The complete flag from gold is carried into every metric and shown.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "SERV-02"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    }
+   ],
+   "anti_patterns": [
+    {
+     "title": "Business logic in BI tools or views",
+     "why": "The same metric gets computed differently in each dashboard, and nobody can test it.",
+     "instead": "Put calculations in gold build() or in the semantic layer's metric definitions."
+    },
+    {
+     "title": "Pointing a conversational query tool at raw silver tables",
+     "why": "The tool then guesses joins and meanings and gives plausible but wrong answers.",
+     "instead": "Point it at metric definitions and described gold tables."
+    }
+   ]
+  },
+  {
+   "id": "semantic_to_ui",
+   "order": 10,
+   "title": "Semantic to experiences",
+   "purpose": "Serve dashboards, conversation interfaces, agents and apps the same certified numbers, cheaply and visibly fresh.",
+   "components": [
+    "semantic layer generators",
+    "observability",
+    "agents",
+    "the platform app"
+   ],
+   "hop": true,
+   "challenges": [
+    {
+     "id": "UI-01",
+     "title": "Dashboards re-querying raw tables",
+     "goes_wrong": "Every open and every click scans large raw tables, and the warehouse bill grows with viewers.",
+     "example": "A monitoring dashboard over raw platform telemetry.",
+     "solution": "Dashboards read certified definitions over compact summary tables, with stored results refreshed when data changes.",
+     "verdict": "solve",
+     "status": "designed",
+     "dac": [
+      "COST-04",
+      "SERV-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-COST-CODE-06",
+      "SL-COST-CONFIG-01",
+      "SL-COST-CONFIG-02",
+      "SL-COST-CONFIG-05",
+      "SL-COST-CONFIG-06"
+     ],
+     "n_checks": 5
+    },
+    {
+     "id": "UI-02",
+     "title": "A conversation interface roaming raw tables",
+     "goes_wrong": "Plain-language questions produce heavy or wrong queries on raw data.",
+     "example": "Asking for OTIF straight from silver.",
+     "solution": "The conversation interface sees only certified definitions and verified functions for frequent questions.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "SERV-06"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-SEM-07"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "UI-03",
+     "title": "One number, many tools",
+     "goes_wrong": "The dashboard, the conversation interface and an agent disagree.",
+     "example": "OTIF south November.",
+     "solution": "All of them read the same certified definitions; known answers are tested.",
+     "verdict": "solve",
+     "status": "building",
+     "dac": [
+      "SERV-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    },
+    {
+     "id": "UI-04",
+     "title": "Agents writing their own queries",
+     "goes_wrong": "An agent's ad-hoc query is untested, unpermissioned and can be wrong.",
+     "example": "A triage agent explaining a failed run.",
+     "solution": "Agents call typed tools with fixed, tested queries; anything they propose goes to the owner's gate.",
+     "verdict": "solve",
+     "status": "designed",
+     "dac": [
+      "SERV-06",
+      "GATE-03"
+     ],
+     "adr": [
+      {
+       "id": "ADR-023",
+       "title": "Agents propose, gates decide; agents follow the same kernel and adapter split"
+      }
+     ],
+     "world_day": null,
+     "checks": [
+      "SL-SEM-07"
+     ],
+     "n_checks": 1
+    },
+    {
+     "id": "UI-05",
+     "title": "The cost of looking",
+     "goes_wrong": "Watching and asking cost more than the pipelines themselves.",
+     "example": "A monitoring template and plain-language questions over raw telemetry.",
+     "solution": "Summary tables, stored results and verified functions under monitoring and conversation screens.",
+     "verdict": "solve",
+     "status": "designed",
+     "dac": [
+      "COST-04"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-COST-CODE-06",
+      "SL-COST-CONFIG-01",
+      "SL-COST-CONFIG-02",
+      "SL-COST-CONFIG-05",
+      "SL-COST-CONFIG-06"
+     ],
+     "n_checks": 5
+    },
+    {
+     "id": "UI-06",
+     "title": "Stale screens",
+     "goes_wrong": "A cached screen shows yesterday's number as today's.",
+     "example": "A dashboard cached before a restatement.",
+     "solution": "Refresh on data change; freshness and the provisional flag shown on the screen.",
+     "verdict": "solve",
+     "status": "designed",
+     "dac": [
+      "PERF-02",
+      "SERV-02"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [
+      "SL-COST-CODE-23",
+      "SL-COST-CONFIG-05",
+      "SL-COST-CONFIG-06"
+     ],
+     "n_checks": 3
+    },
+    {
+     "id": "UI-07",
+     "title": "Rebuilding what the platform gives",
+     "goes_wrong": "A custom portal duplicates dashboards and catalog screens and falls behind.",
+     "example": "Viewing dashboards in a custom app.",
+     "solution": "Native screens for viewing; our own app only for actions (alerts, approvals, quarantine release, recovery, declarations).",
+     "verdict": "people_decide",
+     "status": "designed",
+     "dac": [
+      "GATE-03"
+     ],
+     "adr": [],
+     "world_day": null,
+     "checks": [],
+     "n_checks": 0
+    }
+   ],
+   "anti_patterns": [
+    {
+     "title": "Business logic in BI tools or views",
+     "why": "The same metric gets computed differently in each dashboard, and nobody can test it.",
+     "instead": "Put calculations in gold build() or in the semantic layer's metric definitions."
+    },
+    {
+     "title": "Pointing a conversational query tool at raw silver tables",
+     "why": "The tool then guesses joins and meanings and gives plausible but wrong answers.",
+     "instead": "Point it at metric definitions and described gold tables."
+    },
+    {
+     "title": "Agents querying tables directly",
+     "why": "Untested, unpermissioned queries; answers that differ from the dashboard.",
+     "instead": "Typed tools over certified definitions, with proposals going to a gate."
+    },
+    {
+     "title": "A custom portal that rebuilds native dashboards",
+     "why": "Twice the work, and it drifts from the governed screens.",
+     "instead": "Link out to native screens; build only screens that take actions."
+    }
+   ]
+  }
+ ]
+}

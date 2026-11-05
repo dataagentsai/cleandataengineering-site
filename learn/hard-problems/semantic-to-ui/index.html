@@ -1,0 +1,269 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Semantic to UI: hard problems and anti-patterns · Clean Data Engineering</title>
+<meta name="description" content="The hard challenges and common anti-patterns of semantic to ui in a data platform, with how each is solved and tested. This hop must serve dashboards,…"><link rel="canonical" href="https://cleandataengineering.ai/learn/hard-problems/semantic-to-ui/">
+<meta property="og:title" content="Semantic to UI: hard problems and anti-patterns"><meta property="og:description" content="The hard challenges and common anti-patterns of semantic to ui in a data platform, with how each is solved and tested. This hop must serve dashboards,…"><meta property="og:url" content="https://cleandataengineering.ai/learn/hard-problems/semantic-to-ui/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .diagram a:hover rect { stroke-width:2.6 } .diagram a { cursor:pointer }
+  .map { display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:12px; margin:14px 0; }
+  .map a { display:block; border:var(--line); border-radius:var(--wob); padding:12px 16px; text-decoration:none; color:var(--ink); background:#fff; }
+  .map a:hover { background:var(--butter-wash); } .map b { font-family:var(--hand); font-weight:400; font-size:21px; display:block; } .map span { font-size:14px; color:var(--muted); }
+  .map .n { font-size:12px; color:var(--faint); letter-spacing:.06em; text-transform:uppercase; }
+  .design { border:var(--line); border-radius:var(--wob); padding:14px 18px; margin:16px 0; background:#fff; }
+  .design h3 { margin:0 0 4px; font-size:25px; } .design .one { color:var(--ink-soft); margin:0 0 8px; }
+  .pill { display:inline-block; font-size:12.5px; border:1.5px solid var(--ink); border-radius:999px; padding:1px 10px; margin-right:6px; background:var(--mint-wash); }
+  .pill.drop { background:var(--rose-wash); } .pill.maybe { background:var(--butter-wash); }
+  .warn { border:var(--line); border-radius:var(--wob); padding:10px 16px; background:var(--butter-wash); font-size:15px; }
+</style><style>
+.hp-b{display:inline-block;border-radius:999px;padding:1px 9px;font-size:12.5px;font-weight:600;border:1.3px solid #1F1F1F;white-space:nowrap}
+.hp-v-solve{background:#CDEBD8}.hp-v-assist{background:#FFE7A3}.hp-v-people_decide{background:#F8C9D9}
+.hp-s-built{background:#fff}.hp-s-building{background:#E4ECFA}.hp-s-designed{background:#F3F3F1}.hp-s-gap{background:#FCE4EC}
+table.hp-t td{vertical-align:top}table.hp-t td p.note{margin:6px 0 0;font-size:13px}
+.hp-hard{border-left:4px solid #C2185B;padding:6px 12px;background:#FFF5F8}
+.slf input[type=search]{width:100%;max-width:520px;padding:9px 12px;font-size:16px;border:1.6px solid #1F1F1F;border-radius:10px;margin:6px 0 10px;box-sizing:border-box}
+#hpsel{display:flex;flex-wrap:wrap;gap:8px 12px}#hpsel label{display:flex;flex-direction:column;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint)}
+#hpsel select{font-size:14px;padding:5px 6px;border:1.4px solid #1F1F1F;border-radius:8px;background:#fff;max-width:240px;text-transform:none;letter-spacing:0;color:var(--ink)}
+.slcount{margin:12px 0 4px}.slcount button{margin-left:10px;font-size:13px;border:1.4px solid #1F1F1F;border-radius:999px;background:#fff;padding:2px 12px;cursor:pointer}
+tr.slr{cursor:pointer}tr.slr:hover td{background:var(--butter-wash)}tr.sld td{background:#FAFAF8}tr.sld p{margin:4px 0 8px}
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Semantic to UI: hard problems and anti-patterns", "description": "The hard challenges and common anti-patterns of semantic to ui in a data platform, with how each is solved and tested. This hop must serve dashboards, conversation interfaces, agents and apps the same certified numbers, cheaply and visibly fresh.", "url": "https://cleandataengineering.ai/learn/hard-problems/semantic-to-ui/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-02", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Learn", "item": "https://cleandataengineering.ai/learn/"}, {"@type": "ListItem", "position": 2, "name": "Hard problems by layer", "item": "https://cleandataengineering.ai/learn/hard-problems/"}, {"@type": "ListItem", "position": 3, "name": "Semantic to UI", "item": "https://cleandataengineering.ai/learn/hard-problems/semantic-to-ui/"}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What are the hardest problems in the semantic to ui step?", "acceptedAnswer": {"@type": "Answer", "text": "Dashboards re-querying raw tables; A conversation interface roaming raw tables; One number, many tools; Agents writing their own queries; The cost of looking."}}, {"@type": "Question", "name": "What is the most common mistake at semantic to ui?", "acceptedAnswer": {"@type": "Answer", "text": "Business logic in BI tools or views. Put calculations in gold build() or in the semantic layer's metric definitions."}}]}</script></head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Learn</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/paths/data-engineering/">Data Engineering</a></summary><ul><li><a href="/paths/data-engineering/aws/">AWS</a></li><li><a href="/paths/data-engineering/azure/">Azure</a></li><li><a href="/paths/data-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/data-engineering/databricks/">Databricks</a></li><li><a href="/paths/data-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/aws/">AWS</a></li><li><a href="/paths/ai-engineering/azure/">Azure</a></li><li><a href="/paths/ai-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/ai-engineering/databricks/">Databricks</a></li><li><a href="/paths/ai-engineering/open/">Open source</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/aws/">AWS</a></li><li><a href="/paths/llm-engineering/azure/">Azure</a></li><li><a href="/paths/llm-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/llm-engineering/databricks/">Databricks</a></li><li><a href="/paths/llm-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/aws/">AWS</a></li><li><a href="/paths/ml-engineering/azure/">Azure</a></li><li><a href="/paths/ml-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/ml-engineering/databricks/">Databricks</a></li><li><a href="/paths/ml-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/aws/">AWS</a></li><li><a href="/paths/software-engineering/azure/">Azure</a></li><li><a href="/paths/software-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/software-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/paths/forward-deployed/aws/">AWS</a></li><li><a href="/paths/forward-deployed/azure/">Azure</a></li><li><a href="/paths/forward-deployed/gcp/">Google Cloud</a></li><li><a href="/paths/forward-deployed/databricks/">Databricks</a></li></ul></details></li><li><a href="/concepts/">Key concepts</a></li><li><details><summary><a href="/learn/">Courses</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/agent-harness-aws/">Agent Harness on AWS</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/data-platform-architecture/aws-databricks/">Data platform on AWS + Databricks</a></li><li><a href="/learn/data-platform-architecture/aws-databricks/etl/">The ETL, end to end (AWS)</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/technical-anchor/">The technical anchor</a></li><li><a href="/learn/technical-anchor/discovery/">Technical anchor: discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Technical anchor: project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li></ul></details></li><li><details><summary><a href="/simulators/">Simulators</a></summary><ul><li><a href="/learn/llm-api-sim/">Claude API Simulator</a></li><li><a href="/learn/agent-harness-sim/">Agent Harness Simulator</a></li><li><a href="/learn/data-platform-sim/">DataTwin Studio</a></li><li><a href="/learn/data-platform-sim/problems/">Problem Lab</a></li><li><a href="/learn/data-platform-sim/performance/">Performance stories</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li></ul><h4>Certifications</h4><ul><li><a href="/certifications/">All certifications</a></li><li><details><summary><a href="/certifications/#anthropic">Claude (Anthropic)</a></summary><ul><li><a href="/certifications/claude-certified-architect/CCA-F/">Claude Certified Architect</a></li><li><a href="/certifications/cca-f-mind-maps/">CCA-F mind maps</a></li><li><a href="/certifications/claude-certified-architect/CCAR-P/CCAR-P_Study_Guide.html">Claude Architect, Professional</a></li></ul></details></li><li><details><summary><a href="/certifications/#databricks">Databricks</a></summary><ul><li><a href="/certifications/databricks-genai-engineer/">Gen AI Engineer free prep</a></li></ul></details></li><li><details><summary><a href="/certifications/#microsoft">Microsoft</a></summary><ul><li><a href="/certifications/azure-ai-engineer/">AI-103 free prep</a></li></ul></details></li><li><a href="/certifications/#aws">AWS</a></li><li><a href="/certifications/#gcp">Google Cloud</a></li></ul><h4>AI for a cause</h4><ul><li><a href="/ai-for-cause/">All projects</a></li><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul><h4>Deep tech</h4><ul><li><a href="/deep-tech/">All projects</a></li><li><a href="/problems/">Hard problems</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul><h4>Build with us</h4><ul><li><a href="/projects/">Join a project</a></li><li><details><summary><a href="/research/">Open specifications</a></summary><ul><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">AgentTwin, explained</a></li><li><a href="/learn/datatwin/">DataTwin, explained</a></li><li><a href="/lab/">The AgentTwin Lab</a></li></ul></details></li><li><details><summary><a href="/assets/">Open-source assets</a></summary><ul><li><a href="https://github.com/dataagentsai/reference-agent">Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Eval Harness Framework</a></li><li><a href="https://github.com/dataagentsai/claims-fnol-azure">Claims assistant on Azure</a></li><li><a href="/learn/technical-anchor/project-review/">Data project review skill</a></li></ul></details></li><li><a href="/about/#join">Write or teach</a></li></ul><h4>For leaders</h4><ul><li><a href="/leaders/">The one-minute version</a></li><li><details><summary><a href="/leaders/spec-driven/">Spec-driven development</a></summary><ul><li><a href="/leaders/spec-driven/">For agents</a></li><li><a href="/leaders/spec-driven/data-platform/">For data platforms</a></li></ul></details></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/papers/">Technical papers</a></li><li><a href="/writing/">Blog</a></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/hard-problems/">Hard problems by layer</a> › Semantic to UI</p>
+<p class="eyebrow" style="margin-top:22px">Hard problems by layer · 10 of 10</p>
+<h1>Semantic to UI: hard problems and anti-patterns</h1>
+<p class="lede">The hard challenges and common anti-patterns of semantic to ui in a data platform, with how each is solved and tested. This hop must serve dashboards, conversation interfaces, agents and apps the same certified numbers, cheaply and visibly fresh.</p><div class="sib"><a href="/learn/hard-problems/">↑ All layers</a><a href="/learn/hard-problems/source/">Source systems</a><a href="/learn/hard-problems/ingestion/">Ingestion</a><a href="/learn/hard-problems/bronze/">Bronze</a><a href="/learn/hard-problems/bronze-to-silver/">Bronze to silver</a><a href="/learn/hard-problems/silver/">Silver</a><a href="/learn/hard-problems/silver-to-gold/">Silver to gold</a><a href="/learn/hard-problems/gold/">Gold</a><a href="/learn/hard-problems/gold-to-semantic/">Gold to semantic</a><a href="/learn/hard-problems/semantic/">Semantic layer</a><span>Semantic to UI</span><a href="/learn/hard-problems/all-challenges/">All challenges</a></div>
+<section id="where"><p class="eyebrow">Where we are</p><h2>Semantic to UI</h2>
+<figure class="diagram"><svg viewBox="0 0 1088 74" role="img" aria-label="Where this page sits in the flow: Semantic to UI, highlighted among the ten layers and hops."><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F1F1F"/></marker></defs><rect x="8" y="8" width="104" height="58" rx="10" fill="#F3F3F1" stroke="#1F1F1F" stroke-width="1.2"/><text x="60.0" y="33.0" text-anchor="middle" font-size="15" fill="#1F1F1F">Source</text><text x="60.0" y="51.0" text-anchor="middle" font-size="15" fill="#1F1F1F">systems</text><rect x="116" y="8" width="104" height="58" rx="10" fill="#EFF8FB" stroke="#1F1F1F" stroke-width="1.2"/><text x="168.0" y="42.0" text-anchor="middle" font-size="15" fill="#1F1F1F">Ingestion</text><rect x="224" y="8" width="104" height="58" rx="10" fill="#F5E3D3" stroke="#1F1F1F" stroke-width="1.2"/><text x="276.0" y="42.0" text-anchor="middle" font-size="15" fill="#1F1F1F">Bronze</text><rect x="332" y="8" width="104" height="58" rx="10" fill="#FFF8E8" stroke="#1F1F1F" stroke-width="1.2"/><text x="384.0" y="33.0" text-anchor="middle" font-size="15" fill="#1F1F1F">Bronze to</text><text x="384.0" y="51.0" text-anchor="middle" font-size="15" fill="#1F1F1F">silver</text><rect x="440" y="8" width="104" height="58" rx="10" fill="#ECEEF1" stroke="#1F1F1F" stroke-width="1.2"/><text x="492.0" y="42.0" text-anchor="middle" font-size="15" fill="#1F1F1F">Silver</text><rect x="548" y="8" width="104" height="58" rx="10" fill="#FFF8E8" stroke="#1F1F1F" stroke-width="1.2"/><text x="600.0" y="33.0" text-anchor="middle" font-size="15" fill="#1F1F1F">Silver to</text><text x="600.0" y="51.0" text-anchor="middle" font-size="15" fill="#1F1F1F">gold</text><rect x="656" y="8" width="104" height="58" rx="10" fill="#FFF1C2" stroke="#1F1F1F" stroke-width="1.2"/><text x="708.0" y="42.0" text-anchor="middle" font-size="15" fill="#1F1F1F">Gold</text><rect x="764" y="8" width="104" height="58" rx="10" fill="#FFF8E8" stroke="#1F1F1F" stroke-width="1.2"/><text x="816.0" y="33.0" text-anchor="middle" font-size="15" fill="#1F1F1F">Gold to</text><text x="816.0" y="51.0" text-anchor="middle" font-size="15" fill="#1F1F1F">semantic</text><rect x="872" y="8" width="104" height="58" rx="10" fill="#F6F2FC" stroke="#1F1F1F" stroke-width="1.2"/><text x="924.0" y="33.0" text-anchor="middle" font-size="15" fill="#1F1F1F">Semantic</text><text x="924.0" y="51.0" text-anchor="middle" font-size="15" fill="#1F1F1F">layer</text><rect x="980" y="8" width="104" height="58" rx="10" fill="#1F1F1F" stroke="#1F1F1F" stroke-width="2.4"/><text x="1032.0" y="33.0" text-anchor="middle" font-size="15" fill="#FFFFFF">Semantic to</text><text x="1032.0" y="51.0" text-anchor="middle" font-size="15" fill="#FFFFFF">UI</text></svg><figcaption>The ten layers and hops from source to screen. The dark box is this page.</figcaption></figure>
+<p><b>What this hop must achieve.</b> Serve dashboards, conversation interfaces, agents and apps the same certified numbers, cheaply and visibly fresh.</p>
+<p>This is a hop: the step that moves data from one layer to the next. Handled by: semantic layer generators, observability, agents, the platform app.</p></section>
+
+<section id="challenges"><p class="eyebrow">The hard part</p><h2>7 challenges, and how they are solved</h2>
+<figure class="diagram"><svg viewBox="0 0 780 92" role="img" aria-label="6 solved, 0 assisted, 1 left to people; 2 building, 5 designed."><defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1F1F1F"/></marker></defs><rect x="10" y="14" width="651.4285714285714" height="40" fill="#CDEBD8" stroke="#1F1F1F" stroke-width="1.2"/><text x="335.7142857142857" y="40" text-anchor="middle" font-size="14" fill="#1F1F1F">6 solved</text><rect x="661.4285714285714" y="14" width="108.57142857142857" height="40" fill="#F8C9D9" stroke="#1F1F1F" stroke-width="1.2"/><text x="715.7142857142858" y="40" text-anchor="middle" font-size="14" fill="#1F1F1F">1 people decide</text><text x="10" y="80" text-anchor="start" font-size="14" fill="#1F1F1F">Status: 2 building, 5 designed</text></svg><figcaption>Solved means the engine does it once the decision is declared, and a test proves it. Assisted means the tool suggests and checks, and a person confirms. People decide means a business decision the tool records and enforces.</figcaption></figure>
+<p>Every example comes from the tyre world, a synthetic tyre company whose fourteen simulated days carry planted problems with known right answers, so each fix is tested, not just described.</p>
+<div class="tw"><table class="t hp-t"><tr><th>Challenge</th><th>What goes wrong</th><th>Tyre-world example</th><th>How we solve it</th><th>Verdict</th><th>Status</th></tr><tr><td><b>Dashboards re-querying raw tables</b><br><span class="note">UI-01</span></td><td>Every open and every click scans large raw tables, and the warehouse bill grows with viewers.</td><td>A monitoring dashboard over raw platform telemetry.</td><td>Dashboards read certified definitions over compact summary tables, with stored results refreshed when data changes.<p class="note">assurance rules COST-04, SERV-04.</p><p class="note">Shift-left checks that guard it: <a href="/learn/shift-left/all-checks/#q=SL-COST-CODE-06">SL-COST-CODE-06</a>, <a href="/learn/shift-left/all-checks/#q=SL-COST-CONFIG-01">SL-COST-CONFIG-01</a>, <a href="/learn/shift-left/all-checks/#q=SL-COST-CONFIG-02">SL-COST-CONFIG-02</a>, <a href="/learn/shift-left/all-checks/#q=SL-COST-CONFIG-05">SL-COST-CONFIG-05</a>, <a href="/learn/shift-left/all-checks/#q=SL-COST-CONFIG-06">SL-COST-CONFIG-06</a>.</p></td><td><span class="hp-b hp-v-solve">solved</span></td><td><span class="hp-b hp-s-designed">designed</span></td></tr><tr><td><b>A conversation interface roaming raw tables</b><br><span class="note">UI-02</span></td><td>Plain-language questions produce heavy or wrong queries on raw data.</td><td>Asking for OTIF straight from silver.</td><td>The conversation interface sees only certified definitions and verified functions for frequent questions.<p class="note">assurance rules SERV-06.</p><p class="note">Shift-left checks that guard it: <a href="/learn/shift-left/all-checks/#q=SL-SEM-07">SL-SEM-07</a>.</p></td><td><span class="hp-b hp-v-solve">solved</span></td><td><span class="hp-b hp-s-building">building</span></td></tr><tr><td><b>One number, many tools</b><br><span class="note">UI-03</span></td><td>The dashboard, the conversation interface and an agent disagree.</td><td>OTIF south November.</td><td>All of them read the same certified definitions; known answers are tested.<p class="note">assurance rules SERV-04.</p></td><td><span class="hp-b hp-v-solve">solved</span></td><td><span class="hp-b hp-s-building">building</span></td></tr><tr><td><b>Agents writing their own queries</b><br><span class="note">UI-04</span></td><td>An agent&#x27;s ad-hoc query is untested, unpermissioned and can be wrong.</td><td>A triage agent explaining a failed run.</td><td>Agents call typed tools with fixed, tested queries; anything they propose goes to the owner&#x27;s gate.<p class="note">assurance rules SERV-06, GATE-03; decisions ADR-023 Agents propose, gates decide; agents follow the same kernel and adapter split.</p><p class="note">Shift-left checks that guard it: <a href="/learn/shift-left/all-checks/#q=SL-SEM-07">SL-SEM-07</a>.</p></td><td><span class="hp-b hp-v-solve">solved</span></td><td><span class="hp-b hp-s-designed">designed</span></td></tr><tr><td><b>The cost of looking</b><br><span class="note">UI-05</span></td><td>Watching and asking cost more than the pipelines themselves.</td><td>A monitoring template and plain-language questions over raw telemetry.</td><td>Summary tables, stored results and verified functions under monitoring and conversation screens.<p class="note">assurance rules COST-04.</p><p class="note">Shift-left checks that guard it: <a href="/learn/shift-left/all-checks/#q=SL-COST-CODE-06">SL-COST-CODE-06</a>, <a href="/learn/shift-left/all-checks/#q=SL-COST-CONFIG-01">SL-COST-CONFIG-01</a>, <a href="/learn/shift-left/all-checks/#q=SL-COST-CONFIG-02">SL-COST-CONFIG-02</a>, <a href="/learn/shift-left/all-checks/#q=SL-COST-CONFIG-05">SL-COST-CONFIG-05</a>, <a href="/learn/shift-left/all-checks/#q=SL-COST-CONFIG-06">SL-COST-CONFIG-06</a>.</p></td><td><span class="hp-b hp-v-solve">solved</span></td><td><span class="hp-b hp-s-designed">designed</span></td></tr><tr><td><b>Stale screens</b><br><span class="note">UI-06</span></td><td>A cached screen shows yesterday&#x27;s number as today&#x27;s.</td><td>A dashboard cached before a restatement.</td><td>Refresh on data change; freshness and the provisional flag shown on the screen.<p class="note">assurance rules PERF-02, SERV-02.</p><p class="note">Shift-left checks that guard it: <a href="/learn/shift-left/all-checks/#q=SL-COST-CODE-23">SL-COST-CODE-23</a>, <a href="/learn/shift-left/all-checks/#q=SL-COST-CONFIG-05">SL-COST-CONFIG-05</a>, <a href="/learn/shift-left/all-checks/#q=SL-COST-CONFIG-06">SL-COST-CONFIG-06</a>.</p></td><td><span class="hp-b hp-v-solve">solved</span></td><td><span class="hp-b hp-s-designed">designed</span></td></tr><tr><td><b>Rebuilding what the platform gives</b><br><span class="note">UI-07</span></td><td>A custom portal duplicates dashboards and catalog screens and falls behind.</td><td>Viewing dashboards in a custom app.</td><td>Native screens for viewing; our own app only for actions (alerts, approvals, quarantine release, recovery, declarations).<p class="note">assurance rules GATE-03.</p></td><td><span class="hp-b hp-v-people_decide">people decide</span></td><td><span class="hp-b hp-s-designed">designed</span></td></tr></table></div></section>
+
+<section id="anti"><p class="eyebrow">What not to do</p><h2>Common anti-patterns</h2>
+<p>An anti-pattern is a habit that looks reasonable and keeps causing the same damage. These are the ones seen most often at this hop.</p>
+<div class="tw"><table class="t hp-t"><tr><th>Anti-pattern</th><th>Why it hurts</th><th>Do this instead</th></tr><tr><td><b>Business logic in BI tools or views</b></td><td>The same metric gets computed differently in each dashboard, and nobody can test it.</td><td>Put calculations in gold build() or in the semantic layer&#x27;s metric definitions.</td></tr><tr><td><b>Pointing a conversational query tool at raw silver tables</b></td><td>The tool then guesses joins and meanings and gives plausible but wrong answers.</td><td>Point it at metric definitions and described gold tables.</td></tr><tr><td><b>Agents querying tables directly</b></td><td>Untested, unpermissioned queries; answers that differ from the dashboard.</td><td>Typed tools over certified definitions, with proposals going to a gate.</td></tr><tr><td><b>A custom portal that rebuilds native dashboards</b></td><td>Twice the work, and it drifts from the governed screens.</td><td>Link out to native screens; build only screens that take actions.</td></tr></table></div></section>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>What are the hardest problems in the semantic to ui step?</summary><p>Dashboards re-querying raw tables; A conversation interface roaming raw tables; One number, many tools; Agents writing their own queries; The cost of looking.</p></details><details class="faq"><summary>What is the most common mistake at semantic to ui?</summary><p>Business logic in BI tools or views. Put calculations in gold build() or in the semantic layer&#x27;s metric definitions.</p></details></section>
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
+
+<p><a href="/learn/hard-problems/">↑ All layers</a> · <a href="/learn/hard-problems/all-challenges/">All 69 challenges, filterable</a> · <a href="/learn/shift-left/">Shift left: fail fast on data code</a> · <a href="/learn/medallion-architecture/">Medallion architecture</a></p>
+<div class="sib"><a href="/learn/hard-problems/">↑ All layers</a><a href="/learn/hard-problems/source/">Source systems</a><a href="/learn/hard-problems/ingestion/">Ingestion</a><a href="/learn/hard-problems/bronze/">Bronze</a><a href="/learn/hard-problems/bronze-to-silver/">Bronze to silver</a><a href="/learn/hard-problems/silver/">Silver</a><a href="/learn/hard-problems/silver-to-gold/">Silver to gold</a><a href="/learn/hard-problems/gold/">Gold</a><a href="/learn/hard-problems/gold-to-semantic/">Gold to semantic</a><a href="/learn/hard-problems/semantic/">Semantic layer</a><span>Semantic to UI</span><a href="/learn/hard-problems/all-challenges/">All challenges</a></div></section>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Learn</b><a href="/paths/">Find your path</a><a href="/paths/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/paths/forward-deployed/">Forward Deployed Engineering</a><a href="/concepts/">Key concepts</a><a href="/learn/">Courses</a><a href="/simulators/">Simulators</a><a href="/mindset/">Worried about AI?</a></div><div><b>Certifications</b><a href="/certifications/">All certifications</a><a href="/certifications/#anthropic">Claude (Anthropic)</a><a href="/certifications/#databricks">Databricks</a><a href="/certifications/#microsoft">Microsoft</a><a href="/certifications/#aws">AWS</a><a href="/certifications/#gcp">Google Cloud</a></div><div><b>AI for a cause</b><a href="/ai-for-cause/">All projects</a><a href="/projects/babu-companion/">Babu, companion for elders</a><a href="/road-safety/">AI for road safety</a><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></div><div><b>Deep tech</b><a href="/deep-tech/">All projects</a><a href="/problems/">Hard problems</a><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></div><div><b>Build with us</b><a href="/projects/">Join a project</a><a href="/research/">Open specifications</a><a href="/assets/">Open-source assets</a><a href="/about/#join">Write or teach</a></div><div><b>For leaders</b><a href="/leaders/">The one-minute version</a><a href="/leaders/spec-driven/">Spec-driven development</a><a href="/leaders/#questions">Questions leaders ask</a><a href="/papers/">Technical papers</a><a href="/writing/">Blog</a></div><div><b>About</b><a href="/about/">About this site</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

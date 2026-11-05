@@ -47,6 +47,7 @@ SECTIONS = [
             ("Medallion architecture", "/learn/medallion-architecture/"),
             ("Real-time analytics", "/learn/real-time-analytics/"),
             ("Shift left: fail fast on data code", "/learn/shift-left/"),
+            ("Hard problems by layer", "/learn/hard-problems/"),
             ("The technical anchor", "/learn/technical-anchor/"),
             ("Technical anchor: discovery", "/learn/technical-anchor/discovery/"),
             ("Technical anchor: project review", "/learn/technical-anchor/project-review/"),
