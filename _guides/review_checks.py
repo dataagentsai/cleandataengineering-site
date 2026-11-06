@@ -159,6 +159,9 @@ def main():
         cs = [c for c in cat["checks"] if c.get("pack") == pack]
         title, lede = PACK_TEXT.get(pack, (pack, ""))
         out = f'<h2 class="grp" id="{pack}">{title} ({len(cs)})</h2><p>{lede}</p>'
+        if pack == "ba":
+            out += ('<p><b>Read first:</b> <a href="/writing/source-semantics/">Source semantic understanding: a key to data program success</a>. '
+                    'What to ask about the meaning of each source (grain, statuses, corrections, dates, amounts, the number the business trusts) before anything is built.</p>')
         order = list(v["concerns"]["delivery"]) + list(v["concerns"]["technical"]) if pack != "tech" else list(v["concerns"]["technical"]) + list(v["concerns"]["delivery"])
         for con in order:
             group = [c for c in cs if c["concern"] == con]
