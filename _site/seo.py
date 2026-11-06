@@ -235,6 +235,48 @@ TITLES = {
     "projects/index.html": "Open-source data and AI community projects · Clean Data Engineering",
     "certifications/index.html": "Free Claude Certified Architect and Azure AI-103 exam prep",
     "problems/index.html": "79 hard, unsolved problems in data and AI engineering",
+    # Courses and simulators: the phrase a learner types first ("medallion architecture explained",
+    # "lambda vs kappa", "spark performance tuning"), our own name after it or not at all.
+    "index.html": "Free Data and AI Engineering Courses · Clean Data Engineering",
+    "paths/index.html": "Data and AI Engineering Roadmaps: Free Learning Paths",
+    "concepts/index.html": "Data and AI Engineering Concepts, Explained Simply",
+    "learn/medallion-architecture/index.html": "Medallion Architecture Explained: Bronze, Silver and Gold",
+    "learn/data-platform-architecture/index.html": "Data Platform Architecture Explained, with Diagrams",
+    "learn/data-platform-architecture/aws-databricks/index.html": "Databricks on AWS: Data Platform Reference Architecture",
+    "learn/data-platform-architecture/aws-databricks/etl/index.html": "Metadata-Driven ETL on Databricks and AWS, End to End",
+    "learn/data-platform-architecture/bronze-to-silver/index.html": "Bronze to Silver: Deduplication and SCD Type 1 and 2",
+    "learn/data-platform-architecture/gold/index.html": "Gold Layer Design: Facts, Dimensions and Business Tables",
+    "learn/data-platform-architecture/ingestion/index.html": "Data Ingestion Architecture: Sources to Bronze",
+    "learn/data-platform-architecture/metadata-store/index.html": "Metadata-Driven Data Pipelines: the Metadata Store",
+    "learn/data-platform-architecture/testing/index.html": "Data Platform Testing Strategy: Nine Kinds of Data Test",
+    "learn/data-platform-sim/delta/index.html": "Delta Lake Internals: Transaction Log, Time Travel, VACUUM",
+    "learn/data-platform-sim/spark/index.html": "Spark Internals Explained: Jobs, Stages, Tasks, Shuffle",
+    "learn/data-platform-sim/performance/index.html": "Spark Performance Tuning: 12 Problems Measured and Fixed",
+    "learn/data-platform-sim/problems/index.html": "Data Engineering Problems Solved: SCD2, Late Data, Duplicates",
+    "learn/data-platform-sim/data-quality/index.html": "Data Quality with Deequ and Spark SQL, Metadata-Driven",
+    "learn/real-time-analytics/index.html": "Real-Time Analytics Architecture, Explained Simply",
+    "learn/real-time-analytics/basics/index.html": "Real-Time vs Streaming vs Near Real-Time Analytics",
+    "learn/real-time-analytics/lambda-vs-kappa/index.html": "Lambda vs Kappa Architecture, Explained Simply",
+    "learn/real-time-analytics/change-capture/index.html": "Change Data Capture (CDC) Tools Compared: Debezium and More",
+    "learn/real-time-analytics/cost/index.html": "Real-Time Analytics Cost: What Streaming Really Costs",
+    "learn/real-time-analytics/push-to-ui/index.html": "Real-Time Dashboards: SSE vs WebSocket, Snapshot then Deltas",
+    "learn/shift-left/index.html": "Shift-Left Testing for PySpark and Databricks SQL",
+    "learn/shift-left/data-tests/index.html": "Unit Testing SCD2 and Idempotency in PySpark Without a Cluster",
+    "learn/shift-left/tests-and-coverage/index.html": "PySpark Unit Testing, Code Coverage and Complexity",
+    "learn/shift-left/pure-functions/index.html": "Pure Functions in PySpark: Testable Transformations",
+    "learn/shift-left/security-and-cost/index.html": "PySpark Security Checks: Secrets, SQL Injection, Cost",
+    "learn/technical-anchor/index.html": "Data Engineering Tech Lead Guide: Thinking for the Whole Project",
+    "learn/technical-anchor/project-review/index.html": "Data Project Review Checklist: What Is Your Project Missing?",
+    "learn/llm-api-sim/index.html": "Claude API Simulator: Try the Messages API, Free",
+    "learn/agent-harness-aws/index.html": "AI Agent Architecture on AWS: Bedrock Agent Harness",
+    "learn/agent-harness/series/index.html": "AI Agent Architecture on Azure: the Agent Harness Series",
+    "learn/agent-guardrails/index.html": "AI Agent Guardrails: a Catalog of Guardrail Checks",
+    "learn/ai-universe/index.html": "The AI Stack Explained: Models, Data, Agents and Compute",
+    "learn/agenttwin/index.html": "AgentTwin: Testing AI Agents in a Simulated World",
+    "learn/datatwin/index.html": "DataTwin: Testing a Data Platform in a Simulated Business",
+    "ai-engineering/vertical-agents/index.html": "AI Agents by Industry: Banking, Healthcare, Retail and More",
+    "assets/index.html": "Open-Source AI Agent and Data Engineering Tools",
+    "mindset/index.html": "Worried About AI Taking Your Job? Start Here",
     # Claude Certified Architect: people search "claude certified architect foundations exam", "CCA-F
     # practice questions", "CCA-F mock exam", "CCA-F study guide", "CCAR-F". Lead with those words.
     f"{CCA}index.html": "Claude Certified Architect Foundations (CCA-F) Exam Prep, Free",
@@ -263,6 +305,12 @@ DESCRIPTIONS = {
     "learn/agent-harness/index.html": "Free, hand-drawn tutorial on the agent harness: the code around an AI model that makes an agent "
                                       "safe and reliable. One real agent end to end, with real code.",
 }
+# Learning paths: people search "<role> roadmap", so every path page says it.
+for _d in DISCIPLINES:
+    TITLES.setdefault(f"paths/{_d['id']}/index.html", f"{_d['name']} Roadmap: Free Learning Path")
+    for _p in _d["platforms"]:
+        TITLES.setdefault(f"paths/{_d['id']}/{_p}/index.html", f"{_d['name']} on {PLATFORMS[_p]}: Free Roadmap")
+
 OG_IMAGE = f"{SITE}/assets/og-card.png"
 PERSON = {"@type": "Person", "name": "Basant Choudhary", "url": f"{SITE}/about/"}
 ORG = {"@type": "Organization", "name": "Clean Data Engineering", "url": f"{SITE}/",
