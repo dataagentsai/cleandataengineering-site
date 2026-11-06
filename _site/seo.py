@@ -54,8 +54,10 @@ def priority(rel):
     s = str(rel)
     if s == "index.html":
         return "1.0"
-    if s.startswith(("paths/", "concepts/")):
+    if s.startswith(("paths/", "concepts/")) or s in (CCA + "index.html", CCA + "CCA-F_Study_Guide.html"):
         return "0.9"
+    if s.startswith(CCA) and s.count("/") == 4 and s.endswith("index.html"):
+        return "0.7"  # CCA-F section pages: domains, mock exams, traps, mind maps
     if s.count("/") <= 1:
         return "0.8"
     return "0.5"
@@ -65,8 +67,8 @@ def write_sitemap(rels):
     items = []
     for rel in rels:
         s = (ROOT / rel).read_text(errors="ignore")
-        if re.search(r'<meta name="robots" content="[^"]*noindex', s):
-            continue
+        if re.search(r'<meta name="robots" content="[^"]*noindex', s) or 'http-equiv="refresh"' in s:
+            continue  # hidden pages and redirects do not belong in a sitemap
         items.append(f"  <url><loc>{url_of(rel)}</loc><lastmod>{lastmod(rel)}</lastmod><priority>{priority(rel)}</priority></url>")
     (ROOT / "sitemap.xml").write_text('<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
                                       + "\n".join(items) + "\n</urlset>\n")
@@ -217,6 +219,8 @@ def fill_gaps(rels):
     return n
 
 
+CCA = "certifications/claude-certified-architect/CCA-F/"
+
 # Titles and descriptions for the pages we most want found. They use the words people type into a
 # search box ("AI agent", "free", "simulator"), not only our own names. Applied after every build.
 TITLES = {
@@ -231,8 +235,29 @@ TITLES = {
     "projects/index.html": "Open-source data and AI community projects · Clean Data Engineering",
     "certifications/index.html": "Free Claude Certified Architect and Azure AI-103 exam prep",
     "problems/index.html": "79 hard, unsolved problems in data and AI engineering",
+    # Claude Certified Architect: people search "claude certified architect foundations exam", "CCA-F
+    # practice questions", "CCA-F mock exam", "CCA-F study guide", "CCAR-F". Lead with those words.
+    f"{CCA}index.html": "Claude Certified Architect Foundations (CCA-F) Exam Prep, Free",
+    f"{CCA}CCA-F_Study_Guide.html": "CCA-F Study Guide: Claude Certified Architect Foundations",
+    f"{CCA}Foundations-Mock-Exam/index.html": "CCA-F Mock Exam 1: 77 Claude Certified Architect Questions",
+    f"{CCA}Foundations-Mock-Exam-2/index.html": "CCA-F Mock Exam 2: Timed, 60 Questions in 120 Minutes",
+    f"{CCA}Foundations-Mock-Exam-3/index.html": "CCA-F Mock Exam 3: Claude Certified Architect Scenarios",
+    f"{CCA}Foundations-Mock-Exam-4/index.html": "CCA-F Mock Exam 4: Real-Exam-Style Practice Questions",
+    f"{CCA}Foundations-Mock-Exam-5/index.html": "CCA-F Mock Exam 5: Real-Exam-Style Practice Questions",
+    f"{CCA}Foundations-Mock-Exam-6/index.html": "CCA-F Mock Exam 6: Real-Exam-Style Practice Questions",
+    f"{CCA}Foundations-Mock-Exam-7/index.html": "CCA-F Mock Exam 7: Exam-Level Practice Questions",
+    f"{CCA}Trap-Gym/index.html": "CCA-F Exam Traps: the 30 Traps in Claude Certified Architect",
+    f"{CCA}Mind-Maps/index.html": "CCA-F Mind Maps: the Five Exam Domains on One Page",
 }
 DESCRIPTIONS = {
+    f"{CCA}index.html": "Free prep for the Claude Certified Architect – Foundations exam (CCA-F, also CCAR-F): study guide, "
+                        "all five domains, practice questions, mock exams, mind maps and 30 exam traps.",
+    f"{CCA}CCA-F_Study_Guide.html": "Free study guide for the Claude Certified Architect – Foundations (CCA-F) exam: format, "
+                                    "the five domains and their weights, key concepts and how the questions are written.",
+    f"{CCA}Foundations-Mock-Exam/index.html": "Free CCA-F mock exam: 77 Claude Certified Architect – Foundations practice "
+                                              "questions with answers and explanations.",
+    f"{CCA}Foundations-Mock-Exam-2/index.html": "Free timed CCA-F mock exam: 60 Claude Certified Architect – Foundations "
+                                                "questions in 120 minutes, like the real exam, with explanations.",
     "learn/agent-harness-sim/index.html": "Free AI agent harness simulator. Send a message to a claims assistant and watch every step: "
                                           "tools, guardrail checks, code, the JSON to and from the model, and the trace.",
     "learn/agent-harness/index.html": "Free, hand-drawn tutorial on the agent harness: the code around an AI model that makes an agent "
@@ -242,7 +267,7 @@ OG_IMAGE = f"{SITE}/assets/og-card.png"
 PERSON = {"@type": "Person", "name": "Basant Choudhary", "url": f"{SITE}/about/"}
 ORG = {"@type": "Organization", "name": "Clean Data Engineering", "url": f"{SITE}/",
        "logo": {"@type": "ImageObject", "url": OG_IMAGE}}
-COURSES = ("learn/agent-harness/", "learn/eval-harness/")
+COURSES = ("learn/agent-harness/", "learn/eval-harness/", CCA)
 SIMS = ("learn/agent-harness-sim/", "learn/llm-api-sim/", "learn/data-platform-sim/")
 SUFFIX = " · Clean Data Engineering"
 

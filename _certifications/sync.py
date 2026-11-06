@@ -30,6 +30,7 @@ SOURCES = [
         "repo": HOME / "ClaudeCertifiedArchitect",
         "folders": ["CCA-F", "CCAR-P"],
         "pages": "https://basantchoudhary.github.io/ClaudeCertifiedArchitect/",
+        "home": "CCA-F/",  # /certifications/claude-certified-architect/ sends visitors here
     },
     {
         "slug": "azure-ai-engineer",
@@ -115,6 +116,30 @@ def broken(files: list[Path]) -> list[str]:
     return found
 
 
+def write_home(source: dict) -> None:
+    """A repo copied as folders has no page at its own root, so that address was a 404.
+    Send it on to the repo's main page."""
+    home = source.get("home")
+    index = OUT / source["slug"] / "index.html"
+    if not home or index.exists():
+        return
+    url = f"https://cleandataengineering.ai/certifications/{source['slug']}/{home}"
+    index.write_text(
+        f'<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Moved</title>'
+        f'<link rel="canonical" href="{url}"><meta http-equiv="refresh" content="0; url={home}">'
+        f'</head><body><p>Go to <a href="{home}">{home}</a>.</p></body></html>\n'
+    )
+
+
+def missing_canonical(files: list[Path]) -> int:
+    """The prep repos are also on GitHub Pages; each page must name its cleandataengineering.ai
+    copy as canonical, or Google may rank the GitHub copy instead (see add_canonical.py there)."""
+    return sum(
+        1 for f in files
+        if f.suffix == ".html" and "</head>" in (t := f.read_text(errors="ignore")) and 'rel="canonical"' not in t
+    )
+
+
 def commit(repo: Path) -> str:
     return subprocess.run(
         ["git", "-C", str(repo), "log", "-1", "--format=%h %cs"], capture_output=True, text=True
@@ -127,11 +152,14 @@ def main() -> None:
     for source in SOURCES:
         files = copy(source)
         moved = relink(source, files)
+        write_home(source)
         all_files += files
         lines.append(
             f"{source['slug']}: {len(files)} files from {source['repo'].name}"
             f" {commit(source['repo'])}; {moved} links pointed at GitHub Pages"
         )
+        if source.get("home") and (n := missing_canonical(files)):
+            print(f"WARNING {source['slug']}: {n} pages have no canonical; run add_canonical.py in {source['repo'].name}")
     bad = broken(all_files)
     if bad:
         raise SystemExit("broken links in the copy:\n  " + "\n  ".join(bad[:30]))
