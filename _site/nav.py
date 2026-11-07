@@ -68,7 +68,7 @@ SECTIONS = [
         ("Claude (Anthropic)", "/certifications/#anthropic", [
             ("Claude Certified Architect", "/certifications/claude-certified-architect/CCA-F/"),
             ("CCA-F mind maps", "/certifications/cca-f-mind-maps/"),
-            ("Claude Architect, Professional", "/certifications/claude-certified-architect/CCAR-P/CCAR-P_Study_Guide.html"),
+            ("Claude Architect, Professional", "/certifications/claude-certified-architect/CCAR-P/"),
         ]),
         ("Databricks", "/certifications/#databricks", [
             ("Gen AI Engineer free prep", "/certifications/databricks-genai-engineer/"),

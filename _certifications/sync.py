@@ -47,7 +47,7 @@ SOURCES = [
 ]
 
 SKIP_FILES = {"publish_traps.sh", "link_plain.py", "build_plain_mocks.py"}
-SKIP_DIRS = {".git", "node_modules", "__pycache__", "parts", "src", ".claude"}
+SKIP_DIRS = {".git", "node_modules", "__pycache__", "parts", "src", "source", ".claude"}
 SKIP_SUFFIXES = {".md", ".pyc"}
 SKIP_LINKS = ("http", "mailto:", "data:", "javascript:", "//", "/", "${")
 LINK = re.compile(r'((?:href|src)\s*=\s*["\'])([^"\'#?]+)')
