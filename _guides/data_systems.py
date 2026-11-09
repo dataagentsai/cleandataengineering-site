@@ -777,7 +777,7 @@ def upstreams():
 <p style="margin:10px 0 0"><a class="btn" href="{BASE}upstreams/questionnaire/">Printable questionnaire for your team</a></p></div>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#plain">In plain words</a></li><li><a href="#types">Kinds of sources</a></li><li><a href="#handover">Push, pull or share</a></li>
-<li><a href="#trigger">Schedule or event</a></li><li><a href="#change">How a dataset changes</a></li><li><a href="#deeper">In depth: APIs, files, joins</a></li><li><a href="#load">Full load or incremental</a></li><li><a href="#protect">Protecting the source</a></li><li><a href="#joins">Relationships and joins</a></li><li><a href="#keys">No key, or duplicates</a></li><li><a href="#history">Type 2, Type 1 or overwrite</a></li><li><a href="#missing">No modified or ordering column</a></li><li><a href="#questions">The question list ({n_q} questions)</a></li>
+<li><a href="#trigger">Schedule or event</a></li><li><a href="#change">How a dataset changes</a></li><li><a href="#deeper">In depth: APIs, files, joins, where answers go</a></li><li><a href="#load">Full load or incremental</a></li><li><a href="#protect">Protecting the source</a></li><li><a href="#joins">Relationships and joins</a></li><li><a href="#keys">No key, or duplicates</a></li><li><a href="#history">Type 2, Type 1 or overwrite</a></li><li><a href="#missing">No modified or ordering column</a></li><li><a href="#questions">The question list ({n_q} questions)</a></li>
 <li><a href="#fields">Fields we ask for in every dataset</a></li><li><a href="#profile">Why we ask to scan your data</a></li>
 <li><a href="#decisions">Design decisions</a></li><li><a href="#faq">Questions people ask</a></li><li><a href="#next">How we build it</a></li></ol></nav>
 
@@ -810,6 +810,7 @@ def upstreams():
 <div class="card" style="--w:var(--peri-wash)"><h3><a href="{BASE}upstreams/apis/">API sources</a></h3><p class="one">Bulk versus paged APIs, pagination that doesn't lose records, rate limits and shared quotas, cost per call, deletes and completeness.</p></div>
 <div class="card" style="--w:var(--butter-wash)"><h3><a href="{BASE}upstreams/files/">File sources</a></h3><p class="one">The file contract, done markers, corrections, order, encodings, column changes, and the common file problems.</p></div>
 <div class="card" style="--w:var(--mint-wash)"><h3><a href="{BASE}upstreams/joins/">Learning the joins</a></h3><p class="one">Declared keys, joins already in use, candidates measured on the data, owner sign-off, recorded in the data contract.</p></div>
+<div class="card" style="--w:var(--lilac-wash)"><h3><a href="{BASE}upstreams/answers/">Where the answers go</a></h3><p class="one">One home per answer: the ODCS contract, the manifest, Unity Catalog, tests, the ontology, the code. A worked example, and liquid clustering choices.</p></div>
 </div></section>
 
 <section id="load"><p class="eyebrow">Full or incremental</p><h2>Full load or incremental: the patterns</h2>
