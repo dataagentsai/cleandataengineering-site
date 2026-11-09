@@ -40,6 +40,8 @@ SECTIONS = [
             ("Agent Harness", "/learn/agent-harness/"),
             ("Agent Harness on AWS", "/learn/agent-harness-aws/"),
             ("Eval Harness", "/learn/eval-harness/"),
+            ("Data systems, end to end", "/learn/data-systems/"),
+            ("Data systems: upstreams", "/learn/data-systems/upstreams/"),
             ("Data platform architecture", "/learn/data-platform-architecture/"),
             ("Data platform on AWS + Databricks", "/learn/data-platform-architecture/aws-databricks/"),
             ("The ETL, end to end (AWS)", "/learn/data-platform-architecture/aws-databricks/etl/"),
