@@ -85,6 +85,30 @@ def ld(title, desc, url, crumbs, faq=None):
     return "".join(f'<script type="application/ld+json">{json.dumps(x, ensure_ascii=False)}</script>' for x in items)
 
 
+def q_table(questions):
+    """The one question table: [(cat_id, category, subtitle, [(question, why, breaks, do), ...]), ...]."""
+    q, n = "", 0
+    for cid, cat, sub, rows in questions:
+        q += f'<tr class="cat"><td colspan="5">{cid} · {E(cat)}<span>{E(sub)}</span></td></tr>'
+        for i, (qq, why, breaks, do) in enumerate(rows):
+            n += 1
+            q += f"<tr><td class='id'>{cid}{i + 1}</td><td>{E(qq)}</td><td>{E(why)}</td><td>{E(breaks)}</td><td>{E(do)}</td></tr>"
+    head = "<tr><th>#</th><th>Question to chase</th><th>Why we ask</th><th>What breaks in production if nobody asks</th><th>Do this (not this)</th></tr>"
+    return f'<div class="tw"><table class="t q">{head}{q}</table></div>', n
+
+
+def dec_html(decisions):
+    """Design decisions: [(question, [(option, 'pursue'|'when'|'drop', why), ...]), ...]."""
+    out = ""
+    for qd, opts in decisions:
+        out += f"<h3>{E(qd)}</h3><div class='tw'><table class='t'><tr><th>Option</th><th>Verdict</th></tr>"
+        for o, v, why in opts:
+            word = {"pursue": "Pursue", "drop": "Drop", "when": "Pursue when"}[v]
+            out += f"<tr><td><b>{E(o)}</b></td><td><span class='verdict {v}'>{word}</span> · {E(why)}</td></tr>"
+        out += "</table></div>"
+    return out
+
+
 # ---------------------------------------------------------------------------------------------
 # Level 0: the whole system
 # ---------------------------------------------------------------------------------------------
@@ -141,7 +165,7 @@ BLOCKS = [
       "Each layer makes one promise. Raw is kept, clean is checked, gold is reconciled and every metric has one definition.",
       "Each layer has its own decisions, ways to fail in production, patterns and anti-patterns.",
       "Quality, lineage, cost and access run on every hop, not as a box at the end."],
-     "next", None, "Coming next"),
+     "ready", f"{BASE}platform/", "Read the platform page"),
     ("Downstreams", "sky", "Where the data earns its keep: dashboards, AI, agents, ML and apps.",
      ["Each consumer needs a different freshness, grain and level of trust.",
       "Dashboards and AI must read the same metric definitions, or they will disagree in the same meeting.",
@@ -152,6 +176,7 @@ BLOCKS = [
 
 HOPS = [
     ("0", "Upstreams", "Know how each source behaves before writing a pipeline.", f"{BASE}upstreams/", None),
+    ("·", "The data platform, whole", "Five hops, 24 concerns, one picture; layout and environments ready.", f"{BASE}platform/", "/learn/data-platform-architecture/"),
     ("1", "Sources to bronze", "Get everything in, exactly as it was, once.", None, "/learn/data-platform-architecture/ingestion/"),
     ("2", "Bronze to silver", "One clean, typed row per real thing, with history.", None, "/learn/data-platform-architecture/bronze-to-silver/"),
     ("3", "Silver to gold", "Tables shaped for a use, reconciled every run.", None, "/learn/data-platform-architecture/gold/"),
@@ -553,22 +578,10 @@ def upstreams():
     pp_svg, pp_cap = push_pull()
     types = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td></tr>" for a, b, c, d in SOURCE_TYPES)
     hand = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td><td>{E(e)}</td><td>{E(f)}</td></tr>" for a, b, c, d, e, f in HANDOVER)
-    q = ""
-    n_q = 0
-    for cid, cat, sub, rows in QUESTIONS:
-        q += f'<tr class="cat"><td colspan="5">{cid} · {E(cat)}<span>{E(sub)}</span></td></tr>'
-        for i, (qq, why, breaks, do) in enumerate(rows):
-            n_q += 1
-            q += f"<tr><td class='id'>{cid}{i + 1}</td><td>{E(qq)}</td><td>{E(why)}</td><td>{E(breaks)}</td><td>{E(do)}</td></tr>"
+    q, n_q = q_table(QUESTIONS)
     fields = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td><code>{E(d)}</code></td></tr>" for a, b, c, d in FIELDS)
     prof = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td></tr>" for a, b in PROFILE)
-    dec = ""
-    for qd, opts in DECISIONS:
-        dec += f"<h3>{E(qd)}</h3><div class='tw'><table class='t'><tr><th>Option</th><th>Verdict</th></tr>"
-        for o, v, why in opts:
-            word = {"pursue": "Pursue", "drop": "Drop", "when": "Pursue when"}[v]
-            dec += f"<tr><td><b>{E(o)}</b></td><td><span class='verdict {v}'>{word}</span> · {E(why)}</td></tr>"
-        dec += "</table></div>"
+    dec = dec_html(DECISIONS)
     leaders = "".join(f"<li>{E(x)}</li>" for x in LEADERS_UP)
     faq = "".join(f'<details class="faq"><summary>{E(a)}</summary><p>{E(b)}</p></details>' for a, b in FAQ_UP)
     day2 = [("101", "Asha", "Mumbai", "10:02"), ("103", "Meena", "Agra", "10:09"), ("104", "Joseph", "Kochi", "09:15 (next day)")]
@@ -611,7 +624,7 @@ def upstreams():
 
 <section id="questions"><p class="eyebrow">The question list</p><h2>Every question, why we ask, and what breaks if nobody does</h2>
 <p>One list, grouped by category. Ask it once per source system, then once per dataset for categories E and F. The fourth column is what we have seen go wrong in production when the question was skipped.</p>
-<div class="tw"><table class="t q"><tr><th>#</th><th>Question to chase</th><th>Why we ask</th><th>What breaks in production if nobody asks</th><th>Do this (not this)</th></tr>{q}</table></div></section>
+{q}</section>
 
 <section id="fields"><p class="eyebrow">Per dataset</p><h2>Fields we ask you to point at in every dataset</h2>
 <p>For each dataset, we ask which column (if any) plays each role. A blank is fine, but it is a decision. For example, "no last modified time" means change data capture or a full comparison.</p>
