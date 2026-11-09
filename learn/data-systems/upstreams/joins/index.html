@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Learning the joins between datasets · Clean Data Engineering</title>
+<meta name="description" content="How to learn the joins between datasets: declared keys, joins already in use, candidates from names and AI, measuring uniqueness, match rates and orphans on the data, owner sign-off and data contracts."><link rel="canonical" href="https://cleandataengineering.ai/learn/data-systems/upstreams/joins/">
+<meta property="og:title" content="Learning the joins between datasets"><meta property="og:description" content="How to learn the joins between datasets: declared keys, joins already in use, candidates from names and AI, measuring uniqueness, match rates and orphans on the data, owner sign-off and data contracts."><meta property="og:url" content="https://cleandataengineering.ai/learn/data-systems/upstreams/joins/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--rose-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .promise { font-family:var(--hand); font-size:26px; margin:8px 0 4px; }
+  .leaders { border:var(--line); border-radius:var(--wob); padding:14px 20px; background:var(--butter-wash); margin:16px 0; }
+  .leaders h3 { margin:0 0 6px; font-size:22px; } .leaders ul { margin:0; padding-left:20px; } .leaders li { margin:5px 0; }
+  .cards { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin:14px 0; }
+  .card { border:var(--line); border-radius:var(--wob); padding:14px 18px; background:var(--w, #fff); }
+  .card h3 { margin:0 0 4px; font-size:24px; } .card p.one { margin:0 0 8px; color:var(--ink-soft); }
+  .card ul { margin:0 0 10px; padding-left:18px; font-size:15px; } .card li { margin:4px 0; }
+  .tag { display:inline-block; font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; border:1.5px solid var(--ink); border-radius:999px; padding:1px 10px; background:#fff; }
+  .tag.ready { background:var(--mint-wash); } .tag.next { background:var(--butter-wash); }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.t tr.cat td { background:var(--rose-wash); font-family:var(--hand); font-size:21px; padding-top:10px; border-bottom:1.5px solid var(--ink); }
+  table.t tr.cat td span { font-family:var(--body, inherit); font-size:13.5px; color:var(--muted); margin-left:8px; }
+  table.t td.id { font-family:var(--mono); font-size:12.5px; color:var(--faint); white-space:nowrap; }
+  table.q td:nth-child(2) { font-weight:600; min-width:220px; } table.q td:nth-child(4) { background:#FFF6F6; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .verdict { font-weight:700; white-space:nowrap; } .verdict.pursue { color:#1d6b3a; } .verdict.drop { color:#a3322b; } .verdict.when { color:#8a5a00; }
+  .why { border:var(--line); border-radius:var(--wob); padding:14px 20px; background:var(--sky-wash, #EFF8FB); margin:16px 0; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  .btn { display:inline-block; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--butter-wash); color:var(--ink); text-decoration:none; font-weight:600; cursor:pointer; font-size:15px; }
+  @media (max-width:860px) { .cards { grid-template-columns:1fr; } }
+  @media (max-width:640px) { .toc ol { columns:1; } }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Learning the joins between datasets", "description": "How to learn the joins between datasets: declared keys, joins already in use, candidates from names and AI, measuring uniqueness, match rates and orphans on the data, owner sign-off and data contracts.", "url": "https://cleandataengineering.ai/learn/data-systems/upstreams/joins/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-09", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}, "about": [{"@type": "Thing", "name": "Data engineering"}, {"@type": "Thing", "name": "Data platform"}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Learn", "item": "https://cleandataengineering.ai/learn/"}, {"@type": "ListItem", "position": 2, "name": "Data systems", "item": "https://cleandataengineering.ai/learn/data-systems/"}, {"@type": "ListItem", "position": 3, "name": "Upstreams", "item": "https://cleandataengineering.ai/learn/data-systems/upstreams/"}, {"@type": "ListItem", "position": 4, "name": "Learning the joins", "item": "https://cleandataengineering.ai/learn/data-systems/upstreams/joins/"}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "How do you find relationships between tables when there are no foreign keys?", "acceptedAnswer": {"@type": "Answer", "text": "Read how people already join them (views, report SQL, ETL code, query history), propose candidates from names and types, then measure each on the data: the parent side must be unique, most child values must exist in it, and orphans must be few. The data owner confirms the result, and it is recorded in the data contract and tested every load."}}, {"@type": "Question", "name": "Can AI find the joins between tables?", "acceptedAnswer": {"@type": "Answer", "text": "It is good at proposing candidates from names, comments and sample values, and poor at proving them. Treat its suggestions as candidates and accept only those the data measurements and the owner confirm."}}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Learn</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/paths/data-engineering/">Data Engineering</a></summary><ul><li><a href="/paths/data-engineering/aws/">AWS</a></li><li><a href="/paths/data-engineering/azure/">Azure</a></li><li><a href="/paths/data-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/data-engineering/databricks/">Databricks</a></li><li><a href="/paths/data-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/aws/">AWS</a></li><li><a href="/paths/ai-engineering/azure/">Azure</a></li><li><a href="/paths/ai-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/ai-engineering/databricks/">Databricks</a></li><li><a href="/paths/ai-engineering/open/">Open source</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/aws/">AWS</a></li><li><a href="/paths/llm-engineering/azure/">Azure</a></li><li><a href="/paths/llm-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/llm-engineering/databricks/">Databricks</a></li><li><a href="/paths/llm-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/aws/">AWS</a></li><li><a href="/paths/ml-engineering/azure/">Azure</a></li><li><a href="/paths/ml-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/ml-engineering/databricks/">Databricks</a></li><li><a href="/paths/ml-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/aws/">AWS</a></li><li><a href="/paths/software-engineering/azure/">Azure</a></li><li><a href="/paths/software-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/software-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/paths/forward-deployed/aws/">AWS</a></li><li><a href="/paths/forward-deployed/azure/">Azure</a></li><li><a href="/paths/forward-deployed/gcp/">Google Cloud</a></li><li><a href="/paths/forward-deployed/databricks/">Databricks</a></li></ul></details></li><li><a href="/concepts/">Key concepts</a></li><li><details><summary><a href="/learn/">Courses</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/agent-harness-aws/">Agent Harness on AWS</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/data-systems/">Data systems, end to end</a></li><li><a href="/learn/data-systems/upstreams/">Data systems: upstreams</a></li><li><a href="/learn/data-systems/platform/">Data systems: the platform</a></li><li><a href="/learn/data-systems/platform/cost/calculator/">Databricks cost calculator</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/data-platform-architecture/aws-databricks/">Data platform on AWS + Databricks</a></li><li><a href="/learn/data-platform-architecture/aws-databricks/etl/">The ETL, end to end (AWS)</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/learn/technical-anchor/">The technical anchor</a></li><li><a href="/learn/technical-anchor/discovery/">Technical anchor: discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Technical anchor: project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li></ul></details></li><li><details><summary><a href="/simulators/">Simulators</a></summary><ul><li><a href="/learn/llm-api-sim/">Claude API Simulator</a></li><li><a href="/learn/agent-harness-sim/">Agent Harness Simulator</a></li><li><a href="/learn/data-platform-sim/">DataTwin Studio</a></li><li><a href="/learn/data-platform-sim/problems/">Problem Lab</a></li><li><a href="/learn/data-platform-sim/performance/">Performance stories</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li></ul><h4>Certifications</h4><ul><li><a href="/certifications/">All certifications</a></li><li><details><summary><a href="/certifications/#anthropic">Claude (Anthropic)</a></summary><ul><li><a href="/certifications/claude-certified-architect/CCA-F/">Claude Certified Architect</a></li><li><a href="/certifications/cca-f-mind-maps/">CCA-F mind maps</a></li><li><a href="/certifications/claude-certified-architect/CCAR-P/">Claude Architect, Professional</a></li></ul></details></li><li><details><summary><a href="/certifications/#databricks">Databricks</a></summary><ul><li><a href="/certifications/databricks-genai-engineer/">Gen AI Engineer free prep</a></li></ul></details></li><li><details><summary><a href="/certifications/#microsoft">Microsoft</a></summary><ul><li><a href="/certifications/azure-ai-engineer/">AI-103 free prep</a></li></ul></details></li><li><a href="/certifications/#aws">AWS</a></li><li><a href="/certifications/#gcp">Google Cloud</a></li></ul><h4>AI for a cause</h4><ul><li><a href="/ai-for-cause/">All projects</a></li><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul><h4>Deep tech</h4><ul><li><a href="/deep-tech/">All projects</a></li><li><a href="/problems/">Hard problems</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul><h4>Build with us</h4><ul><li><a href="/projects/">Join a project</a></li><li><details><summary><a href="/research/">Open specifications</a></summary><ul><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">AgentTwin, explained</a></li><li><a href="/learn/datatwin/">DataTwin, explained</a></li><li><a href="/lab/">The AgentTwin Lab</a></li></ul></details></li><li><details><summary><a href="/assets/">Open-source assets</a></summary><ul><li><a href="https://github.com/dataagentsai/reference-agent">Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Eval Harness Framework</a></li><li><a href="https://github.com/dataagentsai/claims-fnol-azure">Claims assistant on Azure</a></li><li><a href="/learn/technical-anchor/project-review/">Data project review skill</a></li></ul></details></li><li><a href="/about/#join">Write or teach</a></li></ul><h4>For leaders</h4><ul><li><a href="/leaders/">The one-minute version</a></li><li><details><summary><a href="/leaders/spec-driven/">Spec-driven development</a></summary><ul><li><a href="/leaders/spec-driven/">For agents</a></li><li><a href="/leaders/spec-driven/data-platform/">For data platforms</a></li></ul></details></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/papers/">Technical papers</a></li><li><a href="/writing/">Blog</a></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-systems/">Data systems</a> › <a href="/learn/data-systems/upstreams/">Upstreams</a> › Learning the joins</p>
+<p class="eyebrow" style="margin-top:22px">Data systems · upstreams, in depth · for data leaders, then builders</p>
+<h1>Learning the joins between datasets</h1>
+<p class="promise">Every join we build is declared, already used, or proven on the data, and confirmed by the owner.</p>
+<p class="lede">How to find out how datasets join when nobody can tell you: read what&#x27;s declared, harvest the joins already in use, propose candidates, measure them on the data, and get the owner to confirm.</p>
+<div class="leaders"><h3>For leaders</h3><ul><li>Wrong joins are the quietest way to get wrong numbers: they multiply or drop rows and still look like correct output.</li><li>Most sources don&#x27;t declare their relationships, especially SaaS apps and older systems.</li><li>Learn the joins cheapest first: declared keys and the vendor&#x27;s model, then joins already used in reports and code, then candidates measured on the data.</li><li>AI can propose joins; only measurements and the owner can confirm them.</li></ul></div>
+<nav class="toc"><b>On this page</b><ol><li><a href="#plain">In plain words</a></li><li><a href="#ladder">The ladder</a></li><li><a href="#signals">Signals</a></li><li><a href="#wrong">How joins go wrong</a></li><li><a href="#questions">The question list (4)</a></li><li><a href="#decisions">Design decisions</a></li><li><a href="#faq">Questions people ask</a></li><li><a href="#next">Where to go next</a></li></ol></nav>
+<section id="plain"><p class="eyebrow">In plain words</p><h2>A family tree from old letters</h2>
+<p>Building a family tree, you start with what's written down: birth certificates and marriage records. Then the family's own stories. Then guesses from shared surnames and towns, which you check against dates before you write them in. A shared surname proves nothing on its own. Finding joins between datasets works the same way: written-down keys first, then the joins people already use, then guesses, and every guess checked against the data.</p></section><section id="ladder"><p class="eyebrow">Smartly, cheapest first</p><h2>Six steps to learn the joins</h2><div class="tw"><table class="t"><tr><th>Step</th><th>What we do</th><th>What it gives</th><th>Effort</th></tr><tr><td><b>1 · Read what is declared</b></td><td>Foreign keys in the database catalog; the vendor&#x27;s published data model (Salesforce object relationships, SAP check tables)</td><td>Exact, when present</td><td>Cheap</td></tr><tr><td><b>2 · Read how people already join</b></td><td>Views, stored procedures, ETL code, report SQL, and the database&#x27;s query history</td><td>The joins the business really uses, including the rules inside them</td><td>Cheap to medium</td></tr><tr><td><b>3 · Propose candidates</b></td><td>Matching names and types (customer_id to customers.id); an AI model reading names, comments and sample values</td><td>Many candidates, some wrong</td><td>Cheap</td></tr><tr><td><b>4 · Measure on the data</b></td><td>For each candidate: is the parent side unique, what share of child values exist in the parent, how many rows match on each side, how many orphans</td><td>Evidence for or against each join</td><td>Medium; use samples and compact value sketches on big tables</td></tr><tr><td><b>5 · Confirm with the owner</b></td><td>Show the map with the measurements; the owner accepts, rejects or corrects</td><td>Agreed joins</td><td>A meeting</td></tr><tr><td><b>6 · Write it down and test it</b></td><td>Relationships in the data contract (ODCS supports them since 3.1), tested on every load</td><td>Joins that stay true</td><td>Automatic after setup</td></tr></table></div></section><section id="signals"><p class="eyebrow">Evidence</p><h2>How much each signal is worth</h2><div class="tw"><table class="t"><tr><th>Signal</th><th>Strength</th><th>False-match risk</th></tr><tr><td><b>Declared foreign key</b></td><td>Strong</td><td>Low, but the key may be declared and not enforced</td></tr><tr><td><b>Used in existing views, reports or query history</b></td><td>Strong</td><td>Low; check the join conditions, not just the tables</td></tr><tr><td><b>Same name and type (order_id in both)</b></td><td>Medium</td><td>Medium: generic names (id, code, type) match everything</td></tr><tr><td><b>Most child values found in a unique parent column</b></td><td>Strong</td><td>High for small numbers: ids 1 to 100 overlap with almost anything</td></tr><tr><td><b>AI model&#x27;s suggestion</b></td><td>Weak until measured</td><td>Medium: plausible-sounding joins that the data doesn&#x27;t support</td></tr></table></div>
+<p>The measurement in step 4 is what turns a guess into a join. For big tables it runs on samples and compact summaries of each column's values, inside the source's environment, so only the measurements leave it. See question L2 on the <a href="/learn/data-systems/upstreams/#questions">Upstreams page</a>.</p></section><section id="wrong"><p class="eyebrow">Why it matters</p><h2>Two ways a wrong join hurts</h2>
+<p>A join assumed to match one row that sometimes matches two <b>multiplies</b> numbers. A join to a parent that's missing <b>drops</b> rows from an inner join. Both look like correct output. The relationship questions I1 to I7 on the <a href="/learn/data-systems/upstreams/#questions">Upstreams page</a> cover how many rows match on each side, orphans, timing and joins as of a past date.</p></section>
+<section id="questions"><p class="eyebrow">The question list</p><h2>Every question, why we ask, and what breaks if nobody does</h2><div class="tw"><table class="t q"><tr><th>#</th><th>Question to chase</th><th>Why we ask</th><th>What breaks in production if nobody asks</th><th>Do this (not this)</th></tr><tr class="cat"><td colspan="5">JN · Learning the joins<span>where relationships come from and how we prove them</span></td></tr><tr><td class='id'>JN1</td><td>Does the database declare foreign keys, and does the vendor publish a data model?</td><td>Declared relationships are the cheapest and most exact source.</td><td>Weeks spent guessing joins the catalog already held.</td><td>Read the catalog and the vendor&#x27;s model first. Not: starting from sample data.</td></tr><tr><td class='id'>JN2</td><td>Can we read the views, procedures, ETL code, report SQL and query history that use this data?</td><td>Existing joins carry the business rules too.</td><td>Our joins are &#x27;correct&#x27; but don&#x27;t match the numbers people trust.</td><td>Harvest join conditions from code and query history; ask about the odd ones. Not: ignoring the old system&#x27;s logic.</td></tr><tr><td class='id'>JN3</td><td>For each proposed join: is the parent unique, what share of child values match, and how many orphans are there?</td><td>A join is only real if the data agrees.</td><td>A join on small ids that happen to overlap produces confident nonsense.</td><td>Measure every candidate; require a unique parent and a high match rate; reject joins on generic low-number ids unless proven. Not: accepting a join because the names match.</td></tr><tr><td class='id'>JN4</td><td>Who confirms each relationship, and where is it recorded?</td><td>Unconfirmed joins drift back into guesses.</td><td>Two teams join the same tables two ways and report two numbers.</td><td>The owner signs off; the relationship goes into the data contract and is tested on every load. Not: knowledge in one engineer&#x27;s head.</td></tr></table></div></section>
+<section id="decisions"><p class="eyebrow">Design decisions</p><h2>The decisions to take</h2><h3>How are relationships found?</h3><div class='tw'><table class='t'><tr><th>Option</th><th>Verdict</th></tr><tr><td><b>Declared keys and existing code first, then candidates measured on the data, then owner sign-off</b></td><td><span class='verdict pursue'>Pursue</span> · Pursue. Cheapest evidence first; nothing accepted unmeasured.</td></tr><tr><td><b>An AI model proposes joins and we use them</b></td><td><span class='verdict drop'>Drop</span> · Drop as a final answer. Keep it as a candidate generator only.</td></tr><tr><td><b>Ask the business to draw the model from memory</b></td><td><span class='verdict when'>Pursue when</span> · Pursue only as a starting sketch to check against the data.</td></tr></table></div></section>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>How do you find relationships between tables when there are no foreign keys?</summary><p>Read how people already join them (views, report SQL, ETL code, query history), propose candidates from names and types, then measure each on the data: the parent side must be unique, most child values must exist in it, and orphans must be few. The data owner confirms the result, and it is recorded in the data contract and tested every load.</p></details><details class="faq"><summary>Can AI find the joins between tables?</summary><p>It is good at proposing candidates from names, comments and sample values, and poor at proving them. Treat its suggestions as candidates and accept only those the data measurements and the owner confirm.</p></details></section>
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2><p><b>Related:</b> <a href="/learn/data-systems/upstreams/#joins">relationships and joins</a> and <a href="/learn/data-systems/upstreams/#profile">why we ask to scan your data</a> on the Upstreams page.</p>
+<p><b>Back up:</b> <a href="/learn/data-systems/upstreams/">Upstreams: know your sources</a>, and the <a href="/learn/data-systems/upstreams/questionnaire/">printable questionnaire</a>.</p></section>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Learn</b><a href="/paths/">Find your path</a><a href="/paths/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/paths/forward-deployed/">Forward Deployed Engineering</a><a href="/concepts/">Key concepts</a><a href="/learn/">Courses</a><a href="/simulators/">Simulators</a><a href="/mindset/">Worried about AI?</a></div><div><b>Certifications</b><a href="/certifications/">All certifications</a><a href="/certifications/#anthropic">Claude (Anthropic)</a><a href="/certifications/#databricks">Databricks</a><a href="/certifications/#microsoft">Microsoft</a><a href="/certifications/#aws">AWS</a><a href="/certifications/#gcp">Google Cloud</a></div><div><b>AI for a cause</b><a href="/ai-for-cause/">All projects</a><a href="/projects/babu-companion/">Babu, companion for elders</a><a href="/road-safety/">AI for road safety</a><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></div><div><b>Deep tech</b><a href="/deep-tech/">All projects</a><a href="/problems/">Hard problems</a><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></div><div><b>Build with us</b><a href="/projects/">Join a project</a><a href="/research/">Open specifications</a><a href="/assets/">Open-source assets</a><a href="/about/#join">Write or teach</a></div><div><b>For leaders</b><a href="/leaders/">The one-minute version</a><a href="/leaders/spec-driven/">Spec-driven development</a><a href="/leaders/#questions">Questions leaders ask</a><a href="/papers/">Technical papers</a><a href="/writing/">Blog</a></div><div><b>About</b><a href="/about/">About this site</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

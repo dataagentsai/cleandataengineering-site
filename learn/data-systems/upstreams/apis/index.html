@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>API sources: paging, limits, cost and completeness · Clean Data Engineering</title>
+<meta name="description" content="API data sources explained: bulk versus paged APIs, pagination that doesn&#x27;t lose records, rate limits and shared quotas, cost per call, deletes, versions, and the questions to ask."><link rel="canonical" href="https://cleandataengineering.ai/learn/data-systems/upstreams/apis/">
+<meta property="og:title" content="API sources: paging, limits, cost and completeness"><meta property="og:description" content="API data sources explained: bulk versus paged APIs, pagination that doesn&#x27;t lose records, rate limits and shared quotas, cost per call, deletes, versions, and the questions to ask."><meta property="og:url" content="https://cleandataengineering.ai/learn/data-systems/upstreams/apis/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--rose-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .promise { font-family:var(--hand); font-size:26px; margin:8px 0 4px; }
+  .leaders { border:var(--line); border-radius:var(--wob); padding:14px 20px; background:var(--butter-wash); margin:16px 0; }
+  .leaders h3 { margin:0 0 6px; font-size:22px; } .leaders ul { margin:0; padding-left:20px; } .leaders li { margin:5px 0; }
+  .cards { display:grid; grid-template-columns:repeat(3, 1fr); gap:14px; margin:14px 0; }
+  .card { border:var(--line); border-radius:var(--wob); padding:14px 18px; background:var(--w, #fff); }
+  .card h3 { margin:0 0 4px; font-size:24px; } .card p.one { margin:0 0 8px; color:var(--ink-soft); }
+  .card ul { margin:0 0 10px; padding-left:18px; font-size:15px; } .card li { margin:4px 0; }
+  .tag { display:inline-block; font-size:12px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; border:1.5px solid var(--ink); border-radius:999px; padding:1px 10px; background:#fff; }
+  .tag.ready { background:var(--mint-wash); } .tag.next { background:var(--butter-wash); }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.t tr.cat td { background:var(--rose-wash); font-family:var(--hand); font-size:21px; padding-top:10px; border-bottom:1.5px solid var(--ink); }
+  table.t tr.cat td span { font-family:var(--body, inherit); font-size:13.5px; color:var(--muted); margin-left:8px; }
+  table.t td.id { font-family:var(--mono); font-size:12.5px; color:var(--faint); white-space:nowrap; }
+  table.q td:nth-child(2) { font-weight:600; min-width:220px; } table.q td:nth-child(4) { background:#FFF6F6; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .verdict { font-weight:700; white-space:nowrap; } .verdict.pursue { color:#1d6b3a; } .verdict.drop { color:#a3322b; } .verdict.when { color:#8a5a00; }
+  .why { border:var(--line); border-radius:var(--wob); padding:14px 20px; background:var(--sky-wash, #EFF8FB); margin:16px 0; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  .btn { display:inline-block; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--butter-wash); color:var(--ink); text-decoration:none; font-weight:600; cursor:pointer; font-size:15px; }
+  @media (max-width:860px) { .cards { grid-template-columns:1fr; } }
+  @media (max-width:640px) { .toc ol { columns:1; } }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "API sources: paging, limits, cost and completeness", "description": "API data sources explained: bulk versus paged APIs, pagination that doesn't lose records, rate limits and shared quotas, cost per call, deletes, versions, and the questions to ask.", "url": "https://cleandataengineering.ai/learn/data-systems/upstreams/apis/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-09", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}, "about": [{"@type": "Thing", "name": "Data engineering"}, {"@type": "Thing", "name": "Data platform"}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Learn", "item": "https://cleandataengineering.ai/learn/"}, {"@type": "ListItem", "position": 2, "name": "Data systems", "item": "https://cleandataengineering.ai/learn/data-systems/"}, {"@type": "ListItem", "position": 3, "name": "Upstreams", "item": "https://cleandataengineering.ai/learn/data-systems/upstreams/"}, {"@type": "ListItem", "position": 4, "name": "APIs", "item": "https://cleandataengineering.ai/learn/data-systems/upstreams/apis/"}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Why do API data loads miss records?", "acceptedAnswer": {"@type": "Answer", "text": "Usually because offset paging over changing data skips rows, a changed-since filter misses records at the window edges, throttling stops the load part way, or the API reads from an index that lags. Cursor or keyset paging, overlapping windows, checkpoints and a count comparison fix most of it."}}, {"@type": "Question", "name": "How do you load a large dataset from a SaaS API?", "acceptedAnswer": {"@type": "Answer", "text": "Use the vendor's bulk or export API for history and big daily loads, and a change feed or a changed-since filter for increments, within your share of the rate limits."}}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Learn</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/paths/data-engineering/">Data Engineering</a></summary><ul><li><a href="/paths/data-engineering/aws/">AWS</a></li><li><a href="/paths/data-engineering/azure/">Azure</a></li><li><a href="/paths/data-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/data-engineering/databricks/">Databricks</a></li><li><a href="/paths/data-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/aws/">AWS</a></li><li><a href="/paths/ai-engineering/azure/">Azure</a></li><li><a href="/paths/ai-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/ai-engineering/databricks/">Databricks</a></li><li><a href="/paths/ai-engineering/open/">Open source</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/aws/">AWS</a></li><li><a href="/paths/llm-engineering/azure/">Azure</a></li><li><a href="/paths/llm-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/llm-engineering/databricks/">Databricks</a></li><li><a href="/paths/llm-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/aws/">AWS</a></li><li><a href="/paths/ml-engineering/azure/">Azure</a></li><li><a href="/paths/ml-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/ml-engineering/databricks/">Databricks</a></li><li><a href="/paths/ml-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/aws/">AWS</a></li><li><a href="/paths/software-engineering/azure/">Azure</a></li><li><a href="/paths/software-engineering/gcp/">Google Cloud</a></li><li><a href="/paths/software-engineering/open/">Open source</a></li></ul></details></li><li><details><summary><a href="/paths/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/paths/forward-deployed/aws/">AWS</a></li><li><a href="/paths/forward-deployed/azure/">Azure</a></li><li><a href="/paths/forward-deployed/gcp/">Google Cloud</a></li><li><a href="/paths/forward-deployed/databricks/">Databricks</a></li></ul></details></li><li><a href="/concepts/">Key concepts</a></li><li><details><summary><a href="/learn/">Courses</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/agent-harness-aws/">Agent Harness on AWS</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/data-systems/">Data systems, end to end</a></li><li><a href="/learn/data-systems/upstreams/">Data systems: upstreams</a></li><li><a href="/learn/data-systems/platform/">Data systems: the platform</a></li><li><a href="/learn/data-systems/platform/cost/calculator/">Databricks cost calculator</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/data-platform-architecture/aws-databricks/">Data platform on AWS + Databricks</a></li><li><a href="/learn/data-platform-architecture/aws-databricks/etl/">The ETL, end to end (AWS)</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/learn/technical-anchor/">The technical anchor</a></li><li><a href="/learn/technical-anchor/discovery/">Technical anchor: discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Technical anchor: project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li></ul></details></li><li><details><summary><a href="/simulators/">Simulators</a></summary><ul><li><a href="/learn/llm-api-sim/">Claude API Simulator</a></li><li><a href="/learn/agent-harness-sim/">Agent Harness Simulator</a></li><li><a href="/learn/data-platform-sim/">DataTwin Studio</a></li><li><a href="/learn/data-platform-sim/problems/">Problem Lab</a></li><li><a href="/learn/data-platform-sim/performance/">Performance stories</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li></ul><h4>Certifications</h4><ul><li><a href="/certifications/">All certifications</a></li><li><details><summary><a href="/certifications/#anthropic">Claude (Anthropic)</a></summary><ul><li><a href="/certifications/claude-certified-architect/CCA-F/">Claude Certified Architect</a></li><li><a href="/certifications/cca-f-mind-maps/">CCA-F mind maps</a></li><li><a href="/certifications/claude-certified-architect/CCAR-P/">Claude Architect, Professional</a></li></ul></details></li><li><details><summary><a href="/certifications/#databricks">Databricks</a></summary><ul><li><a href="/certifications/databricks-genai-engineer/">Gen AI Engineer free prep</a></li></ul></details></li><li><details><summary><a href="/certifications/#microsoft">Microsoft</a></summary><ul><li><a href="/certifications/azure-ai-engineer/">AI-103 free prep</a></li></ul></details></li><li><a href="/certifications/#aws">AWS</a></li><li><a href="/certifications/#gcp">Google Cloud</a></li></ul><h4>AI for a cause</h4><ul><li><a href="/ai-for-cause/">All projects</a></li><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul><h4>Deep tech</h4><ul><li><a href="/deep-tech/">All projects</a></li><li><a href="/problems/">Hard problems</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul><h4>Build with us</h4><ul><li><a href="/projects/">Join a project</a></li><li><details><summary><a href="/research/">Open specifications</a></summary><ul><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">AgentTwin, explained</a></li><li><a href="/learn/datatwin/">DataTwin, explained</a></li><li><a href="/lab/">The AgentTwin Lab</a></li></ul></details></li><li><details><summary><a href="/assets/">Open-source assets</a></summary><ul><li><a href="https://github.com/dataagentsai/reference-agent">Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Eval Harness Framework</a></li><li><a href="https://github.com/dataagentsai/claims-fnol-azure">Claims assistant on Azure</a></li><li><a href="/learn/technical-anchor/project-review/">Data project review skill</a></li></ul></details></li><li><a href="/about/#join">Write or teach</a></li></ul><h4>For leaders</h4><ul><li><a href="/leaders/">The one-minute version</a></li><li><details><summary><a href="/leaders/spec-driven/">Spec-driven development</a></summary><ul><li><a href="/leaders/spec-driven/">For agents</a></li><li><a href="/leaders/spec-driven/data-platform/">For data platforms</a></li></ul></details></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/papers/">Technical papers</a></li><li><a href="/writing/">Blog</a></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/data-systems/">Data systems</a> › <a href="/learn/data-systems/upstreams/">Upstreams</a> › APIs</p>
+<p class="eyebrow" style="margin-top:22px">Data systems · upstreams, in depth · for data leaders, then builders</p>
+<h1>API sources: paging, limits, cost and completeness</h1>
+<p class="promise">Every record the API holds arrives once, within the source&#x27;s limits, and we can prove the load is complete.</p>
+<p class="lede">What goes wrong when data comes through APIs, and the questions to ask first: bulk versus record APIs, paging, changed-since filters, rate limits and quotas, cost per call, deletes, versions and completeness.</p>
+<div class="leaders"><h3>For leaders</h3><ul><li>APIs are built for apps reading a few records, not for copying whole datasets. Bulk extraction through them fights their limits.</li><li>The main risks are missed or doubled records from paging, partial loads after throttling, invisible deletes, changing JSON and cost per call.</li><li>Prefer, in order: the vendor&#x27;s bulk or export API or change feed, a managed connector, then plain paged polling.</li><li>Every API load ends with a completeness check: our count against the API&#x27;s total.</li></ul></div>
+<nav class="toc"><b>On this page</b><ol><li><a href="#plain">In plain words</a></li><li><a href="#kinds">Kinds of APIs</a></li><li><a href="#paging">Paging</a></li><li><a href="#problems">Common problems</a></li><li><a href="#protect">Load on the source</a></li><li><a href="#questions">The question list (10)</a></li><li><a href="#decisions">Design decisions</a></li><li><a href="#faq">Questions people ask</a></li><li><a href="#next">Where to go next</a></li></ol></nav>
+<section id="plain"><p class="eyebrow">In plain words</p><h2>Copying a library by asking at the desk</h2>
+<p>An API is a librarian's desk. It is built for people asking for a few books at a time. Copying the whole library through it means asking for one shelf at a time, all day, while others queue behind you, the librarian limits how often you may ask, and books are being returned and moved while you work. It can be done, but only with a plan: use the bulk delivery service if there is one, keep your place, and count what you got.</p></section><section id="kinds"><p class="eyebrow">Kinds of APIs</p><h2>Seven kinds of APIs</h2><div class="tw"><table class="t"><tr><th>Kind</th><th>How it works</th><th>Good for</th><th>Watch for</th></tr><tr><td><b>Paged REST API</b></td><td>GET a page of records, then the next</td><td>Most SaaS apps and partner APIs</td><td>Pages shifting while you read; rate limits</td></tr><tr><td><b>Bulk or export API</b></td><td>Ask for a job; download one or more files when it finishes</td><td>Backfills and big daily loads (Salesforce Bulk API, many ERPs)</td><td>Job queues and size limits; still the best way to move volume</td></tr><tr><td><b>Change feed or events API</b></td><td>Read what changed since a cursor, including deletes</td><td>Incremental loads that see deletes</td><td>Cursor retention: if you fall behind too far, you must reload</td></tr><tr><td><b>Webhooks</b></td><td>The source calls us when something changes</td><td>Low-latency updates</td><td>Calls missed while we are down; need a catch-up pull</td></tr><tr><td><b>OData and SAP-style services</b></td><td>Query entities with filters and paging, often with delta tokens</td><td>SAP and Microsoft business apps</td><td>Delta tokens expire; server-side page limits</td></tr><tr><td><b>GraphQL</b></td><td>Ask for exactly the fields and nested objects you need</td><td>Modern product APIs</td><td>Query cost limits; nested paging inside one query</td></tr><tr><td><b>SOAP and legacy services</b></td><td>XML requests and responses</td><td>Older enterprise and government systems</td><td>Slow, verbose, strict; few changed-since filters</td></tr></table></div></section><section id="paging"><p class="eyebrow">Pagination</p><h2>How paging decides whether a read is complete</h2><div class="tw"><table class="t"><tr><th>Paging</th><th>Looks like</th><th>What goes wrong</th><th>Use it</th></tr><tr><td><b>Offset or page number</b></td><td>page=1, 2, 3 or offset=0, 100, 200</td><td>Rows inserted or deleted while you read shift the pages: some rows are skipped, others read twice; deep pages get slow</td><td>Only for small, static lists</td></tr><tr><td><b>Cursor or page token</b></td><td>Each response gives a token for the next page</td><td>Stable while reading; tokens can expire mid-run</td><td>The best general choice when offered</td></tr><tr><td><b>Keyset</b></td><td>Next page = records with id (or updated time, id) greater than the last one seen</td><td>Stable and fast if the sort is unique; ties on time need a second sort column</td><td>Best when you can choose the filter</td></tr><tr><td><b>Time window</b></td><td>Records changed between two times, one window at a time</td><td>Depends on the API&#x27;s clock and precision; records changed during the read can fall between windows</td><td>Overlap each window a little and remove duplicates</td></tr></table></div></section><section id="problems"><p class="eyebrow">In production</p><h2>Common API problems, and the fix</h2><div class="tw"><table class="t"><tr><th>Problem</th><th>What you see</th><th>Fix</th></tr><tr><td><b>Rows shift between pages</b></td><td>A few records missing or doubled every run, never the same ones</td><td>Cursor or keyset paging; remove duplicates on the record id; compare counts</td></tr><tr><td><b>Throttled (HTTP 429) half way</b></td><td>A partial load that looks complete</td><td>Back off with jitter, respect Retry-After, save a checkpoint after each page, check completeness before publishing</td></tr><tr><td><b>Quota shared with other integrations</b></td><td>Our backfill stops the sales team&#x27;s other tools</td><td>Our own share of the quota; backfills out of hours; bulk API for volume</td></tr><tr><td><b>Changed-since filter uses another clock</b></td><td>Changes near the window edges are missed</td><td>Overlap each window, use the API&#x27;s own time, remove duplicates</td></tr><tr><td><b>API reads from a search index, not the database</b></td><td>Recent changes appear minutes later</td><td>Re-read a recent window on the next run</td></tr><tr><td><b>Deletes are invisible</b></td><td>Deleted records live on in the platform</td><td>A deleted-records endpoint, a change feed, or a regular full list of ids</td></tr><tr><td><b>Nested JSON keeps changing</b></td><td>New fields lost; type changes break parsing</td><td>Land the raw JSON in bronze; parse in silver with explicit schema-change rules</td></tr><tr><td><b>Token expires mid-run</b></td><td>Load stops after an hour, every night</td><td>Refresh tokens automatically; keep secrets in a vault</td></tr><tr><td><b>Version retired by the vendor</b></td><td>A working integration stops on a date announced months ago</td><td>Track the vendor&#x27;s changelog and retirement dates in the source contract</td></tr><tr><td><b>Each call costs money</b></td><td>The data bill arrives from the vendor, not the cloud</td><td>Incremental loads, larger pages, a cost budget per source</td></tr></table></div></section><section id="protect"><p class="eyebrow">Load and cost</p><h2>Load on the source, and cost</h2>
+<p>Every API call is work for the source system, and some APIs charge per call or per record. Before the first load, work out the backfill: records to read, divided by records per page, times the time per call, against the rate limit. If it comes to days, ask for the bulk API or a file export. Run backfills out of hours, stay inside your share of the quota, and keep a pause switch the source team can use. The <a href="/learn/data-systems/upstreams/#protect">protecting the source</a> rules apply to APIs too.</p></section>
+<section id="questions"><p class="eyebrow">The question list</p><h2>Every question, why we ask, and what breaks if nobody does</h2><div class="tw"><table class="t q"><tr><th>#</th><th>Question to chase</th><th>Why we ask</th><th>What breaks in production if nobody asks</th><th>Do this (not this)</th></tr><tr class="cat"><td colspan="5">API · APIs<span>for sources reached through an API</span></td></tr><tr><td class='id'>API1</td><td>Besides the normal API, is there a bulk export, a change feed or a webhook?</td><td>Normal APIs are built for apps reading a few records, not for copying everything.</td><td>A backfill through the normal API takes nine days and burns the whole quota.</td><td>Bulk export for backfills and big loads, a change feed for increments, webhooks only with a catch-up pull. Not: the record-by-record API for everything.</td></tr><tr><td class='id'>API2</td><td>How does it page: offset, cursor, keyset or time window, and is the sort order stable and unique?</td><td>Paging decides whether a read is complete.</td><td>Offset paging over changing data misses a few records on every run.</td><td>Cursor or keyset paging on a unique sort; remove duplicates on the id. Not: page numbers over live data.</td></tr><tr><td class='id'>API3</td><td>Can we filter by &#x27;changed since&#x27;, on which clock, to what precision, and is the boundary inclusive?</td><td>Incremental API loads depend on this filter being exact.</td><td>Changes made in the same second as the last watermark are skipped.</td><td>An overlap window and duplicate removal on every run. Not: trusting the boundary.</td></tr><tr><td class='id'>API4</td><td>What are the limits: requests per second, daily quota, parallel connections, page size, and is the quota shared?</td><td>Limits decide backfill time and how fast we can catch up after an outage.</td><td>Throttled midway; the load stops and nobody notices it was partial.</td><td>Plan calls against limits; back off and checkpoint; keep our share of the quota. Not: retrying as fast as possible.</td></tr><tr><td class='id'>API5</td><td>Does the API charge per call or per record, and who pays?</td><td>Some APIs bill by usage, outside the cloud bill.</td><td>A full refresh every hour triples the vendor&#x27;s invoice.</td><td>Incremental loads, large pages, a monthly budget per source. Not: full pulls for convenience.</td></tr><tr><td class='id'>API6</td><td>How do we learn about deleted records?</td><td>Most APIs return only records that still exist.</td><td>Deleted customers stay active in the platform.</td><td>A deleted-records endpoint or change feed; otherwise a regular full id list compared with ours. Not: ignoring deletes.</td></tr><tr><td class='id'>API7</td><td>Does the API give a total count, or anything else we can check completeness against?</td><td>Without a total, a partial load looks complete.</td><td>A load that stopped at page 40 of 60 is published as complete.</td><td>Compare our count with the API&#x27;s total, or with a separate count call. Not: assuming the last page was reached.</td></tr><tr><td class='id'>API8</td><td>Does the API read the live database or a search index or replica that lags?</td><td>Lag means recent changes appear late.</td><td>Records changed in the last minutes before a run are missed until someone notices.</td><td>Re-read a recent window each run. Not: a window that ends &#x27;now&#x27;.</td></tr><tr><td class='id'>API9</td><td>How are new fields and versions announced, and when do old versions retire?</td><td>APIs change on the vendor&#x27;s schedule, not ours.</td><td>The integration stops on the day v1 is switched off.</td><td>Pin the version, watch the changelog, record retirement dates in the source contract. Not: &#x27;latest&#x27; with no watcher.</td></tr><tr><td class='id'>API10</td><td>How does authentication work, how long do tokens last, and who rotates the secret?</td><td>Expired credentials are the most common cause of silent stops.</td><td>The load fails every night after the token&#x27;s one-hour life.</td><td>Automatic token refresh and secrets in a vault with expiry alerts. Not: a token pasted into a config file.</td></tr></table></div></section>
+<section id="decisions"><p class="eyebrow">Design decisions</p><h2>The decisions to take</h2><h3>How do we pull large volumes?</h3><div class='tw'><table class='t'><tr><th>Option</th><th>Verdict</th></tr><tr><td><b>The bulk or export API</b></td><td><span class='verdict pursue'>Pursue</span> · Pursue for backfills and big daily loads.</td></tr><tr><td><b>The paged record API, in parallel within the limits</b></td><td><span class='verdict when'>Pursue when</span> · Pursue only when no bulk API exists.</td></tr><tr><td><b>The paged API, one thread, all history</b></td><td><span class='verdict drop'>Drop</span> · Drop. Days of calls and a burnt quota.</td></tr></table></div><h3>How do we page?</h3><div class='tw'><table class='t'><tr><th>Option</th><th>Verdict</th></tr><tr><td><b>Cursor or keyset on a unique sort</b></td><td><span class='verdict pursue'>Pursue</span> · Pursue. Complete and repeatable.</td></tr><tr><td><b>Offset or page number</b></td><td><span class='verdict drop'>Drop</span> · Drop for data that changes while you read.</td></tr></table></div><h3>How do we stay current?</h3><div class='tw'><table class='t'><tr><th>Option</th><th>Verdict</th></tr><tr><td><b>Change feed, or webhooks plus a scheduled catch-up pull</b></td><td><span class='verdict pursue'>Pursue</span> · Pursue. Fast, and nothing is lost when we&#x27;re down.</td></tr><tr><td><b>Webhooks only</b></td><td><span class='verdict drop'>Drop</span> · Drop. Every outage on our side loses changes.</td></tr></table></div></section>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>Why do API data loads miss records?</summary><p>Usually because offset paging over changing data skips rows, a changed-since filter misses records at the window edges, throttling stops the load part way, or the API reads from an index that lags. Cursor or keyset paging, overlapping windows, checkpoints and a count comparison fix most of it.</p></details><details class="faq"><summary>How do you load a large dataset from a SaaS API?</summary><p>Use the vendor&#x27;s bulk or export API for history and big daily loads, and a change feed or a changed-since filter for increments, within your share of the rate limits.</p></details></section>
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2><p><b>Other source types:</b> <a href="/learn/data-systems/upstreams/files/">files</a>; databases are covered on the <a href="/learn/data-systems/upstreams/">main Upstreams page</a> (change data capture, replicas, protecting the source).</p>
+<p><b>Back up:</b> <a href="/learn/data-systems/upstreams/">Upstreams: know your sources</a>, and the <a href="/learn/data-systems/upstreams/questionnaire/">printable questionnaire</a>.</p></section>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Learn</b><a href="/paths/">Find your path</a><a href="/paths/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/paths/forward-deployed/">Forward Deployed Engineering</a><a href="/concepts/">Key concepts</a><a href="/learn/">Courses</a><a href="/simulators/">Simulators</a><a href="/mindset/">Worried about AI?</a></div><div><b>Certifications</b><a href="/certifications/">All certifications</a><a href="/certifications/#anthropic">Claude (Anthropic)</a><a href="/certifications/#databricks">Databricks</a><a href="/certifications/#microsoft">Microsoft</a><a href="/certifications/#aws">AWS</a><a href="/certifications/#gcp">Google Cloud</a></div><div><b>AI for a cause</b><a href="/ai-for-cause/">All projects</a><a href="/projects/babu-companion/">Babu, companion for elders</a><a href="/road-safety/">AI for road safety</a><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></div><div><b>Deep tech</b><a href="/deep-tech/">All projects</a><a href="/problems/">Hard problems</a><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></div><div><b>Build with us</b><a href="/projects/">Join a project</a><a href="/research/">Open specifications</a><a href="/assets/">Open-source assets</a><a href="/about/#join">Write or teach</a></div><div><b>For leaders</b><a href="/leaders/">The one-minute version</a><a href="/leaders/spec-driven/">Spec-driven development</a><a href="/leaders/#questions">Questions leaders ask</a><a href="/papers/">Technical papers</a><a href="/writing/">Blog</a></div><div><b>About</b><a href="/about/">About this site</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

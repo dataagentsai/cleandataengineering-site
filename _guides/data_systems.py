@@ -380,6 +380,10 @@ QUESTIONS = [
          "App-set times skip changes made outside the app.",
          "A DBA's correction script changes 10,000 rows and incremental loads never see it.",
          "Prefer a database-maintained time or CDC; ask the DBA how fixes are applied. Not: assuming every change goes through the app."),
+        ("If there is no modified column at all, what else can show that a row changed: CDC, a row version the database keeps, or comparing row hashes?",
+         "Every incremental method needs some change signal.",
+         "The team falls back to a nightly full reload of a huge table that soon no longer fits the window.",
+         "In order: CDC; a database row version (rowversion, ORA_ROWSCN, xmin) after testing it; a full read comparing a hash of each row with the last one; or ask the source to add the column. Not: guessing from other dates."),
         ("Can the API filter by changed-since time, and does it page in a stable order?",
          "Paging by position over changing data skips or repeats rows.",
          "Rows move between pages during the read; a few go missing on every run.",
@@ -424,6 +428,14 @@ QUESTIONS = [
          "This decides the load method and how the next layer merges rows.",
          "Hard deletes never reach the platform; cancelled orders keep counting as revenue.",
          "With hard deletes and no CDC, read all keys regularly to detect what disappeared. Not: assuming insert-only."),
+        ("For each entity, which changes must reports see as they were at the time (keep history), and which are corrections that should simply replace the old value?",
+         "This decides Type 2, Type 1 or both, column by column.",
+         "Last year's sales move to a customer's new region, or a typo fix creates a fake 'version'.",
+         "The business owner names the columns whose history matters (Type 2); everything else is overwritten (Type 1). Not: Type 2 on every column by default."),
+        ("Do transactions change after they are created (an order's status), and do we need that history or only the latest state?",
+         "Changing transactions are not dimensions; they need their own treatment.",
+         "Only the final status is kept, so 'how long did orders sit in Packed?' can't be answered.",
+         "Keep the latest row (upsert) plus a separate append-only table of status changes when the journey matters. Not: SCD Type 2 on a billion-row fact table."),
         ("Can old records change: late arrivals, backdated entries, corrections to a closed period? How far back?",
          "This sets how far back each load looks, and when a period counts as final.",
          "Last month's numbers change after the board has seen them, and nobody can explain why.",
@@ -446,10 +458,30 @@ QUESTIONS = [
          "Keys drive de-duplication, merging and every join after this.",
          "A key that isn't unique multiplies rows in joins and inflates totals.",
          "Check uniqueness on real data during profiling. Not: trusting the documentation."),
+        ("If there is no business key, what does identify a row: a technical id, a combination of columns, or nothing at all?",
+         "Merging, change detection and deletes all need some identity.",
+         "Without one, every update looks like a new row and history doubles on every load.",
+         "Search for a column combination that is unique in profiling and confirm it with the owner; if none exists, load the dataset as full snapshots or as events. Not: inventing a key the business doesn't recognise."),
+        ("Can two identical rows both be real (two identical purchases in the same second), or is an identical row always a resend?",
+         "Removing duplicates is right for resends and wrong for real repeats.",
+         "Two real orders collapse into one and revenue is understated.",
+         "Ask the owner, and look for a line number, event id or sequence that separates them. Not: removing every identical row by default."),
+        ("When two rows share a key but differ, which one wins, and what breaks a tie?",
+         "Rows with the same key are usually versions of one thing.",
+         "Two versions with the same timestamp; the 'latest' row changes from run to run.",
+         "Keep the latest by the source's sequence or log position, with a fixed tie-break; quarantine true conflicts. Not: 'pick any one'."),
+        ("Can the same real thing appear under two keys (one customer created twice)?",
+         "Duplicate entities inflate counts and split history.",
+         "Customer count is 12% too high and loyalty history is split across records.",
+         "Map duplicates to one master id with matching rules the business owns (entity resolution). Not: merging them silently in silver."),
         ("Which date means what: transaction, effective, posting, created, modified?",
          "Reports must use the right date for the right question.",
          "'Sales by day' on our dashboard disagrees with finance because they use posting date.",
          "Name every date and its use in the data contract. Not: one column called 'date'."),
+        ("What puts the versions of a row in order for history (SCD Type 2), and if nothing does, what will 'valid from' mean?",
+         "History needs an order and a start time for each version.",
+         "Versions land in the wrong order after a backfill, and 'customer region on the order date' is wrong.",
+         "Use the CDC commit time and log sequence, or a source version number; otherwise use our load time and label it 'first seen by the platform'. Not: pretending load time is business time."),
         ("What time zone and precision are times stored in, and how is daylight saving handled?",
          "Rows near midnight and on clock changes go to the wrong day, or twice.",
          "Daily totals are off on the day the clocks change, every year.",
@@ -586,6 +618,39 @@ PROTECT = [
     "Give the source team a named contact and a way to pause your extraction in minutes.",
 ]
 
+HISTORY = [
+    ("Master data whose history matters", "Customer region and segment, product category and price, employee department", "Both: Type 2 on the columns reports group by; Type 1 on the rest", "Reports by region or category must show the value at the time"),
+    ("Master data where only today matters", "Phone, email, address for contact, descriptions", "Type 1 (overwrite)", "Nobody reports by an old phone number"),
+    ("Reference and code lists", "Country, currency, status codes, units", "Type 1, or a full overwrite", "Switch to Type 2 only if a code's meaning changes over time"),
+    ("Hierarchies and mappings", "Sales territory, cost-centre tree, customer to account", "Type 2", "As-of reporting needs the tree as it was"),
+    ("Regulated or contractual terms", "Prices, credit limits, policy terms, interest rates", "Type 2 on every column", "Auditors ask what was true on a given day"),
+    ("Immutable transactions and events", "Payments, clicks, sensor readings, log lines", "Append only, no SCD", "Corrections arrive as new reversing rows"),
+    ("Transactions that change state", "Orders, tickets, claims, shipments", "Latest row (upsert), plus an append-only status history when the journey matters", "Not Type 2 on huge fact tables"),
+    ("Balances and levels", "Stock on hand, account balance, headcount", "Periodic snapshot: append one row per item per day or month", "Not SCD: the history is the snapshot series"),
+    ("Small lookups and derived tables", "Configuration, mapping files, aggregates rebuilt from silver", "Full overwrite every run", "Only when nothing downstream needs their past"),
+]
+
+MISSING_COLS = [
+    ("No last-modified column", "Change data capture from the database log", "Every insert, update and delete, in order, with a commit time", "Needs log access and DBA approval"),
+    ("No last-modified column", "A row version the database keeps (SQL Server rowversion, Oracle ORA_ROWSCN, PostgreSQL xmin)", "A cheap 'changed since' filter without touching the app", "Test it first: ORA_ROWSCN is per block unless row dependencies are on; xmin wraps around"),
+    ("No last-modified column", "Full read, comparing a hash of each row with the previous load", "Always works; finds inserts, updates and deletes", "Cost grows with the table; read in key ranges"),
+    ("No last-modified column", "Ask the source to add one, maintained by the database", "The long-term fix", "A source change: plan it with the owner"),
+    ("No date to order versions (SCD Type 2)", "CDC commit time plus log sequence", "Exact order and an exact 'valid from'", "Only when CDC is available"),
+    ("No date to order versions (SCD Type 2)", "A source version or sequence number", "Correct order; 'valid from' is our load time", "Two changes between loads collapse into one version"),
+    ("No date to order versions (SCD Type 2)", "Our load time, labelled 'first seen by the platform'", "Honest history of when we saw each change", "It is system time, not business time; say so in the contract"),
+    ("No date to order versions (SCD Type 2)", "File order for file feeds (file timestamp, then line number)", "Order within and across files", "Re-sent files must not reorder history"),
+]
+
+KEY_CASES = [
+    ("No business key, but a column combination is unique", "Profiling finds, say, (store, till, receipt_no) unique", "Use it as the key once the owner confirms it; test its uniqueness on every load", "A combination that is unique today may not be next year"),
+    ("No key at all, and rows change", "A spreadsheet or export with no id", "Load full snapshots and compare whole rows: a new row is an insert, a missing row a delete, an update shows as both", "History is coarse; ask the source to add an id"),
+    ("No key, rows never change (events, logs, readings)", "Each row is a fact that happened", "Load as events; give each row an id from its content and position (file and line, or a hash plus a counter)", "A hash alone merges real identical events"),
+    ("Exact duplicates from resends", "The same file or message arrived twice", "Bronze keeps both; silver keeps one, using the event id or a hash of the row within the overlap window", "Count them; a rising duplicate rate is a source problem"),
+    ("Same key, different values", "Two versions of one order", "Keep the latest by the source's sequence or log position, with a fixed tie-break; quarantine real conflicts", "Timestamps tie more often than people expect"),
+    ("Real repeats that look identical", "Two identical purchases in the same second", "Keep both; separate them with a line number or event id", "Removing duplicates by default under-counts"),
+    ("One real thing under two keys", "The same customer created twice", "Map both to one master id with matching rules the business owns", "Merging is a business decision; never do it silently"),
+]
+
 FIELDS = [
     ("Business key", "The column or columns that identify one real thing.", "Merge, de-duplicate and join on it.", "order_no, or (company, invoice_no)"),
     ("Last modified time", "When this row last changed, set on every change.", "Find what changed since the last load.", "updated_at"),
@@ -694,6 +759,9 @@ def upstreams():
     q, n_q = q_table(QUESTIONS)
     loads = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td><td>{E(e)}</td></tr>" for a, b, c, d, e in LOAD_PATTERNS)
     protect = "".join(f"<li>{E(x)}</li>" for x in PROTECT)
+    history = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td></tr>" for a, b, c, d in HISTORY)
+    missing = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td></tr>" for a, b, c, d in MISSING_COLS)
+    keycases = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td></tr>" for a, b, c, d in KEY_CASES)
     fields = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td><code>{E(d)}</code></td></tr>" for a, b, c, d in FIELDS)
     prof = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td></tr>" for a, b in PROFILE)
     dec = dec_html(DECISIONS)
@@ -709,7 +777,7 @@ def upstreams():
 <p style="margin:10px 0 0"><a class="btn" href="{BASE}upstreams/questionnaire/">Printable questionnaire for your team</a></p></div>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#plain">In plain words</a></li><li><a href="#types">Kinds of sources</a></li><li><a href="#handover">Push, pull or share</a></li>
-<li><a href="#trigger">Schedule or event</a></li><li><a href="#change">How a dataset changes</a></li><li><a href="#load">Full load or incremental</a></li><li><a href="#protect">Protecting the source</a></li><li><a href="#joins">Relationships and joins</a></li><li><a href="#questions">The question list ({n_q} questions)</a></li>
+<li><a href="#trigger">Schedule or event</a></li><li><a href="#change">How a dataset changes</a></li><li><a href="#deeper">In depth: APIs, files, joins</a></li><li><a href="#load">Full load or incremental</a></li><li><a href="#protect">Protecting the source</a></li><li><a href="#joins">Relationships and joins</a></li><li><a href="#keys">No key, or duplicates</a></li><li><a href="#history">Type 2, Type 1 or overwrite</a></li><li><a href="#missing">No modified or ordering column</a></li><li><a href="#questions">The question list ({n_q} questions)</a></li>
 <li><a href="#fields">Fields we ask for in every dataset</a></li><li><a href="#profile">Why we ask to scan your data</a></li>
 <li><a href="#decisions">Design decisions</a></li><li><a href="#faq">Questions people ask</a></li><li><a href="#next">How we build it</a></li></ol></nav>
 
@@ -737,6 +805,13 @@ def upstreams():
 <p>Look at what the incremental query sees. Joseph is new, so his row is picked up. Asha's city changed, but the app's bulk-update script didn't touch <code>updated_at</code>, so her change is <b>missed</b>. Ravi was hard-deleted, so there is no row left to find, and he is <b>still a customer</b> in our platform. The load succeeded, and two of three changes were lost.</p>
 <p>That is why the question list asks which kinds of change happen, who sets the modified time, and whether deletes are hard or soft. The answers decide between an incremental query, change data capture and a full comparison; the <a href="#load">load patterns</a> below set them side by side.</p></section>
 
+<section id="deeper"><p class="eyebrow">In depth</p><h2>Go deeper by source type and problem</h2>
+<div class="cards">
+<div class="card" style="--w:var(--peri-wash)"><h3><a href="{BASE}upstreams/apis/">API sources</a></h3><p class="one">Bulk versus paged APIs, pagination that doesn't lose records, rate limits and shared quotas, cost per call, deletes and completeness.</p></div>
+<div class="card" style="--w:var(--butter-wash)"><h3><a href="{BASE}upstreams/files/">File sources</a></h3><p class="one">The file contract, done markers, corrections, order, encodings, column changes, and the common file problems.</p></div>
+<div class="card" style="--w:var(--mint-wash)"><h3><a href="{BASE}upstreams/joins/">Learning the joins</a></h3><p class="one">Declared keys, joins already in use, candidates measured on the data, owner sign-off, recorded in the data contract.</p></div>
+</div></section>
+
 <section id="load"><p class="eyebrow">Full or incremental</p><h2>Full load or incremental: the patterns</h2>
 <p>Every dataset is loaded one of a few ways. A full load is the simplest and the safest when the table is small or the source has no reliable way to say what changed. An incremental load is cheaper for big tables but needs a change signal you can trust and a plan for deletes. Most platforms use both: incremental every run, and a full comparison now and then to prove nothing drifted.</p>
 <div class="tw"><table class="t"><tr><th>Pattern</th><th>How it works</th><th>Sees hard deletes?</th><th>Use it for</th><th>Watch for</th></tr>{loads}</table></div>
@@ -748,6 +823,20 @@ def upstreams():
 
 <section id="joins"><p class="eyebrow">Relationships</p><h2>How datasets join, and how joins go wrong</h2>
 <p>Silver and gold are built by joining datasets: orders to order lines, lines to products, customers across the CRM and billing. Two things go wrong. A join assumed to match one row that sometimes matches two <b>multiplies</b> numbers: an order with two rows in a "one per order" table counts its revenue twice. A join to a parent that is missing <b>drops</b> rows: order lines whose order hasn't arrived disappear from an inner join. So we ask for the relationship map, then measure in profiling how many rows really match on each side and how many have no parent (questions I1 to I7 below).</p></section>
+
+<section id="keys"><p class="eyebrow">No key, or duplicates</p><h2>When there is no business key, or there are duplicates</h2>
+<p>Many sources have no reliable business key, and many send duplicates. Neither stops a platform, but each needs a decision written down per dataset. Bronze always keeps every row exactly as it arrived; the decisions below are applied from bronze to silver, and anything that can't be decided is quarantined with a reason (questions H1 to H5 below).</p>
+<div class="tw"><table class="t"><tr><th>Situation</th><th>Example</th><th>What we do</th><th>Watch for</th></tr>{keycases}</table></div></section>
+
+<section id="history"><p class="eyebrow">Keeping history</p><h2>Type 2, Type 1, both, or overwrite: which dataset gets which</h2>
+<p><b>Type 1</b> overwrites a value, so only today's is kept. <b>Type 2</b> adds a new version with 'valid from' and 'valid to' each time a tracked value changes, so reports can see it as it was. <b>Both</b> means Type 2 on the few columns reports group by and Type 1 on the rest. Some datasets need none of these: events are appended, balances are snapshotted, and small derived tables are simply overwritten. The business owner decides which columns need history (questions G2 and G3 below).</p>
+<div class="tw"><table class="t"><tr><th>Kind of dataset</th><th>Examples</th><th>Treatment</th><th>Why</th></tr>{history}</table></div>
+<p>One warning: personal data in Type 2 history must still be erasable on request. Plan for the deletion to reach every version.</p></section>
+
+<section id="missing"><p class="eyebrow">Missing columns</p><h2>No last-modified column, or no date to order history</h2>
+<p>Two columns decide most of the design: one that says when a row last changed (for incremental loads) and one that puts versions in order (for history, SCD Type 2). When a source has neither, these are the options, best first (questions E3 and H7 below).</p>
+<div class="tw"><table class="t"><tr><th>Missing</th><th>Option</th><th>What you get</th><th>Watch for</th></tr>{missing}</table></div>
+<p>One rule covers both: if 'valid from' is our load time rather than the business's date, write that in the data contract, so nobody reads "first seen by the platform" as "happened then".</p></section>
 
 <section id="questions"><p class="eyebrow">The question list</p><h2>Every question, why we ask, and what breaks if nobody does</h2>
 <p>One list, grouped by category. Ask it once per source system, then once per dataset for categories F, G, H and I. The fourth column is what we have seen go wrong in production when the question was skipped.</p>
@@ -777,6 +866,13 @@ def upstreams():
     return wb.page(title, desc, url, body, CSS + ld(title, desc, url, [("Learn", "/learn/"), ("Data systems", BASE), ("Upstreams", f"{BASE}upstreams/")], FAQ_UP)), n_q
 
 
+def _deep():
+    sp = importlib.util.spec_from_file_location("upstream_deep", ROOT / "_guides" / "upstream_deep.py")
+    m = importlib.util.module_from_spec(sp)
+    sp.loader.exec_module(m)
+    return m
+
+
 def questionnaire():
     q = ""
     for cid, cat, sub, rows in QUESTIONS:
@@ -785,6 +881,10 @@ def questionnaire():
         for i, (qq, why, _b, _d) in enumerate(rows):
             q += f"<tr><td class='id'>{cid}{i + 1}</td><td>{E(qq)}</td><td>{E(why)}</td><td class='ans'></td></tr>"
     f = "".join(f"<tr><td><b>{E(a)}</b><br><span class='note'>{E(b)}</span></td><td class='ans'></td><td class='ans'></td></tr>" for a, b, _c, _d in FIELDS)
+    deep = _deep()
+    def _rows(groups):
+        return "".join(f"<tr><td class='id'>{cid}{i + 1}</td><td>{E(qq)}</td><td>{E(why)}</td><td class='ans'></td></tr>" for cid, _c, _s, rows in groups for i, (qq, why, _b, _d) in enumerate(rows))
+    extra_api, extra_files = _rows(deep.API_Q), _rows(deep.FILE_Q)
     css = CSS + """<style>
   .ans { min-width:220px; border-left:1.5px dashed var(--rule-firm); }
   .meta { display:grid; grid-template-columns:1fr 1fr; gap:6px 24px; border:var(--line); border-radius:var(--wob); padding:12px 18px; margin:14px 0; }
@@ -811,7 +911,11 @@ def questionnaire():
 <tr><td>A copy of production in a sandbox, as is (no personal data)</td><td class="ans"></td></tr>
 <tr><td>A masked copy of production in a sandbox (consistent masking so joins work)</td><td class="ans"></td></tr>
 <tr><td>Profiling run inside your environment; only the summary leaves</td><td class="ans"></td></tr>
-<tr><td>Person who will review the profile with us</td><td class="ans"></td></tr></table></div>"""
+<tr><td>Person who will review the profile with us</td><td class="ans"></td></tr></table></div>
+<h2>Part 4 · Only if the source is an API</h2>
+<div class="tw"><table class="t"><tr><th>#</th><th>Question</th><th>Why we ask</th><th>Your answer</th></tr>{extra_api}</table></div>
+<h2>Part 5 · Only if the source sends files</h2>
+<div class="tw"><table class="t"><tr><th>#</th><th>Question</th><th>Why we ask</th><th>Your answer</th></tr>{extra_files}</table></div>"""
     title = "Source system questionnaire"
     desc = "A printable questionnaire for source system owners: access, push and pull support, how data changes, keys and dates, schema, volume, profiling access, sensitivity and reconciliation."
     url = f"{SITE}{BASE}upstreams/questionnaire/"
@@ -826,6 +930,7 @@ def main():
     (out / "upstreams" / "index.html").write_text(up)
     (out / "upstreams" / "questionnaire" / "index.html").write_text(questionnaire())
     print(f"data systems -> {out} ({n_q} upstream questions)")
+    _deep().main()
 
 
 if __name__ == "__main__":
