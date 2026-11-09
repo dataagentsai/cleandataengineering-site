@@ -1,0 +1,41 @@
+# Monthly refresh of the Databricks cost calculator's prices.
+# Opens a pull request with the changes; nothing is published until a person merges it.
+# Databricks DBU prices refresh only if the DATABRICKS_HOST, DATABRICKS_TOKEN and
+# DATABRICKS_WAREHOUSE_ID repository secrets are set; EC2 prices always refresh.
+name: Refresh cost calculator prices
+
+on:
+  schedule:
+    - cron: "0 6 1 * *"   # 06:00 UTC on the 1st of every month
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Refresh prices
+        env:
+          DATABRICKS_HOST: ${{ secrets.DATABRICKS_HOST }}
+          DATABRICKS_TOKEN: ${{ secrets.DATABRICKS_TOKEN }}
+          DATABRICKS_WAREHOUSE_ID: ${{ secrets.DATABRICKS_WAREHOUSE_ID }}
+        run: python3 _tools/dbx_cost/refresh_prices.py | tee /tmp/summary.md
+      - name: Rebuild the calculator pages
+        run: |
+          python3 _guides/dbx_cost.py
+          python3 _site/seo.py
+      - name: Open a pull request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          branch: bot/refresh-dbx-prices
+          title: "Cost calculator: monthly price refresh"
+          body-path: /tmp/summary.md
+          commit-message: "Cost calculator: monthly price refresh"
+          delete-branch: true

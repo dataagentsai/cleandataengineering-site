@@ -51,7 +51,7 @@ CONCERNS = [
     ("X7", "Lineage", "See", "both", "For any table or column: where it came from and what it feeds.", None, "/concepts/lineage/"),
     ("X8", "Logs, metrics, traces", "See", "wide", "One run can be followed from the source file to the dashboard tile.", None, "/concepts/observability/"),
     ("X9", "Freshness & SLOs", "See", "both", "Each table has a promised age; the time budget is split across the hops.", None, "/concepts/freshness/"),
-    ("X10", "Cost & FinOps", "See", "both", "Every cost has an owner and a budget, end to end and per hop.", None, "/concepts/cost-drivers/"),
+    ("X10", "Cost & FinOps", "See", "both", "Every cost has an owner and a budget, end to end and per hop.", "cost", None),
     ("X19", "Performance & scale", "See", "both", "Big data stays fast and cheap: file sizes, layout, merges, aggregates, right-sized compute.", None, "/concepts/small-files/"),
     ("X11", "Security & access", "Guard", "both", "Who may read or change each layer, granted on purpose.", None, "/concepts/least-privilege/"),
     ("X12", "Privacy & PII", "Guard", "both", "Personal data is found, tagged, masked, kept only as long as allowed and erasable.", None, "/concepts/governance/"),
@@ -354,7 +354,7 @@ def overview():
 <section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{faq}</section>
 
 <section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
-<p><b>Ready now:</b> <a href="{P}layout/">Layout: catalogs, schemas and naming</a> and <a href="{P}environments/">Environments and CI/CD</a>. These two shape every other page.</p>
+<p><b>Ready now:</b> <a href="{P}layout/">Layout: catalogs, schemas and naming</a>, <a href="{P}environments/">Environments and CI/CD</a> and <a href="{P}cost/">Cost and FinOps</a>, with the <a href="{P}cost/calculator/">Databricks cost calculator</a>.</p>
 <p><b>Before the platform:</b> <a href="{BASE}upstreams/">Upstreams: know your sources</a>.</p>
 <p><b>How we build it:</b> <a href="/learn/data-platform-architecture/">Data platform architecture, drawn right</a> and <a href="/learn/medallion-architecture/">Medallion architecture, drawn right</a>.</p>
 <p><b>Back up:</b> <a href="{BASE}">Data systems, end to end</a>.</p></section>"""
@@ -368,7 +368,7 @@ def overview():
 # Shared page shell for a concern page
 # ---------------------------------------------------------------------------------------------
 
-def concern_page(slug, cid, title, promise, lede, leaders, sections, questions, decisions, faq, next_html, desc):
+def concern_page(slug, cid, title, promise, lede, leaders, sections, questions, decisions, faq, next_html, desc, kind="wide"):
     qt, n_q = ds.q_table(questions)
     toc = "".join(f'<li><a href="#{sid}">{E(t)}</a></li>' for sid, t, _ in sections)
     toc += f'<li><a href="#questions">The question list ({n_q})</a></li><li><a href="#decisions">Design decisions</a></li><li><a href="#faq">Questions people ask</a></li><li><a href="#next">Where to go next</a></li>'
@@ -376,7 +376,7 @@ def concern_page(slug, cid, title, promise, lede, leaders, sections, questions, 
     lead = "".join(f"<li>{E(x)}</li>" for x in leaders)
     faqh = "".join(f'<details class="faq"><summary>{E(a)}</summary><p>{E(b)}</p></details>' for a, b in faq)
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="{BASE}">Data systems</a> › <a href="{P}">Data platform</a> › {E(title.split(':')[0])}</p>
-<p class="eyebrow" style="margin-top:22px">Data platform · concern {cid} · <span class="kind wide">Platform-wide</span></p>
+<p class="eyebrow" style="margin-top:22px">Data platform · concern {cid} · <span class="kind {KIND[kind][0]}">{KIND[kind][1]}</span></p>
 <h1>{E(title)}</h1>
 <p class="promise">{E(promise)}</p>
 <p class="lede">{E(lede)}</p>
