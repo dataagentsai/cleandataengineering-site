@@ -323,7 +323,37 @@ QUESTIONS = [
          "Go-live waits on a firewall ticket; a password expires and loads stop with nobody alerted.",
          "Raise access requests on day one; keep secrets in a vault with expiry alerts. Not: a personal account in a config file."),
     ]),
-    ("C", "Push support", "what the source can send us without being asked", [
+    ("C", "Protecting the source", "our extraction must never hurt the system that runs the business", [
+        ("How much load can the source take, and when: peak hours, nightly batch, month-end close?",
+         "Our extract competes with their business for the same database.",
+         "An extract during month-end close slows the finance system, and our access is switched off.",
+         "Agree an extract window and a load budget (queries, connections, rows per second) and throttle to it. Not: running whenever suits us."),
+        ("Will we read through a read-only account with access to only the tables we need?",
+         "An extraction account that can write, or see everything, is a risk to them and to us.",
+         "A mistaken statement in a tool locks or changes source tables.",
+         "A read-only service account with SELECT on named tables or views, no schema changes. Not: borrowing the app's or an admin account."),
+        ("Do our extract queries use indexes, and has the source's DBA reviewed them?",
+         "A filter on a column with no index reads the whole table on every run.",
+         "An hourly 'changed since' query on an unindexed column scans 500 million rows each time.",
+         "An index on the change column (or CDC instead), and a DBA review of every extract query. Not: SELECT * with an unindexed filter."),
+        ("How do our long reads avoid blocking their writers?",
+         "Long reads can hold locks or grow the source's undo and temp space.",
+         "A three-hour extract blocks order updates, or fails with 'snapshot too old'.",
+         "Read from a replica or a snapshot, and read in chunks by key range with short transactions. Not: one long transaction over a busy table."),
+        ("For CDC: what does change capture cost the source, and who watches it?",
+         "Change capture keeps log on the source until we read it.",
+         "Our pipeline is down for a weekend; the replication slot keeps every log file, the source's disk fills and the app stops.",
+         "Alerts on capture lag, a cap on retained log, and a runbook to drop the capture safely. Not: set up and forget."),
+        ("Do we share an API quota with other users of the source, and how do we stay inside our part?",
+         "API limits are often per company, not per integration.",
+         "Our backfill uses the whole day's quota and the sales team's other integrations stop.",
+         "Our own share of the quota, backoff on limit errors, backfills out of hours. Not: retrying as fast as possible."),
+        ("Can the source team stop our extraction quickly if they need to?",
+         "They must be able to protect their system without finding us first.",
+         "During an incident on the source, nobody knows how to stop our jobs.",
+         "A named contact, a pause flag in our metadata and a documented stop procedure. Not: 'call the data team'."),
+    ]),
+    ("D", "Push support", "what the source can send us without being asked", [
         ("Can the source push changes: log-based CDC, a vendor extractor, business events, webhooks, or files it drops?",
          "Push captures every change, including deletes, as it happens, without scanning tables.",
          "Polling misses deletes and the in-between states of a row (created, then cancelled within the hour).",
@@ -341,7 +371,7 @@ QUESTIONS = [
          "A partial file loads, and the day's total drops by 40% with no error.",
          "Ask for a done marker with a row count (and ideally a checksum). Not: 'load whatever is in the folder at 2 a.m.'."),
     ]),
-    ("D", "Pull support", "what we can fetch, and whether we can trust it", [
+    ("E", "Pull support", "what we can fetch, and whether we can trust it", [
         ("Is there a column that reliably says when each row last changed?",
          "Incremental loads depend on it completely.",
          "Updates that don't touch the column are missed for months, and nobody notices.",
@@ -354,12 +384,42 @@ QUESTIONS = [
          "Paging by position over changing data skips or repeats rows.",
          "Rows move between pages during the read; a few go missing on every run.",
          "Use cursor or key-based paging and a small overlap window. Not: page numbers over live data."),
-        ("Can we take a full snapshot, how long does it take, and when may we?",
-         "A full read is the safety net for checking incremental loads and finding deletes.",
-         "Incremental loads slowly drift from the source and there is no way to prove or fix it.",
-         "Schedule a periodic full read (or a key-only read) and compare. Not: incremental forever with no check."),
     ]),
-    ("E", "How the data changes", "the answers that decide full versus incremental and how silver merges", [
+    ("F", "Full or incremental load", "per dataset: reload everything, or only what changed", [
+        ("How big is each dataset, and how long does a full extract take and load the source?",
+         "A full load's cost grows with the table, every run.",
+         "A daily full load of a 2 TB table runs nine hours, spills into business hours and slows the source.",
+         "Full loads for small and reference tables; incremental or CDC for large ones. Not: full for everything because it's simpler."),
+        ("Is there any reliable way to get only the changes: a trusted modified column, CDC, or a change API?",
+         "Without one, a full extract compared with what we hold is the only safe option.",
+         "An incremental load built on an untrustworthy column silently misses changes for months.",
+         "No reliable change signal means full snapshot and compare. Not: incremental on a guess."),
+        ("For a full load, do we replace the table, or compare the new snapshot with what we hold?",
+         "Replacing can't tell what changed and leaves the table empty if the load fails midway; comparing finds inserts, updates and deletes.",
+         "Truncate-then-insert fails halfway and dashboards show an empty table for an hour.",
+         "Land the snapshot in staging, check its row count, then merge by key or swap in one step. Not: truncate, then insert."),
+        ("Can the source re-send a whole period (the last 7 days, the current month) instead of everything?",
+         "A period reload is the middle ground for sources that restate recent data.",
+         "Overlapping windows are appended and recent days are counted twice.",
+         "Replace whole periods or partitions so a re-send is safe to repeat. Not: appending overlapping windows."),
+        ("On incremental loads, how will we see rows that were deleted at the source?",
+         "A 'changed since' query can't return a row that no longer exists.",
+         "Cancelled and deleted orders stay in the platform forever.",
+         "CDC, a soft-delete flag, or a regular key-only full extract compared with our keys. Not: ignoring deletes."),
+        ("How often should a full comparison run alongside incremental loads: weekly, monthly?",
+         "Incremental loads drift: missed changes, bulk fixes, clock problems.",
+         "Small differences pile up for a year and nobody can say when they started.",
+         "A scheduled full (or key and count) comparison that reports and repairs differences. Not: incremental forever with no check."),
+        ("How will the first, historical load run: one big extract, or in chunks by date or key, and in which source window?",
+         "The first load is the biggest and the most likely to hurt the source.",
+         "A 30-hour initial extract fails at hour 28 and starts again from zero.",
+         "Chunked, resumable loads with checkpoints, in an agreed window. Not: one giant query."),
+        ("At what exact point do we switch from the first full load to incremental?",
+         "A gap between the two loses rows; an overlap doubles them.",
+         "Changes made while the initial load ran are never picked up.",
+         "Record the CDC position or watermark before the full extract starts, begin incremental from it, and let the merge remove the overlap. Not: starting incremental 'from now'."),
+    ]),
+    ("G", "How the data changes", "the answers that decide the load method and how silver merges", [
         ("Which of these happen: inserts only, updates, hard deletes, soft deletes?",
          "This decides the load method and how the next layer merges rows.",
          "Hard deletes never reach the platform; cancelled orders keep counting as revenue.",
@@ -381,7 +441,7 @@ QUESTIONS = [
          "Silent gaps after every quarterly cleanup.",
          "Ask for the fix log; prefer CDC on sources with frequent fixes. Not: hoping fixes are rare."),
     ]),
-    ("F", "Keys and dates", "what makes a row unique and which date means what", [
+    ("H", "Keys and dates", "what makes a row unique and which date means what", [
         ("What is the business key of each dataset: one column or several? Is it really unique?",
          "Keys drive de-duplication, merging and every join after this.",
          "A key that isn't unique multiplies rows in joins and inflates totals.",
@@ -394,12 +454,38 @@ QUESTIONS = [
          "Rows near midnight and on clock changes go to the wrong day, or twice.",
          "Daily totals are off on the day the clocks change, every year.",
          "Store UTC alongside the source's local time and zone. Not: guessing the zone from the server."),
-        ("How do keys link across datasets and across systems (customer id in the CRM versus in billing)?",
-         "Gold tables join across sources; the joins need a known mapping.",
-         "Orphan rows and customers counted twice.",
-         "Profile join match rates; give the mapping table an owner. Not: fuzzy joins in a dashboard."),
     ]),
-    ("G", "Schema and meaning", "what the columns and codes mean", [
+    ("I", "Relationships and joins", "how datasets connect, so silver and gold join them correctly", [
+        ("Which datasets relate to which (order, order lines, product, customer), and through which columns?",
+         "Silver and gold are built by joining; the joins and the load order come from these relationships.",
+         "Gold joins on the wrong column and totals are quietly wrong.",
+         "A relationship map per source, confirmed by the owner and checked in profiling. Not: guessing from column names."),
+        ("For each relationship, how many rows can match on each side: one-to-one, one-to-many, many-to-many?",
+         "A join that is assumed one-to-one but isn't multiplies rows.",
+         "Orders joined to a 'one per order' table that sometimes has two rows: revenue doubles for those orders.",
+         "Measure it in profiling and test it on every load. Not: trusting the documentation."),
+        ("Are foreign keys enforced in the source database, or only by the application?",
+         "Unenforced relationships produce orphans: children without parents.",
+         "Order lines point to orders that don't exist; an inner join silently drops their revenue.",
+         "Profile orphan rates; decide per relationship whether to keep orphans under an 'unknown' parent or quarantine them. Not: inner joins that hide them."),
+        ("Do related tables arrive together, from the same point in time?",
+         "Parent and child read at different moments are out of step.",
+         "Order lines arrive before their order header and drop out of the join until the next day.",
+         "Read related tables from the same snapshot or log position, or handle late parents explicitly. Not: hoping the timing works out."),
+        ("How do the same things link across systems (customer id in the CRM versus in billing)?",
+         "Gold joins across sources; those joins need a known mapping.",
+         "Orphan rows, and customers counted twice.",
+         "Profile match rates across systems; give the mapping table an owner. Not: fuzzy joins in a dashboard."),
+        ("Must some joins use the value as it was at the time (the customer's region on the order date)?",
+         "Joining to today's value rewrites history.",
+         "Last year's sales by region move every time a customer moves.",
+         "Join as of the transaction date to the history kept in silver (SCD Type 2). Not: always joining to the current row."),
+        ("Which join paths do the reports users trust today use?",
+         "Trusted reports hold business rules inside their joins.",
+         "Our joins are 'correct' but don't match the numbers the business knows.",
+         "Get the logic of the trusted reports and test our joins against it. Not: designing joins from scratch."),
+    ]),
+    ("J", "Schema and meaning", "what the columns and codes mean", [
         ("Is there a data dictionary? What do the status codes and flags mean?",
          "A code means nothing to us without its definition.",
          "'Status 7' means cancelled in one region and refunded in another; revenue is wrong in both.",
@@ -417,7 +503,7 @@ QUESTIONS = [
          "Names and phone numbers hidden in a 'notes' field reach a dashboard.",
          "Keep them raw in bronze; parse and scan them on purpose. Not: flattening blindly."),
     ]),
-    ("H", "Volume and timing", "how much, how fast and when", [
+    ("K", "Volume and timing", "how much, how fast and when", [
         ("How many rows exist today, how many arrive per day, how fast is it growing, and when are the peaks?",
          "Sizing, cost and partitioning come from these numbers.",
          "The month-end load runs ten times longer and misses its deadline.",
@@ -435,7 +521,7 @@ QUESTIONS = [
          "The 2 a.m. job runs on an empty folder because the source was late tonight.",
          "Prefer an event, file-arrival trigger or done marker. If only a schedule is possible, add a completeness check before loading. Not: a fixed time with no check."),
     ]),
-    ("I", "Access to profile real data", "why we ask to scan your data", [
+    ("L", "Access to profile real data", "why we ask to scan your data", [
         ("Can we have a copy of production data in a sandbox: masked if it holds personal data, as is if it doesn't?",
          "Only real data shows real keys, gaps, odd values and edge cases.",
          "Logic built on test data breaks on the first real load.",
@@ -449,7 +535,7 @@ QUESTIONS = [
          "We 'clean' values that were correct, or keep ones that were wrong.",
          "A short profile review with the data owner per source. Not: deciding alone."),
     ]),
-    ("J", "Sensitivity and rules", "what the law and your policies require", [
+    ("M", "Sensitivity and rules", "what the law and your policies require", [
         ("Which columns hold personal, health, payment or other sensitive data?",
          "This decides masking, who may see what and where data may be stored.",
          "Personal data shows up in a widely shared dashboard; an audit finding follows.",
@@ -463,7 +549,7 @@ QUESTIONS = [
          "Licensed data is shared with a partner and the contract is breached.",
          "Record usage limits as metadata on the dataset. Not: a note in someone's inbox."),
     ]),
-    ("K", "Trust and reconciliation", "how we will prove nothing was lost", [
+    ("N", "Trust and reconciliation", "how we will prove nothing was lost", [
         ("What quality problems do you already know about?",
          "Known problems are cheap to plan for and expensive to discover live.",
          "We find them in front of executives and lose trust in week one.",
@@ -477,6 +563,27 @@ QUESTIONS = [
          "Our total differs from the trusted report and nobody can explain why.",
          "Reconcile gold with that report before go-live and explain every difference. Not: launching first."),
     ]),
+]
+
+LOAD_PATTERNS = [
+    ("Full replace (truncate, then load)", "Empty the table and load the whole extract", "No", "Almost never", "An empty or half-full table if the load fails; no record of what changed"),
+    ("Full snapshot and compare", "Load the whole extract to staging, then merge by key", "Yes", "Small and medium tables, reference data, sources with no reliable change signal", "Cost grows with the table; needs a trustworthy key"),
+    ("Period reload", "Replace a whole period or partition (last 7 days, this month) each run", "Within the period", "Sources that restate recent data", "Choose the window from how far back changes really happen"),
+    ("Incremental by watermark", "Read rows changed since the last load, using a modified column", "No", "Large tables with a trustworthy modified column and soft deletes", "Misses hard deletes and changes that skip the column; needs an overlap window"),
+    ("Incremental plus key compare", "Incremental for changes, plus a regular key-only full read to find deletes", "Yes, on the compare schedule", "Large tables with hard deletes and no CDC", "Deletes show up late, at the next compare"),
+    ("Change data capture", "Read every insert, update and delete from the database log", "Yes", "Busy and large tables where deletes and order matter", "Log retention, capture lag, DBA approval"),
+    ("Initial load, then incremental", "One chunked full load of history, then incremental from a recorded position", "Depends on the incremental method", "Every new source, once", "The hand-over point: record it before the full load starts"),
+]
+
+PROTECT = [
+    "Agree an extract window and a load budget with the source owner: when, how many queries and connections, how many rows per second.",
+    "Read through a read-only account limited to the tables you need, never the application's or an admin account.",
+    "Prefer a replica, a standby or change data capture over queries on the live primary.",
+    "Have the source's DBA review every extract query; make sure 'changed since' filters use an index.",
+    "Read big tables in chunks by key range with short transactions, so their writers are never blocked.",
+    "For CDC, alert on capture lag and cap the log kept for us, so a stalled pipeline can't fill the source's disk.",
+    "Stay inside your share of any API quota, back off on limit errors and run backfills out of hours.",
+    "Give the source team a named contact and a way to pause your extraction in minutes.",
 ]
 
 FIELDS = [
@@ -505,6 +612,12 @@ PROFILE = [
 ]
 
 DECISIONS = [
+    ("Full or incremental for this table?", [
+        ("Full snapshot and compare", "pursue", "Pursue for small and medium tables, reference data, and any table without a change signal you can trust."),
+        ("Incremental (watermark or CDC), plus a regular full comparison", "pursue", "Pursue for large tables. The comparison catches drift and, without CDC, deletes."),
+        ("Incremental with no comparison, ever", "drop", "Drop. Drift builds up silently."),
+        ("Truncate and reload", "drop", "Drop. A failed load leaves an empty table, and nothing records what changed."),
+    ]),
     ("How do we capture changes from a busy operational table?", [
         ("Log-based CDC", "pursue", "Pursue when updates or hard deletes matter or volumes are large. It catches everything with little load on the source."),
         ("Incremental query on a modified column", "when", "Pursue only when the column passes the profiling test and deletes are soft."),
@@ -579,6 +692,8 @@ def upstreams():
     types = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td></tr>" for a, b, c, d in SOURCE_TYPES)
     hand = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td><td>{E(e)}</td><td>{E(f)}</td></tr>" for a, b, c, d, e, f in HANDOVER)
     q, n_q = q_table(QUESTIONS)
+    loads = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td><td>{E(e)}</td></tr>" for a, b, c, d, e in LOAD_PATTERNS)
+    protect = "".join(f"<li>{E(x)}</li>" for x in PROTECT)
     fields = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td><code>{E(d)}</code></td></tr>" for a, b, c, d in FIELDS)
     prof = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td></tr>" for a, b in PROFILE)
     dec = dec_html(DECISIONS)
@@ -594,7 +709,7 @@ def upstreams():
 <p style="margin:10px 0 0"><a class="btn" href="{BASE}upstreams/questionnaire/">Printable questionnaire for your team</a></p></div>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#plain">In plain words</a></li><li><a href="#types">Kinds of sources</a></li><li><a href="#handover">Push, pull or share</a></li>
-<li><a href="#trigger">Schedule or event</a></li><li><a href="#change">How a dataset changes</a></li><li><a href="#questions">The question list ({n_q} questions)</a></li>
+<li><a href="#trigger">Schedule or event</a></li><li><a href="#change">How a dataset changes</a></li><li><a href="#load">Full load or incremental</a></li><li><a href="#protect">Protecting the source</a></li><li><a href="#joins">Relationships and joins</a></li><li><a href="#questions">The question list ({n_q} questions)</a></li>
 <li><a href="#fields">Fields we ask for in every dataset</a></li><li><a href="#profile">Why we ask to scan your data</a></li>
 <li><a href="#decisions">Design decisions</a></li><li><a href="#faq">Questions people ask</a></li><li><a href="#next">How we build it</a></li></ol></nav>
 
@@ -620,10 +735,22 @@ def upstreams():
 <p class="note">Day one</p>{rows_table(ROWS_DAY1)}
 <p class="note">Day two: Asha moved to Mumbai, Ravi was deleted, Joseph was added</p>{rows_table(day2, {"101": "bad", "104": "new"})}
 <p>Look at what the incremental query sees. Joseph is new, so his row is picked up. Asha's city changed, but the app's bulk-update script didn't touch <code>updated_at</code>, so her change is <b>missed</b>. Ravi was hard-deleted, so there is no row left to find, and he is <b>still a customer</b> in our platform. The load succeeded, and two of three changes were lost.</p>
-<p>That is why the question list asks which kinds of change happen, who sets the modified time, and whether deletes are hard or soft. The answers decide between an incremental query, change data capture and a full comparison.</p></section>
+<p>That is why the question list asks which kinds of change happen, who sets the modified time, and whether deletes are hard or soft. The answers decide between an incremental query, change data capture and a full comparison; the <a href="#load">load patterns</a> below set them side by side.</p></section>
+
+<section id="load"><p class="eyebrow">Full or incremental</p><h2>Full load or incremental: the patterns</h2>
+<p>Every dataset is loaded one of a few ways. A full load is the simplest and the safest when the table is small or the source has no reliable way to say what changed. An incremental load is cheaper for big tables but needs a change signal you can trust and a plan for deletes. Most platforms use both: incremental every run, and a full comparison now and then to prove nothing drifted.</p>
+<div class="tw"><table class="t"><tr><th>Pattern</th><th>How it works</th><th>Sees hard deletes?</th><th>Use it for</th><th>Watch for</th></tr>{loads}</table></div>
+<p>Questions F1 to F8 below decide which pattern each dataset gets.</p></section>
+
+<section id="protect"><p class="eyebrow">Protecting the source</p><h2>Take the data without hurting the system</h2>
+<p>The source system runs the business; our extraction is a guest. If we slow it down once, we lose access. These rules keep it safe (questions C1 to C7 below):</p>
+<ul>{protect}</ul></section>
+
+<section id="joins"><p class="eyebrow">Relationships</p><h2>How datasets join, and how joins go wrong</h2>
+<p>Silver and gold are built by joining datasets: orders to order lines, lines to products, customers across the CRM and billing. Two things go wrong. A join assumed to match one row that sometimes matches two <b>multiplies</b> numbers: an order with two rows in a "one per order" table counts its revenue twice. A join to a parent that is missing <b>drops</b> rows: order lines whose order hasn't arrived disappear from an inner join. So we ask for the relationship map, then measure in profiling how many rows really match on each side and how many have no parent (questions I1 to I7 below).</p></section>
 
 <section id="questions"><p class="eyebrow">The question list</p><h2>Every question, why we ask, and what breaks if nobody does</h2>
-<p>One list, grouped by category. Ask it once per source system, then once per dataset for categories E and F. The fourth column is what we have seen go wrong in production when the question was skipped.</p>
+<p>One list, grouped by category. Ask it once per source system, then once per dataset for categories F, G, H and I. The fourth column is what we have seen go wrong in production when the question was skipped.</p>
 {q}</section>
 
 <section id="fields"><p class="eyebrow">Per dataset</p><h2>Fields we ask you to point at in every dataset</h2>
@@ -653,7 +780,7 @@ def upstreams():
 def questionnaire():
     q = ""
     for cid, cat, sub, rows in QUESTIONS:
-        scope = " (answer per dataset)" if cid in ("E", "F") else ""
+        scope = " (answer per dataset)" if cid in ('F', 'G', 'H', 'I') else ""
         q += f'<tr class="cat"><td colspan="4">{cid} · {E(cat)}<span>{E(sub)}{scope}</span></td></tr>'
         for i, (qq, why, _b, _d) in enumerate(rows):
             q += f"<tr><td class='id'>{cid}{i + 1}</td><td>{E(qq)}</td><td>{E(why)}</td><td class='ans'></td></tr>"
@@ -671,7 +798,7 @@ def questionnaire():
 </style>"""
     body = f"""<p class="crumbs noprint"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="{BASE}">Data systems</a> › <a href="{BASE}upstreams/">Upstreams</a> › Questionnaire</p>
 <h1 style="margin-top:22px">Source system questionnaire</h1>
-<p class="lede">Please fill one copy per source system. Sections E and F, and the dataset sheet at the end, are answered once per dataset. "Don't know" is a useful answer, because it tells us what to profile. The reasons behind every question are on the <a href="{BASE}upstreams/">Upstreams page</a>.</p>
+<p class="lede">Please fill one copy per source system. Sections F, G, H and I, and the dataset sheet at the end, are answered once per dataset. "Don't know" is a useful answer, because it tells us what to profile. The reasons behind every question are on the <a href="{BASE}upstreams/">Upstreams page</a>.</p>
 <p class="noprint"><button class="btn" onclick="window.print()">Print or save as PDF</button></p>
 <div class="meta"><div>Source system:</div><div>Date:</div><div>Business owner:</div><div>Technical owner:</div><div>Filled in by:</div><div>Datasets covered:</div></div>
 <h2 class="first">Part 1 · The source system</h2>
