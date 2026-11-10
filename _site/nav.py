@@ -7,8 +7,8 @@ menu (a <header> with class="brand"), starting with the home page. Generators co
 footer from the home page (_writing/build.py site_parts), so a rebuild keeps them. The CSS and the
 small script sit inside the header block on purpose: anything that copies the header copies them.
 
-Layout (31 Oct 2026), agreed with the owner: a left panel on every page, grouped by purpose
-(Learn · Build with us · For leaders · About), fixed and scrolling on its own on wide
+Layout: a left panel on every page, grouped by purpose
+(Concepts · On your cloud · Your role · How we work · Causes and deep tech · About; see SECTIONS), fixed and scrolling on its own on wide
 screens, opened from a Menu button below 900px. The page's own link is marked and its group
 opened. The top bar keeps the name, Certifications, Blog, Find my path and For leaders.
 """
@@ -21,52 +21,44 @@ import sys
 sys.path.insert(0, str(ROOT / "_paths"))
 from data import DISCIPLINES, PLATFORMS  # noqa: E402
 
-# Each stream in Learn opens to its own guides and key concepts (10 Nov 2026, the owner asked to move the
-# data platform guides out of Courses and to put key concepts under each stream). URLs never change; only the menu.
-STREAMS = {
-    "data-engineering": ("/data-engineering/", [
-        ("Start here", "/data-engineering/"),
-        ("Learning path", "/paths/data-engineering/"),
-        ("Key concepts", "/concepts/#data-engineering"),
-        ("Tools and simulators", "/data-engineering/#tools"),
-        ("Delivering data projects", "/data-engineering/#deliver"),
-        ("Projects to join", "/projects/?subject=data"),
-    ]),
-    "ai-engineering": ("/paths/ai-engineering/", [
-        ("The AI Universe", "/learn/ai-universe/"),
-        ("Agent Harness", "/learn/agent-harness/"),
-        ("Agent Harness on AWS", "/learn/agent-harness-aws/"),
-        ("Eval Harness", "/learn/eval-harness/"),
-        ("Agent guardrails", "/learn/agent-guardrails/"),
-        ("Vertical agents", "/ai-engineering/vertical-agents/"),
-        ("Simulator: Agent Harness", "/learn/agent-harness-sim/"),
-        ("For leaders: spec-driven development", "/leaders/spec-driven/"),
-        ("Open spec: AI Assurance Catalog", "https://dataagentsai.github.io/ai-assurance-catalog/"),
-        ("Open spec: AI Harness Catalog", "https://dataagentsai.github.io/ai-harness-catalog/"),
-        ("Open spec: AgentTwin, explained", "/learn/agenttwin/"),
-        ("The AgentTwin Lab", "/lab/"),
-        ("Code: Reference Agent", "https://github.com/dataagentsai/reference-agent"),
-        ("Code: AgentTwin library", "https://github.com/dataagentsai/agenttwin"),
-        ("Code: Eval Harness Framework", "https://github.com/dataagentsai/eval-harness-framework"),
-        ("Code: Claims assistant on Azure", "https://github.com/dataagentsai/claims-fnol-azure"),
-        ("Projects to join", "/projects/?subject=ai"),
-        ("Key concepts", "/concepts/#ai-engineering"),
-        ("Learning path by platform", "/paths/ai-engineering/"),
-    ]),
+# Menu structure agreed with the owner on 10 Nov 2026. One tree of ideas shown twice:
+#   CONCEPTS (platform-agnostic): for leaders, data systems, the data and AI platform with its
+#     capabilities (data engineering, BI, ML, AI, across all), key concepts.
+#   ON YOUR CLOUD: the same headings per platform (/platforms/<id>/#systems, #de, #bi, #ml, #ai, #across).
+#   YOUR ROLE: paths through both trees, plus practice and projects. HOW WE WORK: skills that aren't a
+#   technology. Open specs and code sit in the capability they serve. URLs never move; only the menu.
+# Item: (name, href, children[, "cap"]); a child with href None is a small heading; "cap" indents an item.
+
+CLOUD_HEADS = [("Data systems", "systems"), ("Data engineering", "de"), ("BI and analytics", "bi"), ("ML", "ml"),
+               ("AI", "ai"), ("Across all of them", "across"), ("Learning paths", "paths"), ("Certifications", "certs")]
+
+
+def cloud(name, pid, heads=None):
+    keys = heads or [k for _, k in CLOUD_HEADS]
+    return (name, f"/platforms/{pid}/", [(n, f"/platforms/{pid}/#{k}") for n, k in CLOUD_HEADS if k in keys])
+
+
+ROLE_KIDS = {
+    "data-engineering": [("Start here", "/data-engineering/"), ("Learning path", "/paths/data-engineering/"),
+                         ("Practice and simulators", "/data-engineering/#tools"), ("Projects to join", "/projects/?subject=data")],
+    "ai-engineering": [("Learning path", "/paths/ai-engineering/"), ("Simulator: Agent Harness", "/learn/agent-harness-sim/"),
+                       ("Vertical agents", "/ai-engineering/vertical-agents/"), ("Projects to join", "/projects/?subject=ai")],
+    "llm-engineering": [("Learning path", "/paths/llm-engineering/"), ("Simulator: Claude API", "/learn/llm-api-sim/"),
+                        ("Projects to join", "/projects/?subject=llm")],
 }
-
-# Extra pages for the other streams, shown after their platform paths.
-EXTRAS = {"llm-engineering": [("Simulator: Claude API", "/learn/llm-api-sim/"), ("Projects to join", "/projects/?subject=llm")]}
-
-# Other streams: their platform paths, their extra pages, then their key concepts.
-ROLES = [(d["name"], STREAMS[d["id"]][0], STREAMS[d["id"]][1]) if d["id"] in STREAMS else
-         (d["name"], f"/paths/{d['id']}/", [(PLATFORMS[p], f"/paths/{d['id']}/{p}/") for p in d["platforms"]]
-          + EXTRAS.get(d["id"], []) + [("Key concepts", f"/concepts/#{d['id']}")])
+ROLES = [(d["name"], "/data-engineering/" if d["id"] == "data-engineering" else f"/paths/{d['id']}/",
+          ROLE_KIDS.get(d["id"], [("Learning path", f"/paths/{d['id']}/")]) + [("Key concepts", f"/concepts/#{d['id']}")])
          for d in DISCIPLINES]
 
-# (group, [(name, href, [(child, href), ...]), ...])
 SECTIONS = [
-    ("Foundations", [
+    ("Concepts", [
+        ("For leaders", "/leaders/", [
+            ("The one-minute version", "/leaders/"),
+            ("Questions leaders ask", "/leaders/#questions"),
+            ("Spec-driven development: agents", "/leaders/spec-driven/"),
+            ("Spec-driven development: data platforms", "/leaders/spec-driven/data-platform/"),
+            ("Technical papers", "/papers/"),
+        ]),
         ("Data systems", "/learn/data-systems/", [
             ("The whole system, end to end", "/learn/data-systems/"),
             ("Upstreams", None),
@@ -79,59 +71,97 @@ SECTIONS = [
             ("Downstreams", None),
             ("Know your consumers", "/learn/data-systems/downstreams/"),
         ]),
-        ("Data platform", "/learn/data-systems/platform/", [
-            ("The data platform, whole", "/learn/data-systems/platform/"),
-            ("Layout: catalogs and schemas", "/learn/data-systems/platform/layout/"),
-            ("Environments and CI/CD", "/learn/data-systems/platform/environments/"),
-            ("Cost and FinOps", "/learn/data-systems/platform/cost/"),
+        ("Data and AI platform", "/learn/data-systems/platform/", [
+            ("Conceptual architecture", None),
+            ("The platform, whole", "/learn/data-systems/platform/"),
             ("Data platform architecture", "/learn/data-platform-architecture/"),
             ("Medallion architecture", "/learn/medallion-architecture/"),
             ("Real-time analytics", "/learn/real-time-analytics/"),
-            ("Test architecture for data", "/learn/data-platform-architecture/testing/"),
-            ("Shift left: fail fast on data code", "/learn/shift-left/"),
         ]),
+        ("Data engineering", "/learn/data-systems/platform/#hops", [
+            ("Hop 1: sources to bronze", "/learn/data-platform-architecture/ingestion/"),
+            ("Hop 2: bronze to silver", "/learn/data-platform-architecture/bronze-to-silver/"),
+            ("Hop 3: silver to gold", "/learn/data-platform-architecture/gold/"),
+            ("The metadata store", "/learn/data-platform-architecture/metadata-store/"),
+            ("Shift left: fail fast on data code", "/learn/shift-left/"),
+            ("Open spec: DataTwin", "/learn/datatwin/"),
+            ("Open spec: Clean Data Engineering specs", "/projects/data-eng-specs/"),
+        ], "cap"),
+        ("BI and analytics", "/concepts/semantic-layer/", [
+            ("Hop 4: the semantic layer", "/concepts/semantic-layer/"),
+            ("Genie and metric views", "/writing/genie-metric-views/"),
+            ("Know your consumers", "/learn/data-systems/downstreams/"),
+        ], "cap"),
+        ("ML", "/concepts/#ml-engineering", [
+            ("Key ML ideas (pages coming)", "/concepts/#ml-engineering"),
+        ], "cap"),
+        ("AI", "/learn/ai-universe/", [
+            ("The AI Universe", "/learn/ai-universe/"),
+            ("Agent Harness", "/learn/agent-harness/"),
+            ("Eval Harness", "/learn/eval-harness/"),
+            ("Agent guardrails", "/learn/agent-guardrails/"),
+            ("Open spec: AI Assurance Catalog", "https://dataagentsai.github.io/ai-assurance-catalog/"),
+            ("Open spec: AI Harness Catalog", "https://dataagentsai.github.io/ai-harness-catalog/"),
+            ("Open spec: AgentTwin", "/learn/agenttwin/"),
+            ("The AgentTwin Lab", "/lab/"),
+            ("Code: Reference Agent", "https://github.com/dataagentsai/reference-agent"),
+            ("Code: AgentTwin library", "https://github.com/dataagentsai/agenttwin"),
+            ("Code: Eval Harness Framework", "https://github.com/dataagentsai/eval-harness-framework"),
+        ], "cap"),
+        ("Across all of them", "/learn/data-systems/platform/#concerns", [
+            ("All 24 concerns", "/learn/data-systems/platform/#concerns"),
+            ("Layout: catalogs and schemas", "/learn/data-systems/platform/layout/"),
+            ("Environments and CI/CD", "/learn/data-systems/platform/environments/"),
+            ("Cost and FinOps", "/learn/data-systems/platform/cost/"),
+            ("Test architecture for data", "/learn/data-platform-architecture/testing/"),
+        ], "cap"),
         ("Key concepts, A to Z", "/concepts/#a-z", []),
     ]),
-    ("Streams", [
+    ("On your cloud", [
+        cloud("Databricks", "databricks"),
+        cloud("AWS", "aws"),
+        cloud("Azure and Fabric", "azure"),
+        cloud("Google Cloud", "gcp"),
+        cloud("Open source", "open"),
+        cloud("Claude (Anthropic)", "anthropic", ["ai", "certs"]),
+        ("All certifications", "/certifications/", []),
+    ]),
+    ("Your role", [
         ("Find your path", "/paths/", []),
         *ROLES,
         ("Worried about AI?", "/mindset/", []),
+        ("All projects to join", "/projects/", []),
     ]),
-    ("Platforms", [
-        ("Databricks", "/platforms/databricks/", []),
-        ("AWS", "/platforms/aws/", []),
-        ("Azure and Fabric", "/platforms/azure/", []),
-        ("Google Cloud", "/platforms/gcp/", []),
-        ("Open source", "/platforms/open/", []),
-        ("Claude (Anthropic)", "/platforms/anthropic/", []),
-        ("All certifications", "/certifications/", []),
+    ("How we work", [
+        ("Thinking principles", "/how-we-work/#thinking", []),
+        ("Business analysis", "/how-we-work/#ba", []),
+        ("Project management", "/how-we-work/#pm", []),
+        ("The technical anchor", "/learn/technical-anchor/", [
+            ("The role", "/learn/technical-anchor/"),
+            ("Discovery", "/learn/technical-anchor/discovery/"),
+            ("Project review", "/learn/technical-anchor/project-review/"),
+            ("Project review: the checks", "/learn/technical-anchor/project-review/checks/"),
+        ]),
     ]),
-    ("AI for a cause", [
-        ("All projects", "/ai-for-cause/", []),
-        ("Babu, companion for elders", "/projects/babu-companion/", []),
-        ("AI for road safety", "/road-safety/", []),
-        ("Raah, guide for blind people", "/ai-for-cause/raah/", []),
-    ]),
-    ("Deep tech", [
-        ("All projects", "/deep-tech/", []),
-        ("Hard problems", "/problems/", []),
-        ("Hinglish pre-training data", "/projects/hinglish-pretraining-data/", []),
-        ("Robot data benchmark", "/projects/robotics-data-benchmark/", []),
-    ]),
-    ("Build with us", [
-        ("All projects", "/projects/", []),
-        ("All open specifications", "/research/", []),
-        ("All open-source code", "/assets/", []),
-        ("Write or teach", "/about/#join", []),
-    ]),
-    ("For leaders", [
-        ("The one-minute version", "/leaders/", []),
-        ("Questions leaders ask", "/leaders/#questions", []),
-        ("Technical papers", "/papers/", []),
-        ("Blog", "/writing/", []),
+    ("Causes and deep tech", [
+        ("AI for a cause", "/ai-for-cause/", [
+            ("Babu, companion for elders", "/projects/babu-companion/"),
+            ("AI for road safety", "/road-safety/"),
+            ("Raah, guide for blind people", "/ai-for-cause/raah/"),
+        ]),
+        ("Deep tech", "/deep-tech/", [
+            ("Hard problems", "/problems/"),
+            ("Hard problems by layer", "/learn/hard-problems/"),
+            ("Hinglish pre-training data", "/projects/hinglish-pretraining-data/"),
+            ("Robot data benchmark", "/projects/robotics-data-benchmark/"),
+        ]),
     ]),
     ("About", [
         ("About this site", "/about/", []),
+        ("Write or teach", "/about/#join", []),
+        ("Blog", "/writing/", []),
+        ("All open specifications", "/research/", []),
+        ("All open-source code", "/assets/", []),
     ]),
 ]
 
@@ -157,6 +187,7 @@ CSS = """<style>
   .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
   .sidepanel details[open] > summary::after { transform:rotate(90deg); }
   .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
   .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
   .sidepanel .close { display:none; }
   .scrim { display:none; }
@@ -194,12 +225,15 @@ def panel():
            '<a class="sbrand" href="/">Clean Data Engineering</a>']
     for g, items in SECTIONS:
         out.append(f"<h4>{g}</h4><ul>")
-        for name, href, kids in items:
+        for it in items:
+            name, href, kids = it[0], it[1], it[2]
+            cap = len(it) > 3 and it[3] == "cap"
+            li = '<li class="cap">' if cap else "<li>"
             if kids:
                 ks = "".join(f'<li class="sub">{n}</li>' if h is None else f'<li><a href="{h}">{n}</a></li>' for n, h in kids)
-                out.append(f'<li><details><summary><a href="{href}">{name}</a></summary><ul>{ks}</ul></details></li>')
+                out.append(f'{li}<details><summary><a href="{href}">{name}</a></summary><ul>{ks}</ul></details></li>')
             else:
-                out.append(f'<li><a href="{href}">{name}</a></li>')
+                out.append(f'{li}<a href="{href}">{name}</a></li>')
         out.append("</ul>")
     out.append("</aside>")
     return "".join(out)
@@ -217,7 +251,7 @@ def header():
 def footer():
     cols = []
     for g, items in SECTIONS:
-        links = "".join(f'<a href="{h}">{n}</a>' for n, h, _ in items)
+        links = "".join(f'<a href="{it[1]}">{it[0]}</a>' for it in items)
         cols.append(f"<div><b>{g}</b>{links}</div>")
     return ("<footer>\n  <div class=\"wrap\">\n    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}"
             ".fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>\n"
