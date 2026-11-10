@@ -1,0 +1,976 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streaming Architecture on AWS and Databricks, IoT to Gold</title>
+<meta name="description" content="Streaming for IoT and other sources on AWS and Databricks: seconds vs minutes, Kappa through bronze, joins, SCD, DLT or not, Auto Loader, S3, replays, errors, SLA report, cost."><link rel="canonical" href="https://cleandataengineering.ai/learn/streaming/">
+<meta property="og:title" content="Streaming Architecture on AWS and Databricks, IoT to Gold"><meta property="og:description" content="Streaming for IoT and other sources on AWS and Databricks: seconds vs minutes, Kappa through bronze, joins, SCD, DLT or not, Auto Loader, S3, replays, errors, SLA report, cost."><meta property="og:url" content="https://cleandataengineering.ai/learn/streaming/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .sx .lead { font-size:17px; color:var(--ink-soft); }
+  .sx .muted { color:var(--muted); }
+  .sx .box { border:var(--line); border-radius:var(--wob); padding:12px 16px; margin:14px 0; background:#fff; }
+  .sx .box.do { background:var(--butter-wash); } .sx .box.warn { background:var(--butter-wash); border-style:dashed; }
+  .sx .grid { display:grid; gap:12px; } .sx .g2 { grid-template-columns:1fr 1fr; } .sx .g3 { grid-template-columns:repeat(3,1fr); }
+  .sx .card { border:var(--line); border-radius:var(--wob); padding:10px 14px; background:#fff; }
+  .sx .card h4 { margin:0 0 4px; font-family:var(--hand); font-weight:400; font-size:21px; }
+  .sx .tbl { overflow-x:auto; margin:8px 0 18px; }
+  .sx table { border-collapse:collapse; width:100%; font-size:14.5px; }
+  .sx th, .sx td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  .sx th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .sx td.v { font-weight:700; background:var(--mint-wash); } .sx td.v.drop { font-weight:400; background:var(--rose-wash); }
+  .sx code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  .sx .fig { border:var(--line); border-radius:var(--wob); padding:12px 14px; margin:16px 0; background:#fff; overflow-x:auto; }
+  .sx .fig svg { width:100%; min-width:640px; height:auto; display:block; } .sx .fig text { font-family:var(--hand); }
+  .sx .fig p { font-size:13.5px; color:var(--muted); margin:6px 0 0; }
+  @media (max-width:760px) { .sx .g2, .sx .g3 { grid-template-columns:1fr; } }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Streaming architecture on AWS and Databricks", "description": "Streaming for IoT and other sources on AWS and Databricks: seconds vs minutes, Kappa through bronze, joins, SCD, DLT or not, Auto Loader, S3, replays, errors, SLA report, cost.", "url": "https://cleandataengineering.ai/learn/streaming/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-10", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Learn", "item": "https://cleandataengineering.ai/learn/"}, {"@type": "ListItem", "position": 2, "name": "Data engineering", "item": "https://cleandataengineering.ai/data-engineering/"}, {"@type": "ListItem", "position": 3, "name": "Streaming", "item": "https://cleandataengineering.ai/learn/streaming/"}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Should a 1 to 5 second streaming lane call Databricks?", "acceptedAnswer": {"@type": "Answer", "text": "No. Keep it light and inside the streaming layer: validate, deduplicate, limit checks, one-minute windows, and small reference data copied in on a schedule. Databricks reads the raw stream separately and builds the numbers of record."}}, {"@type": "Question", "name": "Where do SCD type 1 and type 2 happen in a streaming lakehouse?", "acceptedAnswer": {"@type": "Answer", "text": "In silver, by dataset kind: master data as SCD type 2, transactions as type 1, sensor events append only. Gold builds dimensions from silver's history and joins facts as of event time."}}, {"@type": "Question", "name": "DLT or plain Structured Streaming?", "acceptedAnswer": {"@type": "Answer", "text": "Plain Structured Streaming in jobs as the default, because it is portable and fully testable; DLT's AUTO CDC is worth it for tables built from database changes, where out-of-order SCD2 is hardest to write by hand."}}, {"@type": "Question", "name": "Can S3 be used as the stream?", "acceptedAnswer": {"@type": "Answer", "text": "Not as the belt itself: one object per event is slow and costs a request each. S3 works well as minute-level landing for Auto Loader and as the long-term history that makes Kappa replays possible."}}, {"@type": "Question", "name": "Should I trigger a DLT pipeline for each file that lands in S3?", "acceptedAnswer": {"@type": "Answer", "text": "No. Use a file arrival trigger or a schedule and let Auto Loader pick up every new file, so a missed event never loses a file and ten files cost one run."}}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Concepts</h4><ul><li><details><summary><a href="/leaders/">For leaders</a></summary><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/leaders/spec-driven/">Spec-driven development: agents</a></li><li><a href="/leaders/spec-driven/data-platform/">Spec-driven development: data platforms</a></li><li><a href="/papers/">Technical papers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/">Data systems</a></summary><ul><li><a href="/learn/data-systems/">The whole system, end to end</a></li><li class="sub">Upstreams</li><li><a href="/learn/data-systems/upstreams/">Know your sources</a></li><li><a href="/learn/data-systems/upstreams/apis/">API sources</a></li><li><a href="/learn/data-systems/upstreams/files/">File sources</a></li><li><a href="/learn/data-systems/upstreams/joins/">Learning the joins</a></li><li><a href="/learn/data-systems/upstreams/answers/">Where the answers go</a></li><li><a href="/learn/data-systems/upstreams/questionnaire/">Source system questionnaire</a></li><li class="sub">Downstreams</li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/platform/">Data and AI platform</a></summary><ul><li class="sub">Conceptual architecture</li><li><a href="/learn/data-systems/platform/">The platform, whole</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#hops">Data engineering</a></summary><ul><li><a href="/learn/data-platform-architecture/ingestion/">Hop 1: sources to bronze</a></li><li><a href="/learn/data-platform-architecture/bronze-to-silver/">Hop 2: bronze to silver</a></li><li><a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a></li><li><a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a></li><li><a href="/learn/streaming/">Streaming</a></li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/datatwin/">Open spec: DataTwin</a></li><li><a href="/projects/data-eng-specs/">Open spec: Clean Data Engineering specs</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/semantic-layer/">BI and analytics</a></summary><ul><li><a href="/concepts/semantic-layer/">Hop 4: the semantic layer</a></li><li><a href="/writing/genie-metric-views/">Genie and metric views</a></li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/#ml-engineering">ML</a></summary><ul><li><a href="/concepts/#ml-engineering">Key ML ideas (pages coming)</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/ai-universe/">AI</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">Open spec: AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">Open spec: AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">Open spec: AgentTwin</a></li><li><a href="/lab/">The AgentTwin Lab</a></li><li><a href="https://github.com/dataagentsai/reference-agent">Code: Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">Code: AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Code: Eval Harness Framework</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#concerns">Across all of them</a></summary><ul><li><a href="/learn/data-systems/platform/#concerns">All 24 concerns</a></li><li><a href="/learn/data-systems/platform/layout/">Layout: catalogs and schemas</a></li><li><a href="/learn/data-systems/platform/environments/">Environments and CI/CD</a></li><li><a href="/learn/data-systems/platform/cost/">Cost and FinOps</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li></ul></details></li><li><a href="/concepts/#a-z">Key concepts, A to Z</a></li></ul><h4>On your cloud</h4><ul><li><details><summary><a href="/platforms/databricks/">Databricks</a></summary><ul><li><a href="/platforms/databricks/#systems">Data systems</a></li><li><a href="/platforms/databricks/#de">Data engineering</a></li><li><a href="/platforms/databricks/#bi">BI and analytics</a></li><li><a href="/platforms/databricks/#ml">ML</a></li><li><a href="/platforms/databricks/#ai">AI</a></li><li><a href="/platforms/databricks/#across">Across all of them</a></li><li><a href="/platforms/databricks/#paths">Learning paths</a></li><li><a href="/platforms/databricks/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/aws/">AWS</a></summary><ul><li><a href="/platforms/aws/#systems">Data systems</a></li><li><a href="/platforms/aws/#de">Data engineering</a></li><li><a href="/platforms/aws/#bi">BI and analytics</a></li><li><a href="/platforms/aws/#ml">ML</a></li><li><a href="/platforms/aws/#ai">AI</a></li><li><a href="/platforms/aws/#across">Across all of them</a></li><li><a href="/platforms/aws/#paths">Learning paths</a></li><li><a href="/platforms/aws/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/azure/">Azure and Fabric</a></summary><ul><li><a href="/platforms/azure/#systems">Data systems</a></li><li><a href="/platforms/azure/#de">Data engineering</a></li><li><a href="/platforms/azure/#bi">BI and analytics</a></li><li><a href="/platforms/azure/#ml">ML</a></li><li><a href="/platforms/azure/#ai">AI</a></li><li><a href="/platforms/azure/#across">Across all of them</a></li><li><a href="/platforms/azure/#paths">Learning paths</a></li><li><a href="/platforms/azure/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/gcp/">Google Cloud</a></summary><ul><li><a href="/platforms/gcp/#systems">Data systems</a></li><li><a href="/platforms/gcp/#de">Data engineering</a></li><li><a href="/platforms/gcp/#bi">BI and analytics</a></li><li><a href="/platforms/gcp/#ml">ML</a></li><li><a href="/platforms/gcp/#ai">AI</a></li><li><a href="/platforms/gcp/#across">Across all of them</a></li><li><a href="/platforms/gcp/#paths">Learning paths</a></li><li><a href="/platforms/gcp/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/open/">Open source</a></summary><ul><li><a href="/platforms/open/#systems">Data systems</a></li><li><a href="/platforms/open/#de">Data engineering</a></li><li><a href="/platforms/open/#bi">BI and analytics</a></li><li><a href="/platforms/open/#ml">ML</a></li><li><a href="/platforms/open/#ai">AI</a></li><li><a href="/platforms/open/#across">Across all of them</a></li><li><a href="/platforms/open/#paths">Learning paths</a></li><li><a href="/platforms/open/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/anthropic/">Claude (Anthropic)</a></summary><ul><li><a href="/platforms/anthropic/#ai">AI</a></li><li><a href="/platforms/anthropic/#certs">Certifications</a></li></ul></details></li><li><a href="/certifications/">All certifications</a></li></ul><h4>Your role</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/data-engineering/">Data Engineering</a></summary><ul><li><a href="/data-engineering/">Start here</a></li><li><a href="/paths/data-engineering/">Learning path</a></li><li><a href="/data-engineering/#tools">Practice and simulators</a></li><li><a href="/projects/?subject=data">Projects to join</a></li><li><a href="/concepts/#data-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/">Learning path</a></li><li><a href="/learn/agent-harness-sim/">Simulator: Agent Harness</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li><li><a href="/projects/?subject=ai">Projects to join</a></li><li><a href="/concepts/#ai-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/">Learning path</a></li><li><a href="/learn/llm-api-sim/">Simulator: Claude API</a></li><li><a href="/projects/?subject=llm">Projects to join</a></li><li><a href="/concepts/#llm-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/">Learning path</a></li><li><a href="/concepts/#ml-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/">Learning path</a></li><li><a href="/concepts/#software-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/paths/forward-deployed/">Learning path</a></li><li><a href="/concepts/#forward-deployed">Key concepts</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li><li><a href="/projects/">All projects to join</a></li></ul><h4>How we work</h4><ul><li><a href="/how-we-work/#thinking">Thinking principles</a></li><li><a href="/how-we-work/#ba">Business analysis</a></li><li><a href="/how-we-work/#pm">Project management</a></li><li><details><summary><a href="/learn/technical-anchor/">The technical anchor</a></summary><ul><li><a href="/learn/technical-anchor/">The role</a></li><li><a href="/learn/technical-anchor/discovery/">Discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li></ul></details></li></ul><h4>Causes and deep tech</h4><ul><li><details><summary><a href="/ai-for-cause/">AI for a cause</a></summary><ul><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul></details></li><li><details><summary><a href="/deep-tech/">Deep tech</a></summary><ul><li><a href="/problems/">Hard problems</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul></details></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li><li><a href="/about/#join">Write or teach</a></li><li><a href="/writing/">Blog</a></li><li><a href="/research/">All open specifications</a></li><li><a href="/assets/">All open-source code</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › Streaming</p>
+<p class="eyebrow" style="margin-top:22px">Data engineering · free guide · one page</p>
+<h1>Streaming architecture on AWS and Databricks</h1>
+<p class="lede">IoT and ordinary sources, seconds and minutes, AWS alone or with Databricks: the architecture as roles first, then the options for every part with pros, cons and a verdict.</p>
+<nav class="toc"><b>On this page</b><ol><li><a href="#start">Start here</a></li><li><a href="#lesson">What a stream is</a></li><li><a href="#concept">Abstract architecture</a></li><li><a href="#sla">Seconds or minutes</a></li><li><a href="#speeds">Three speeds: where they meet</a></li><li><a href="#kappa">Kappa, Lambda and us</a></li><li><a href="#medallion">Bronze, silver, gold, SCD</a></li><li><a href="#joins">Joining data in a stream</a></li><li><a href="#ui">To the UI: direct, fast layer, gold</a></li><li><a href="#dbx">DLT, Spark Streaming, Auto Loader</a></li><li><a href="#s3">Can S3 be used?</a></li><li><a href="#noniot">Streams that are not IoT</a></li><li><a href="#physical">Binding options per part</a></li><li><a href="#stacks">AWS-only vs AWS + Databricks</a></li><li><a href="#perf">Performance and sizing</a></li><li><a href="#cost">Cost</a></li><li><a href="#replay">Replays</a></li><li><a href="#errors">Error handling</a></li><li><a href="#slareport">End-to-end SLA report</a></li><li><a href="#nfr">Non-functional concerns</a></li><li><a href="#decide">Decisions to make</a></li><li><a href="#notes">Notes and sources</a></li></ol></nav>
+<div class="sx">
+
+<!-- ================= 0 ================= -->
+<section id="start">
+<p class="lead">How live data gets from factory machines (and from databases, apps and files) to screens, alerts and reports. The guide starts with the architecture as roles with no product names, then gives options on AWS alone and on AWS with Databricks for every role, each with pros, cons and a verdict. A tyre maker is the worked example throughout.</p>
+<h3>The worked example</h3>
+<p>A tyre maker with five plants. Curing presses, mixers and extruders report temperature, pressure and cycle state every few seconds. Supervisors want alerts and live boards within seconds. Planners and quality teams want hourly numbers they can trust. SAP, MES, a lab system (LIMS) and a dealer portal also produce data that has to join with the sensor data.</p>
+<h3>Design rules used throughout</h3>
+<ul>
+<li>One event stream feeds two lanes: a <b>live lane</b> (seconds, for acting now) and a <b>platform lane</b> (minutes, the number of record).</li>
+<li>The platform lane does not run continuously: streaming tables run once every 15 minutes and stop.</li>
+<li>The live lane never writes gold. Gold is the number of record.</li>
+<li>One contract per stream: Avro in a schema registry; key = <code>press_id</code>; every record carries <code>reading_id</code> and event time. The stream keeps 7 days.</li>
+<li>Gold facts are built by recomputing changed time windows, with as-of joins to history dimensions, not by joining inside the stream.</li>
+</ul>
+</section>
+
+<!-- ================= 1 ================= -->
+<section id="lesson">
+<h2>What a stream is, in plain words</h2>
+<p>A <b>batch</b> is a box of data delivered at a time: "here are yesterday's orders". A <b>stream</b> is a conveyor belt: small messages keep arriving, one after another, and never "finish". Streaming is a way of <i>delivering</i> data, not a kind of data. The same orders can arrive as a nightly file or as one message per order.</p>
+<p>Three things make streams harder than batches:</p>
+<ol>
+<li><b>Time has two clocks.</b> <i>Event time</i> is when it happened at the press. <i>Arrival time</i> is when the message reached us. A gateway that was offline for 20 minutes delivers old readings late, so reports must group by event time.</li>
+<li><b>Nothing ever "ends".</b> To say "the 10:00–11:00 average is final", you need a rule for how long to wait for stragglers. That rule is a <b>watermark</b>, for example "wait 10 minutes after the hour".</li>
+<li><b>Messages can arrive twice.</b> Senders retry when unsure. Every reading carries a unique <code>reading_id</code> so duplicates can be removed and totals never double.</li>
+</ol>
+<h3>Where a tyre company gets streams from</h3>
+<div class="grid g3">
+<div class="card"><h4>Machines (IoT)</h4>Curing presses, mixers and extruders report temperature, pressure and cycle state every few seconds.</div>
+<div class="card"><h4>Connected tyres (IoT, maybe later)</h4>Sensors inside tyres on fleet vehicles report pressure and temperature. Millions of small senders.</div>
+<div class="card"><h4>Database changes</h4>SAP orders and MES production records. These are not events by nature; change capture (CDC) turns every insert or update into an event.</div>
+<div class="card"><h4>App events</h4>Dealer portal clicks, warranty-claim app submissions.</div>
+<div class="card"><h4>Webhooks</h4>Salesforce or a payment provider calls our URL when something changes.</div>
+<div class="card"><h4>Files and logs</h4>LIMS lab results, partner files, application logs. Files arrive in bursts but can be read "as a stream" of files.</div>
+</div>
+<p>The key question for every source is the same: <b>who must act on this data, and how fast?</b> If a supervisor must stop a press within a minute, it needs the live lane. If a planner reads it tomorrow, a 15-minute or daily load is cheaper and simpler.</p>
+</section>
+
+<!-- ================= 2 ================= -->
+<section id="concept">
+<h2>Conceptual architecture (no products)</h2>
+<p class="lead">Twelve roles. Every physical design later is just a choice of product for each role.</p>
+<div class="fig">
+<svg viewBox="0 0 1000 410" role="img" aria-label="Conceptual streaming architecture: sources enter through a front door into a replayable event log; a live lane and a platform lane read the log; files and database changes can go straight to the platform lane; cross-cutting concerns underneath.">
+<defs><marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs>
+<g fill="#fff" stroke="#111" stroke-width="1.6">
+ <rect x="10" y="20" width="150" height="50" rx="8"/><rect x="10" y="80" width="150" height="50" rx="8"/><rect x="10" y="140" width="150" height="50" rx="8"/>
+ <rect x="10" y="225" width="150" height="40" rx="8" stroke-dasharray="5 4"/><rect x="10" y="275" width="150" height="40" rx="8" stroke-dasharray="5 4"/>
+ <rect x="190" y="20" width="120" height="170" rx="8"/>
+ <rect x="345" y="20" width="120" height="200" rx="8" stroke-width="2.4"/>
+ <rect x="495" y="20" width="500" height="125" rx="10" fill="#fafafa" stroke-dasharray="2 4"/>
+ <rect x="495" y="160" width="500" height="160" rx="10" fill="#fafafa" stroke-dasharray="2 4"/>
+ <rect x="510" y="58" width="110" height="74" rx="8"/><rect x="635" y="58" width="110" height="74" rx="8"/><rect x="760" y="58" width="110" height="74" rx="8"/><rect x="885" y="58" width="100" height="74" rx="8"/>
+ <rect x="510" y="200" width="110" height="105" rx="8"/><rect x="635" y="200" width="110" height="105" rx="8"/><rect x="760" y="200" width="110" height="105" rx="8"/><rect x="885" y="200" width="100" height="105" rx="8"/>
+ <rect x="10" y="338" width="985" height="62" rx="10"/>
+</g>
+<g font-size="15">
+ <text x="20" y="40">R1 Machines, sensors</text><text x="20" y="60" font-size="13">via a plant gateway</text>
+ <text x="20" y="100">Connected products</text><text x="20" y="120" font-size="13">tyres on vehicles (later)</text>
+ <text x="20" y="160">Apps and webhooks</text><text x="20" y="180" font-size="13">dealer portal, SaaS</text>
+ <text x="20" y="250">Database changes (CDC)</text><text x="20" y="300">Files (LIMS, partners)</text>
+ <text x="200" y="42">R2 Front door</text><text x="200" y="64" font-size="13">who are you?</text><text x="200" y="82" font-size="13">one identity per</text><text x="200" y="98" font-size="13">device or app</text><text x="200" y="122" font-size="13">batch at the edge</text><text x="200" y="140" font-size="13">to cut cost</text>
+ <text x="355" y="42">R3 Event log</text><text x="355" y="66" font-size="13">ordered per key</text><text x="355" y="84" font-size="13">kept for days</text><text x="355" y="102" font-size="13">many readers</text><text x="355" y="120" font-size="13">replay after a fault</text>
+ <text x="355" y="160" font-size="13">R4 Contract:</text><text x="355" y="176" font-size="13">schema registry,</text><text x="355" y="192" font-size="13">key, event time,</text><text x="355" y="208" font-size="13">reading id</text>
+ <text x="507" y="43">LIVE LANE · seconds · for acting now (never writes gold)</text>
+ <text x="518" y="80">R5 Live</text><text x="518" y="98">processor</text><text x="518" y="118" font-size="12.5">windows, limits</text>
+ <text x="643" y="80">R6 Live store</text><text x="643" y="100" font-size="12.5">latest values,</text><text x="643" y="116" font-size="12.5">last 48 hours</text>
+ <text x="768" y="80">R7 Push and</text><text x="768" y="98">alerts</text><text x="768" y="118" font-size="12.5">snapshot, changes</text>
+ <text x="893" y="80">Live boards,</text><text x="893" y="98">phones</text><text x="893" y="118" font-size="12.5">1–5 s behind</text>
+ <text x="507" y="183">PLATFORM LANE · minutes · the number of record</text>
+ <text x="518" y="222">R8 Lake</text><text x="518" y="240">ingest</text><text x="518" y="262" font-size="12.5">every 15 min,</text><text x="518" y="278" font-size="12.5">log or files to</text><text x="518" y="294" font-size="12.5">bronze</text>
+ <text x="643" y="222">R9 Bronze</text><text x="643" y="244" font-size="12.5">kept forever:</text><text x="643" y="260" font-size="12.5">the long memory</text><text x="643" y="276" font-size="12.5">replay source</text>
+ <text x="768" y="222">R9 Silver,</text><text x="768" y="240">gold</text><text x="768" y="262" font-size="12.5">dedupe, check,</text><text x="768" y="278" font-size="12.5">joins, window</text><text x="768" y="294" font-size="12.5">recompute</text>
+ <text x="893" y="222">R10 BI, AI,</text><text x="893" y="240">ML</text><text x="893" y="262" font-size="12.5">15–75 min</text><text x="893" y="278" font-size="12.5">behind</text>
+ <text x="22" y="360">R12 Across everything:</text>
+ <text x="22" y="384" font-size="14">contracts and schema evolution · identity and encryption · monitoring (lag, freshness, a silent stream) · data quality and quarantine · catalog and lineage · cost · tests with the DataTwin world</text>
+ <text x="175" y="13" font-size="13">R11 commands back to devices (optional, dashed)</text>
+</g>
+<g stroke="#111" stroke-width="1.5" fill="none" marker-end="url(#ah)">
+ <path d="M160,45 L188,45"/><path d="M160,105 L188,105"/><path d="M160,165 L188,165"/>
+ <path d="M310,105 L343,105"/>
+ <path d="M465,95 L508,95"/><path d="M620,95 L633,95"/><path d="M745,95 L758,95"/><path d="M870,95 L883,95"/>
+ <path d="M465,210 L508,210"/><path d="M620,252 L633,252"/><path d="M745,252 L758,252"/><path d="M870,252 L883,252"/>
+ <path d="M160,245 L508,245" stroke-dasharray="6 4"/><path d="M160,295 L508,295" stroke-dasharray="6 4"/>
+ <path d="M565,58 L565,8 L85,8 L85,18" stroke-dasharray="3 4"/>
+</g>
+<text x="250" y="240" font-size="12.5">default: as files, no stream needed</text>
+</svg>
+<p>Solid arrows: the stream. Dashed arrows: sources that usually do not need a stream. Dotted: optional commands back to devices.</p>
+</div>
+<div class="tbl"><table>
+<tr><th>Role</th><th>Job, in one sentence</th><th>Why it must exist</th></tr>
+<tr><td>R1 Edge and gateway</td><td>Collects machine signals on the factory floor, buffers them when the network is down, and sends them in batches.</td><td>Factory networks drop; sending each reading alone is slow and expensive.</td></tr>
+<tr><td>R2 Front door</td><td>Checks who is sending, with one identity per device or app, and accepts messages.</td><td>One stolen device can be switched off without touching the rest.</td></tr>
+<tr><td>R3 Event log</td><td>Keeps messages in order per key (press) for days, so many readers can read at their own pace and replay.</td><td>Separates senders from readers; makes faults recoverable.</td></tr>
+<tr><td>R4 Contract</td><td>Defines the message shape and versions it in a registry.</td><td>A firmware update must not silently break every reader.</td></tr>
+<tr><td>R5 Live processor</td><td>Computes 1-minute windows, limit and drift checks, and emits only changes.</td><td>Someone must act within minutes.</td></tr>
+<tr><td>R6 Live store</td><td>Holds latest values and the last 48 hours for live screens.</td><td>A new screen needs a snapshot before changes start flowing.</td></tr>
+<tr><td>R7 Push and alerts</td><td>Sends a snapshot, then changes, to screens; sends alerts to people and tickets.</td><td>Screens should not keep asking "anything new?".</td></tr>
+<tr><td>R8 Lake ingest</td><td>Copies the log, or files, into bronze tables every 15 minutes.</td><td>Reports and ML need history, not a belt.</td></tr>
+<tr><td>R9 Lake tables</td><td>Bronze keeps everything forever; silver cleans; gold joins and aggregates.</td><td>One number of record, rebuildable from bronze.</td></tr>
+<tr><td>R10 Use</td><td>Dashboards, Genie, ML features, APIs.</td><td>Where value shows up.</td></tr>
+<tr><td>R11 Commands back</td><td>Changes settings on devices, such as reporting rate.</td><td>Optional; only if the business needs control, not just watching.</td></tr>
+<tr><td>R12 Cross-cutting</td><td>Security, monitoring, quality, catalog, cost, tests.</td><td>Same concerns as batch, plus lag and "silent stream".</td></tr>
+</table></div>
+</section>
+
+
+<!-- ================= SLA ================= -->
+<section id="sla">
+<h2>Seconds or minutes: two service levels, end to end</h2>
+<p class="lead">"Real time" means two different promises. Each needs its own path and has its own cost. End to end means from the moment something happens at the press to the moment a person can see it.</p>
+<div class="tbl"><table>
+<tr><th>Tier</th><th>Promise (end to end)</th><th>Who acts</th><th>Path</th><th>Rough cost a month (production)</th><th>Verdict</th></tr>
+<tr><td>T0 · under a second</td><td>Machine stops itself</td><td>The machine</td><td>Plant control system (PLC, SCADA), not the cloud</td><td>—</td><td class="v drop">Drop for the cloud</td></tr>
+<tr><td><b>T1 · seconds</b></td><td>99% of alerts on screen within 5 s; window values within 90 s</td><td>Operator, supervisor</td><td>Live lane: Kinesis → Flink (Lambda for simple limits) → DynamoDB → WebSocket push</td><td>~$530</td><td class="v">Pursue</td></tr>
+<tr><td>T2 · about a minute</td><td>Data in a table within 1–3 min</td><td>Rarely anyone</td><td>Always-on streaming table, or Auto Loader in continuous mode</td><td>+$700–1,500 (always on)</td><td class="v drop">Drop unless a named user needs it</td></tr>
+<tr><td><b>T3 · minutes</b></td><td>99% of readings in silver within 20 min of arrival; gold hour complete within 75 min of hour end</td><td>Shift lead, planner, quality</td><td>Platform lane: streaming tables trigger-once every 15 min → silver → hourly gold</td><td>~$420–1,120</td><td class="v">Pursue</td></tr>
+<tr><td>T4 · daily</td><td>Ready by 06:00</td><td>Management, finance</td><td>Batch</td><td>part of batch</td><td class="v">Pursue (existing)</td></tr>
+</table></div>
+<p><b>End-to-end total for T1 + T3:</b> about $950–1,650 a month at production scale. The hop-by-hop budget is in <a href="#perf">Performance and sizing</a>. The report that proves the promises is described under <a href="#slareport">SLA report</a>.</p>
+<div class="box"><b>Measure two ways.</b> Report delay from <i>event time</i> (what the user feels) and from <i>arrival time</i> (what the platform controls). A gateway that was offline for an hour makes event-time delay look terrible, but that is a plant network problem, not a platform breach. The SLA report keeps both and says which one broke.</div>
+</section>
+<!-- ================= SPEEDS ================= -->
+<section id="speeds">
+<h2>Three speeds, two lanes: where they meet</h2>
+<p class="lead">There are three speeds: seconds (1–5 s), near real time (15–75 min) and batch (daily). There are only two lanes. Near real time and batch are <b>the same pipeline</b> (same code, same tables) run at a different cadence. The seconds lane is a separate, light, disposable lane.</p>
+<div class="fig">
+<svg viewBox="0 0 1000 330" role="img" aria-label="Three speeds: one raw stream splits into the seconds lane and the platform lane; reference data flows from silver and gold down to the seconds lane; near real time and batch meet in gold; the screen shows live tiles next to gold numbers.">
+<defs><marker id="ah5" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs>
+<g fill="#fff" stroke="#111" stroke-width="1.6">
+<rect x="10" y="120" width="130" height="80" rx="8" stroke-width="2.4"/>
+<rect x="190" y="20" width="560" height="90" rx="10" stroke-dasharray="2 4" fill="#fafafa"/>
+<rect x="190" y="160" width="560" height="160" rx="10" stroke-dasharray="2 4" fill="#fafafa"/>
+<rect x="205" y="45" width="150" height="55" rx="8"/><rect x="380" y="45" width="150" height="55" rx="8"/><rect x="555" y="45" width="180" height="55" rx="8"/>
+<rect x="205" y="190" width="120" height="55" rx="8"/><rect x="345" y="190" width="120" height="55" rx="8"/><rect x="485" y="190" width="250" height="55" rx="8" stroke-width="2.4"/>
+<rect x="205" y="260" width="260" height="50" rx="8"/>
+<rect x="800" y="60" width="185" height="200" rx="10"/>
+</g>
+<g font-size="15">
+<text x="22" y="145">Kinesis</text><text x="22" y="165" font-size="13">raw events, once</text><text x="22" y="183" font-size="13">split point (1)</text>
+<text x="200" y="38">SECONDS LANE · AWS only · no Databricks call · 48 h, disposable</text>
+<text x="213" y="67">light transforms</text><text x="213" y="87" font-size="12.5">validate, dedupe, limits</text>
+<text x="388" y="67">1-min windows</text><text x="388" y="87" font-size="12.5">per press, changes only</text>
+<text x="563" y="67">live store + push</text><text x="563" y="87" font-size="12.5">tiles, alerts</text>
+<text x="200" y="180">PLATFORM LANE · Databricks · near real time and batch = same pipeline</text>
+<text x="213" y="212">bronze</text><text x="213" y="232" font-size="12.5">every 15 min</text>
+<text x="353" y="212">silver</text><text x="353" y="232" font-size="12.5">SCD, quality</text>
+<text x="493" y="212">gold (3): streams meet</text><text x="493" y="232" font-size="12.5">batch dims + batch facts, window recompute</text>
+<text x="213" y="282">batch sources: SAP, MES, LIMS</text><text x="213" y="300" font-size="12.5">CDC files daily or every few minutes</text>
+<text x="812" y="85">Screen (4)</text><text x="812" y="110" font-size="13">live tile: "live,</text><text x="812" y="127" font-size="13">not final"</text><text x="812" y="160" font-size="13">beside gold numbers:</text><text x="812" y="177" font-size="13">"number of record"</text><text x="812" y="212" font-size="13">shown side by side,</text><text x="812" y="229" font-size="13">never added together</text>
+<text x="600" y="140" font-size="13">(2) reference data flows UP:</text><text x="600" y="155" font-size="13">limits, press master, recipes</text>
+<text x="300" y="150" font-size="13">alerts raised = new facts → platform</text>
+</g>
+<g stroke="#111" stroke-width="1.5" fill="none" marker-end="url(#ah5)">
+<path d="M140,145 L188,72"/><path d="M140,175 L203,217"/>
+<path d="M355,72 L378,72"/><path d="M530,72 L553,72"/><path d="M735,72 L798,110"/>
+<path d="M325,217 L343,217"/><path d="M465,217 L483,217"/><path d="M465,285 L560,247"/><path d="M735,217 L798,200"/>
+<path d="M600,188 L460,102" stroke-dasharray="6 4"/>
+<path d="M650,100 Q480,140 270,188" stroke-dasharray="3 4"/>
+</g>
+</svg>
+<p>(1) One raw stream, read separately by each lane. (2) Reference data is copied from the platform lane into the seconds lane on a schedule. (3) Near real time and batch meet in gold. (4) The screen shows live and final numbers side by side, labelled.</p>
+</div>
+
+<h3>Four questions people ask</h3>
+<div class="tbl"><table>
+<tr><th>Question</th><th>Answer</th><th>Verdict</th></tr>
+<tr><td><b>Does the 1–5 s lane only do light transforms, never call Databricks?</b></td><td>Yes. Allowed: validate against the contract, short-window dedupe, unit conversion, limit checks, 1-minute windows per press, change detection, lookup of small reference data held <i>inside</i> the lane. Not allowed: calls to Databricks or any warehouse at runtime, multi-source joins, SCD2 as-of joins, history beyond 48 hours. A call to Databricks would add seconds and tie the lane's uptime to the platform's.</td><td class="v">Pursue</td></tr>
+<tr><td><b>Should the fast lane send its data to the slow lane?</b></td><td>Not its readings. The platform lane reads the <b>raw stream from Kinesis itself</b>, so a bug in the fast lane can never corrupt the number of record. The fast lane sends only what it <i>creates</i>: alerts raised and acknowledged (a new fact, "alert events"), and its one-minute SLA summaries. Both go via Firehose to bronze.</td><td class="v">Pursue (raw from Kinesis; alerts as their own dataset)</td></tr>
+<tr><td>(the alternative) Platform lane reads the fast lane's output</td><td>Couples the two lanes; a Flink bug or a dropped late reading flows into gold.</td><td class="v drop">Drop</td></tr>
+<tr><td><b>Do the speeds meet?</b></td><td>In four places, and only these:
+  <ol>
+  <li><b>At the source:</b> the same raw event on Kinesis.</li>
+  <li><b>Reference data upward:</b> limits, the press master and recipes from silver or gold are published every 15 minutes or daily into the seconds lane (DynamoDB, or Flink broadcast state). The fast lane reads its own copy and never calls the platform.</li>
+  <li><b>In gold:</b> near-real-time facts join batch dimensions and batch facts.</li>
+  <li><b>On the screen:</b> live tiles beside gold numbers, labelled, never added together.</li>
+  </ol></td><td class="v">Pursue</td></tr>
+<tr><td><b>Is near real time joined only with near real time, or with batch too?</b></td><td>With batch too. Most joins in gold are near real time to batch: sensor hours joined to the SAP material dimension (daily) and to LIMS scrap (hours late). The rule: <b>a gold row is only as fresh as its slowest input.</b> Each hour carries a "complete" flag that turns true only when every input's watermark has passed it. Until then the row shows with unknown members (−1), and window recompute fixes it when the batch input lands. Each fact declares its freshness from its slowest input.</td><td class="v">Pursue</td></tr>
+<tr><td><b>Can one dataset exist in all three speeds?</b></td><td>Yes, as one dataset with one contract and one owner, served at different speeds. Press readings: seconds = latest values and 1-minute windows for 48 hours (disposable); near real time = silver readings and press-hour gold; batch = daily OEE, monthly reports, ML training from the same gold. Only one copy is the record (bronze, silver and gold); the live copy expires. Expect small differences between live and gold (late data, duplicates); the SLA report shows that drift and alerts above a set level (say 2%).</td><td class="v">Pursue (one dataset, many speeds, one record)</td></tr>
+</table></div>
+</section>
+
+<!-- ================= 3 ================= -->
+<section id="kappa">
+<h2>Kappa, Lambda, and where we sit</h2>
+<div class="fig">
+<svg viewBox="0 0 1000 290" role="img" aria-label="Three panels: Lambda with two paths merged; Kappa with one log and replay; our design with Kinesis to bronze as the long memory and a separate live lane.">
+<defs><marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs>
+<g fill="#fff" stroke="#111" stroke-width="1.5">
+ <rect x="5" y="5" width="315" height="280" rx="12" stroke-dasharray="2 4"/><rect x="342" y="5" width="315" height="280" rx="12" stroke-dasharray="2 4"/><rect x="680" y="5" width="315" height="280" rx="12" stroke-width="2.2"/>
+ <rect x="110" y="50" width="100" height="34" rx="6"/><rect x="25" y="115" width="115" height="34" rx="6"/><rect x="180" y="115" width="115" height="34" rx="6"/><rect x="110" y="185" width="100" height="34" rx="6"/>
+ <rect x="440" y="50" width="120" height="34" rx="6"/><rect x="430" y="120" width="140" height="44" rx="6" stroke-width="2.2"/><rect x="440" y="200" width="120" height="34" rx="6"/>
+ <rect x="700" y="50" width="120" height="34" rx="6"/><rect x="700" y="115" width="120" height="44" rx="6" stroke-width="2.2"/><rect x="700" y="190" width="120" height="34" rx="6"/><rect x="855" y="115" width="120" height="44" rx="6"/><rect x="855" y="190" width="120" height="34" rx="6"/>
+</g>
+<g font-size="15">
+ <text x="20" y="30" font-size="19">Lambda</text><text x="357" y="30" font-size="19">Kappa</text><text x="695" y="30" font-size="19">Ours: Kappa through bronze</text>
+ <text x="135" y="72">source</text><text x="35" y="137">batch code</text><text x="190" y="137">speed code</text><text x="125" y="207">merge views</text>
+ <text x="20" y="250" font-size="13.5">Two codebases compute the same number.</text><text x="20" y="268" font-size="13.5">They disagree; someone has to merge them.</text>
+ <text x="470" y="72">source</text><text x="440" y="140">log, kept long</text><text x="450" y="157" font-size="12.5">(the truth)</text><text x="455" y="222">one stream job</text>
+ <text x="357" y="262" font-size="13.5">One codebase. New logic? Replay the log.</text><text x="357" y="280" font-size="13.5">Needs a log that keeps months or years.</text>
+ <text x="725" y="72">Kinesis, 7 days</text><text x="712" y="135">bronze, forever</text><text x="712" y="152" font-size="12.5">(the long memory)</text><text x="712" y="212">silver → gold</text>
+ <text x="868" y="135">live lane</text><text x="868" y="152" font-size="12.5">acts, never writes gold</text><text x="868" y="212">screens, alerts</text>
+ <text x="695" y="250" font-size="13.5">Same code reads stream or replay from bronze.</text><text x="695" y="268" font-size="13.5">Two lanes give two products, not two answers.</text>
+</g>
+<g stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#ah2)">
+ <path d="M140,84 L90,113"/><path d="M180,84 L235,113"/><path d="M82,149 L140,183"/><path d="M237,149 L185,183"/>
+ <path d="M500,84 L500,118"/><path d="M500,164 L500,198"/><path d="M580,217 Q620,140 572,140" stroke-dasharray="5 4"/>
+ <path d="M760,84 L760,113"/><path d="M760,159 L760,188"/><path d="M820,67 Q915,67 915,113"/><path d="M915,159 L915,188"/>
+</g>
+<text x="578" y="182" font-size="12.5">replay</text>
+</svg>
+<p>Lambda: two paths, one answer, merged. Kappa: one path, history rebuilt by replay. Ours: Kappa where bronze plays the long log; the live lane is a different product.</p>
+</div>
+<h3>How Kappa fits, in four points</h3>
+<ol>
+<li><b>Kappa's idea:</b> everything is a stream, there is one code path, and to fix or change logic you replay the log from the start. No separate batch code.</li>
+<li><b>The catch:</b> Kappa needs a log that keeps everything. Kinesis can keep up to 365 days and Kafka can keep forever with tiered storage, but paying a log to hold years of readings is expensive and awkward to query.</li>
+<li><b>Our answer:</b> the log keeps 7 days (for outages); <b>bronze keeps everything forever on S3</b>, cheaply. Bronze is Kappa's long log. Spark reads bronze with the same code as a stream or as a full replay, so there is still one code path.</li>
+<li><b>Why our two lanes are not Lambda:</b> Lambda computes <i>the same number</i> twice and merges. Our live lane computes "act now" signals that are never reported as the number of record; gold comes only from the platform lane. So the two lanes never disagree about a reported number.</li>
+</ol>
+<h3>Where Kappa does not fit, and what we do instead</h3>
+<div class="tbl"><table>
+<tr><th>Case</th><th>Why pure Kappa struggles</th><th>What we do</th><th>Verdict</th></tr>
+<tr><td>Sensor readings to bronze and silver</td><td>Fits well: event-native, append-only, keyed by press.</td><td>Stream (trigger-once, 15 min); replay from bronze when logic changes.</td><td class="v">Pursue Kappa</td></tr>
+<tr><td>Gold facts that join several inputs (OEE, scrap per press-hour)</td><td>Inputs arrive at different speeds (LIMS results hours later); a pure stream join would hold state for hours and still miss corrections.</td><td>Window recompute: find changed hours, rebuild them fully.</td><td class="v">Pursue window recompute</td></tr>
+<tr><td>SAP and MES tables</td><td>Not event-native. Making every table a stream adds CDC tooling and a log for data nobody needs in seconds.</td><td>CDC lands as files every few minutes; the same incremental pipeline reads them.</td><td class="v drop">Drop Kappa here</td></tr>
+<tr><td>Live lane after a logic change</td><td>Flink state must be rebuilt; Kinesis has only 7 days.</td><td>Fine: the live lane only needs 48 hours. Replay 2 days from Kinesis.</td><td class="v">Pursue (7 days is enough)</td></tr>
+</table></div>
+<p><b>One-line summary:</b> Kappa for event-native sources, with bronze as the long log; incremental batch for databases and files; window recompute for multi-input gold. This is "one medallion, two speeds", with Kappa made explicit.</p>
+</section>
+
+
+<!-- ================= MEDALLION ================= -->
+<section id="medallion">
+<h2>What happens in bronze, silver and gold</h2>
+<p class="lead">The same three layers as batch, run incrementally. Each layer has one job, so faults are easy to find.</p>
+<div class="tbl"><table>
+<tr><th>Layer</th><th>Sensor stream (event)</th><th>Database changes (CDC from SAP, MES)</th><th>Never do here</th></tr>
+<tr><td><b>Bronze</b><br>keep everything</td><td>Append every record as it came, plus envelope: shard, sequence number, Kinesis arrival time, ingest run id, schema version. Payload kept raw (or as VARIANT). Clustered on ingest date. Kept forever.</td><td>Append every change row from DMS files (insert, update, delete, commit time, change sequence). Kept forever.</td><td>Deduplicate, filter, fix values</td></tr>
+<tr><td><b>Silver</b><br>one clean truth per source</td><td>The 13 standard stages: decode by schema version, types, event time in UTC plus plant local, quality checks (range, stuck sensor, clock skew), deduplicate on <code>reading_id</code>, conform <code>press_id</code>, append. Bad rows go to quarantine with a reason.</td><td>Same stages, then <b>history</b>: master data (press, material, dealer) as <b>SCD type 2</b>; transactions (orders, claims) as <b>SCD type 1</b> (type 2 where the business needs the past state). Changes applied in source order, not arrival order.</td><td>Join across sources (silver is source-aligned)</td></tr>
+<tr><td><b>Gold</b><br>business numbers</td><td>Stream-hour job: press-minute and press-hour aggregates; facts such as OEE and scrap per press-hour by window recompute; each hour carries a "complete" flag.</td><td>Conformed dimensions with surrogate keys built from silver SCD2 (−1 unknown, −2 not applicable); facts join dimensions <b>as of event time</b>.</td><td>Read the live store; inner-join to dimensions</td></tr>
+</table></div>
+<h3>Where SCD type 1 and type 2 happen</h3>
+<ul>
+<li><b>In silver.</b> The dataset kind sets the history type. Master data is SCD2, transactions are SCD1, events are append-only, and snapshots are kept as snapshots. Only the listed tracked columns open a new version.</li>
+<li><b>Sensor readings get no SCD.</b> They are facts that never change. A "correction" is a new reading, and deduplication keeps the first.</li>
+<li><b>Gold does not redo SCD.</b> It builds dimensions from silver's SCD2 history, adds surrogate keys, and joins facts as of event time.</li>
+<li><b>The streaming catch for SCD2:</b> changes can arrive out of order, and a late change must be slotted into the middle of history. Two ways to do it:
+  <ul>
+  <li>DLT's AUTO CDC (formerly APPLY CHANGES) handles this with a sequence column.</li>
+  <li>Plain Spark needs our own MERGE in <code>foreachBatch</code> that re-cuts the valid-from and valid-to dates. This is one reason to consider DLT for CDC tables (see <a href="#dbx">Databricks choices</a>).</li>
+  </ul></li>
+<li><b>Changing a table from type 1 to type 2 is a replay from bronze,</b> which still holds every change, so the past gets history too.</li>
+</ul>
+</section>
+<!-- ================= 4 ================= -->
+<section id="joins">
+<h2>Joining data in a stream</h2>
+<p class="lead">In batch, a join sees both tables complete. In a stream, one or both sides are still arriving, so every join has to answer: <b>how long do I remember the other side, and what if it is late?</b> Memory held between messages is called <i>state</i>. State costs RAM, and lost state means a wrong answer.</p>
+<div class="fig">
+<svg viewBox="0 0 1000 200" role="img" aria-label="Stream to stream join on a time line: press cycle start events and green tyre barcode scans are matched if within 10 minutes; a watermark line marks when unmatched state can be dropped.">
+<defs><marker id="ah3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs>
+<g stroke="#111" stroke-width="1.5" fill="none"><path d="M60,170 L960,170" marker-end="url(#ah3)"/><path d="M120,60 L940,60"/><path d="M120,120 L940,120"/>
+<path d="M650,30 L650,180" stroke-dasharray="6 5" stroke-width="2"/>
+<rect x="300" y="45" width="220" height="90" rx="8" stroke-dasharray="2 4"/></g>
+<g fill="#111"><circle cx="330" cy="60" r="7"/><circle cx="470" cy="120" r="7"/><circle cx="560" cy="60" r="7"/><circle cx="800" cy="120" r="7"/><circle cx="210" cy="120" r="7" fill="#fff" stroke="#111" stroke-width="1.5"/></g>
+<g font-size="14">
+<text x="10" y="64">Press cycles</text><text x="10" y="124">Barcode scans</text><text x="880" y="190">event time</text>
+<text x="305" y="40">match window: scan within 10 min of cycle start</text>
+<text x="660" y="44">watermark: "nothing older than this will come"</text>
+<text x="660" y="100" font-size="13">state left of this line is dropped</text>
+<text x="150" y="146" font-size="13">scan with no cycle: unmatched</text>
+<text x="530" y="90" font-size="13">waits in state</text>
+</g>
+</svg>
+<p>Example: link each curing cycle to the tyre serial scanned at the press. The processor keeps unmatched cycles until the watermark passes, then gives up and routes them to an "unmatched" output.</p>
+</div>
+<h3>Five kinds of join, with tyre examples</h3>
+<div class="tbl"><table>
+<tr><th>Join kind</th><th>Tyre example</th><th>How it works</th><th>Gotcha</th><th>Engine support</th><th>Where we do it</th><th>Verdict</th></tr>
+<tr><td><b>Stream to static (lookup)</b></td><td>Reading + press master (plant, line, mould)</td><td>Each message looks up the current row of a small table.</td><td>Uses the dimension as it is now. A late or changed dimension row does not fix messages already joined. Missing key: keep the row, mark it unknown.</td><td>Spark: stream-static join, table re-read each micro-batch. Flink: lookup join (JDBC, DynamoDB) or broadcast state.</td><td>Live lane only, to label screens.</td><td class="v">Pursue (live only)</td></tr>
+<tr><td><b>Stream to stream, time-bounded</b></td><td>Press cycle start + barcode scan at the press (picture above)</td><td>Both sides wait in state until a match or the watermark passes.</td><td>State size = message rate × window. No watermark means state grows forever. Unmatched rows must go somewhere visible.</td><td>Spark: inner and outer joins with watermarks on both sides. Flink: interval join.</td><td>Silver, when the link is needed within the hour; otherwise gold.</td><td class="v">Pursue, with a declared window</td></tr>
+<tr><td><b>As-of (temporal) join</b></td><td>Reading at 10:04 + the curing recipe valid at 10:04 (SCD2)</td><td>Picks the dimension version valid at the event time, not today's.</td><td>Needs the dimension's history. Late recipe changes mean re-joining.</td><td>Flink: temporal table join, native. Spark streaming: not native; done in batch over Delta.</td><td>Gold, by window recompute.</td><td class="v">Pursue in gold</td></tr>
+<tr><td><b>Window first, then join</b></td><td>Per press-hour sensor averages + scrap from LIMS, which arrives hours later</td><td>Aggregate each side to the same grain (press-hour), then join the aggregates.</td><td>One side is hours late, so the result changes after it was first shown.</td><td>Any engine; easiest in batch.</td><td>Gold: the stream-hour job, then window recompute.</td><td class="v">Pursue in gold</td></tr>
+<tr><td><b>Stream to changelog (CDC) table</b></td><td>Dealer app events + SAP customer table kept up to date by CDC</td><td>Both sides are changing; the join must re-emit when either side changes.</td><td>Unbounded state unless a time-to-live is set; results get retracted and re-emitted, which confuses most sinks.</td><td>Flink: regular join on changelogs. Spark: not as a stream; use MERGE in batch.</td><td>Gold, batch.</td><td class="v drop">Drop in stream</td></tr>
+</table></div>
+<div class="box"><b>The join rule:</b> join inside the stream only when the answer is needed in seconds <i>and</i> the other side is small or time-bounded. Otherwise land both sides in bronze and silver, and join in gold by window recompute. This keeps state small and makes corrections automatic.</div>
+<h3>Five join hazards and what handles each</h3>
+<ul>
+<li><b>Late dimension</b> (a new press appears in readings before it appears in the master table): keep the reading with an unknown key (−1). Window recompute fixes it when the master row lands.</li>
+<li><b>Fan-out</b> (duplicate key on the "one" side multiplies rows): count duplicate keys on the one side separately; one net count hides mistakes that cancel out.</li>
+<li><b>Clock skew</b> (a press clock that is 3 minutes wrong): the gateway stamps its own time too; when the two differ by more than a limit, the reading is flagged.</li>
+<li><b>State loss</b> (a processor restart without its checkpoint): checkpoints on S3; the live lane can rebuild from 2 days of Kinesis.</li>
+<li><b>Re-emitted results</b>: sinks are idempotent (MERGE on key, or upsert by press and minute), so a retry never double counts.</li>
+</ul>
+</section>
+
+
+<!-- ================= UI ================= -->
+<section id="ui">
+<h2>Getting to the UI: direct, via a fast layer, or via gold</h2>
+<p class="lead">The question is not "how fast can data reach a screen" but "what does a screen need when it opens": the latest value, a chart of the last hours, or the ability to slice and filter.</p>
+<div class="tbl"><table>
+<tr><th>Route</th><th>Path</th><th>Delay</th><th>Pros</th><th>Cons</th><th>Rough cost</th><th>Verdict</th></tr>
+<tr><td>A · Direct push, no store</td><td>Flink → Lambda → API Gateway WebSocket → screen</td><td>~1 s</td><td>Fewest parts</td><td>A screen that opens or reconnects sees nothing until the next change; no chart of the last hour</td><td>~$100</td><td class="v drop">Drop as the only route</td></tr>
+<tr><td><b>B · Small live store + push</b></td><td>Flink → DynamoDB → DynamoDB Streams → Lambda → WebSocket; a new screen reads the snapshot from DynamoDB first</td><td>1–3 s</td><td>Snapshot then changes; serverless; cheap; 48-hour charts from the same table</td><td>No ad-hoc slicing; key design matters</td><td>~$150</td><td class="v">Pursue (recommended)</td></tr>
+<tr><td>C · Fast analytic layer (ClickHouse)</td><td>Kinesis → ClickHouse (ClickPipes) or Flink → ClickHouse; the API polls every second and pushes only differences; Grafana can query it directly</td><td>2–5 s</td><td>SQL, slicing and filters over days, many users at once</td><td>New vendor; does not push; a third copy with its own numbers to keep consistent with gold</td><td>Dev &lt;$100; production $500–3k</td><td class="v">Pursue only if live screens need slicing beyond 48 hours</td></tr>
+<tr><td>D · Lakebase as the live store</td><td>Flink → Lakebase (Postgres); the app reads with SQL and polls</td><td>2–5 s</td><td>SQL; Databricks-native; already our metadata store</td><td>No push; always-on compute; Flink to Postgres sink to own</td><td>~$100–300</td><td class="v">Pursue as the Databricks-leaning alternative to B</td></tr>
+<tr><td>E · Via gold</td><td>Gold → metric views → AI/BI dashboards (auto-refresh), Genie; or gold synced to Lakebase for an app</td><td>15–75 min</td><td>The number of record; governed; no extra copy</td><td>Not live</td><td>part of the platform</td><td class="v">Pursue for reports; Drop for live</td></tr>
+</table></div>
+<p><b>Rule:</b> live screens say "live, not final". A number that goes into a report always comes from gold, whatever the route.</p>
+</section>
+
+<!-- ================= DATABRICKS CHOICES ================= -->
+<section id="dbx">
+<h2>Databricks choices: DLT or not, Spark Streaming, Auto Loader, file arrival</h2>
+
+<h3>Is Spark Structured Streaming worth it when we only run every 15 minutes?</h3>
+<p><b>Yes, for the platform lane.</b> Even when it runs once and stops (trigger "available now"), a Spark streaming read gives us the bookkeeping for free: which Kinesis records or which files are already done (the checkpoint), exactly-once writes into Delta, and catch-up after a missed run. Doing the same with plain batch reads means writing our own "where did I stop" logic for every source.</p>
+<div class="tbl"><table>
+<tr><th>Use</th><th>Pros</th><th>Cons</th><th>Verdict</th></tr>
+<tr><td><b>Structured Streaming, trigger available-now, every 15 min</b> (platform lane)</td><td>Checkpoints, exactly-once to Delta, catch-up, same code later if we go faster; pay only for run minutes on serverless</td><td>Checkpoint is tied to the query; changing a query shape can need a new checkpoint (a replay)</td><td class="v">Pursue</td></tr>
+<tr><td>Structured Streaming always on (micro-batch, seconds)</td><td>One engine for both lanes</td><td>Always-on cluster; weaker event-time state than Flink</td><td class="v drop">Drop for the live lane</td></tr>
+<tr><td>Real-time mode (GA 2026, under 100 ms claimed)</td><td>Spark at Flink-like latency</td><td>Fixed classic cluster, always on; check Kinesis support</td><td class="v drop">Drop now; revisit to retire Flink</td></tr>
+<tr><td>Old Spark Streaming (DStreams)</td><td>—</td><td>Deprecated</td><td class="v drop">Drop</td></tr>
+<tr><td>Plain batch with our own high-water mark</td><td>Simple to read</td><td>We rebuild what checkpoints already do; easy to miss late files</td><td class="v drop">Drop for streams and files</td></tr>
+</table></div>
+
+<h3>DLT (Lakeflow Declarative Pipelines) or not?</h3>
+<p>DLT means you declare tables (streaming tables, materialized views) and their rules, and Databricks runs them: checkpoints, retries, ordering, data quality expectations, and AUTO CDC for SCD. The alternative ("non-DLT") is our own PySpark code using Structured Streaming inside Lakeflow Jobs. The <a href="/learn/data-platform-architecture/aws-databricks/etl/">reference ETL</a> on this site is built that way: the <a href="/learn/data-platform-architecture/bronze-to-silver/">13 silver stages</a> as pure PySpark functions, testable on a laptop.</p>
+<div class="tbl"><table>
+<tr><th>Option</th><th>Pros</th><th>Cons</th><th>Verdict</th></tr>
+<tr><td><b>Non-DLT: Structured Streaming in Lakeflow Jobs</b> (our 13 stages in <code>foreachBatch</code>)</td><td>Full control of every step; runs locally and in CI; portable to Fabric, EMR, Glue, GCP (only adapters change); our run recorder sees every step</td><td>We own checkpoints, SCD2 MERGE with late changes, retries and DQ wiring</td><td class="v">Pursue as the default engine</td></tr>
+<tr><td>DLT for everything</td><td>Less code; managed checkpoints and retries; expectations; lineage; serverless; good event log</td><td>Databricks-only (breaks portability); tables owned by the pipeline; a full refresh can wipe a streaming table (must lock it); one update at a time per pipeline; harder to test outside Databricks; our 13 stages must be rewritten as declarations</td><td class="v drop">Drop</td></tr>
+<tr><td><b>DLT as an adapter for CDC tables only</b> (AUTO CDC builds SCD1/SCD2 from DMS changes)</td><td>Out-of-order SCD2 handled by Databricks; removes our hardest MERGE code</td><td>Two engines to know; must still report into our run log</td><td class="v">Pursue after a spike</td></tr>
+</table></div>
+
+<h3>Auto Loader, in plain words</h3>
+<p>Auto Loader is a Spark streaming source for <b>files</b>. You point it at an S3 folder; it finds new files, remembers which ones it has read (in its checkpoint), handles schema changes, and puts unexpected fields in a rescue column. It finds new files in one of two ways:</p>
+<ul>
+<li><b>Listing the folder.</b> Fine for small folders, but slow and costly for big ones.</li>
+<li><b>File events.</b> S3 tells Databricks about each new file through queue notifications that Databricks sets up on the Unity Catalog external location. This is recommended.</li>
+</ul>
+<p><b>Kinesis is for records; S3 events are for files.</b> The sensor stream comes through Kinesis. DMS change files, LIMS results and partner files come through S3 and Auto Loader.</p>
+
+<h3>"A file lands in S3, call DLT for that file": four ways to react</h3>
+<div class="tbl"><table>
+<tr><th>Option</th><th>How</th><th>Delay</th><th>Pros</th><th>Cons</th><th>Verdict</th></tr>
+<tr><td><b>F1 · Auto Loader on a schedule</b></td><td>Job or pipeline every 15 min; Auto Loader (available-now) reads every new file since last run</td><td>≤15 min + run</td><td>Simplest; files batched together; cheap</td><td>Runs even when nothing arrived (seconds of cost)</td><td class="v">Pursue for regular feeds (DMS CDC)</td></tr>
+<tr><td><b>F2 · Databricks file arrival trigger</b></td><td>Job trigger watches the external location or volume path; when new files appear it starts the job (which can run a DLT pipeline task); Auto Loader inside picks up <i>all</i> new files</td><td>~1–2 min + run</td><td>Event-driven; no runs when nothing arrives; no AWS glue code</td><td>Checks about once a minute; a burst of files becomes one run (good) but runs queue; check trigger limits per workspace</td><td class="v">Pursue for irregular drops (LIMS, partners)</td></tr>
+<tr><td>F3 · S3 event → EventBridge → Lambda → Jobs API "run now" with the file path</td><td>One run per file, path passed as a parameter</td><td>~1 min + startup</td><td>Per-file control</td><td>A pipeline start per file (slow, costly); one DLT update at a time, so files queue; passing paths bypasses Auto Loader's bookkeeping, so a missed event is a lost file; more code to own</td><td class="v drop">Drop</td></tr>
+<tr><td>F4 · Auto Loader continuous</td><td>Always-on stream on the folder</td><td>seconds to 1 min</td><td>Fastest for files</td><td>Always-on compute</td><td class="v drop">Drop unless a T2 need appears</td></tr>
+</table></div>
+<p><b>Answer:</b> do not hand a single file to DLT. Trigger the pipeline (F2), or run it on a schedule (F1), and let Auto Loader find every new file. That way a missed event never loses a file, and ten files arriving together cost one run, not ten.</p>
+</section>
+<!-- ================= 5 ================= -->
+<section id="s3">
+<h2>Can S3 be used?</h2>
+<p class="lead">Yes, in four of the five roles below, but not as the conveyor belt itself. S3 is a warehouse, not a belt: it holds objects, it does not push them to readers, and every object written is a paid request.</p>
+<div class="box warn"><b>The number that settles it:</b> at production scale (300 readings a second), one S3 object per reading is about 778 million PUT requests a month. At about $0.005 per 1,000 PUTs, that is roughly <b>$3,900 a month in requests alone</b>. Readers would also have to list or be notified about each object, and then the platform lane reads millions of tiny files. Buffering readings into one file a minute fixes all three, at the cost of a minute of delay.</div>
+<div class="tbl"><table>
+<tr><th>Use of S3</th><th>How</th><th>Delay</th><th>Good for</th><th>Verdict</th></tr>
+<tr><td>S3 as the event log between devices and processors</td><td>Devices write objects; processors list the bucket.</td><td>Seconds to minutes, unpredictable</td><td>Nothing in our design</td><td class="v drop">Drop</td></tr>
+<tr><td>S3 as micro-batch landing ("streaming over files")</td><td>Firehose buffers 60 s or 64 MB, writes one file; S3 event notification goes to SQS; Auto Loader picks it up.</td><td>1–3 minutes</td><td>Sources that need minutes, not seconds; the AWS-only platform lane; CDC files from DMS</td><td class="v">Pursue</td></tr>
+<tr><td>S3 as Kappa's long memory</td><td>Bronze Delta (or Iceberg) tables on S3, kept forever.</td><td>n/a</td><td>Replay, history, ML training</td><td class="v">Pursue</td></tr>
+<tr><td>S3 for processor checkpoints and state</td><td>Flink and Spark save checkpoints to S3.</td><td>n/a</td><td>Recovery after restarts</td><td class="v">Pursue (managed for us)</td></tr>
+<tr><td>S3 Express One Zone as a fast log</td><td>Single-zone, low-latency bucket used as a queue.</td><td>Tens of milliseconds per request, still polled</td><td>Kafka-on-object-storage products use it internally; not something to build ourselves</td><td class="v drop">Drop</td></tr>
+</table></div>
+<p>So: Kinesis (or Kafka) is the belt; S3 is where the belt empties into, and where history lives. For sources that only need minutes, you can skip the belt entirely and go straight to S3 files.</p>
+</section>
+
+<!-- ================= 6 ================= -->
+<section id="noniot">
+<h2>Streams that are not IoT</h2>
+<p class="lead">The same design takes any event source. What changes per source is the front door (R2) and whether it needs the belt (R3) at all. Rule: <b>use the belt only when a reader needs it within minutes, or when several readers need the same events.</b></p>
+<div class="tbl"><table>
+<tr><th>Source kind</th><th>Tyre example</th><th>Event-native?</th><th>Front door</th><th>Needs the belt?</th><th>Recommended path</th><th>Verdict</th></tr>
+<tr><td>Machine sensors</td><td>Curing presses, mixers</td><td>Yes</td><td>Plant gateway (SiteWise Edge on Greengrass)</td><td>Yes: two readers, seconds</td><td>Gateway → Kinesis → live lane + platform lane</td><td class="v">Pursue</td></tr>
+<tr><td>Connected products</td><td>Tyre sensors on fleet vehicles</td><td>Yes</td><td>IoT Core (MQTT, one certificate per vehicle), batched on the vehicle</td><td>Yes</td><td>IoT Core rule → Kinesis → both lanes</td><td class="v">Pursue later, if in scope</td></tr>
+<tr><td>Database changes (CDC)</td><td>SAP orders, MES production</td><td>No; CDC makes events</td><td>AWS DMS (full load + ongoing changes), or Debezium</td><td>Usually no</td><td>DMS → S3 Parquet files every 1–5 min → Auto Loader → bronze. Switch to DMS → Kinesis only if a live reader appears.</td><td class="v">Pursue (files by default)</td></tr>
+<tr><td>App events</td><td>Dealer portal clicks, warranty-claim app</td><td>Yes</td><td>API Gateway → Kinesis, or SDK from the backend</td><td>Only if someone acts on it live</td><td>API Gateway → Firehose → S3 (minutes); Kinesis if a live use appears</td><td class="v">Pursue</td></tr>
+<tr><td>SaaS webhooks</td><td>Salesforce, payment provider</td><td>Yes, but low volume and bursty</td><td>API Gateway → EventBridge (routes, archives)</td><td>No</td><td>EventBridge → Firehose → S3 → bronze</td><td class="v">Pursue</td></tr>
+<tr><td>Partner Kafka</td><td>Logistics partner's Kafka or Confluent topic</td><td>Yes</td><td>Their cluster</td><td>Theirs</td><td>Databricks reads their Kafka directly; or MSK Replicator if we need our own copy</td><td class="v">Pursue when it appears</td></tr>
+<tr><td>Files</td><td>LIMS results, partner CSVs</td><td>No</td><td>S3 bucket</td><td>No</td><td>S3 notifications → Auto Loader (already the batch design)</td><td class="v">Pursue</td></tr>
+<tr><td>Logs and metrics</td><td>App logs, CloudWatch metrics</td><td>Yes</td><td>CloudWatch subscription or metric stream</td><td>No</td><td>Firehose → S3 → ops tables</td><td class="v">Pursue</td></tr>
+<tr><td>Queues used as a log</td><td>SQS, SNS, EventBridge as the analytics source</td><td>—</td><td>—</td><td>—</td><td>A queue deletes a message once read: no replay, no second reader, no per-key order</td><td class="v drop">Drop as a log</td></tr>
+</table></div>
+<p><b>Answer to "might there be systems apart from IoT?":</b> yes, and they fit without a second architecture. Only machine sensors (and later connected tyres) need the belt and the live lane today. Everything else lands as files or through Firehose into the same bronze, under the same contracts and checks.</p>
+</section>
+
+<!-- ================= 7 ================= -->
+<section id="physical">
+<h2>Binding options per part</h2>
+<p class="lead">The abstract parts (R1–R12) stay fixed; a <b>binding</b> picks the product for each part. Every table lists options from AWS, Databricks and open source with pros, cons and a verdict. In the <a href="/projects/data-eng-specs/">Clean Data Engineering specs</a>, the chosen rows become a binding file for that platform; another cloud is just another binding. One table per part. Prices are rough list prices for US regions (see <a href="#cost">Cost</a>). "AWS-only" and "AWS + Databricks" share C1–C7; they differ from C8 onward.</p>
+
+<h3>C1 · Edge and plant gateway (R1)</h3>
+<div class="tbl"><table>
+<tr><th>Option</th><th>Pros</th><th>Cons</th><th>Verdict</th></tr>
+<tr><td><b>IoT SiteWise Edge on Greengrass, with stream manager exporting to Kinesis</b></td><td>OPC-UA and Modbus collectors built in; buffers to local disk when offline; batches; AWS manages updates</td><td>One more AWS runtime to learn; SiteWise cloud asset modelling is extra and priced per data point</td><td class="v">Pursue (export straight to Kinesis; skip SiteWise cloud storage)</td></tr>
+<tr><td>Third-party industrial software (Kepware, Ignition) publishing MQTT or to Kinesis</td><td>Plants often already run one</td><td>Licences; another vendor</td><td class="v">Pursue if the plant already has it</td></tr>
+<tr><td>Our own Python service on a small box</td><td>Full control</td><td>We own buffering, retries, updates, security patches</td><td class="v drop">Drop</td></tr>
+</table></div>
+
+<h3>C2 · Front door and identity (R2)</h3>
+<div class="tbl"><table>
+<tr><th>Option</th><th>Pros</th><th>Cons</th><th>Cost note</th><th>Verdict</th></tr>
+<tr><td><b>Gateway writes directly to Kinesis</b> (IAM role via Greengrass token exchange)</td><td>Cheapest; fewest hops; batches up to 500 records per call</td><td>Identity is per gateway, not per machine</td><td>Kinesis charges only</td><td class="v">Pursue for plants</td></tr>
+<tr><td>IoT Core (MQTT, X.509 per device, rules engine → Kinesis)</td><td>Per-device identity, device shadows, commands back, millions of devices</td><td>Priced per message and per rule action</td><td>About $1 per million messages + $0.30 per million rule actions: ~$1,000 a month if every press sends alone</td><td class="v">Pursue for connected tyres and commands; Drop for plant readings</td></tr>
+<tr><td>API Gateway → Kinesis or Firehose</td><td>Apps and webhooks over HTTPS, with auth</td><td>Not for devices on MQTT</td><td>About $1 per million calls (HTTP API)</td><td class="v">Pursue for apps</td></tr>
+<tr><td>Databricks Zerobus Ingest (GA Feb 2026): send events straight into a Delta table</td><td>No belt to run; serverless</td><td>Only one reader (the table); no live lane from the same events; no Kinesis-style replay</td><td>Lakeflow Jobs serverless pricing</td><td class="v drop">Drop for sensors; reconsider for a single-reader app stream</td></tr>
+</table></div>
+
+<h3>C3 · Event log (R3)</h3>
+<div class="tbl"><table>
+<tr><th>Option</th><th>Pros</th><th>Cons</th><th>Rough monthly, production scale</th><th>Verdict</th></tr>
+<tr><td><b>Kinesis Data Streams, provisioned</b></td><td>Serverless to run; native to IoT Core, Firehose, Flink, Lambda and Databricks; 1 MB/s or 1,000 records/s in per shard</td><td>Shard sizing is ours; 7-day retention costs extra</td><td>~$60–130 (2 shards, 7 days, 2 dedicated readers)</td><td class="v">Pursue (recommended)</td></tr>
+<tr><td>Kinesis on-demand</td><td>No sizing; good while volume is unknown</td><td>Higher per-GB price at steady load</td><td>~$160</td><td class="v">Pursue for the first months, then switch</td></tr>
+<tr><td>MSK provisioned (Kafka)</td><td>Kafka ecosystem: Debezium, Kafka Connect, partner topics, many readers, very long retention with tiered storage</td><td>Brokers to size, patch and tune; cross-zone traffic</td><td>~$480 (3 × m7g.large + storage)</td><td class="v">Pursue only if Kafka tools are needed</td></tr>
+<tr><td>MSK Serverless</td><td>No brokers to manage</td><td>~$550 a month floor before any data</td><td>~$700</td><td class="v drop">Drop at this scale</td></tr>
+<tr><td>Confluent Cloud</td><td>Best tooling; cloud-neutral</td><td>Highest price</td><td>$1k–3k</td><td class="v drop">Drop unless multi-cloud is required</td></tr>
+<tr><td>SQS, SNS, EventBridge</td><td>Messaging and routing</td><td>No replay, no second reader </td><td>—</td><td class="v drop">Drop as the log</td></tr>
+</table></div>
+
+<h3>C4 · Contract (R4)</h3>
+<div class="tbl"><table>
+<tr><th>Option</th><th>Verdict</th></tr>
+<tr><td><b>Avro in Glue Schema Registry</b>, backward-compatible changes only; fields <code>reading_id</code>, <code>press_id</code> (key), <code>event_time</code>, <code>gateway_time</code>, <code>schema_version</code>, tags; ODCS contract in the catalog</td><td class="v">Pursue </td></tr>
+<tr><td>Confluent Schema Registry</td><td class="v">Pursue only with MSK and Confluent tools</td></tr>
+<tr><td>JSON with no registry</td><td class="v drop">Drop</td></tr>
+</table></div>
+
+<h3>C5 · Live processor (R5)</h3>
+<div class="tbl"><table>
+<tr><th>Option</th><th>Pros</th><th>Cons</th><th>Rough monthly</th><th>Verdict</th></tr>
+<tr><td><b>Managed Service for Apache Flink</b></td><td>Event-time windows, watermarks, state, interval and temporal joins; exactly-once with checkpoints</td><td>Flink skills needed; always on</td><td>~$250 (3 processing units)</td><td class="v">Pursue </td></tr>
+<tr><td>Lambda reading Kinesis</td><td>Stateless threshold alerts ("pressure above limit"); nearly free</td><td>No reliable windows or state</td><td>~$10</td><td class="v">Pursue for simple limit alerts beside Flink</td></tr>
+<tr><td>Databricks real-time mode (GA Mar 2026)</td><td>One engine (Spark) for both lanes; under 100 ms claimed</td><td>Classic compute only, fixed size, always on; check Kinesis source support</td><td>~$700–1,000 for a small always-on cluster</td><td class="v drop">Drop for now; revisit if the team wants one engine</td></tr>
+<tr><td>Glue streaming (Spark)</td><td>Serverless Spark</td><td>Always on, weaker than Flink for the live lane, not needed for the platform lane</td><td>~$650</td><td class="v drop">Drop</td></tr>
+<tr><td>AWS IoT Events (detector models)</td><td>Was built for this</td><td>End of support 20 May 2026</td><td>—</td><td class="v drop">Drop (retired)</td></tr>
+</table></div>
+
+<h3>C6 · Live store (R6)</h3>
+<div class="tbl"><table>
+<tr><th>Option</th><th>Pros</th><th>Cons</th><th>Rough monthly</th><th>Verdict</th></tr>
+<tr><td><b>DynamoDB</b> (latest per press, plus 48-hour items with TTL)</td><td>Serverless; pay per write; DynamoDB Streams can push every change to the gateway</td><td>No ad-hoc slicing or SQL</td><td>~$50</td><td class="v">Pursue (recommended)</td></tr>
+<tr><td>Lakebase (Databricks Postgres)</td><td>SQL; already our metadata store; Databricks-native</td><td>Does not push changes, so the gateway must poll; always-on compute</td><td>~$100–300 (check)</td><td class="v">Pursue as the alternative</td></tr>
+<tr><td>ClickHouse Cloud</td><td>Fast ad-hoc slicing over 48 hours</td><td>New vendor; does not push</td><td>Dev &lt;$100; prod $500+</td><td class="v">Pursue only if live screens need slicing</td></tr>
+<tr><td>ElastiCache (Valkey)</td><td>Fastest latest-value cache</td><td>No history; memory to size</td><td>~$50–150</td><td class="v drop">Drop as primary</td></tr>
+<tr><td>Timestream for LiveAnalytics</td><td>Time series</td><td>Closed to new customers since 20 Jun 2025</td><td>—</td><td class="v drop">Drop (closed)</td></tr>
+<tr><td>Timestream for InfluxDB</td><td>Time series, AWS-managed</td><td>Instances to size; Influx skills</td><td>~$100+</td><td class="v drop">Drop unless the team knows Influx</td></tr>
+</table></div>
+
+<h3>C7 · Push and alerts (R7)</h3>
+<div class="tbl"><table>
+<tr><th>Option</th><th>Verdict</th></tr>
+<tr><td><b>API Gateway WebSocket</b>: snapshot, then changes; at most 1 update a second per widget</td><td class="v">Pursue </td></tr>
+<tr><td>AppSync Events (managed pub/sub over WebSocket)</td><td class="v">Pursue as a simpler alternative; test it in the physical step</td></tr>
+<tr><td>SNS (SMS, email) and EventBridge (to ServiceNow, Teams)</td><td class="v">Pursue for alerts</td></tr>
+</table></div>
+
+<h3>C8 · Lake ingest: belt or files to bronze (R8)</h3>
+<div class="tbl"><table>
+<tr><th>Option</th><th>Stack</th><th>Verdict</th></tr>
+<tr><td><b>Databricks Kinesis source in a streaming table, trigger every 15 minutes</b> (our lander steps run in foreachBatch; dedupe on <code>reading_id</code>)</td><td>AWS + Databricks</td><td class="v">Pursue (check that "available now" works with the Kinesis source on your runtime)</td></tr>
+<tr><td>Firehose → S3 Parquet → Auto Loader</td><td>Both</td><td class="v">Pursue as the fallback if the Kinesis source falls short</td></tr>
+<tr><td><b>Firehose → S3 Tables (managed Iceberg)</b></td><td>AWS-only</td><td class="v">Pursue for AWS-only</td></tr>
+<tr><td>Zerobus</td><td>AWS + Databricks</td><td class="v drop">Drop here (see C2)</td></tr>
+</table></div>
+
+<h3>C9 · Lake tables and transforms (R9)</h3>
+<div class="tbl"><table>
+<tr><th>Option</th><th>Stack</th><th>Verdict</th></tr>
+<tr><td><b>Delta on S3 in Unity Catalog; Lakeflow streaming tables for bronze and silver; jobs for the stream-hour step and gold window recompute</b></td><td>AWS + Databricks</td><td class="v">Pursue </td></tr>
+<tr><td>S3 Tables (Iceberg); Glue ETL or EMR Serverless for silver and gold; Glue Data Catalog and Lake Formation</td><td>AWS-only</td><td class="v">Pursue for AWS-only</td></tr>
+<tr><td>Athena scheduled INSERTs for simple gold</td><td>AWS-only</td><td class="v">Pursue for small, single-input aggregates</td></tr>
+</table></div>
+
+<h3>C10 · Query and BI (R10)</h3>
+<div class="tbl"><table>
+<tr><th>Option</th><th>Stack</th><th>Verdict</th></tr>
+<tr><td><b>Databricks SQL, metric views, AI/BI dashboards, Genie</b></td><td>AWS + Databricks</td><td class="v">Pursue </td></tr>
+<tr><td>Athena + QuickSight</td><td>AWS-only</td><td class="v">Pursue for AWS-only</td></tr>
+<tr><td>Amazon Managed Grafana on the live store</td><td>Both</td><td class="v">Pursue for engineers' time-series boards (optional)</td></tr>
+<tr><td>Redshift Serverless</td><td>AWS-only</td><td class="v drop">Drop at this scale unless already owned</td></tr>
+</table></div>
+
+<h3>C11 · Commands back (R11) and C12 · Monitoring (R12)</h3>
+<div class="tbl"><table>
+<tr><th>Option</th><th>Verdict</th></tr>
+<tr><td>IoT Core jobs and device shadows for connected tyres; Greengrass deployments to change gateway settings</td><td class="v">Pursue only when control is in scope</td></tr>
+<tr><td><b>Monitoring:</b> CloudWatch alarms on Kinesis reader lag (iterator age) and write throttling, Flink checkpoint time and back-pressure, DynamoDB throttles; a "silent stream" heartbeat per plant; a run recorder that logs every 15-minute run as it finishes (push, not poll)</td><td class="v">Pursue</td></tr>
+</table></div>
+</section>
+
+<!-- ================= 8 ================= -->
+<section id="stacks">
+<h2>AWS-only vs AWS + Databricks, side by side</h2>
+<div class="tbl"><table>
+<tr><th>Role</th><th>AWS-only</th><th>AWS + Databricks</th></tr>
+<tr><td>R1–R2 Plant to front door</td><td colspan="2">Same: SiteWise Edge on Greengrass → Kinesis; IoT Core for connected tyres and commands; API Gateway for apps</td></tr>
+<tr><td>R3–R4 Belt and contract</td><td colspan="2">Same: Kinesis provisioned, 7 days; Avro in Glue Schema Registry</td></tr>
+<tr><td>R5–R7 Live lane</td><td colspan="2">Same: Managed Flink (+ Lambda for simple limits) → DynamoDB → API Gateway WebSocket; SNS and EventBridge for alerts</td></tr>
+<tr><td>R8 Lake ingest</td><td>Firehose → S3 Tables (Iceberg)</td><td>Lakeflow streaming table reads Kinesis every 15 min</td></tr>
+<tr><td>R9 Tables and transforms</td><td>Iceberg; Glue ETL or EMR Serverless; Glue Catalog and Lake Formation</td><td>Delta; Lakeflow pipelines and jobs; Unity Catalog</td></tr>
+<tr><td>R10 Use</td><td>Athena, QuickSight, SageMaker</td><td>Databricks SQL, AI/BI, Genie, Databricks ML</td></tr>
+<tr><td>R12 Governance</td><td>Lake Formation, CloudTrail</td><td>Unity Catalog (lineage, tags, masks), system tables</td></tr>
+<tr><td><b>Strength</b></td><td>Fewest vendors; lowest bill at small scale; everything pay-per-use</td><td>One governed home for batch and streams; same code for both; Genie and ML on the same tables; one governed platform for batch and streams</td></tr>
+<tr><td><b>Weakness</b></td><td>Spark/Glue jobs and Iceberg upkeep are ours; weaker lineage and semantic layer; two engines (Flink plus Glue) to own</td><td>Two bills; Databricks cost on top for every 15-minute run</td></tr>
+<tr><td><b>Verdict</b></td><td class="v drop">Drop as the main design; keep as the "no Databricks" reference variant</td><td class="v">Pursue (recommended when Databricks is the platform)</td></tr>
+</table></div>
+<p><b>The real split is by lane, not by vendor:</b> the live lane is AWS-native in both stacks, because it is about seconds and pushing to screens. The platform lane goes wherever the rest of the platform lives. A Databricks-only design (Zerobus in, real-time mode for live, Lakebase as live store) is possible since 2026, but it gives up the shared belt and replay; I would not choose it today.</p>
+</section>
+
+<!-- ================= 9 ================= -->
+<section id="perf">
+<h2>Performance and sizing</h2>
+<h3>Three scales</h3>
+<div class="tbl"><table>
+<tr><th></th><th>Demo world (DataTwin)</th><th>Production, assumed</th><th>Stretch: connected tyres</th></tr>
+<tr><td>What</td><td>The tyre world's sensor stream</td><td>5 plants, 1,500 machines; one message every 5 s per machine carrying ~20 tags, ~1 KB</td><td>200,000 vehicles; one 500-byte message a minute</td></tr>
+<tr><td>Messages</td><td>622,080 a day (~7 a second)</td><td>~300 a second; ~778 million a month</td><td>~3,300 a second; ~8.6 billion a month</td></tr>
+<tr><td>Data in</td><td>tiny</td><td>~0.3 MB/s; ~26 GB a day raw</td><td>~1.7 MB/s; ~144 GB a day</td></tr>
+<tr><td>Kinesis shards</td><td>1</td><td>1 needed, 2 for headroom and parallel reads</td><td>4 needed (record limit), 6 for headroom; or pack records to beat the 1,000/s limit</td></tr>
+<tr><td>Flink</td><td>1 unit</td><td>2 units + 1 for orchestration</td><td>4–8 units</td></tr>
+<tr><td>Bronze growth</td><td>~0.1 GB a day</td><td>~4–6 GB a day compressed</td><td>~25–35 GB a day compressed</td></tr>
+</table></div>
+<p class="muted">If your real plant numbers differ, only this table and the cost section change; the architecture does not.</p>
+<h3>Latency budget</h3>
+<div class="tbl"><table>
+<tr><th>Hop</th><th>Live lane</th><th>Platform lane</th></tr>
+<tr><td>Machine → gateway → Kinesis</td><td>0.2–1 s (gateway batches every second)</td><td>same</td></tr>
+<tr><td>Kinesis → reader</td><td>~0.1 s with a dedicated reader (enhanced fan-out); ~1 s with shared polling</td><td>waits for the next 15-minute run</td></tr>
+<tr><td>Processing</td><td>Limit alerts: immediate. 1-minute windows: window end + 5 s allowed lateness</td><td>2–5 min per run</td></tr>
+<tr><td>Store and push</td><td>~0.1–0.3 s</td><td>gold hourly job at :15</td></tr>
+<tr><td><b>End to end</b></td><td><b>1–3 s for alerts; up to ~65 s for window values</b></td><td><b>15–20 min for silver; 15–75 min for gold</b></td></tr>
+</table></div>
+<h3>Five performance rules</h3>
+<ol>
+<li><b>Batch at the edge.</b> Bundling readings per gateway per second cuts messages, requests and cost by 10–100 times.</li>
+<li><b>Key by press.</b> Order is kept per press; the many presses spread across shards. Never key by plant: one hot shard.</li>
+<li><b>Give each lane its own reader</b> (enhanced fan-out) so the 15-minute catch-up run cannot slow the live lane.</li>
+<li><b>Emit changes, not every reading,</b> into the live store and to screens; at stretch scale this is the difference between $50 and $5,000 a month in DynamoDB writes.</li>
+<li><b>Bronze files sized well:</b> 15-minute runs write fewer, larger files; liquid clustering and predictive optimization keep them tidy.</li>
+</ol>
+</section>
+
+<!-- ================= 10 ================= -->
+<section id="cost">
+<h2>Cost (rough, per month, production scale)</h2>
+<div class="box warn">Rough US-region list prices as I remember them for 2025–2026, not quotes. Check with the AWS Pricing Calculator and Databricks pricing before showing a client. People and support costs are not included.</div>
+<div class="tbl"><table>
+<tr><th>Item</th><th>AWS-only</th><th>AWS + Databricks</th><th>Note</th></tr>
+<tr><td>Plant gateways (Greengrass fee)</td><td>~$1</td><td>~$1</td><td>Hardware not counted</td></tr>
+<tr><td>Kinesis (2 shards, 7 days, 2 dedicated readers)</td><td>~$120</td><td>~$120</td><td>On-demand ~$160</td></tr>
+<tr><td>Managed Flink (3 units)</td><td>~$250</td><td>~$250</td><td></td></tr>
+<tr><td>Lambda limit alerts</td><td>~$10</td><td>~$10</td><td></td></tr>
+<tr><td>DynamoDB live store</td><td>~$50</td><td>~$50</td><td>Changes only, 1-minute windows</td></tr>
+<tr><td>API Gateway WebSocket, SNS</td><td>~$100</td><td>~$100</td><td>~50 live screens</td></tr>
+<tr><td>Lake ingest</td><td>Firehose → S3 Tables ~$50</td><td>Streaming table every 15 min ~$300–800</td><td>Serverless DBUs; the biggest unknown; measure on your workload</td></tr>
+<tr><td>Storage (S3, first year average)</td><td>~$20</td><td>~$20</td><td>Grows ~$2 a month each month</td></tr>
+<tr><td>Silver, gold, BI</td><td>Glue/EMR + Athena + QuickSight ~$150–400</td><td>Jobs + SQL warehouse ~$100–300 extra</td><td>Databricks warehouse is shared with batch</td></tr>
+<tr><td><b>Total</b></td><td><b>~$750–1,000</b></td><td><b>~$950–1,650</b></td><td>Live lane alone is ~$530 in both</td></tr>
+<tr><td>If every press goes through IoT Core instead of the gateway</td><td>+~$1,000</td><td>+~$1,000</td><td>Why C2 recommends gateway → Kinesis</td></tr>
+<tr><td>Stretch scale (connected tyres)</td><td colspan="2">IoT Core ~$9k unbatched, ~$1k with 10 readings per message; Kinesis ~$300; Flink ~$450–750; DynamoDB $50 or $5k depending on "changes only"</td><td>Per-message prices dominate: batch on the vehicle</td></tr>
+</table></div>
+<h3>What drives the bill</h3>
+<ol>
+<li><b>Per-message prices</b> (IoT Core, S3 PUTs, DynamoDB writes) dominate at scale: batch at the edge and emit only changes.</li>
+<li><b>Always-on compute</b> (Flink): keep the live lane to what someone acts on within minutes.</li>
+<li><b>The 15-minute cadence</b> sets the Databricks part: 30 minutes roughly halves it; 5 minutes roughly triples it.</li>
+<li><b>Retention on the belt:</b> 7 days is cheap; history belongs in bronze.</li>
+</ol>
+</section>
+
+
+<!-- ================= REPLAY ================= -->
+<section id="replay">
+<h2>Replays</h2>
+<p class="lead">A replay is reading old data again on purpose: after a fault, a bug fix or a logic change. Because Kinesis keeps 7 days and bronze keeps everything, every layer can be rebuilt. Rules: every replay is a logged run with a reason; replays use separate compute so live service levels are not hurt; replays never re-send alerts.</p>
+<div class="tbl"><table>
+<tr><th>Replay</th><th>When</th><th>How</th><th>Reads from</th><th>Why it is safe</th></tr>
+<tr><td>Live lane restart</td><td>Flink crash or deploy</td><td>Restart from the last checkpoint (automatic)</td><td>Kinesis</td><td>Exactly-once state; upserts by press and minute</td></tr>
+<tr><td>Live lane rebuild</td><td>New window or limit logic</td><td>Start Flink from a timestamp up to 7 days back</td><td>Kinesis</td><td>Writes are upserts; alerts marked "replay" and suppressed</td></tr>
+<tr><td>Re-ingest bronze</td><td>Lander bug, lost run</td><td>New checkpoint starting at a Kinesis timestamp</td><td>Kinesis (≤7 days)</td><td>Silver deduplicates on <code>reading_id</code></td></tr>
+<tr><td>Rebuild silver</td><td>Rule change, SCD type change</td><td>Reset that table's checkpoint and re-read bronze for the range</td><td>Bronze (forever)</td><td>Bronze is never changed; restatement logged</td></tr>
+<tr><td>Recompute gold windows</td><td>Late data, dimension fix, logic change</td><td>Window recompute for listed hours or days</td><td>Silver</td><td>Whole windows replaced; restatements visible in the SLA report</td></tr>
+<tr><td>Gateway resend</td><td>Plant back online</td><td>Gateway sends its disk buffer</td><td>Gateway</td><td>Duplicates removed by <code>reading_id</code>; late data counted</td></tr>
+<tr><td>History backfill</td><td>Years of historian data</td><td>Separate bulk job (ETL design)</td><td>Historian export on S3</td><td>Never through the stream</td></tr>
+</table></div>
+<p><b>Insurance option:</b> also copy the raw Kinesis stream to S3 through Firehose (~$25 a month). Then a reader that falls more than 7 days behind still loses nothing. Verdict: <b>Pursue</b>, because it is cheap and closes the only real data-loss gap.</p>
+</section>
+
+<!-- ================= ERRORS ================= -->
+<section id="errors">
+<h2>Error handling</h2>
+<p class="lead">Principle: <b>errors are rows, not log lines.</b> Every rejected record lands in a table with run id, stage, reason and a pointer to the raw payload, so the SLA report can count it. One bad record never stops a pipeline.</p>
+<div class="tbl"><table>
+<tr><th>What goes wrong</th><th>Where</th><th>What happens</th><th>Shows up as</th></tr>
+<tr><td>Plant network down</td><td>Gateway</td><td>Buffers to disk (hours), sends on reconnect</td><td>"Silent plant" alert after 5 min; late-data count when it returns</td></tr>
+<tr><td>Writes throttled</td><td>Kinesis</td><td>SDK retries with back-off</td><td>Throttle alarm; add a shard</td></tr>
+<tr><td>Bad message (cannot decode, unknown schema)</td><td>Live lane / platform lane</td><td>Live: side output to a dead-letter folder. Platform: kept raw in bronze, sent to quarantine in silver</td><td>Quarantine by reason</td></tr>
+<tr><td>Contract or quality failure (missing field, impossible value, stuck sensor)</td><td>Silver</td><td>Row to quarantine with the rule that failed; the rest continue</td><td>DQ counts; alert above a threshold (e.g. 1%)</td></tr>
+<tr><td>Duplicates</td><td>Silver</td><td>Removed on <code>reading_id</code></td><td>Duplicate count per hop</td></tr>
+<tr><td>Later than the watermark</td><td>Live lane / gold</td><td>Live: left out of live views. Gold: accepted, window recomputed</td><td>Late count by lateness bucket; restatements</td></tr>
+<tr><td>Processor crash</td><td>Flink / Spark job</td><td>Restart from checkpoint; job retries 3 times</td><td>Run log; alert after retries</td></tr>
+<tr><td>A 15-minute run fails or is skipped</td><td>Platform lane</td><td>Next run catches up (available-now reads everything new)</td><td>Alert after 2 missed runs; SLA breach marked</td></tr>
+<tr><td>Reader falls behind</td><td>Any Kinesis reader</td><td>Keeps going; risk only near 7 days</td><td>Lag alarm at 1 h (live) and 24 h (platform); Firehose copy is the backstop</td></tr>
+<tr><td>Sink failure (DynamoDB throttle, stale WebSocket)</td><td>Live lane</td><td>Retry; drop dead connections</td><td>Push error rate</td></tr>
+<tr><td>Bad deploy</td><td>Any</td><td>Roll back, then replay the affected range</td><td>Replay run with reason</td></tr>
+</table></div>
+</section>
+
+<!-- ================= SLA REPORT ================= -->
+<section id="slareport">
+<h2>The end-to-end SLA report</h2>
+<p class="lead">One report answers four questions every day: did we keep the promises, where did the time go, did anything get lost, and what went wrong.</p>
+<h3>Timestamps every reading carries</h3>
+<div class="tbl"><table>
+<tr><th>Stamp</th><th>Set by</th><th>Meaning</th></tr>
+<tr><td>t0 <code>event_time</code></td><td>Machine</td><td>When it happened</td></tr>
+<tr><td>t1 <code>gateway_time</code></td><td>Plant gateway</td><td>When the plant sent it (also catches clock skew)</td></tr>
+<tr><td>t2 <code>kinesis_arrival</code></td><td>Kinesis</td><td>When it reached AWS</td></tr>
+<tr><td>t3 <code>live_emitted_at</code></td><td>Flink</td><td>When the live lane pushed it (alerts and windows)</td></tr>
+<tr><td>t4 <code>bronze_at</code> + run id</td><td>Lander</td><td>When it landed in bronze</td></tr>
+<tr><td>t5 <code>silver_at</code> + run id</td><td>Silver builder</td><td>When it became clean data</td></tr>
+<tr><td>t6 <code>gold_complete_at</code></td><td>Gold builder</td><td>When its press-hour was marked complete</td></tr>
+</table></div>
+<h3>How it is built</h3>
+<ul>
+<li>Flink writes a one-minute summary per plant: counts, p50/p95/p99 of t3 − t0 and t3 − t2, late and bad counts. The summary goes through Firehose into an ops table.</li>
+<li>Each 15-minute run records counts and delay percentiles per hop through the run recorder.</li>
+<li>Two ops tables hold the result:
+  <ul>
+  <li><code>ops.stream_sla_minute</code>: stream, plant, minute, hop, count, p50, p95, p99, late, duplicate and quarantined counts.</li>
+  <li><code>ops.gold_hour_completeness</code>: press-hour, complete at, inputs late, restated.</li>
+  </ul></li>
+<li>Metric views sit on top, feeding an AI/BI dashboard. Ops agents read them through tools, never through raw queries.</li>
+</ul>
+<h3>The five pages of the report</h3>
+<div class="grid g2">
+<div class="card"><h4>1 · Scorecard</h4>Each promise with % met for yesterday, 7 days and 30 days, plus breach count. Example: "Alerts ≤5 s: 99.6% (target 99%)".</div>
+<div class="card"><h4>2 · Where the time goes</h4>A waterfall of p95 delay per hop (machine → gateway → Kinesis → live, and → bronze → silver → gold) by plant.</div>
+<div class="card"><h4>3 · Nothing lost</h4>Counts per hop side by side: gateway sent, Kinesis received, bronze, silver (+ duplicates + quarantined), gold minutes covered. The difference must be zero or explained.</div>
+<div class="card"><h4>4 · Errors and lateness</h4>Quarantine by reason, late readings by bucket (&lt;5 min, &lt;1 h, &lt;1 day, older), restated gold hours.</div>
+<div class="card"><h4>5 · Incidents</h4>Silent plants, missed runs, lag alarms and replays, each with start, end, cause and which promise it broke (event-time vs arrival-time).</div>
+</div>
+<div class="fig">
+<svg viewBox="0 0 1000 170" role="img" aria-label="Example waterfall: p95 delay per hop for the platform lane, most time spent waiting for the 15-minute run.">
+<g font-size="14"><text x="10" y="20">Example, platform lane p95 per hop (minutes)</text>
+<text x="10" y="52">machine → Kinesis</text><text x="10" y="82">wait for 15-min run</text><text x="10" y="112">bronze → silver</text><text x="10" y="142">silver → gold hour</text></g>
+<g stroke="#111" stroke-width="1.5" fill="#fff">
+<rect x="190" y="40" width="8" height="18"/>
+<rect x="198" y="70" width="450" height="18" fill="#eee"/>
+<rect x="648" y="100" width="105" height="18"/>
+<rect x="753" y="130" width="180" height="18" fill="#ddd"/></g>
+<g font-size="13"><text x="205" y="55">0.2</text><text x="655" y="84">15</text><text x="760" y="114">3.5</text><text x="938" y="144">6 → 25 total</text></g>
+</svg>
+<p>Made-up numbers to show the shape: most delay is waiting for the next run, which is a cadence choice, not a performance problem.</p>
+</div>
+</section>
+<!-- ================= 11 ================= -->
+<section id="nfr">
+<h2>Non-functional concerns</h2>
+<div class="tbl"><table>
+<tr><th>Concern</th><th>What it means here</th><th>Target</th><th>How the design meets it</th></tr>
+<tr><td>Freshness</td><td>How far behind each screen or table may be</td><td>Live: alerts ≤5 s, windows ≤90 s. Silver ≤20 min. Gold ≤75 min.</td><td>Two lanes; freshness checked per table; a late run alerts</td></tr>
+<tr><td>Throughput and growth</td><td>Handle 10× without redesign</td><td>3,000 messages a second</td><td>Add shards and Flink units; same design </td></tr>
+<tr><td>Ordering</td><td>Readings of one press in order</td><td>Per press</td><td>Partition key <code>press_id</code>; windows use event time anyway</td></tr>
+<tr><td>Delivery and correctness</td><td>Nothing lost, nothing counted twice</td><td>Exactly-once <i>results</i></td><td>At-least-once delivery + dedupe on <code>reading_id</code> + idempotent MERGE; Flink checkpoints</td></tr>
+<tr><td>Late and out-of-order data</td><td>Gateway offline for a while</td><td>Live: 5 s lateness, later readings go to the platform lane only. Gold: 2-day lookback</td><td>Watermarks; window recompute re-checks 2 days</td></tr>
+<tr><td>Replay and retention</td><td>Recover from a bad deploy or outage</td><td>7 days on the belt; forever in bronze</td><td>Kinesis retention; bronze append-only, never deleted</td></tr>
+<tr><td>Availability</td><td>Keep working when a part fails</td><td>Live lane 99.9%; no data loss while the gateway buffers</td><td>Gateway disk buffer; Kinesis, Flink and DynamoDB are multi-zone</td></tr>
+<tr><td>Disaster recovery</td><td>A whole region down</td><td>Platform lane: hours; live lane: best effort</td><td>Gateways buffer for hours; bronze replicated to a DR region</td></tr>
+<tr><td>Security</td><td>Only known senders and readers</td><td>Per-gateway identity; least privilege; encrypted everywhere</td><td>IAM role per gateway, X.509 per vehicle; KMS keys; VPC endpoints; no public brokers</td></tr>
+<tr><td>Privacy</td><td>Personal data in streams</td><td>No PII in bronze outside restricted columns</td><td>Sensors carry none; dealer app events and vehicle location are PII: masked in silver, tagged in the catalog</td></tr>
+<tr><td>Schema evolution</td><td>Firmware adds a tag</td><td>No reader breaks</td><td>Registry allows backward-compatible changes only; unknown fields go to a rescue column</td></tr>
+<tr><td>Data quality</td><td>Impossible values, stuck sensors, clock skew</td><td>Bad rows visible, never silently dropped</td><td>Range and staleness checks in silver; quarantine table; gateway time vs press time check</td></tr>
+<tr><td>Observability</td><td>Know when it is slow or silent</td><td>Alert within 5 minutes of a silent plant</td><td>Lag and throttle alarms; heartbeat per plant; run recorder; one alert per incident</td></tr>
+<tr><td>Cost control</td><td>No surprise bills</td><td>Monthly budget with alerts</td><td>Edge batching; changes only; tags per data product for cost reports</td></tr>
+<tr><td>Operability</td><td>Small team can run it</td><td>No self-managed clusters</td><td>All managed or serverless; Flink is the one skill to grow</td></tr>
+<tr><td>Portability</td><td>Reuse on Azure, Fabric, GCP</td><td>Only adapters change</td><td>Stream port: Kinesis adapter today; Event Hubs and Pub/Sub adapters later; contracts and checks stay</td></tr>
+<tr><td>Testability</td><td>Prove it before a client sees it</td><td>Planted incidents caught</td><td>DataTwin sensor stream with late, duplicate and silent-press incidents; replay tests; port contract tables on moto</td></tr>
+</table></div>
+</section>
+
+<!-- ================= 12 ================= -->
+<section id="decide">
+<h2>Decisions to make, with recommendations</h2>
+<div class="tbl"><table>
+<tr><th>#</th><th>Question</th><th>Options</th><th>My recommendation</th></tr>
+<tr><td>S1</td><td>Which stack?</td><td>AWS-only · AWS + Databricks · Databricks-only (Zerobus + real-time mode)</td><td><b>AWS + Databricks</b>, with an AWS-native live lane. Keep AWS-only as a documented variant.</td></tr>
+<tr><td>S2</td><td>How do plant readings enter?</td><td>Gateway → Kinesis directly · every machine through IoT Core</td><td><b>Gateway → Kinesis</b>; IoT Core only for connected tyres and commands. Saves ~$1,000 a month.</td></tr>
+<tr><td>S3</td><td>Which belt?</td><td>Kinesis · MSK</td><td><b>Kinesis</b> (on-demand first month, then provisioned). MSK only if Kafka tools or partner topics arrive.</td></tr>
+<tr><td>S4</td><td>Which live store?</td><td>DynamoDB · Lakebase · ClickHouse Cloud</td><td><b>DynamoDB</b>: it pushes changes and costs ~$50. Lakebase if you want SQL and one fewer service.</td></tr>
+<tr><td>S5</td><td>How do SAP and MES changes arrive?</td><td>DMS → S3 files · DMS → Kinesis · Debezium on MSK</td><td><b>DMS → S3 files</b> into the existing batch path; no belt until a live reader needs it.</td></tr>
+<tr><td>S7</td><td>DLT or not?</td><td>Non-DLT (our Structured Streaming jobs) · DLT for everything · DLT only for CDC tables</td><td><b>Non-DLT as default; DLT for CDC→SCD tables after a spike.</b></td></tr>
+<tr><td>S8</td><td>How do file drops start processing?</td><td>Schedule · Databricks file arrival trigger · S3 event → Lambda → run per file</td><td><b>Schedule for regular feeds, file arrival trigger for irregular ones;</b> never one run per file.</td></tr>
+<tr><td>S9</td><td>Live UI route?</td><td>Direct push · live store + push · ClickHouse · Lakebase</td><td><b>Live store (DynamoDB) + push.</b> ClickHouse only if screens need slicing.</td></tr>
+<tr><td>S10</td><td>Firehose raw copy of Kinesis to S3?</td><td>Yes · no</td><td><b>Yes</b> (~$25 a month); removes the 7-day loss risk.</td></tr>
+<tr><td>S6</td><td>Are connected tyres in scope?</td><td>Now · later · never</td><td><b>Later.</b> The design already fits them; it only adds IoT Core and more shards.</td></tr>
+</table></div>
+
+</section>
+
+<!-- ================= 13 ================= -->
+<section id="notes">
+<h2>Notes and sources</h2>
+<ul>
+<li>AWS IoT Events end of support, 20 May 2026: <a href="https://docs.aws.amazon.com/iotevents/latest/developerguide/iotevents-end-of-support.html">AWS docs</a>. AWS IoT Analytics was also discontinued (15 Dec 2025, per a third-party copy of the AWS notice; confirm on AWS).</li>
+<li>Timestream for LiveAnalytics closed to new customers from 20 Jun 2025: <a href="https://docs.aws.amazon.com/timestream/latest/developerguide/AmazonTimestreamForLiveAnalytics-availability-change.html">AWS docs</a>.</li>
+<li>Zerobus Ingest generally available, 23 Feb 2026: <a href="https://www.databricks.com/en/blog/announcing-general-availability-zerobus-ingest-part-lakeflow-connect">Databricks blog</a>, <a href="https://docs.databricks.com/aws/en/ingestion/zerobus-overview">docs</a>.</li>
+<li>Real-time mode for Structured Streaming generally available (March 2026): <a href="https://www.databricks.com/blog/announcing-general-availability-real-time-mode-apache-spark-structured-streaming-databricks">Databricks blog</a>, <a href="https://docs.databricks.com/aws/en/structured-streaming/real-time">docs</a>.</li>
+<li>Related on this site: <a href="/learn/real-time-analytics/">Real-time analytics, drawn simply</a>, <a href="/learn/medallion-architecture/">Medallion architecture</a>, <a href="/learn/data-platform-architecture/aws-databricks/">Data platform on AWS + Databricks</a>, <a href="/learn/datatwin/">DataTwin</a>.</li>
+</ul>
+</section>
+</div>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>Should a 1 to 5 second streaming lane call Databricks?</summary><p>No. Keep it light and inside the streaming layer: validate, deduplicate, limit checks, one-minute windows, and small reference data copied in on a schedule. Databricks reads the raw stream separately and builds the numbers of record.</p></details><details class="faq"><summary>Where do SCD type 1 and type 2 happen in a streaming lakehouse?</summary><p>In silver, by dataset kind: master data as SCD type 2, transactions as type 1, sensor events append only. Gold builds dimensions from silver&#x27;s history and joins facts as of event time.</p></details><details class="faq"><summary>DLT or plain Structured Streaming?</summary><p>Plain Structured Streaming in jobs as the default, because it is portable and fully testable; DLT&#x27;s AUTO CDC is worth it for tables built from database changes, where out-of-order SCD2 is hardest to write by hand.</p></details><details class="faq"><summary>Can S3 be used as the stream?</summary><p>Not as the belt itself: one object per event is slow and costs a request each. S3 works well as minute-level landing for Auto Loader and as the long-term history that makes Kappa replays possible.</p></details><details class="faq"><summary>Should I trigger a DLT pipeline for each file that lands in S3?</summary><p>No. Use a file arrival trigger or a schedule and let Auto Loader pick up every new file, so a missed event never loses a file and ten files cost one run.</p></details></section>
+<section id="next"><p class="eyebrow">Related</p><h2>Where it connects</h2>
+<p><a href="/learn/real-time-analytics/">Real-time analytics, drawn simply</a> · <a href="/learn/medallion-architecture/">Medallion architecture</a> · <a href="/learn/data-platform-architecture/aws-databricks/">Data platform on AWS + Databricks</a> · <a href="/data-engineering/">All data engineering</a></p></section>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Concepts</b><a href="/leaders/">For leaders</a><a href="/learn/data-systems/">Data systems</a><a href="/learn/data-systems/platform/">Data and AI platform</a><a href="/learn/data-systems/platform/#hops">Data engineering</a><a href="/concepts/semantic-layer/">BI and analytics</a><a href="/concepts/#ml-engineering">ML</a><a href="/learn/ai-universe/">AI</a><a href="/learn/data-systems/platform/#concerns">Across all of them</a><a href="/concepts/#a-z">Key concepts, A to Z</a></div><div><b>On your cloud</b><a href="/platforms/databricks/">Databricks</a><a href="/platforms/aws/">AWS</a><a href="/platforms/azure/">Azure and Fabric</a><a href="/platforms/gcp/">Google Cloud</a><a href="/platforms/open/">Open source</a><a href="/platforms/anthropic/">Claude (Anthropic)</a><a href="/certifications/">All certifications</a></div><div><b>Your role</b><a href="/paths/">Find your path</a><a href="/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/paths/forward-deployed/">Forward Deployed Engineering</a><a href="/mindset/">Worried about AI?</a><a href="/projects/">All projects to join</a></div><div><b>How we work</b><a href="/how-we-work/#thinking">Thinking principles</a><a href="/how-we-work/#ba">Business analysis</a><a href="/how-we-work/#pm">Project management</a><a href="/learn/technical-anchor/">The technical anchor</a></div><div><b>Causes and deep tech</b><a href="/ai-for-cause/">AI for a cause</a><a href="/deep-tech/">Deep tech</a></div><div><b>About</b><a href="/about/">About this site</a><a href="/about/#join">Write or teach</a><a href="/writing/">Blog</a><a href="/research/">All open specifications</a><a href="/assets/">All open-source code</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

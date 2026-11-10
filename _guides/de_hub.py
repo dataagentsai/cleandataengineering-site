@@ -30,6 +30,7 @@ STORY = [
 GUIDES = [
     ("Data platform architecture", "/learn/data-platform-architecture/", "How we build it: control plane, metadata, three services, streaming lane, agents that only suggest."),
     ("Medallion architecture", "/learn/medallion-architecture/", "Bronze, silver and gold, one order through every layer, nine rules, products per platform."),
+    ("Streaming on AWS and Databricks", "/learn/streaming/", "IoT and ordinary sources, seconds and minutes: roles first, then options per part with pros, cons and a verdict; SCD, DLT, Auto Loader, replays, SLA report, cost."),
     ("Real-time analytics", "/learn/real-time-analytics/", "From a database change to a number on screen in a second: designs, products and cost."),
     ("Test architecture for data", "/learn/data-platform-architecture/testing/", "Unit, contract, data and simulation tests, and where each runs."),
     ("Shift left: fail fast on data code", "/learn/shift-left/", "Static and offline checks that catch PySpark and SQL problems before they run."),
