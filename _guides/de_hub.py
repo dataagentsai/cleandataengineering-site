@@ -24,7 +24,7 @@ URL = f"{SITE}/data-engineering/"
 
 STORY = [
     ("Data systems, end to end", "/learn/data-systems/", "rose", "Start here. Upstreams, the data platform and downstreams on one page, then a page per block and per hop with the questions to chase, what breaks in production and the decisions."),
-    ("Upstreams: know your sources", "/learn/data-systems/upstreams/", "grey", "70 questions to ask about every source, with the reason for each; APIs, files, joins, and where the answers go."),
+    ("Upstreams: know your sources", "/learn/data-systems/upstreams/", "grey", "85 questions to ask about every source, streams included, with the reason for each; APIs, files, joins, and where the answers go."),
     ("The data platform, whole", "/learn/data-systems/platform/", "silver", "Five hops along the medallion and 24 cross-cutting concerns, with layout, environments and cost pages."),
 ]
 GUIDES = [
