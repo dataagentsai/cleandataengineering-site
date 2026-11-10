@@ -25,27 +25,22 @@ from data import DISCIPLINES, PLATFORMS  # noqa: E402
 # data platform guides out of Courses and to put key concepts under each stream). URLs never change; only the menu.
 STREAMS = {
     "data-engineering": ("/data-engineering/", [
-        ("Data systems, end to end", "/learn/data-systems/"),
-        ("Upstreams: know your sources", "/learn/data-systems/upstreams/"),
-        ("The data platform, whole", "/learn/data-systems/platform/"),
+        ("On your platform", None),
         ("Databricks cost calculator", "/learn/data-systems/platform/cost/calculator/"),
-        ("Data platform architecture", "/learn/data-platform-architecture/"),
-        ("Medallion architecture", "/learn/medallion-architecture/"),
-        ("Real-time analytics", "/learn/real-time-analytics/"),
-        ("Test architecture for data", "/learn/data-platform-architecture/testing/"),
-        ("Shift left: fail fast on data code", "/learn/shift-left/"),
         ("AWS + Databricks, and the ETL", "/learn/data-platform-architecture/aws-databricks/"),
-        ("Hard problems by layer", "/learn/hard-problems/"),
-        ("The technical anchor", "/learn/technical-anchor/"),
+        ("Learning path by platform", "/paths/data-engineering/"),
+        ("Practice", None),
         ("Simulator: DataTwin Studio", "/learn/data-platform-sim/"),
         ("Simulator: Problem Lab", "/learn/data-platform-sim/problems/"),
         ("Simulator: Performance stories", "/learn/data-platform-sim/performance/"),
+        ("The technical anchor", "/learn/technical-anchor/"),
+        ("Hard problems by layer", "/learn/hard-problems/"),
+        ("Build with us", None),
         ("For leaders: spec-driven data platforms", "/leaders/spec-driven/data-platform/"),
         ("Open spec: DataTwin, explained", "/learn/datatwin/"),
         ("Open spec: Clean Data Engineering specs", "/projects/data-eng-specs/"),
         ("Projects to join", "/projects/?subject=data"),
         ("Key concepts", "/concepts/#data-engineering"),
-        ("Learning path by platform", "/paths/data-engineering/"),
     ]),
     "ai-engineering": ("/paths/ai-engineering/", [
         ("The AI Universe", "/learn/ai-universe/"),
@@ -81,26 +76,42 @@ ROLES = [(d["name"], STREAMS[d["id"]][0], STREAMS[d["id"]][1]) if d["id"] in STR
 
 # (group, [(name, href, [(child, href), ...]), ...])
 SECTIONS = [
-    ("Learn", [
+    ("Foundations", [
+        ("Data systems", "/learn/data-systems/", [
+            ("Data systems, end to end", "/learn/data-systems/"),
+            ("Upstreams: know your sources", "/learn/data-systems/upstreams/"),
+            ("API sources", "/learn/data-systems/upstreams/apis/"),
+            ("File sources", "/learn/data-systems/upstreams/files/"),
+            ("Learning the joins", "/learn/data-systems/upstreams/joins/"),
+            ("Where the answers go", "/learn/data-systems/upstreams/answers/"),
+            ("Source system questionnaire", "/learn/data-systems/upstreams/questionnaire/"),
+        ]),
+        ("Data platform", "/learn/data-systems/platform/", [
+            ("The data platform, whole", "/learn/data-systems/platform/"),
+            ("Layout: catalogs and schemas", "/learn/data-systems/platform/layout/"),
+            ("Environments and CI/CD", "/learn/data-systems/platform/environments/"),
+            ("Cost and FinOps", "/learn/data-systems/platform/cost/"),
+            ("Data platform architecture", "/learn/data-platform-architecture/"),
+            ("Medallion architecture", "/learn/medallion-architecture/"),
+            ("Real-time analytics", "/learn/real-time-analytics/"),
+            ("Test architecture for data", "/learn/data-platform-architecture/testing/"),
+            ("Shift left: fail fast on data code", "/learn/shift-left/"),
+        ]),
+        ("Key concepts, A to Z", "/concepts/#a-z", []),
+    ]),
+    ("Streams", [
         ("Find your path", "/paths/", []),
         *ROLES,
         ("Worried about AI?", "/mindset/", []),
     ]),
-    ("Certifications", [
+    ("Platforms", [
+        ("Databricks", "/platforms/databricks/", []),
+        ("AWS", "/platforms/aws/", []),
+        ("Azure and Fabric", "/platforms/azure/", []),
+        ("Google Cloud", "/platforms/gcp/", []),
+        ("Open source", "/platforms/open/", []),
+        ("Claude (Anthropic)", "/platforms/anthropic/", []),
         ("All certifications", "/certifications/", []),
-        ("Claude (Anthropic)", "/certifications/#anthropic", [
-            ("Claude Certified Architect", "/certifications/claude-certified-architect/CCA-F/"),
-            ("CCA-F mind maps", "/certifications/cca-f-mind-maps/"),
-            ("Claude Architect, Professional", "/certifications/claude-certified-architect/CCAR-P/"),
-        ]),
-        ("Databricks", "/certifications/#databricks", [
-            ("Gen AI Engineer free prep", "/certifications/databricks-genai-engineer/"),
-        ]),
-        ("Microsoft", "/certifications/#microsoft", [
-            ("AI-103 free prep", "/certifications/azure-ai-engineer/"),
-        ]),
-        ("AWS", "/certifications/#aws", []),
-        ("Google Cloud", "/certifications/#gcp", []),
     ]),
     ("AI for a cause", [
         ("All projects", "/ai-for-cause/", []),
@@ -153,6 +164,7 @@ CSS = """<style>
   .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
   .sidepanel details[open] > summary::after { transform:rotate(90deg); }
   .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
   .sidepanel .close { display:none; }
   .scrim { display:none; }
   @media (min-width:900px) {
@@ -191,7 +203,7 @@ def panel():
         out.append(f"<h4>{g}</h4><ul>")
         for name, href, kids in items:
             if kids:
-                ks = "".join(f'<li><a href="{h}">{n}</a></li>' for n, h in kids)
+                ks = "".join(f'<li class="sub">{n}</li>' if h is None else f'<li><a href="{h}">{n}</a></li>' for n, h in kids)
                 out.append(f'<li><details><summary><a href="{href}">{name}</a></summary><ul>{ks}</ul></details></li>')
             else:
                 out.append(f'<li><a href="{href}">{name}</a></li>')

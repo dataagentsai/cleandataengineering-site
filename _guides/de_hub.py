@@ -85,21 +85,21 @@ def page():
 <li><a href="#story">Start here: data systems, end to end</a></li><li><a href="#guides">Architecture guides</a></li><li><a href="#tools">Tools and simulators</a></li>
 <li><a href="#deliver">Delivering data projects</a></li><li><a href="#more">Specifications, projects, leaders</a></li><li><a href="#concepts">Key concepts</a></li><li><a href="#paths">Learning path by platform</a></li></ol></nav>
 
-<section id="story"><p class="eyebrow">Start here</p><h2>Data systems, end to end</h2>
+<section id="story"><p class="eyebrow">Foundations · shared by every stream</p><h2>Start with the data system, then the platform</h2>
 <p>For data leaders first, then builders: the whole data system in one picture, then a page for each part with the questions to chase and the decisions to take.</p>{cards(STORY, True)}</section>
 
-<section id="guides"><p class="eyebrow">How we build it</p><h2>Architecture guides</h2>{cards(GUIDES)}</section>
+<section id="guides"><p class="eyebrow">Foundations · data platform</p><h2>Architecture guides</h2>{cards(GUIDES)}</section>
 
-<section id="tools"><p class="eyebrow">Try it</p><h2>Tools and simulators</h2>{cards(TOOLS)}</section>
+<section id="tools"><p class="eyebrow">Data Engineering · practice</p><h2>Tools and simulators</h2>{cards(TOOLS)}</section>
 
-<section id="deliver"><p class="eyebrow">Projects</p><h2>Delivering data projects</h2>{cards(DELIVER)}</section>
+<section id="deliver"><p class="eyebrow">Data Engineering · practice</p><h2>Delivering data projects</h2>{cards(DELIVER)}</section>
 
-<section id="more"><p class="eyebrow">Build with us</p><h2>Open specifications, projects and leaders</h2>{cards(MORE)}</section>
+<section id="more"><p class="eyebrow">Data Engineering · build with us</p><h2>Open specifications, projects and leaders</h2>{cards(MORE)}</section>
 
-<section id="concepts"><p class="eyebrow">The same everywhere</p><h2>Key concepts</h2>
+<section id="concepts"><p class="eyebrow">Data Engineering · key concepts</p><h2>Key concepts</h2>
 <p>Short pages on the ideas every data engineer uses, whatever the platform. The <a href="/concepts/#a-z">full A to Z</a> covers every stream.</p>{groups}</section>
 
-<section id="paths"><p class="eyebrow">Step by step</p><h2>Learning path by platform</h2>
+<section id="paths"><p class="eyebrow">Data Engineering · on your platform</p><h2>Learning path by platform</h2>
 <p>Crawl, walk and run on the platform you use, with projects. <a href="/paths/data-engineering/">See the whole path</a>.</p><div class="ideas">{paths}</div></section>"""
     title = "Data Engineering"
     desc = "Free data engineering guides, tools and learning paths: data systems end to end, upstream questions, medallion and platform architecture, a Databricks cost calculator, simulators and key concepts."
