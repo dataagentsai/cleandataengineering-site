@@ -171,7 +171,7 @@ BLOCKS = [
       "Dashboards and AI must read the same metric definitions, or they will disagree in the same meeting.",
       "Agents call typed tools over certified data. They never write raw SQL.",
       "Every consumer is named with an owner, so a change upstream can be traced to who it hurts."],
-     "next", None, "Coming soon"),
+     "ready", f"{BASE}downstreams/", "Read the downstreams page"),
 ]
 
 HOPS = [
@@ -182,7 +182,7 @@ HOPS = [
     ("3", "Silver to gold", "Tables shaped for a use, reconciled every run.", None, "/learn/data-platform-architecture/gold/"),
     ("4", "Gold to semantic", "Every metric defined once, with an owner.", None, "/concepts/semantic-layer/"),
     ("5", "Semantic to experiences", "Dashboards, AI and agents give the same answer.", None, None),
-    ("6", "Downstreams", "Every consumer named, with what it needs and what it can tolerate.", None, None),
+    ("6", "Downstreams", "Every consumer named, with what it needs and what it can tolerate.", f"{BASE}downstreams/", None),
 ]
 
 TEMPLATE = [
@@ -932,6 +932,10 @@ def main():
     (out / "upstreams" / "questionnaire" / "index.html").write_text(questionnaire())
     print(f"data systems -> {out} ({n_q} upstream questions)")
     _deep().main()
+    _down = importlib.util.spec_from_file_location("downstreams", ROOT / "_guides" / "downstreams.py")
+    _m = importlib.util.module_from_spec(_down)
+    _down.loader.exec_module(_m)
+    _m.main()
 
 
 if __name__ == "__main__":

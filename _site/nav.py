@@ -25,22 +25,12 @@ from data import DISCIPLINES, PLATFORMS  # noqa: E402
 # data platform guides out of Courses and to put key concepts under each stream). URLs never change; only the menu.
 STREAMS = {
     "data-engineering": ("/data-engineering/", [
-        ("On your platform", None),
-        ("Databricks cost calculator", "/learn/data-systems/platform/cost/calculator/"),
-        ("AWS + Databricks, and the ETL", "/learn/data-platform-architecture/aws-databricks/"),
-        ("Learning path by platform", "/paths/data-engineering/"),
-        ("Practice", None),
-        ("Simulator: DataTwin Studio", "/learn/data-platform-sim/"),
-        ("Simulator: Problem Lab", "/learn/data-platform-sim/problems/"),
-        ("Simulator: Performance stories", "/learn/data-platform-sim/performance/"),
-        ("The technical anchor", "/learn/technical-anchor/"),
-        ("Hard problems by layer", "/learn/hard-problems/"),
-        ("Build with us", None),
-        ("For leaders: spec-driven data platforms", "/leaders/spec-driven/data-platform/"),
-        ("Open spec: DataTwin, explained", "/learn/datatwin/"),
-        ("Open spec: Clean Data Engineering specs", "/projects/data-eng-specs/"),
-        ("Projects to join", "/projects/?subject=data"),
+        ("Start here", "/data-engineering/"),
+        ("Learning path", "/paths/data-engineering/"),
         ("Key concepts", "/concepts/#data-engineering"),
+        ("Tools and simulators", "/data-engineering/#tools"),
+        ("Delivering data projects", "/data-engineering/#deliver"),
+        ("Projects to join", "/projects/?subject=data"),
     ]),
     "ai-engineering": ("/paths/ai-engineering/", [
         ("The AI Universe", "/learn/ai-universe/"),
@@ -78,13 +68,16 @@ ROLES = [(d["name"], STREAMS[d["id"]][0], STREAMS[d["id"]][1]) if d["id"] in STR
 SECTIONS = [
     ("Foundations", [
         ("Data systems", "/learn/data-systems/", [
-            ("Data systems, end to end", "/learn/data-systems/"),
-            ("Upstreams: know your sources", "/learn/data-systems/upstreams/"),
+            ("The whole system, end to end", "/learn/data-systems/"),
+            ("Upstreams", None),
+            ("Know your sources", "/learn/data-systems/upstreams/"),
             ("API sources", "/learn/data-systems/upstreams/apis/"),
             ("File sources", "/learn/data-systems/upstreams/files/"),
             ("Learning the joins", "/learn/data-systems/upstreams/joins/"),
             ("Where the answers go", "/learn/data-systems/upstreams/answers/"),
             ("Source system questionnaire", "/learn/data-systems/upstreams/questionnaire/"),
+            ("Downstreams", None),
+            ("Know your consumers", "/learn/data-systems/downstreams/"),
         ]),
         ("Data platform", "/learn/data-systems/platform/", [
             ("The data platform, whole", "/learn/data-systems/platform/"),
