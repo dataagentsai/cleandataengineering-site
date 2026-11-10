@@ -21,12 +21,62 @@ import sys
 sys.path.insert(0, str(ROOT / "_paths"))
 from data import DISCIPLINES, PLATFORMS  # noqa: E402
 
-# Extra links under a role, after its platforms (2 Nov 2026: vertical agents under AI Engineering).
-ROLE_EXTRAS = {"ai-engineering": [("Vertical agents", "/ai-engineering/vertical-agents/")]}
+# Each stream in Learn opens to its own guides and key concepts (10 Nov 2026, the owner asked to move the
+# data platform guides out of Courses and to put key concepts under each stream). URLs never change; only the menu.
+STREAMS = {
+    "data-engineering": ("/data-engineering/", [
+        ("Data systems, end to end", "/learn/data-systems/"),
+        ("Upstreams: know your sources", "/learn/data-systems/upstreams/"),
+        ("The data platform, whole", "/learn/data-systems/platform/"),
+        ("Databricks cost calculator", "/learn/data-systems/platform/cost/calculator/"),
+        ("Data platform architecture", "/learn/data-platform-architecture/"),
+        ("Medallion architecture", "/learn/medallion-architecture/"),
+        ("Real-time analytics", "/learn/real-time-analytics/"),
+        ("Test architecture for data", "/learn/data-platform-architecture/testing/"),
+        ("Shift left: fail fast on data code", "/learn/shift-left/"),
+        ("AWS + Databricks, and the ETL", "/learn/data-platform-architecture/aws-databricks/"),
+        ("Hard problems by layer", "/learn/hard-problems/"),
+        ("The technical anchor", "/learn/technical-anchor/"),
+        ("Simulator: DataTwin Studio", "/learn/data-platform-sim/"),
+        ("Simulator: Problem Lab", "/learn/data-platform-sim/problems/"),
+        ("Simulator: Performance stories", "/learn/data-platform-sim/performance/"),
+        ("For leaders: spec-driven data platforms", "/leaders/spec-driven/data-platform/"),
+        ("Open spec: DataTwin, explained", "/learn/datatwin/"),
+        ("Open spec: Clean Data Engineering specs", "/projects/data-eng-specs/"),
+        ("Projects to join", "/projects/?subject=data"),
+        ("Key concepts", "/concepts/#data-engineering"),
+        ("Learning path by platform", "/paths/data-engineering/"),
+    ]),
+    "ai-engineering": ("/paths/ai-engineering/", [
+        ("The AI Universe", "/learn/ai-universe/"),
+        ("Agent Harness", "/learn/agent-harness/"),
+        ("Agent Harness on AWS", "/learn/agent-harness-aws/"),
+        ("Eval Harness", "/learn/eval-harness/"),
+        ("Agent guardrails", "/learn/agent-guardrails/"),
+        ("Vertical agents", "/ai-engineering/vertical-agents/"),
+        ("Simulator: Agent Harness", "/learn/agent-harness-sim/"),
+        ("For leaders: spec-driven development", "/leaders/spec-driven/"),
+        ("Open spec: AI Assurance Catalog", "https://dataagentsai.github.io/ai-assurance-catalog/"),
+        ("Open spec: AI Harness Catalog", "https://dataagentsai.github.io/ai-harness-catalog/"),
+        ("Open spec: AgentTwin, explained", "/learn/agenttwin/"),
+        ("The AgentTwin Lab", "/lab/"),
+        ("Code: Reference Agent", "https://github.com/dataagentsai/reference-agent"),
+        ("Code: AgentTwin library", "https://github.com/dataagentsai/agenttwin"),
+        ("Code: Eval Harness Framework", "https://github.com/dataagentsai/eval-harness-framework"),
+        ("Code: Claims assistant on Azure", "https://github.com/dataagentsai/claims-fnol-azure"),
+        ("Projects to join", "/projects/?subject=ai"),
+        ("Key concepts", "/concepts/#ai-engineering"),
+        ("Learning path by platform", "/paths/ai-engineering/"),
+    ]),
+}
 
-# One entry per role path (1 Nov 2026, the owner asked to show the roles in Learn), each opening to its platforms.
-ROLES = [(d["name"], f"/paths/{d['id']}/", [(PLATFORMS[p], f"/paths/{d['id']}/{p}/") for p in d["platforms"]]
-          + ROLE_EXTRAS.get(d["id"], []))
+# Extra pages for the other streams, shown after their platform paths.
+EXTRAS = {"llm-engineering": [("Simulator: Claude API", "/learn/llm-api-sim/"), ("Projects to join", "/projects/?subject=llm")]}
+
+# Other streams: their platform paths, their extra pages, then their key concepts.
+ROLES = [(d["name"], STREAMS[d["id"]][0], STREAMS[d["id"]][1]) if d["id"] in STREAMS else
+         (d["name"], f"/paths/{d['id']}/", [(PLATFORMS[p], f"/paths/{d['id']}/{p}/") for p in d["platforms"]]
+          + EXTRAS.get(d["id"], []) + [("Key concepts", f"/concepts/#{d['id']}")])
          for d in DISCIPLINES]
 
 # (group, [(name, href, [(child, href), ...]), ...])
@@ -34,37 +84,6 @@ SECTIONS = [
     ("Learn", [
         ("Find your path", "/paths/", []),
         *ROLES,
-        ("Key concepts", "/concepts/", []),
-        ("Courses", "/learn/", [
-            ("The AI Universe", "/learn/ai-universe/"),
-            ("Agent Harness", "/learn/agent-harness/"),
-            ("Agent Harness on AWS", "/learn/agent-harness-aws/"),
-            ("Eval Harness", "/learn/eval-harness/"),
-            ("Data systems, end to end", "/learn/data-systems/"),
-            ("Data systems: upstreams", "/learn/data-systems/upstreams/"),
-            ("Data systems: the platform", "/learn/data-systems/platform/"),
-            ("Databricks cost calculator", "/learn/data-systems/platform/cost/calculator/"),
-            ("Data platform architecture", "/learn/data-platform-architecture/"),
-            ("Data platform on AWS + Databricks", "/learn/data-platform-architecture/aws-databricks/"),
-            ("The ETL, end to end (AWS)", "/learn/data-platform-architecture/aws-databricks/etl/"),
-            ("Test architecture for data", "/learn/data-platform-architecture/testing/"),
-            ("Medallion architecture", "/learn/medallion-architecture/"),
-            ("Real-time analytics", "/learn/real-time-analytics/"),
-            ("Shift left: fail fast on data code", "/learn/shift-left/"),
-            ("Hard problems by layer", "/learn/hard-problems/"),
-            ("The technical anchor", "/learn/technical-anchor/"),
-            ("Technical anchor: discovery", "/learn/technical-anchor/discovery/"),
-            ("Technical anchor: project review", "/learn/technical-anchor/project-review/"),
-            ("Project review: the checks", "/learn/technical-anchor/project-review/checks/"),
-            ("Agent guardrails", "/learn/agent-guardrails/"),
-        ]),
-        ("Simulators", "/simulators/", [
-            ("Claude API Simulator", "/learn/llm-api-sim/"),
-            ("Agent Harness Simulator", "/learn/agent-harness-sim/"),
-            ("DataTwin Studio", "/learn/data-platform-sim/"),
-            ("Problem Lab", "/learn/data-platform-sim/problems/"),
-            ("Performance stories", "/learn/data-platform-sim/performance/"),
-        ]),
         ("Worried about AI?", "/mindset/", []),
     ]),
     ("Certifications", [
@@ -96,29 +115,13 @@ SECTIONS = [
         ("Robot data benchmark", "/projects/robotics-data-benchmark/", []),
     ]),
     ("Build with us", [
-        ("Join a project", "/projects/", []),
-        ("Open specifications", "/research/", [
-            ("AI Assurance Catalog", "https://dataagentsai.github.io/ai-assurance-catalog/"),
-            ("AI Harness Catalog", "https://dataagentsai.github.io/ai-harness-catalog/"),
-            ("AgentTwin, explained", "/learn/agenttwin/"),
-            ("DataTwin, explained", "/learn/datatwin/"),
-            ("The AgentTwin Lab", "/lab/"),
-        ]),
-        ("Open-source assets", "/assets/", [
-            ("Reference Agent", "https://github.com/dataagentsai/reference-agent"),
-            ("AgentTwin library", "https://github.com/dataagentsai/agenttwin"),
-            ("Eval Harness Framework", "https://github.com/dataagentsai/eval-harness-framework"),
-            ("Claims assistant on Azure", "https://github.com/dataagentsai/claims-fnol-azure"),
-            ("Data project review skill", "/learn/technical-anchor/project-review/"),
-        ]),
+        ("All projects", "/projects/", []),
+        ("All open specifications", "/research/", []),
+        ("All open-source code", "/assets/", []),
         ("Write or teach", "/about/#join", []),
     ]),
     ("For leaders", [
         ("The one-minute version", "/leaders/", []),
-        ("Spec-driven development", "/leaders/spec-driven/", [
-            ("For agents", "/leaders/spec-driven/"),
-            ("For data platforms", "/leaders/spec-driven/data-platform/"),
-        ]),
         ("Questions leaders ask", "/leaders/#questions", []),
         ("Technical papers", "/papers/", []),
         ("Blog", "/writing/", []),

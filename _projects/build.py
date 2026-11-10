@@ -261,6 +261,7 @@ def list_page():
 var b=e.target.closest('button');if(!b)return;c.querySelectorAll('button').forEach(function(x){{x.classList.toggle('on',x===b)}});
 f[c.dataset.f]=b.dataset.v;document.querySelectorAll('.card').forEach(function(el){{
 var ok=Object.keys(f).every(function(k){{return!f[k]||el.dataset[k]===f[k]}});el.style.display=ok?'':'none'}})}})}})}})();
+(function(){{var sq=new URLSearchParams(location.search).get('subject');if(!sq)return;var b=document.querySelector('.chips[data-f="subject"] button[data-v="'+sq+'"]');if(b)b.click();}})();
 (function(){{var row=document.getElementById('startrow'),grid=document.querySelector('.cards'),msg=document.getElementById('startmsg');
 var cards=Array.prototype.slice.call(grid.children),rank={{crawl:0,walk:1,run:2}},from={{fresher:'crawl',switching:'walk',experienced:'run'}};
 function apply(v){{row.querySelectorAll('button').forEach(function(b){{b.classList.toggle('on',b.dataset.v===v)}});
