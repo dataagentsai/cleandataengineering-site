@@ -295,14 +295,17 @@
 <span class="ss-legend">Each chart is the age of the newest data on the screen: it climbs while nothing new arrives and drops at each refresh.</span></div>
 <div class="ss-stage" id="ssim" data-mode="faster"><svg id="ssim-svg" role="img" aria-label="Four platform-lane designs compared on one clock"></svg></div>
 
-<h2>Where the waiting is today</h2>
-<div class="tw"><table class="t"><tr><th>Wait</th><th>Today</th><th>What removes it</th></tr>
-<tr><td>Until the next run</td><td>0 to 15 min</td><td>Shorter cadence (C) or continuous (D)</td></tr>
-<tr><td>The run itself</td><td>2 to 5 min</td><td>Smaller runs (C) or always-on compute (D)</td></tr>
-<tr><td>Until gold at :15 each hour</td><td>up to 60 min</td><td><b>Chain gold to the run</b>, provisional every run (B)</td></tr>
-<tr><td>Until Power BI refreshes</td><td>up to 30 min on Pro</td><td><b>The gold job starts the refresh</b> (B): push the signal, pull the data</td></tr>
+<h2>Why today's lane is slow: where the time goes</h2>
+<p>Follow one reading from the press to the Power BI screen in design A. On average it takes <b>about 60 minutes</b> (best about 31, worst about 90). <b>Only about 7 of those minutes are work.</b> The rest is waiting for clocks.</p>
+<div class="tw"><table class="t"><tr><th>Step</th><th>Average</th><th>Worst</th><th>Share of the average</th><th>Work or waiting?</th></tr>
+<tr><td>Machine to Kinesis</td><td>1 s</td><td>1 s</td><td>0%</td><td>Work</td></tr>
+<tr><td>Wait for the hour to close (gold is built per closed hour)</td><td>30 min</td><td>60 min</td><td><b>50%</b></td><td>Waiting: the gold design</td></tr>
+<tr><td>Wait for the gold job's :15 slot (the 15-min run to silver happens inside this wait)</td><td>15 min</td><td>15 min</td><td><b>25%</b></td><td>Waiting: a clock</td></tr>
+<tr><td>Gold job runs</td><td>4 min</td><td>5 min</td><td>7%</td><td>Work</td></tr>
+<tr><td>Wait for Power BI's next 30-minute refresh</td><td>11 min</td><td>11 min</td><td><b>18%</b></td><td>Waiting: a clock</td></tr>
+<tr><td><b>Total</b></td><td><b>about 60 min</b></td><td><b>about 90 min</b></td><td>about 88% waiting</td><td></td></tr>
 </table></div>
-
+<p><b>So three quarters of the time comes from building gold once an hour, and most of the rest from Power BI's refresh clock.</b> The 15-minute run cadence, the obvious suspect, is hidden inside the hourly wait; it only starts to matter after gold is chained. In design B the same reading takes about 14 minutes on average: about 7.5 waiting for the next run, 3 for the run, 2 for gold and 1.5 for the refresh. Now the cadence is the biggest share, which is what design C shortens.</p>
 <h2>The architecture changes, one by one</h2>
 <div class="tw"><table class="t"><tr><th>Change</th><th>Pros</th><th>Cons</th><th>Verdict</th></tr>
 <tr><td><b>1 · Chain the steps instead of clocks.</b> When the silver run finishes, a table update trigger (or the last task of the same job) starts gold; when gold finishes, a task calls the Power BI refresh API.</td><td>Removes the two biggest waits; no new services</td><td>A failed step must stop the chain and alert</td><td><b>Pursue</b></td></tr>
