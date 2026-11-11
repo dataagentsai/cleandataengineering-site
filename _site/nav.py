@@ -86,6 +86,7 @@ SECTIONS = [
             ("Delta vs Iceberg", "/learn/delta-vs-iceberg/"),
             ("Time travel as SCD Type 2?", "/learn/time-travel-vs-scd2/"),
             ("SCD2: AUTO CDC or own PySpark?", "/learn/scd2-auto-cdc-vs-pyspark/"),
+            ("Gold harness spec: facts and SCD2", "/learn/gold-harness-spec/"),
             ("Who maintains your tables", "/learn/table-maintenance/"),
             ("Streaming", "/learn/streaming/"),
             ("Streaming: all options", "/learn/streaming/options/"),
