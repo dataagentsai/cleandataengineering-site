@@ -1,0 +1,512 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>One example end to end: tyre sales to dealers · Clean Data Engineering</title>
+<meta name="description" content="A complete worked example: business questions, a gold star schema, an entitlements table and row filter, a metric view with composed, year-over-year and semi-additive measures, queries, materialization choices, dashboard and Genie, number tests, and the same model in dbt and Power BI DAX."><link rel="canonical" href="https://cleandataengineering.ai/learn/metric-views/example/">
+<meta property="og:title" content="One example end to end: tyre sales to dealers"><meta property="og:description" content="A complete worked example: business questions, a gold star schema, an entitlements table and row filter, a metric view with composed, year-over-year and semi-additive measures, queries, materialization choices, dashboard and Genie, number tests, and the same model in dbt and Power BI DAX."><meta property="og:url" content="https://cleandataengineering.ai/learn/metric-views/example/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .bi .fig { border:var(--line); border-radius:var(--wob); padding:12px 14px; margin:16px 0; background:#fff; overflow-x:auto; }
+  .bi .fig svg { width:100%; min-width:680px; height:auto; display:block; } .bi .fig text { font-family:var(--hand); fill:#111; }
+  .bi .fig p { font-size:13.5px; color:var(--muted); margin:6px 0 0; }
+  .bi .box { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--butter-wash); }
+  .bi .warn { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--rose-wash); }
+  .bi .tabs3 { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
+  .bi .tabs3 a { border:1.5px solid var(--ink); border-radius:999px; padding:4px 14px; background:#fff; color:var(--ink); text-decoration:none; font-size:15px; }
+  .bi .tabs3 a.on { background:var(--butter-wash); font-weight:700; }
+  .bi table.t td { font-size:14px; }
+  .bi td.v { font-weight:700; white-space:nowrap; }
+  .bi .toc { columns:2; } @media (max-width:700px){ .bi .toc { columns:1; } }
+</style><style>
+  .path { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 6px; }
+  .path a { border:1.5px solid var(--ink); border-radius:999px; padding:3px 12px; background:#fff; color:var(--ink); text-decoration:none; font-size:14px; }
+  .path a.on { background:var(--rose-wash); font-weight:700; }
+  .bi .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .bi .grid2 { grid-template-columns:1fr; } }
+  .bi .card { border:var(--line); border-radius:var(--wob); padding:10px 16px; background:#fff; }
+  .bi .card h3 { margin:4px 0 6px; } .bi .card.good { background:var(--mint-wash); } .bi .card.bad { background:var(--rose-wash); }
+  .bi .steps { counter-reset:s; list-style:none; padding-left:0; } .bi .steps > li { counter-increment:s; border:var(--line); border-radius:var(--wob); padding:10px 16px 10px 52px; margin:10px 0; position:relative; background:#fff; }
+  .bi .steps > li::before { content:counter(s); position:absolute; left:14px; top:9px; width:26px; height:26px; border:1.5px solid var(--ink); border-radius:50%; text-align:center; line-height:24px; font-family:var(--hand); background:var(--butter-wash); }
+  .bi pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .bi .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .bi .gloss dt { font-weight:700; margin-top:8px; } .bi .gloss dd { margin:2px 0 0 0; }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "One example end to end: tyre sales to dealers", "description": "A complete worked example: business questions, a gold star schema, an entitlements table and row filter, a metric view with composed, year-over-year and semi-additive measures, queries, materialization choices, dashboard and Genie, number tests, and the same model in dbt and Power BI DAX.", "url": "https://cleandataengineering.ai/learn/metric-views/example/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-11", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Data engineering", "item": "https://cleandataengineering.ai/data-engineering/"}, {"@type": "ListItem", "position": 2, "name": "Metric views", "item": "https://cleandataengineering.ai/learn/metric-views/"}, {"@type": "ListItem", "position": 3, "name": "9 · Example", "item": "https://cleandataengineering.ai/learn/metric-views/example/"}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Can I run this example on Databricks Free Edition?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Use the catalog 'workspace' instead of 'main', run the gold script, then the metric views, then the queries on the serverless SQL warehouse. Row filters need a second user to see the effect."}}, {"@type": "Question", "name": "Why copy region onto the fact table?", "acceptedAnswer": {"@type": "Answer", "text": "So the row filter checks a column on the row itself, without a join per row. The dealer table still holds region for slicing; gold keeps the two in step."}}, {"@type": "Question", "name": "Why two metric views instead of one?", "acceptedAnswer": {"@type": "Answer", "text": "Sales and stock have different grains: invoice lines versus dealer-product-day snapshots. Putting them in one view would make one of them fan out."}}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Concepts</h4><ul><li><details><summary><a href="/leaders/">For leaders</a></summary><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/leaders/spec-driven/">Spec-driven development: agents</a></li><li><a href="/leaders/spec-driven/data-platform/">Spec-driven development: data platforms</a></li><li><a href="/papers/">Technical papers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/">Data systems</a></summary><ul><li><a href="/learn/data-systems/">The whole system, end to end</a></li><li class="sub">Upstreams</li><li><a href="/learn/data-systems/upstreams/">Know your sources</a></li><li><a href="/learn/data-systems/upstreams/apis/">API sources</a></li><li><a href="/learn/data-systems/upstreams/files/">File sources</a></li><li><a href="/learn/data-systems/upstreams/joins/">Learning the joins</a></li><li><a href="/learn/data-systems/upstreams/answers/">Where the answers go</a></li><li><a href="/learn/data-systems/upstreams/questionnaire/">Source system questionnaire</a></li><li class="sub">Downstreams</li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/platform/">Data and AI platform</a></summary><ul><li class="sub">Conceptual architecture</li><li><a href="/learn/data-systems/platform/">The platform, whole</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#hops">Data engineering</a></summary><ul><li class="sub">The hops</li><li><a href="/learn/data-platform-architecture/ingestion/">Hop 1: sources to bronze</a></li><li><a href="/learn/data-platform-architecture/bronze-to-silver/">Hop 2: bronze to silver</a></li><li><a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a></li><li><a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a></li><li class="sub">Tables and formats</li><li><a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a></li><li><a href="/learn/table-maintenance/">Who maintains your tables</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li class="sub">History, SCD and facts</li><li><a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD2: AUTO CDC or own PySpark?</a></li><li><a href="/learn/gold-harness-spec/">Gold harness spec: facts and SCD2</a></li><li><a href="/learn/time-travel-vs-scd2/">Time travel as SCD Type 2?</a></li><li class="sub">Streaming and real time</li><li><a href="/learn/streaming/">Streaming on AWS and Databricks</a></li><li><a href="/learn/streaming/options/">Streaming: all options</a></li><li><a href="/learn/streaming/sim/">Streaming simulator</a></li><li><a href="/learn/streaming/real-time-mode/">Databricks real time: RTM and Lakehouse//RT</a></li><li class="sub">Quality and testing</li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/data-platform-sim/data-quality/">Data quality, metadata-driven</a></li><li class="sub">Hands-on simulators</li><li><a href="/learn/data-platform-sim/">One batch through Spark and Delta</a></li><li><a href="/learn/data-platform-sim/spark/">Spark internals</a></li><li><a href="/learn/data-platform-sim/delta/">Delta Lake internals</a></li><li><a href="/learn/data-platform-sim/performance/">Spark performance: 12 problems</a></li><li><a href="/learn/data-platform-sim/problems/">Problems solved: SCD2, late data, duplicates</a></li><li class="sub">On AWS</li><li><a href="/learn/data-platform-architecture/aws-databricks/">AWS + Databricks, ETL end to end</a></li><li><a href="/learn/aws-data-services/">AWS data services catalog</a></li><li class="sub">Open specs</li><li><a href="/learn/datatwin/">DataTwin</a></li><li><a href="/projects/data-eng-specs/">Clean Data Engineering specs</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/semantic-layer/">BI and analytics</a></summary><ul><li><a href="/concepts/semantic-layer/">Hop 4: the semantic layer</a></li><li><a href="/writing/genie-metric-views/">Genie and metric views</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/">Power BI vs Databricks AI/BI</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/power-bi/">Power BI and Fabric, in depth</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/ai-bi/">Databricks AI/BI, in depth</a></li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/#ml-engineering">ML</a></summary><ul><li><a href="/concepts/#ml-engineering">Key ML ideas (pages coming)</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/ai-universe/">AI</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">Open spec: AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">Open spec: AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">Open spec: AgentTwin</a></li><li><a href="/lab/">The AgentTwin Lab</a></li><li><a href="https://github.com/dataagentsai/reference-agent">Code: Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">Code: AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Code: Eval Harness Framework</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#concerns">Across all of them</a></summary><ul><li><a href="/learn/data-systems/platform/#concerns">All 24 concerns</a></li><li><a href="/learn/data-systems/platform/layout/">Layout: catalogs and schemas</a></li><li><a href="/learn/data-systems/platform/environments/">Environments and CI/CD</a></li><li><a href="/learn/data-systems/platform/cost/">Cost and FinOps</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li></ul></details></li><li><a href="/concepts/#a-z">Key concepts, A to Z</a></li></ul><h4>On your cloud</h4><ul><li><details><summary><a href="/platforms/databricks/">Databricks</a></summary><ul><li><a href="/platforms/databricks/#systems">Data systems</a></li><li><a href="/platforms/databricks/#de">Data engineering</a></li><li><a href="/platforms/databricks/#bi">BI and analytics</a></li><li><a href="/platforms/databricks/#ml">ML</a></li><li><a href="/platforms/databricks/#ai">AI</a></li><li><a href="/platforms/databricks/#across">Across all of them</a></li><li><a href="/platforms/databricks/#paths">Learning paths</a></li><li><a href="/platforms/databricks/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/aws/">AWS</a></summary><ul><li><a href="/platforms/aws/#systems">Data systems</a></li><li><a href="/platforms/aws/#de">Data engineering</a></li><li><a href="/platforms/aws/#bi">BI and analytics</a></li><li><a href="/platforms/aws/#ml">ML</a></li><li><a href="/platforms/aws/#ai">AI</a></li><li><a href="/platforms/aws/#across">Across all of them</a></li><li><a href="/platforms/aws/#paths">Learning paths</a></li><li><a href="/platforms/aws/#certs">Certifications</a></li><li><a href="/learn/aws-data-services/">AWS data services: all 66</a></li></ul></details></li><li><details><summary><a href="/platforms/azure/">Azure and Fabric</a></summary><ul><li><a href="/platforms/azure/#systems">Data systems</a></li><li><a href="/platforms/azure/#de">Data engineering</a></li><li><a href="/platforms/azure/#bi">BI and analytics</a></li><li><a href="/platforms/azure/#ml">ML</a></li><li><a href="/platforms/azure/#ai">AI</a></li><li><a href="/platforms/azure/#across">Across all of them</a></li><li><a href="/platforms/azure/#paths">Learning paths</a></li><li><a href="/platforms/azure/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/gcp/">Google Cloud</a></summary><ul><li><a href="/platforms/gcp/#systems">Data systems</a></li><li><a href="/platforms/gcp/#de">Data engineering</a></li><li><a href="/platforms/gcp/#bi">BI and analytics</a></li><li><a href="/platforms/gcp/#ml">ML</a></li><li><a href="/platforms/gcp/#ai">AI</a></li><li><a href="/platforms/gcp/#across">Across all of them</a></li><li><a href="/platforms/gcp/#paths">Learning paths</a></li><li><a href="/platforms/gcp/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/open/">Open source</a></summary><ul><li><a href="/platforms/open/#systems">Data systems</a></li><li><a href="/platforms/open/#de">Data engineering</a></li><li><a href="/platforms/open/#bi">BI and analytics</a></li><li><a href="/platforms/open/#ml">ML</a></li><li><a href="/platforms/open/#ai">AI</a></li><li><a href="/platforms/open/#across">Across all of them</a></li><li><a href="/platforms/open/#paths">Learning paths</a></li><li><a href="/platforms/open/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/anthropic/">Claude (Anthropic)</a></summary><ul><li><a href="/platforms/anthropic/#ai">AI</a></li><li><a href="/platforms/anthropic/#certs">Certifications</a></li></ul></details></li><li><a href="/certifications/">All certifications</a></li></ul><h4>Your role</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/data-engineering/">Data Engineering</a></summary><ul><li><a href="/data-engineering/">Start here</a></li><li><a href="/paths/data-engineering/">Learning path</a></li><li><a href="/data-engineering/#tools">Practice and simulators</a></li><li><a href="/projects/?subject=data">Projects to join</a></li><li><a href="/concepts/#data-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/">Learning path</a></li><li><a href="/learn/agent-harness-sim/">Simulator: Agent Harness</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li><li><a href="/projects/?subject=ai">Projects to join</a></li><li><a href="/concepts/#ai-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/">Learning path</a></li><li><a href="/learn/llm-api-sim/">Simulator: Claude API</a></li><li><a href="/projects/?subject=llm">Projects to join</a></li><li><a href="/concepts/#llm-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/">Learning path</a></li><li><a href="/concepts/#ml-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/">Learning path</a></li><li><a href="/concepts/#software-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/paths/forward-deployed/">Learning path</a></li><li><a href="/concepts/#forward-deployed">Key concepts</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li><li><a href="/projects/">All projects to join</a></li></ul><h4>How we work</h4><ul><li><a href="/how-we-work/#thinking">Thinking principles</a></li><li><a href="/how-we-work/#ba">Business analysis</a></li><li><a href="/how-we-work/#pm">Project management</a></li><li><details><summary><a href="/learn/technical-anchor/">The technical anchor</a></summary><ul><li><a href="/learn/technical-anchor/">The role</a></li><li><a href="/learn/technical-anchor/discovery/">Discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li></ul></details></li></ul><h4>Causes and deep tech</h4><ul><li><details><summary><a href="/ai-for-cause/">AI for a cause</a></summary><ul><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul></details></li><li><details><summary><a href="/deep-tech/">Deep tech</a></summary><ul><li><a href="/problems/">Hard problems</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul></details></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li><li><a href="/about/#join">Write or teach</a></li><li><a href="/writing/">Blog</a></li><li><a href="/research/">All open specifications</a></li><li><a href="/assets/">All open-source code</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › <a href="/learn/metric-views/">Metric views</a> › 9 · Example</p>
+<p class="eyebrow" style="margin-top:22px">Data engineering · BI and analytics · free guide · 9 · Example</p>
+<h1>One example end to end: tyre sales to dealers</h1>
+<nav class="path" aria-label="Pages in this section"><a href="/learn/metric-views/" class="">Start here</a><a href="/learn/metric-views/semantic-model/" class="">1 · The idea</a><a href="/learn/metric-views/three-ways/" class="">2 · Three products</a><a href="/learn/metric-views/limits/" class="">3 · Limits</a><a href="/learn/metric-views/anatomy/" class="">4 · Parts</a><a href="/learn/metric-views/granularity/" class="">5 · Grain</a><a href="/learn/metric-views/security/" class="">6 · Row-level security</a><a href="/learn/metric-views/performance/" class="">7 · Speed</a><a href="/learn/metric-views/production/" class="">8 · Production</a><a href="/learn/metric-views/example/" class="on">9 · Example</a></nav>
+<div class="bi">
+<p>A tyre maker sells to dealers in two regions. Sales Finance wants one set of numbers for a dashboard, a Genie space for managers, and Power BI for the monthly pack, and each regional manager must see only their region. Here it is, built end to end, small enough to run in a free workspace.</p>
+<div class="fig"><svg viewBox="0 0 1000 340" role="img" aria-label="The worked example. Gold tables dim_dealer, dim_product, fact_sales_line and fact_stock_daily feed two metric views: sales_mv with revenue, margin percent and year over year, and stock_mv with units on hand. A region_access table drives the row filter on the fact table. An AI/BI dashboard, a Genie space, Power BI and an agent tool read the metric views."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><rect x="10" y="30" width="170" height="60" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="95.0" y="56.0" font-size="15" text-anchor="middle">dim_dealer</text><text x="95.0" y="74.0" font-size="13" text-anchor="middle">region, channel</text><rect x="10" y="110" width="170" height="60" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="95.0" y="136.0" font-size="15" text-anchor="middle">dim_product</text><text x="95.0" y="154.0" font-size="13" text-anchor="middle">segment, rim</text><rect x="10" y="190" width="170" height="60" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="95.0" y="216.0" font-size="15" text-anchor="middle">fact_sales_line</text><text x="95.0" y="234.0" font-size="13" text-anchor="middle">one row per line</text><rect x="10" y="270" width="170" height="60" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="95.0" y="296.0" font-size="15" text-anchor="middle">fact_stock_daily</text><text x="95.0" y="314.0" font-size="13" text-anchor="middle">one row per day</text><rect x="240" y="30" width="180" height="60" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="330.0" y="56.0" font-size="15" text-anchor="middle">region_access</text><text x="330.0" y="74.0" font-size="13" text-anchor="middle">who sees what</text><rect x="470" y="110" width="200" height="80" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="570.0" y="137.0" font-size="15" text-anchor="middle">sales_mv</text><text x="570.0" y="155.0" font-size="13" text-anchor="middle">revenue, margin %,</text><text x="570.0" y="173.0" font-size="13" text-anchor="middle">year over year</text><rect x="470" y="240" width="200" height="70" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="570.0" y="271.0" font-size="15" text-anchor="middle">stock_mv</text><text x="570.0" y="289.0" font-size="13" text-anchor="middle">units on hand (last)</text><rect x="780" y="20" width="200" height="56" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="880.0" y="53.0" font-size="15" text-anchor="middle">AI/BI dashboard</text><path d="M670,150 L778,48" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)" stroke-dasharray="5 5"/><rect x="780" y="98" width="200" height="56" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="880.0" y="131.0" font-size="15" text-anchor="middle">Genie space</text><path d="M670,150 L778,126" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)" stroke-dasharray="5 5"/><rect x="780" y="176" width="200" height="56" rx="10" fill="#f1eefb" stroke="#111" stroke-width="1.5"/><text x="880.0" y="209.0" font-size="15" text-anchor="middle">Power BI</text><path d="M670,150 L778,204" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)" stroke-dasharray="5 5"/><rect x="780" y="254" width="200" height="56" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="880.0" y="287.0" font-size="15" text-anchor="middle">agent tool</text><path d="M670,150 L778,282" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)" stroke-dasharray="5 5"/><path d="M180,60 L468,130" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M180,140 L468,145" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M180,220 L468,165" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M180,300 L468,275" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M330,90 L330,205" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)" stroke-dasharray="5 5"/><text x="290" y="160" font-size="13" text-anchor="middle">row filter</text><path d="M670,275 L778,270" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)" stroke-dasharray="5 5"/></svg><p>Four gold tables, one entitlements table, two metric views, four readers.</p></div>
+<div class="warn"><b>Not yet run on Databricks.</b> The expected numbers were worked out by hand from the sample rows. Run the scripts in order and compare; tell us if anything differs.</div>
+<ol class="steps">
+<li><b>Agree the metrics first.</b> Before any table, write the questions and the metric each needs.<div class="tw"><table class="t"><tr><th>Question</th><th>Metric</th><th>Sliced by</th></tr><tr><td><b>Net revenue by region and month</b></td><td>net_revenue</td><td>region, invoice_month</td></tr><tr><td><b>Margin % by segment</b></td><td>margin_pct</td><td>segment</td></tr><tr><td><b>Growth on the same month last year</b></td><td>yoy_growth_pct</td><td>invoice_month (+ region)</td></tr><tr><td><b>Active dealers in a month</b></td><td>active_dealers</td><td>invoice_month, region</td></tr><tr><td><b>Average invoice value</b></td><td>avg_invoice_value</td><td>any</td></tr><tr><td><b>Units on hand at month end</b></td><td>units_on_hand</td><td>snapshot_month, region</td></tr></table></div><p>Two grains show up straight away: sales happen per invoice line; stock is counted per dealer per day. So: two fact tables, two metric views.</p></li>
+<li><b>Build atomic gold.</b> One row per business event, keys declared, region copied onto the facts for cheap security, clustered by what dashboards filter on.<pre class="code">-- Gold, atomic, one row per business event. Catalog &#x27;main&#x27; (on Free Edition use &#x27;workspace&#x27;).
+CREATE SCHEMA IF NOT EXISTS main.sales_gold;
+
+CREATE OR REPLACE TABLE main.sales_gold.dim_dealer (
+  dealer_id STRING NOT NULL, dealer_name STRING, city STRING, region STRING, channel STRING,
+  CONSTRAINT pk_dealer PRIMARY KEY (dealer_id) RELY);
+INSERT INTO main.sales_gold.dim_dealer VALUES
+  (&#x27;D1&#x27;,&#x27;Sharma Tyres&#x27;,&#x27;Delhi&#x27;,&#x27;North&#x27;,&#x27;Retail&#x27;),
+  (&#x27;D2&#x27;,&#x27;Punjab Wheels&#x27;,&#x27;Ludhiana&#x27;,&#x27;North&#x27;,&#x27;Fleet&#x27;),
+  (&#x27;D3&#x27;,&#x27;Chennai Treads&#x27;,&#x27;Chennai&#x27;,&#x27;South&#x27;,&#x27;Retail&#x27;);
+
+CREATE OR REPLACE TABLE main.sales_gold.dim_product (
+  product_id STRING NOT NULL, sku STRING, segment STRING, rim_inches INT,
+  CONSTRAINT pk_product PRIMARY KEY (product_id) RELY);
+INSERT INTO main.sales_gold.dim_product VALUES
+  (&#x27;P1&#x27;,&#x27;PCR-185-15&#x27;,&#x27;PCR&#x27;,15), (&#x27;P2&#x27;,&#x27;TBR-295-22&#x27;,&#x27;TBR&#x27;,22), (&#x27;P3&#x27;,&#x27;2W-90-17&#x27;,&#x27;2W&#x27;,17);
+
+-- One row per invoice line. region is copied from the dealer in gold so the
+-- row filter needs no join. Returns are negative lines.
+CREATE OR REPLACE TABLE main.sales_gold.fact_sales_line (
+  invoice_id STRING, line_no INT, invoice_date DATE, dealer_id STRING, region STRING,
+  product_id STRING, qty INT, net_amount DECIMAL(18,2), cost_amount DECIMAL(18,2), status STRING)
+CLUSTER BY (invoice_date, region);
+INSERT INTO main.sales_gold.fact_sales_line VALUES
+  (&#x27;I-001&#x27;,1,&#x27;2024-01-10&#x27;,&#x27;D1&#x27;,&#x27;North&#x27;,&#x27;P1&#x27;, 10,  40000, 30000,&#x27;INVOICED&#x27;),
+  (&#x27;I-002&#x27;,1,&#x27;2024-01-18&#x27;,&#x27;D3&#x27;,&#x27;South&#x27;,&#x27;P2&#x27;,  4,  80000, 62000,&#x27;INVOICED&#x27;),
+  (&#x27;I-003&#x27;,1,&#x27;2025-01-08&#x27;,&#x27;D1&#x27;,&#x27;North&#x27;,&#x27;P1&#x27;, 12,  50400, 37200,&#x27;INVOICED&#x27;),
+  (&#x27;I-003&#x27;,2,&#x27;2025-01-08&#x27;,&#x27;D1&#x27;,&#x27;North&#x27;,&#x27;P3&#x27;, 20,  30000, 21000,&#x27;INVOICED&#x27;),
+  (&#x27;I-004&#x27;,1,&#x27;2025-01-21&#x27;,&#x27;D2&#x27;,&#x27;North&#x27;,&#x27;P2&#x27;,  2,  42000, 33000,&#x27;INVOICED&#x27;),
+  (&#x27;I-005&#x27;,1,&#x27;2025-01-25&#x27;,&#x27;D3&#x27;,&#x27;South&#x27;,&#x27;P2&#x27;,  5, 105000, 80000,&#x27;INVOICED&#x27;),
+  (&#x27;I-006&#x27;,1,&#x27;2025-01-28&#x27;,&#x27;D3&#x27;,&#x27;South&#x27;,&#x27;P1&#x27;, -2,  -8400, -6200,&#x27;RETURNED&#x27;),
+  (&#x27;I-007&#x27;,1,&#x27;2025-01-30&#x27;,&#x27;D2&#x27;,&#x27;North&#x27;,&#x27;P1&#x27;, 50, 210000,150000,&#x27;CANCELLED&#x27;),
+  (&#x27;I-008&#x27;,1,&#x27;2025-02-05&#x27;,&#x27;D1&#x27;,&#x27;North&#x27;,&#x27;P3&#x27;, 10,  15500, 10500,&#x27;INVOICED&#x27;),
+  (&#x27;I-009&#x27;,1,&#x27;2025-02-14&#x27;,&#x27;D3&#x27;,&#x27;South&#x27;,&#x27;P1&#x27;,  8,  33600, 24800,&#x27;INVOICED&#x27;);
+
+-- Stock: one row per dealer, product and day (a snapshot, semi-additive).
+CREATE OR REPLACE TABLE main.sales_gold.fact_stock_daily (
+  snapshot_date DATE, dealer_id STRING, region STRING, product_id STRING, units_on_hand INT);
+INSERT INTO main.sales_gold.fact_stock_daily VALUES
+  (&#x27;2025-01-30&#x27;,&#x27;D1&#x27;,&#x27;North&#x27;,&#x27;P1&#x27;,40), (&#x27;2025-01-31&#x27;,&#x27;D1&#x27;,&#x27;North&#x27;,&#x27;P1&#x27;,35),
+  (&#x27;2025-01-30&#x27;,&#x27;D3&#x27;,&#x27;South&#x27;,&#x27;P2&#x27;,12), (&#x27;2025-01-31&#x27;,&#x27;D3&#x27;,&#x27;South&#x27;,&#x27;P2&#x27;,10);</pre></li>
+<li><b>Write the metric views.</b> Atomic measures first, then composed ones; scope in the filter; names and synonyms for Genie; a window for last year; a semi-additive window for stock.<pre class="code">CREATE OR REPLACE VIEW main.sales_gold.sales_mv
+WITH METRICS
+LANGUAGE YAML
+AS $$
+version: 1.1
+comment: &quot;Tyre sales to dealers, one row per invoice line. Cancelled lines excluded; returns are negative lines. Owner: Sales Finance.&quot;
+source: main.sales_gold.fact_sales_line
+filter: status &lt;&gt; &#x27;CANCELLED&#x27;
+joins:
+  - name: dealer
+    source: main.sales_gold.dim_dealer
+    on: source.dealer_id = dealer.dealer_id
+  - name: product
+    source: main.sales_gold.dim_product
+    on: source.product_id = product.product_id
+fields:
+  - name: invoice_date
+    expr: invoice_date
+    display_name: Invoice date
+  - name: invoice_month
+    expr: DATE_TRUNC(&#x27;MONTH&#x27;, invoice_date)
+    display_name: Invoice month
+  - name: region
+    expr: source.region
+    display_name: Region
+    synonyms: [&#x27;zone&#x27;, &#x27;sales region&#x27;]
+  - name: dealer_name
+    expr: dealer.dealer_name
+    display_name: Dealer
+  - name: channel
+    expr: dealer.channel
+  - name: segment
+    expr: CASE product.segment WHEN &#x27;PCR&#x27; THEN &#x27;Passenger car&#x27; WHEN &#x27;TBR&#x27; THEN &#x27;Truck and bus&#x27; WHEN &#x27;2W&#x27; THEN &#x27;Two-wheeler&#x27; ELSE &#x27;Other&#x27; END
+    display_name: Segment
+    synonyms: [&#x27;category&#x27;, &#x27;product line&#x27;]
+measures:
+  - name: net_revenue
+    expr: SUM(net_amount)
+    display_name: Net revenue
+    comment: &quot;Invoiced amount after discounts, returns netted off, excluding tax.&quot;
+    synonyms: [&#x27;revenue&#x27;, &#x27;sales&#x27;, &#x27;turnover&#x27;]
+  - name: gross_margin
+    expr: SUM(net_amount - cost_amount)
+    display_name: Gross margin
+  - name: margin_pct
+    expr: MEASURE(gross_margin) / NULLIF(MEASURE(net_revenue), 0)
+    display_name: Margin %
+  - name: units
+    expr: SUM(qty)
+    display_name: Units sold
+  - name: invoices
+    expr: COUNT(DISTINCT invoice_id)
+  - name: avg_invoice_value
+    expr: MEASURE(net_revenue) / NULLIF(MEASURE(invoices), 0)
+    display_name: Average invoice value
+  - name: active_dealers
+    expr: COUNT(DISTINCT dealer_id) FILTER (WHERE status = &#x27;INVOICED&#x27;)
+    display_name: Active dealers
+  - name: net_revenue_ly
+    expr: SUM(net_amount)
+    display_name: Net revenue, same month last year
+    window:
+      - order: invoice_month
+        range: current
+        offset: -12 month
+  - name: yoy_growth_pct
+    expr: (MEASURE(net_revenue) - MEASURE(net_revenue_ly)) / NULLIF(MEASURE(net_revenue_ly), 0)
+    display_name: Growth vs last year %
+$$;
+
+CREATE OR REPLACE VIEW main.sales_gold.stock_mv
+WITH METRICS
+LANGUAGE YAML
+AS $$
+version: 1.1
+comment: &quot;Dealer stock, one row per dealer, product and day.&quot;
+source: main.sales_gold.fact_stock_daily
+fields:
+  - name: snapshot_date
+    expr: snapshot_date
+  - name: snapshot_month
+    expr: DATE_TRUNC(&#x27;MONTH&#x27;, snapshot_date)
+  - name: region
+    expr: region
+measures:
+  - name: units_on_hand
+    expr: SUM(units_on_hand)
+    display_name: Units on hand
+    window:
+      - order: snapshot_date
+        range: current
+        semiadditive: last
+$$;</pre></li>
+<li><b>Ask questions.</b><pre class="code">-- Q1 Net revenue and margin by region and month
+SELECT region, invoice_month,
+       MEASURE(net_revenue) AS revenue, MEASURE(margin_pct) AS margin
+FROM main.sales_gold.sales_mv
+GROUP BY ALL ORDER BY region, invoice_month;
+
+-- Q2 Growth on the same month last year (January 2025 vs January 2024)
+SELECT region, invoice_month,
+       MEASURE(net_revenue) AS revenue, MEASURE(net_revenue_ly) AS revenue_ly, MEASURE(yoy_growth_pct) AS growth
+FROM main.sales_gold.sales_mv
+WHERE invoice_month = DATE&#x27;2025-01-01&#x27;
+GROUP BY ALL ORDER BY region;
+
+-- Q3 Company margin: ratio of sums, not the average of regional margins
+SELECT MEASURE(margin_pct) AS company_margin FROM main.sales_gold.sales_mv WHERE year(invoice_date) = 2025;
+
+-- Q4 Stock at month end (semi-additive): last day, not the sum of days
+SELECT region, snapshot_month, MEASURE(units_on_hand) AS units_on_hand
+FROM main.sales_gold.stock_mv GROUP BY ALL ORDER BY region;</pre><div class="tw"><table class="t"><tr><th>Query</th><th>Slice</th><th>Result</th><th>Why</th></tr><tr><td><b>Q1</b></td><td>North, 2025-01</td><td>122,400.00</td><td>margin 0.2549  (31,200 margin; cancelled I-007 left out)</td></tr><tr><td><b>Q1</b></td><td>South, 2025-01</td><td>96,600.00</td><td>margin 0.2360  (105,000 minus an 8,400 return)</td></tr><tr><td><b>Q2</b></td><td>North, 2025-01</td><td>122,400 vs 40,000</td><td>growth 2.06 (206%)</td></tr><tr><td><b>Q2</b></td><td>South, 2025-01</td><td>96,600 vs 80,000</td><td>growth 0.2075 (20.75%)</td></tr><tr><td><b>Q3</b></td><td>2025, all regions</td><td>268,100 revenue, 67,800 margin</td><td>0.2529: summed first, divided last</td></tr><tr><td><b>Q4</b></td><td>North and South, 2025-01</td><td>35 and 10</td><td>the 31 Jan values, not 75 and 22</td></tr></table></div></li>
+<li><b>Add row-level security</b> on the gold tables, from one entitlements table. Asha now sees only North; Ravi sees both. Users get SELECT on the metric views only.<pre class="code">CREATE SCHEMA IF NOT EXISTS main.security;
+CREATE OR REPLACE TABLE main.security.region_access (user_email STRING, region STRING);
+INSERT INTO main.security.region_access VALUES (&#x27;asha@example.com&#x27;,&#x27;North&#x27;), (&#x27;ravi@example.com&#x27;,&#x27;*&#x27;);
+
+CREATE OR REPLACE FUNCTION main.security.region_filter(p_region STRING)
+RETURN EXISTS (SELECT 1 FROM main.security.region_access a
+               WHERE a.user_email = current_user() AND (a.region = p_region OR a.region = &#x27;*&#x27;));
+
+ALTER TABLE main.sales_gold.fact_sales_line  SET ROW FILTER main.security.region_filter ON (region);
+ALTER TABLE main.sales_gold.fact_stock_daily SET ROW FILTER main.security.region_filter ON (region);
+
+GRANT SELECT ON VIEW main.sales_gold.sales_mv TO `sales-managers`;
+GRANT SELECT ON VIEW main.sales_gold.stock_mv TO `sales-managers`;</pre></li>
+<li><b>Decide on speed.</b> With row filters on the facts, materialization is refused. At this size nothing is needed. At real size: clustering is already on; if the CEO dashboard is still slow, build a day × region × segment aggregate table in the gold pipeline with the same row filter and a small metric view over it. Company-wide KPIs with no security can live in a separate, materialized metric view.</li>
+<li><b>Serve it.</b> An AI/BI dashboard with datasets on the metric views (one tile = one MEASURE query). A Genie space over <code>sales_mv</code> and <code>stock_mv</code> only, with example questions and benchmarks ("revenue by zone last month" must equal Q1). Power BI reads through native query with MEASURE() in DirectQuery, or a thin model (step 9).</li>
+<li><b>Test it.</b> The Q1–Q4 numbers become golden-number tests (see <a href="/learn/metric-views/production/#tests">the table-driven tests</a>); join-key uniqueness on dim_dealer and dim_product; RLS tests as Asha, Ravi and a user with no row. Commit the YAML, deploy from CI, certify.</li>
+<li><b>The same model in dbt and Power BI</b>, for comparison. Notice what each needs that the metric view got from Unity Catalog: dbt has no security of its own, and Power BI needs a role when it holds a copy.
+<h3>dbt Semantic Layer</h3><pre class="code"># models/gold/sales.yml  (dbt 1.12+ latest spec; same gold tables)
+models:
+  - name: fact_sales_line
+    semantic_model:
+      enabled: true
+    agg_time_dimension: invoice_date
+    columns:
+      - name: line_key                        # invoice_id || &#x27;-&#x27; || line_no, built in the model
+        entity: { type: primary, name: sales_line }
+      - name: dealer_id
+        entity: { type: foreign, name: dealer }
+      - name: product_id
+        entity: { type: foreign, name: product }
+      - name: invoice_date
+        granularity: day
+        dimension: { type: time }
+      - name: region
+        dimension: { type: categorical }
+      - name: status
+        dimension: { type: categorical }
+    metrics:
+      - name: net_revenue
+        type: simple
+        label: Net revenue
+        agg: sum
+        expr: net_amount
+        filter: &quot;{{ Dimension(&#x27;sales_line__status&#x27;) }} != &#x27;CANCELLED&#x27;&quot;
+      - name: gross_margin
+        type: simple
+        agg: sum
+        expr: net_amount - cost_amount
+        filter: &quot;{{ Dimension(&#x27;sales_line__status&#x27;) }} != &#x27;CANCELLED&#x27;&quot;
+
+metrics:
+  - name: margin_pct
+    type: ratio
+    label: Margin %
+    numerator: gross_margin
+    denominator: net_revenue
+  - name: yoy_growth_pct
+    type: derived
+    label: Growth vs last year %
+    expr: (net_revenue - net_revenue_ly) / nullif(net_revenue_ly, 0)
+    input_metrics:
+      - name: net_revenue
+      - name: net_revenue
+        offset_window: 1 year
+        alias: net_revenue_ly
+
+# Ask:  mf query --metrics net_revenue,margin_pct,yoy_growth_pct --group-by sales_line__region,metric_time__month
+# Note: no RLS here; the warehouse identity running the query decides what rows exist.</pre><h3>Power BI DAX</h3><pre class="code">-- Power BI (thin model over the same gold tables, DirectQuery with SSO or Import)
+Net Revenue      := CALCULATE ( SUM ( fact_sales_line[net_amount] ), fact_sales_line[status] &lt;&gt; &quot;CANCELLED&quot; )
+Gross Margin     := CALCULATE ( SUMX ( fact_sales_line, fact_sales_line[net_amount] - fact_sales_line[cost_amount] ),
+                               fact_sales_line[status] &lt;&gt; &quot;CANCELLED&quot; )
+Margin %         := DIVIDE ( [Gross Margin], [Net Revenue] )
+Net Revenue LY   := CALCULATE ( [Net Revenue], SAMEPERIODLASTYEAR ( dim_date[date] ) )
+Growth vs LY %   := DIVIDE ( [Net Revenue] - [Net Revenue LY], [Net Revenue LY] )
+Units on Hand    := CALCULATE ( SUM ( fact_stock_daily[units_on_hand] ), LASTDATE ( dim_date[date] ) )
+
+-- RLS role &#x27;Region&#x27; on fact tables (needed only for Import / Direct Lake copies):
+-- reads the SAME entitlements table, loaded into the model as region_access
+VAR me = USERPRINCIPALNAME ()
+RETURN
+  CONTAINS ( region_access, region_access[user_email], me, region_access[region], &quot;*&quot; )
+  || CONTAINS ( region_access, region_access[user_email], me, region_access[region], fact_sales_line[region] )</pre></li>
+</ol>
+<section id="learned"><p class="eyebrow">What the example shows</p><h2>Six lessons in one small model</h2><ul><li>Agreeing the metrics first decided the gold tables and their grain.</li><li>The filter kept cancelled invoice I-007 (210,000) out of every number, in every tool.</li><li>Margin was composed from sums, so the company margin (25.3%) is summed first and divided last, at any grain.</li><li>Last year and stock needed windows, not new tables.</li><li>Security lived on gold, once; the metric views needed no change to respect it.</li><li>The same model in dbt and DAX is longer and must add the security story itself.</li></ul></section>
+<p style="margin-top:28px">← <a href="/learn/metric-views/production/">8 · Production</a></p>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>Can I run this example on Databricks Free Edition?</summary><p>Yes. Use the catalog &#x27;workspace&#x27; instead of &#x27;main&#x27;, run the gold script, then the metric views, then the queries on the serverless SQL warehouse. Row filters need a second user to see the effect.</p></details><details class="faq"><summary>Why copy region onto the fact table?</summary><p>So the row filter checks a column on the row itself, without a join per row. The dealer table still holds region for slicing; gold keeps the two in step.</p></details><details class="faq"><summary>Why two metric views instead of one?</summary><p>Sales and stock have different grains: invoice lines versus dealer-product-day snapshots. Putting them in one view would make one of them fan out.</p></details></section>
+<section id="sources"><p class="eyebrow">Sources</p><h2>Checked against (11 Nov 2026)</h2><ul>
+<li><a href="https://docs.databricks.com/aws/en/metric-views/">Databricks: Unity Catalog metric views</a> and the <a href="https://docs.databricks.com/aws/en/metric-views/data-modeling/syntax">YAML reference</a></li>
+<li><a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views/materialization">Materialization</a> · <a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views/advanced-techniques">Advanced techniques</a> · <a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views/relationships">Relationships</a> · <a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views/bi-tools">BI tools</a> · <a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views/feature-availability">Feature availability</a></li>
+<li><a href="https://docs.databricks.com/aws/en/data-governance/unity-catalog/filters-and-masks/">Row filters and column masks</a> · <a href="https://kb.databricks.com/upcoming-change-to-abac-policy-evaluation-for-tables-accessed-through-views-and-functions">ABAC evaluation through views (KB)</a></li>
+<li><a href="https://docs.getdbt.com/docs/build/semantic-models">dbt semantic models</a> · <a href="https://www.getdbt.com/blog/dbt-labs-affirms-commitment-to-open-semantic-interchange-by-open-sourcing-metricflow">MetricFlow open-sourced</a> · <a href="https://ossie.apache.org/updates/ossie-enters-apache-incubator/">Apache Ossie</a></li>
+</ul><p>Metric views change every few months. Confirm runtime minimums and preview status before a design depends on them.</p></section>
+</div>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Concepts</b><a href="/leaders/">For leaders</a><a href="/learn/data-systems/">Data systems</a><a href="/learn/data-systems/platform/">Data and AI platform</a><a href="/learn/data-systems/platform/#hops">Data engineering</a><a href="/concepts/semantic-layer/">BI and analytics</a><a href="/concepts/#ml-engineering">ML</a><a href="/learn/ai-universe/">AI</a><a href="/learn/data-systems/platform/#concerns">Across all of them</a><a href="/concepts/#a-z">Key concepts, A to Z</a></div><div><b>On your cloud</b><a href="/platforms/databricks/">Databricks</a><a href="/platforms/aws/">AWS</a><a href="/platforms/azure/">Azure and Fabric</a><a href="/platforms/gcp/">Google Cloud</a><a href="/platforms/open/">Open source</a><a href="/platforms/anthropic/">Claude (Anthropic)</a><a href="/certifications/">All certifications</a></div><div><b>Your role</b><a href="/paths/">Find your path</a><a href="/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/paths/forward-deployed/">Forward Deployed Engineering</a><a href="/mindset/">Worried about AI?</a><a href="/projects/">All projects to join</a></div><div><b>How we work</b><a href="/how-we-work/#thinking">Thinking principles</a><a href="/how-we-work/#ba">Business analysis</a><a href="/how-we-work/#pm">Project management</a><a href="/learn/technical-anchor/">The technical anchor</a></div><div><b>Causes and deep tech</b><a href="/ai-for-cause/">AI for a cause</a><a href="/deep-tech/">Deep tech</a></div><div><b>About</b><a href="/about/">About this site</a><a href="/about/#join">Write or teach</a><a href="/writing/">Blog</a><a href="/research/">All open specifications</a><a href="/assets/">All open-source code</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

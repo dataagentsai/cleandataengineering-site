@@ -1,0 +1,350 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The parts of a metric view · Clean Data Engineering</title>
+<meta name="description" content="Every part of a Unity Catalog metric view: version, source, filter, joins (star, snowflake, one-to-many, rely), fields, measures, composed and window measures, parameters, agent metadata, materialization, MEASURE() queries, relationships, BI tools and runtime minimums."><link rel="canonical" href="https://cleandataengineering.ai/learn/metric-views/anatomy/">
+<meta property="og:title" content="The parts of a metric view"><meta property="og:description" content="Every part of a Unity Catalog metric view: version, source, filter, joins (star, snowflake, one-to-many, rely), fields, measures, composed and window measures, parameters, agent metadata, materialization, MEASURE() queries, relationships, BI tools and runtime minimums."><meta property="og:url" content="https://cleandataengineering.ai/learn/metric-views/anatomy/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .bi .fig { border:var(--line); border-radius:var(--wob); padding:12px 14px; margin:16px 0; background:#fff; overflow-x:auto; }
+  .bi .fig svg { width:100%; min-width:680px; height:auto; display:block; } .bi .fig text { font-family:var(--hand); fill:#111; }
+  .bi .fig p { font-size:13.5px; color:var(--muted); margin:6px 0 0; }
+  .bi .box { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--butter-wash); }
+  .bi .warn { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--rose-wash); }
+  .bi .tabs3 { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
+  .bi .tabs3 a { border:1.5px solid var(--ink); border-radius:999px; padding:4px 14px; background:#fff; color:var(--ink); text-decoration:none; font-size:15px; }
+  .bi .tabs3 a.on { background:var(--butter-wash); font-weight:700; }
+  .bi table.t td { font-size:14px; }
+  .bi td.v { font-weight:700; white-space:nowrap; }
+  .bi .toc { columns:2; } @media (max-width:700px){ .bi .toc { columns:1; } }
+</style><style>
+  .path { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 6px; }
+  .path a { border:1.5px solid var(--ink); border-radius:999px; padding:3px 12px; background:#fff; color:var(--ink); text-decoration:none; font-size:14px; }
+  .path a.on { background:var(--rose-wash); font-weight:700; }
+  .bi .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .bi .grid2 { grid-template-columns:1fr; } }
+  .bi .card { border:var(--line); border-radius:var(--wob); padding:10px 16px; background:#fff; }
+  .bi .card h3 { margin:4px 0 6px; } .bi .card.good { background:var(--mint-wash); } .bi .card.bad { background:var(--rose-wash); }
+  .bi .steps { counter-reset:s; list-style:none; padding-left:0; } .bi .steps > li { counter-increment:s; border:var(--line); border-radius:var(--wob); padding:10px 16px 10px 52px; margin:10px 0; position:relative; background:#fff; }
+  .bi .steps > li::before { content:counter(s); position:absolute; left:14px; top:9px; width:26px; height:26px; border:1.5px solid var(--ink); border-radius:50%; text-align:center; line-height:24px; font-family:var(--hand); background:var(--butter-wash); }
+  .bi pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .bi .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .bi .gloss dt { font-weight:700; margin-top:8px; } .bi .gloss dd { margin:2px 0 0 0; }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "The parts of a metric view", "description": "Every part of a Unity Catalog metric view: version, source, filter, joins (star, snowflake, one-to-many, rely), fields, measures, composed and window measures, parameters, agent metadata, materialization, MEASURE() queries, relationships, BI tools and runtime minimums.", "url": "https://cleandataengineering.ai/learn/metric-views/anatomy/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-11", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Data engineering", "item": "https://cleandataengineering.ai/data-engineering/"}, {"@type": "ListItem", "position": 2, "name": "Metric views", "item": "https://cleandataengineering.ai/learn/metric-views/"}, {"@type": "ListItem", "position": 3, "name": "4 · Parts", "item": "https://cleandataengineering.ai/learn/metric-views/anatomy/"}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "How do I query a metric view?", "acceptedAnswer": {"@type": "Answer", "text": "SELECT the fields you want, wrap each measure in MEASURE(), and end with GROUP BY ALL. SELECT * is not allowed, and the metric view can't be joined to other tables directly; wrap it in a CTE first."}}, {"@type": "Question", "name": "What is the difference between a field and a measure?", "acceptedAnswer": {"@type": "Answer", "text": "A field is a scalar expression you group or filter by, like region or month. A measure is an aggregate, like SUM(net_amount), that is evaluated for whatever grouping the query asks for."}}, {"@type": "Question", "name": "Can a measure use another measure?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Write MEASURE(other_measure) inside the expression, for example MEASURE(gross_margin) / NULLIF(MEASURE(net_revenue), 0). This keeps each recipe in one place."}}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Concepts</h4><ul><li><details><summary><a href="/leaders/">For leaders</a></summary><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/leaders/spec-driven/">Spec-driven development: agents</a></li><li><a href="/leaders/spec-driven/data-platform/">Spec-driven development: data platforms</a></li><li><a href="/papers/">Technical papers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/">Data systems</a></summary><ul><li><a href="/learn/data-systems/">The whole system, end to end</a></li><li class="sub">Upstreams</li><li><a href="/learn/data-systems/upstreams/">Know your sources</a></li><li><a href="/learn/data-systems/upstreams/apis/">API sources</a></li><li><a href="/learn/data-systems/upstreams/files/">File sources</a></li><li><a href="/learn/data-systems/upstreams/joins/">Learning the joins</a></li><li><a href="/learn/data-systems/upstreams/answers/">Where the answers go</a></li><li><a href="/learn/data-systems/upstreams/questionnaire/">Source system questionnaire</a></li><li class="sub">Downstreams</li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/platform/">Data and AI platform</a></summary><ul><li class="sub">Conceptual architecture</li><li><a href="/learn/data-systems/platform/">The platform, whole</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#hops">Data engineering</a></summary><ul><li class="sub">The hops</li><li><a href="/learn/data-platform-architecture/ingestion/">Hop 1: sources to bronze</a></li><li><a href="/learn/data-platform-architecture/bronze-to-silver/">Hop 2: bronze to silver</a></li><li><a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a></li><li><a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a></li><li class="sub">Tables and formats</li><li><a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a></li><li><a href="/learn/table-maintenance/">Who maintains your tables</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li class="sub">History, SCD and facts</li><li><a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD2: AUTO CDC or own PySpark?</a></li><li><a href="/learn/gold-harness-spec/">Gold harness spec: facts and SCD2</a></li><li><a href="/learn/time-travel-vs-scd2/">Time travel as SCD Type 2?</a></li><li class="sub">Streaming and real time</li><li><a href="/learn/streaming/">Streaming on AWS and Databricks</a></li><li><a href="/learn/streaming/options/">Streaming: all options</a></li><li><a href="/learn/streaming/sim/">Streaming simulator</a></li><li><a href="/learn/streaming/real-time-mode/">Databricks real time: RTM and Lakehouse//RT</a></li><li class="sub">Quality and testing</li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/data-platform-sim/data-quality/">Data quality, metadata-driven</a></li><li class="sub">Hands-on simulators</li><li><a href="/learn/data-platform-sim/">One batch through Spark and Delta</a></li><li><a href="/learn/data-platform-sim/spark/">Spark internals</a></li><li><a href="/learn/data-platform-sim/delta/">Delta Lake internals</a></li><li><a href="/learn/data-platform-sim/performance/">Spark performance: 12 problems</a></li><li><a href="/learn/data-platform-sim/problems/">Problems solved: SCD2, late data, duplicates</a></li><li class="sub">On AWS</li><li><a href="/learn/data-platform-architecture/aws-databricks/">AWS + Databricks, ETL end to end</a></li><li><a href="/learn/aws-data-services/">AWS data services catalog</a></li><li class="sub">Open specs</li><li><a href="/learn/datatwin/">DataTwin</a></li><li><a href="/projects/data-eng-specs/">Clean Data Engineering specs</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/semantic-layer/">BI and analytics</a></summary><ul><li><a href="/concepts/semantic-layer/">Hop 4: the semantic layer</a></li><li><a href="/writing/genie-metric-views/">Genie and metric views</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/">Power BI vs Databricks AI/BI</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/power-bi/">Power BI and Fabric, in depth</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/ai-bi/">Databricks AI/BI, in depth</a></li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/#ml-engineering">ML</a></summary><ul><li><a href="/concepts/#ml-engineering">Key ML ideas (pages coming)</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/ai-universe/">AI</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">Open spec: AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">Open spec: AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">Open spec: AgentTwin</a></li><li><a href="/lab/">The AgentTwin Lab</a></li><li><a href="https://github.com/dataagentsai/reference-agent">Code: Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">Code: AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Code: Eval Harness Framework</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#concerns">Across all of them</a></summary><ul><li><a href="/learn/data-systems/platform/#concerns">All 24 concerns</a></li><li><a href="/learn/data-systems/platform/layout/">Layout: catalogs and schemas</a></li><li><a href="/learn/data-systems/platform/environments/">Environments and CI/CD</a></li><li><a href="/learn/data-systems/platform/cost/">Cost and FinOps</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li></ul></details></li><li><a href="/concepts/#a-z">Key concepts, A to Z</a></li></ul><h4>On your cloud</h4><ul><li><details><summary><a href="/platforms/databricks/">Databricks</a></summary><ul><li><a href="/platforms/databricks/#systems">Data systems</a></li><li><a href="/platforms/databricks/#de">Data engineering</a></li><li><a href="/platforms/databricks/#bi">BI and analytics</a></li><li><a href="/platforms/databricks/#ml">ML</a></li><li><a href="/platforms/databricks/#ai">AI</a></li><li><a href="/platforms/databricks/#across">Across all of them</a></li><li><a href="/platforms/databricks/#paths">Learning paths</a></li><li><a href="/platforms/databricks/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/aws/">AWS</a></summary><ul><li><a href="/platforms/aws/#systems">Data systems</a></li><li><a href="/platforms/aws/#de">Data engineering</a></li><li><a href="/platforms/aws/#bi">BI and analytics</a></li><li><a href="/platforms/aws/#ml">ML</a></li><li><a href="/platforms/aws/#ai">AI</a></li><li><a href="/platforms/aws/#across">Across all of them</a></li><li><a href="/platforms/aws/#paths">Learning paths</a></li><li><a href="/platforms/aws/#certs">Certifications</a></li><li><a href="/learn/aws-data-services/">AWS data services: all 66</a></li></ul></details></li><li><details><summary><a href="/platforms/azure/">Azure and Fabric</a></summary><ul><li><a href="/platforms/azure/#systems">Data systems</a></li><li><a href="/platforms/azure/#de">Data engineering</a></li><li><a href="/platforms/azure/#bi">BI and analytics</a></li><li><a href="/platforms/azure/#ml">ML</a></li><li><a href="/platforms/azure/#ai">AI</a></li><li><a href="/platforms/azure/#across">Across all of them</a></li><li><a href="/platforms/azure/#paths">Learning paths</a></li><li><a href="/platforms/azure/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/gcp/">Google Cloud</a></summary><ul><li><a href="/platforms/gcp/#systems">Data systems</a></li><li><a href="/platforms/gcp/#de">Data engineering</a></li><li><a href="/platforms/gcp/#bi">BI and analytics</a></li><li><a href="/platforms/gcp/#ml">ML</a></li><li><a href="/platforms/gcp/#ai">AI</a></li><li><a href="/platforms/gcp/#across">Across all of them</a></li><li><a href="/platforms/gcp/#paths">Learning paths</a></li><li><a href="/platforms/gcp/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/open/">Open source</a></summary><ul><li><a href="/platforms/open/#systems">Data systems</a></li><li><a href="/platforms/open/#de">Data engineering</a></li><li><a href="/platforms/open/#bi">BI and analytics</a></li><li><a href="/platforms/open/#ml">ML</a></li><li><a href="/platforms/open/#ai">AI</a></li><li><a href="/platforms/open/#across">Across all of them</a></li><li><a href="/platforms/open/#paths">Learning paths</a></li><li><a href="/platforms/open/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/anthropic/">Claude (Anthropic)</a></summary><ul><li><a href="/platforms/anthropic/#ai">AI</a></li><li><a href="/platforms/anthropic/#certs">Certifications</a></li></ul></details></li><li><a href="/certifications/">All certifications</a></li></ul><h4>Your role</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/data-engineering/">Data Engineering</a></summary><ul><li><a href="/data-engineering/">Start here</a></li><li><a href="/paths/data-engineering/">Learning path</a></li><li><a href="/data-engineering/#tools">Practice and simulators</a></li><li><a href="/projects/?subject=data">Projects to join</a></li><li><a href="/concepts/#data-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/">Learning path</a></li><li><a href="/learn/agent-harness-sim/">Simulator: Agent Harness</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li><li><a href="/projects/?subject=ai">Projects to join</a></li><li><a href="/concepts/#ai-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/">Learning path</a></li><li><a href="/learn/llm-api-sim/">Simulator: Claude API</a></li><li><a href="/projects/?subject=llm">Projects to join</a></li><li><a href="/concepts/#llm-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/">Learning path</a></li><li><a href="/concepts/#ml-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/">Learning path</a></li><li><a href="/concepts/#software-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/paths/forward-deployed/">Learning path</a></li><li><a href="/concepts/#forward-deployed">Key concepts</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li><li><a href="/projects/">All projects to join</a></li></ul><h4>How we work</h4><ul><li><a href="/how-we-work/#thinking">Thinking principles</a></li><li><a href="/how-we-work/#ba">Business analysis</a></li><li><a href="/how-we-work/#pm">Project management</a></li><li><details><summary><a href="/learn/technical-anchor/">The technical anchor</a></summary><ul><li><a href="/learn/technical-anchor/">The role</a></li><li><a href="/learn/technical-anchor/discovery/">Discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li></ul></details></li></ul><h4>Causes and deep tech</h4><ul><li><details><summary><a href="/ai-for-cause/">AI for a cause</a></summary><ul><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul></details></li><li><details><summary><a href="/deep-tech/">Deep tech</a></summary><ul><li><a href="/problems/">Hard problems</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul></details></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li><li><a href="/about/#join">Write or teach</a></li><li><a href="/writing/">Blog</a></li><li><a href="/research/">All open specifications</a></li><li><a href="/assets/">All open-source code</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › <a href="/learn/metric-views/">Metric views</a> › 4 · Parts</p>
+<p class="eyebrow" style="margin-top:22px">Data engineering · BI and analytics · free guide · 4 · Parts</p>
+<h1>The parts of a metric view</h1>
+<nav class="path" aria-label="Pages in this section"><a href="/learn/metric-views/" class="">Start here</a><a href="/learn/metric-views/semantic-model/" class="">1 · The idea</a><a href="/learn/metric-views/three-ways/" class="">2 · Three products</a><a href="/learn/metric-views/limits/" class="">3 · Limits</a><a href="/learn/metric-views/anatomy/" class="on">4 · Parts</a><a href="/learn/metric-views/granularity/" class="">5 · Grain</a><a href="/learn/metric-views/security/" class="">6 · Row-level security</a><a href="/learn/metric-views/performance/" class="">7 · Speed</a><a href="/learn/metric-views/production/" class="">8 · Production</a><a href="/learn/metric-views/example/" class="">9 · Example</a></nav>
+<div class="bi">
+<p>A metric view is a view in Unity Catalog whose body is YAML instead of a SELECT. You create it with <code>CREATE VIEW ... WITH METRICS LANGUAGE YAML</code>, grant SELECT on it like any view, and query it with <code>MEASURE()</code>. Here is every part, mapped back to the ten parts of the idea.</p>
+<div class="fig"><svg viewBox="0 0 1000 400" role="img" aria-label="The parts of a metric view, line by line: version, source (the grain), filter (scope), joins (relationships), fields (dimensions), measures, business metadata such as display names and synonyms, and optional materialization (the speed layer)."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><rect x="20" y="10" width="440" height="380" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="36" y="34" font-size="13" text-anchor="start">CREATE VIEW sales_mv WITH METRICS LANGUAGE YAML AS $$</text><rect x="36" y="50" width="408" height="34" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="240.0" y="71.66666666666667" font-size="14" text-anchor="middle">version: 1.1</text><path d="M446,67 L528,67" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="536" y="72" font-size="15" text-anchor="start">which YAML spec</text><rect x="36" y="92" width="408" height="34" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="240.0" y="113.66666666666667" font-size="14" text-anchor="middle">source: gold.fact_sales_line</text><path d="M446,109 L528,109" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="536" y="114" font-size="15" text-anchor="start">the grain: one row = one invoice line</text><rect x="36" y="134" width="408" height="34" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="240.0" y="155.66666666666666" font-size="14" text-anchor="middle">filter: status &lt;&gt; &#x27;CANCELLED&#x27;</text><path d="M446,151 L528,151" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="536" y="156" font-size="15" text-anchor="start">scope: what always counts</text><rect x="36" y="176" width="408" height="34" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="240.0" y="197.66666666666666" font-size="14" text-anchor="middle">joins: dealer, product</text><path d="M446,193 L528,193" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="536" y="198" font-size="15" text-anchor="start">relationships to dimensions</text><rect x="36" y="218" width="408" height="34" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="240.0" y="239.66666666666666" font-size="14" text-anchor="middle">fields: region, month, segment</text><path d="M446,235 L528,235" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="536" y="240" font-size="15" text-anchor="start">dimensions: ways to slice</text><rect x="36" y="260" width="408" height="34" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="240.0" y="281.6666666666667" font-size="14" text-anchor="middle">measures: net_revenue, margin_pct</text><path d="M446,277 L528,277" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="536" y="282" font-size="15" text-anchor="start">aggregations, composed, windows</text><rect x="36" y="302" width="408" height="34" rx="10" fill="#f1eefb" stroke="#111" stroke-width="1.5"/><text x="240.0" y="323.6666666666667" font-size="14" text-anchor="middle">display_name / synonyms / format</text><path d="M446,319 L528,319" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="536" y="324" font-size="15" text-anchor="start">business names for people and Genie</text><rect x="36" y="344" width="408" height="34" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="240.0" y="365.6666666666667" font-size="14" text-anchor="middle">materialization: (optional)</text><path d="M446,361 L528,361" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="536" y="366" font-size="15" text-anchor="start">speed layer: pre-aggregates</text><text x="36" y="386" font-size="13" text-anchor="start">$$</text></svg><p>Each YAML key is one of the ten parts of a semantic model.</p></div>
+<section id="keys"><p class="eyebrow">Top-level keys</p><h2>What each key does</h2><div class="tw"><table class="t"><tr><th>Key</th><th>Required</th><th>What it does</th></tr><tr><td><b>version</b></td><td>Yes</td><td>The YAML spec version (1.1 today), not your own revision number. 1.1 is needed for agent metadata, one-to-many joins, wildcards and window offsets.</td></tr><tr><td><b>comment</b></td><td>No</td><td>What the metric view is for. Shows in Catalog Explorer and helps Genie.</td></tr><tr><td><b>source</b></td><td>Yes</td><td>A table, view, materialized view, streaming table, another metric view, or a SQL query. Sets the grain.</td></tr><tr><td><b>filter</b></td><td>No</td><td>A boolean SQL expression applied to every query: scope, such as no cancelled orders.</td></tr><tr><td><b>joins</b></td><td>No</td><td>Star joins (name, source, on or using); nested joins for a snowflake; cardinality many_to_one (default) or one_to_many; rely.at_most_one_match.</td></tr><tr><td><b>fields (or dimensions)</b></td><td>One of fields/measures</td><td>Scalar SQL expressions to group and filter by. Can carry comment, display_name, format, synonyms (up to 10).</td></tr><tr><td><b>measures</b></td><td>One of fields/measures</td><td>Aggregate expressions. Can reference other measures with MEASURE(). Can carry a window and the same metadata as fields.</td></tr><tr><td><b>parameters</b></td><td>No</td><td>Named, typed values passed at query time when the view is called like a table function. Blocks materialization.</td></tr><tr><td><b>materialization</b></td><td>No</td><td>Schedule, mode: relaxed, and a list of aggregated or unaggregated materialized views. A managed Lakeflow pipeline keeps them fresh.</td></tr></table></div></section>
+<section id="create"><p class="eyebrow">Writing one</p><h2>A complete metric view</h2><pre class="code">CREATE OR REPLACE VIEW main.sales_gold.sales_mv
+WITH METRICS
+LANGUAGE YAML
+AS $$
+version: 1.1
+comment: &quot;Tyre sales to dealers. One row per invoice line. Owner: Sales Finance.&quot;
+source: main.sales_gold.fact_sales_line
+filter: status &lt;&gt; &#x27;CANCELLED&#x27;
+joins:
+  - name: dealer
+    source: main.sales_gold.dim_dealer
+    on: source.dealer_id = dealer.dealer_id
+    rely:
+      at_most_one_match: true        # a promise: dim_dealer has one row per dealer_id
+  - name: product
+    source: main.sales_gold.dim_product
+    on: source.product_id = product.product_id
+fields:
+  - name: invoice_month
+    expr: DATE_TRUNC(&#x27;MONTH&#x27;, invoice_date)
+    display_name: Invoice month
+  - name: region
+    expr: dealer.region
+    synonyms: [&#x27;zone&#x27;, &#x27;sales region&#x27;]
+  - name: segment
+    expr: CASE product.segment WHEN &#x27;PCR&#x27; THEN &#x27;Passenger car&#x27; WHEN &#x27;TBR&#x27; THEN &#x27;Truck and bus&#x27; ELSE &#x27;Two-wheeler&#x27; END
+measures:
+  - name: net_revenue
+    expr: SUM(net_amount)
+    display_name: Net revenue
+    synonyms: [&#x27;revenue&#x27;, &#x27;sales&#x27;]
+  - name: gross_margin
+    expr: SUM(net_amount - cost_amount)
+  - name: margin_pct
+    expr: MEASURE(gross_margin) / NULLIF(MEASURE(net_revenue), 0)
+    display_name: Margin %
+$$;</pre><p class="cap">Names with spaces need backticks in queries; quote any expression that contains a colon; use | for long multi-line expressions.</p></section>
+<section id="query"><p class="eyebrow">Asking it questions</p><h2>How to query a metric view</h2><pre class="code">-- 1. Basic: fields plus MEASURE(), then GROUP BY ALL
+SELECT region, invoice_month, MEASURE(net_revenue) AS revenue, MEASURE(margin_pct) AS margin
+FROM main.sales_gold.sales_mv
+WHERE invoice_month &gt;= &#x27;2025-01-01&#x27;
+GROUP BY ALL
+ORDER BY region, invoice_month;
+
+-- 2. Joining with another table: not allowed directly, so use a CTE
+WITH m AS (
+  SELECT region, MEASURE(net_revenue) AS revenue FROM main.sales_gold.sales_mv GROUP BY ALL
+)
+SELECT m.region, m.revenue, t.target_amount, m.revenue / t.target_amount AS attainment
+FROM m JOIN main.sales_gold.region_target_2025 t USING (region);
+
+-- 3. See the stored YAML and metadata
+DESCRIBE TABLE EXTENDED main.sales_gold.sales_mv AS JSON;</pre><p>Measures are always wrapped in <code>MEASURE()</code>; fields are used like normal columns in SELECT, WHERE and GROUP BY. Under the hood Unity Catalog turns your query into plain SQL over the source and its joins.</p><div class="fig"><svg viewBox="0 0 1000 310" role="img" aria-label="How a metric view query runs. A query with MEASURE goes to Unity Catalog, which expands the measure and the joins into plain SQL on the gold tables; a SQL warehouse runs it as the user. If a materialized view matches, the query is rewritten to read the pre-computed answer instead."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><rect x="10" y="40" width="200" height="90" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="110.0" y="72.66666666666667" font-size="14" text-anchor="middle">SELECT region,</text><text x="110.0" y="89.66666666666667" font-size="12" text-anchor="middle">MEASURE(margin_pct)</text><text x="110.0" y="106.66666666666667" font-size="12" text-anchor="middle">... GROUP BY ALL</text><rect x="260" y="40" width="200" height="90" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="360.0" y="72.0" font-size="15" text-anchor="middle">Unity Catalog</text><text x="360.0" y="90.0" font-size="13" text-anchor="middle">expands the measure</text><text x="360.0" y="108.0" font-size="13" text-anchor="middle">and the joins</text><rect x="510" y="40" width="220" height="90" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="620.0" y="72.0" font-size="15" text-anchor="middle">plain SQL on gold:</text><text x="620.0" y="90.0" font-size="13" text-anchor="middle">SUM(...)/SUM(...)</text><text x="620.0" y="108.0" font-size="13" text-anchor="middle">fact JOIN dealer</text><rect x="780" y="40" width="200" height="90" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="880.0" y="72.0" font-size="15" text-anchor="middle">SQL warehouse</text><text x="880.0" y="90.0" font-size="13" text-anchor="middle">(Photon) runs it</text><text x="880.0" y="108.0" font-size="13" text-anchor="middle">as the user</text><path d="M210,85 L258,85" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M460,85 L508,85" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M730,85 L778,85" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="510" y="190" width="220" height="80" rx="10" fill="#f1eefb" stroke="#111" stroke-width="1.5" stroke-dasharray="3 4"/><text x="620.0" y="226.0" font-size="15" text-anchor="middle">materialized view</text><text x="620.0" y="244.0" font-size="13" text-anchor="middle">(if one matches)</text><path d="M360,130 L508,230" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)" stroke-dasharray="5 5"/><text x="420" y="205" font-size="13" text-anchor="middle">rewrite if it fits</text><path d="M730,230 L860,132" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)" stroke-dasharray="5 5"/><text x="500" y="300" font-size="14" text-anchor="middle">No match: it reads the gold tables live. Match: it reads the pre-computed answer.</text></svg><p>From a MEASURE() query to SQL on gold tables, or to a materialized answer.</p></div></section>
+<section id="composed"><p class="eyebrow">Building on measures</p><h2>Composed and window measures</h2><p>Write <b>atomic</b> measures first (one aggregation each), then <b>compose</b> them with <code>MEASURE(name)</code>, so a change to net revenue flows into margin and growth automatically. <b>Window measures</b> add time logic: trailing and leading windows, running totals, last year, and semi-additive balances.</p><pre class="code">measures:
+  - name: net_revenue
+    expr: SUM(net_amount)
+  - name: net_revenue_ly                # same month last year
+    expr: SUM(net_amount)
+    window:
+      - order: invoice_month
+        range: current
+        offset: -12 month
+  - name: yoy_growth_pct
+    expr: (MEASURE(net_revenue) - MEASURE(net_revenue_ly)) / NULLIF(MEASURE(net_revenue_ly), 0)
+  - name: dealers_last_28_days          # distinct dealers in a trailing window
+    expr: COUNT(DISTINCT dealer_id)
+    window:
+      - order: invoice_date
+        range: trailing 28 day inclusive</pre><div class="tw"><table class="t"><tr><th>Window key</th><th>What it does</th></tr><tr><td><b>order</b></td><td>The field that orders the window, usually a date field defined in the view. Must be deterministic.</td></tr><tr><td><b>range</b></td><td>current, cumulative, trailing N unit, leading N unit, or all. trailing and leading exclude the anchor row unless you add inclusive.</td></tr><tr><td><b>semiadditive</b></td><td>first or last (default last): what to return when the order field is not in the GROUP BY. This is how stock and balances work.</td></tr><tr><td><b>offset</b></td><td>Shifts the frame, such as -12 month for last year. Needs YAML 1.1.</td></tr></table></div></section>
+<section id="meta"><p class="eyebrow">For people and Genie</p><h2>Agent metadata</h2><p>With YAML 1.1, fields and measures take <code>display_name</code> (up to 255 characters), <code>format</code> (currency, percent, number), <code>synonyms</code> (up to 10) and <code>comment</code>. Genie and dashboards use them to understand questions like 'sales by zone'. Unity Catalog tags and the certified status sit on the view itself, as on any table.</p></section>
+<section id="rel"><p class="eyebrow">Several metric views</p><h2>Relationships between metric views (Beta)</h2><pre class="code">-- Relationships between metric views (Beta, runtime 19+ or a SQL warehouse):
+-- metadata only, tells Genie and BI tools how two metric views fit together.
+ALTER VIEW main.sales_gold.sales_mv
+  ADD CONSTRAINT sales_to_dealer MANY TO ONE RELATIONSHIP TO main.sales_gold.dealer_mv
+  USING (dealer_id);</pre><p>One metric view per business process (sales lines, stock snapshots, targets) is cleaner than one giant view. Relationships tell tools how they connect through shared dimensions. They are not enforced and not used for query speed.</p></section>
+<section id="tools"><p class="eyebrow">Outside Databricks</p><h2>How other tools read metric views</h2><div class="tw"><table class="t"><tr><th>Tool</th><th>How, Nov 2026</th></tr><tr><td><b>AI/BI dashboards, Genie, alerts, SQL editor, notebooks</b></td><td>Native.</td></tr><tr><td><b>Power BI</b></td><td>Native query with MEASURE() in DirectQuery, or a wrapper view; publishing as a Power BI semantic model is Private Preview.</td></tr><tr><td><b>Tableau</b></td><td>Custom SQL with MEASURE(), or BI compatibility mode set in Initial SQL.</td></tr><tr><td><b>Sigma, other JDBC/ODBC tools</b></td><td>Custom or pass-through SQL with MEASURE().</td></tr><tr><td><b>Wrapper views</b></td><td>A normal view over the metric view with fixed dimensions; works everywhere, but you need one per dimension set.</td></tr></table></div></section>
+<section id="runtime"><p class="eyebrow">Versions</p><h2>Minimum Databricks Runtime per feature</h2><div class="tw"><table class="t"><tr><th>Feature</th><th>Minimum runtime</th></tr><tr><td><b>Metric views</b></td><td>16.4</td></tr><tr><td><b>Temporary metric views</b></td><td>17.2</td></tr><tr><td><b>Materialization, snowflake joins, agent metadata (YAML 1.1), JDBC/ODBC</b></td><td>17.3</td></tr><tr><td><b>BI compatibility mode, REFRESH MATERIALIZED VIEW</b></td><td>18.0</td></tr><tr><td><b>Materialization refresh_policy</b></td><td>18 LTS</td></tr><tr><td><b>One-to-many joins, window offset, inclusive/exclusive, rely.at_most_one_match, AGG()</b></td><td>18.1</td></tr><tr><td><b>Parameters, wildcards</b></td><td>18.2</td></tr><tr><td><b>Relationships between metric views (Beta), numeric offsets, derived names</b></td><td>19 (or a SQL warehouse)</td></tr></table></div><p>SQL warehouses get new features first. Check the current list before you rely on a feature on job clusters.</p></section>
+<p style="margin-top:28px">← <a href="/learn/metric-views/limits/">3 · Limits</a> · Next: <a href="/learn/metric-views/granularity/">5 · Grain</a> →</p>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>How do I query a metric view?</summary><p>SELECT the fields you want, wrap each measure in MEASURE(), and end with GROUP BY ALL. SELECT * is not allowed, and the metric view can&#x27;t be joined to other tables directly; wrap it in a CTE first.</p></details><details class="faq"><summary>What is the difference between a field and a measure?</summary><p>A field is a scalar expression you group or filter by, like region or month. A measure is an aggregate, like SUM(net_amount), that is evaluated for whatever grouping the query asks for.</p></details><details class="faq"><summary>Can a measure use another measure?</summary><p>Yes. Write MEASURE(other_measure) inside the expression, for example MEASURE(gross_margin) / NULLIF(MEASURE(net_revenue), 0). This keeps each recipe in one place.</p></details></section>
+<section id="sources"><p class="eyebrow">Sources</p><h2>Checked against (11 Nov 2026)</h2><ul>
+<li><a href="https://docs.databricks.com/aws/en/metric-views/">Databricks: Unity Catalog metric views</a> and the <a href="https://docs.databricks.com/aws/en/metric-views/data-modeling/syntax">YAML reference</a></li>
+<li><a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views/materialization">Materialization</a> · <a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views/advanced-techniques">Advanced techniques</a> · <a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views/relationships">Relationships</a> · <a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views/bi-tools">BI tools</a> · <a href="https://docs.databricks.com/aws/en/uc-semantics/metric-views/feature-availability">Feature availability</a></li>
+<li><a href="https://docs.databricks.com/aws/en/data-governance/unity-catalog/filters-and-masks/">Row filters and column masks</a> · <a href="https://kb.databricks.com/upcoming-change-to-abac-policy-evaluation-for-tables-accessed-through-views-and-functions">ABAC evaluation through views (KB)</a></li>
+<li><a href="https://docs.getdbt.com/docs/build/semantic-models">dbt semantic models</a> · <a href="https://www.getdbt.com/blog/dbt-labs-affirms-commitment-to-open-semantic-interchange-by-open-sourcing-metricflow">MetricFlow open-sourced</a> · <a href="https://ossie.apache.org/updates/ossie-enters-apache-incubator/">Apache Ossie</a></li>
+</ul><p>Metric views change every few months. Confirm runtime minimums and preview status before a design depends on them.</p></section>
+</div>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Concepts</b><a href="/leaders/">For leaders</a><a href="/learn/data-systems/">Data systems</a><a href="/learn/data-systems/platform/">Data and AI platform</a><a href="/learn/data-systems/platform/#hops">Data engineering</a><a href="/concepts/semantic-layer/">BI and analytics</a><a href="/concepts/#ml-engineering">ML</a><a href="/learn/ai-universe/">AI</a><a href="/learn/data-systems/platform/#concerns">Across all of them</a><a href="/concepts/#a-z">Key concepts, A to Z</a></div><div><b>On your cloud</b><a href="/platforms/databricks/">Databricks</a><a href="/platforms/aws/">AWS</a><a href="/platforms/azure/">Azure and Fabric</a><a href="/platforms/gcp/">Google Cloud</a><a href="/platforms/open/">Open source</a><a href="/platforms/anthropic/">Claude (Anthropic)</a><a href="/certifications/">All certifications</a></div><div><b>Your role</b><a href="/paths/">Find your path</a><a href="/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/paths/forward-deployed/">Forward Deployed Engineering</a><a href="/mindset/">Worried about AI?</a><a href="/projects/">All projects to join</a></div><div><b>How we work</b><a href="/how-we-work/#thinking">Thinking principles</a><a href="/how-we-work/#ba">Business analysis</a><a href="/how-we-work/#pm">Project management</a><a href="/learn/technical-anchor/">The technical anchor</a></div><div><b>Causes and deep tech</b><a href="/ai-for-cause/">AI for a cause</a><a href="/deep-tech/">Deep tech</a></div><div><b>About</b><a href="/about/">About this site</a><a href="/about/#join">Write or teach</a><a href="/writing/">Blog</a><a href="/research/">All open specifications</a><a href="/assets/">All open-source code</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

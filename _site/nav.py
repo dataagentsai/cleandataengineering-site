@@ -87,6 +87,7 @@ SECTIONS = [
             ("Tables and formats", None),
             ("Delta vs Iceberg", "/learn/delta-vs-iceberg/"),
             ("Who maintains your tables", "/learn/table-maintenance/"),
+            ("Metric views, taught from zero", "/learn/metric-views/"),
             ("History, SCD and facts", None),
             ("SCD2: AUTO CDC or own PySpark?", "/learn/scd2-auto-cdc-vs-pyspark/"),
             ("Gold harness spec: facts and SCD2", "/learn/gold-harness-spec/"),
@@ -115,6 +116,7 @@ SECTIONS = [
         ("BI and analytics", "/concepts/semantic-layer/", [
             ("Hop 4: the semantic layer", "/concepts/semantic-layer/"),
             ("Genie and metric views", "/writing/genie-metric-views/"),
+            ("Metric views, taught from zero", "/learn/metric-views/"),
             ("Power BI vs Databricks AI/BI", "/learn/power-bi-vs-databricks-ai-bi/"),
             ("Power BI and Fabric, in depth", "/learn/power-bi-vs-databricks-ai-bi/power-bi/"),
             ("Databricks AI/BI, in depth", "/learn/power-bi-vs-databricks-ai-bi/ai-bi/"),
