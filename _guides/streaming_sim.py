@@ -4,7 +4,7 @@
 
 /learn/streaming/sim/        Flow: IoT and non-IoT sources, hop by hop, fast lane and platform lane, incidents.
 /learn/streaming/sim/lanes/  Three lanes over a simulated day: fast, near real time and batch, and where they meet.
-Both pick a binding (AWS + Databricks, AWS only, Azure + Databricks, Databricks only) and a route
+Both pick a binding (AWS + Databricks, AWS only, Databricks only) and a route
 (direct, via the medallion, or both). Illustrative model of /learn/streaming/, not recorded runs.
 """
 import json
@@ -92,7 +92,7 @@ CSS = C.CSS + """<style>
 </style>"""
 
 BINDING_OPTS = [("aws-dbx", "AWS + Databricks (recommended)"), ("aws", "AWS only"),
-                ("az-dbx", "Azure + Databricks, Power BI"), ("dbx-only", "Databricks only (not recommended)")]
+("dbx-only", "Databricks only (not recommended)")]
 ROUTE_OPTS = [("both", "Both: live screen and reports"), ("direct", "Direct to the screen only"), ("medallion", "Through the medallion only")]
 
 
@@ -153,7 +153,7 @@ def shell(mode, h1, lede, ctl_extra, below, qa):
 def flow_page():
     url = f"{SITE}/learn/streaming/sim/"
     title = "Streaming simulator: IoT and database data, hop by hop"
-    desc = "Watch IoT readings, app events, CDC and lab files flow through the fast lane and the medallion to a live screen and Power BI, on AWS, Azure or Databricks bindings."
+    desc = "Watch IoT readings, app events, CDC and lab files flow through the fast lane and the medallion to a live screen and Power BI, on AWS with or without Databricks."
     extra = """<fieldset><legend>Sources</legend>
 <label><input type="checkbox" data-src="press"> Curing presses (IoT, 300/s)</label>
 <label><input type="checkbox" data-src="tyre"> Connected tyres (IoT, 3,333/s)</label>
@@ -187,16 +187,16 @@ def flow_page():
 <h2>What to try</h2>
 <ol>
 <li><b>Watch one 15-minute run.</b> Stream readings pile up at lake ingest; at :00, :15, :30 and :45 a run moves them to bronze and silver. At :15 each hour, gold builds the previous hour and the report updates.</li>
-<li><b>Watch Kinesis.</b> Each reading enters one shard, chosen by its press key, so one press stays in order. Two readers read the stream on their own: the live lane a couple of seconds behind, the lake reader up to 15 minutes behind until the next run (normal). Turn on connected tyres and the stream grows from 2 to 6 shards; on Azure the same box is Event Hubs with partitions.</li>
+<li><b>Watch Kinesis.</b> Each reading enters one shard, chosen by its press key, so one press stays in order. Two readers read the stream on their own: the live lane a couple of seconds behind, the lake reader up to 15 minutes behind until the next run (normal). Turn on connected tyres and the stream grows from 2 to 6 shards.</li>
 <li><b>Watch the files.</b> App events (bundled by Firehose) and database changes (written by DMS) land as files in S3 and wait there; the 15-minute run reads them with Auto Loader, which remembers which files it has already loaded. A lab file is different: it lands once an hour at an odd time, so a Databricks file arrival trigger starts a load about a minute after it lands, instead of waiting for the next run. Either way the pipeline is never handed a single file; Auto Loader finds every new file itself.</li>
 <li><b>Switch the route to "Direct".</b> The screen stays live, but database changes and lab files have nowhere to go, and no number is ever final.</li>
 <li><b>Switch to "Through the medallion".</b> Every number is governed, but the screen is 15 to 75 minutes behind.</li>
 <li><b>Take a plant gateway offline.</b> The live screen goes stale, the gateway buffers, and when it returns the late readings are counted and the gold hour is marked provisional.</li>
-<li><b>Change the binding.</b> The roles stay the same; only the product in each box changes. On Azure, live Power BI goes through Fabric Real-Time Intelligence.</li>
+<li><b>Change the binding.</b> The roles stay the same; only the product in each box changes.</li>
 </ol>"""
     qa = [("Is this simulator showing real measured numbers?", "No. It is an illustrative model of the design on the streaming guide: rates, run times and delays are typical values, not recordings."),
           ("Why does the platform lane wait for runs instead of streaming continuously?", "Running every 15 minutes and stopping costs a fraction of an always-on cluster and meets a minutes-level promise. Only the fast lane runs all the time, and it only does light work."),
-          ("Can Power BI show real-time data?", "Power BI's old push and streaming datasets are being retired (no new ones after 31 Oct 2027). For seconds-level screens use Fabric Real-Time Intelligence or a live web board; for reports, Power BI reads gold with automatic page refresh.")]
+          ("Can Power BI show real-time data?", "Power BI's old push and streaming datasets are being retired (no new ones after 31 Oct 2027). For seconds-level screens use a live web board fed by the fast lane; for reports, Power BI reads gold, refreshed when the gold job finishes.")]
     body = shell("flow", "Streaming simulator: data flow, hop by hop",
                  "IoT readings and ordinary sources (app events, database changes, lab files) travel from the source to a live screen in seconds, and through bronze, silver and gold to a Power BI report in minutes. Pick a binding and a route, then break things.",
                  extra, below, qa)
@@ -272,7 +272,7 @@ def faster_page():
 <tr><td><b>2 · Provisional gold every run.</b> Each run recomputes the current hour's window, not only closed hours; every hour keeps a "complete" flag.</td><td>Gold within minutes of silver; the same window-recompute code</td><td>A few more small gold runs a day; people must read the flag</td><td><b>Pursue</b></td></tr>
 <tr><td><b>3 · Power BI capacity that can refresh often.</b> Import model refreshed by the API after each gold run, or DirectQuery with change detection.</td><td>Viewers read memory; no idle queries</td><td>Pro allows only 8 refreshes a day; needs Premium Per User, Premium or Fabric</td><td><b>Pursue</b> with change 1</td></tr>
 <tr><td><b>4 · Runs every 5 minutes.</b></td><td>Screen 5 to 10 min old</td><td>About three times the platform-lane compute; more small files to compact</td><td><b>Pursue only</b> if a named user needs under 10 minutes</td></tr>
-<tr><td><b>5 · Continuous pipeline.</b> Always-on streaming tables, gold kept up to date incrementally, a warm SQL warehouse, DirectQuery checks every minute (on Azure, Direct Lake can read gold without a refresh).</td><td>Screen 2 to 4 min old</td><td>Three to four times the cost; always-on compute to watch</td><td><b>Drop</b>: if minutes are not enough, the need belongs in the fast lane</td></tr>
+<tr><td><b>5 · Continuous pipeline.</b> Always-on streaming tables, gold kept up to date incrementally, a warm SQL warehouse, DirectQuery checks every minute.</td><td>Screen 2 to 4 min old</td><td>Three to four times the cost; always-on compute to watch</td><td><b>Drop</b>: if minutes are not enough, the need belongs in the fast lane</td></tr>
 </table></div>
 
 <h2>Results at a glance</h2>

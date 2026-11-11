@@ -21,8 +21,8 @@ wb = C.wb
 SITE = wb.SITE
 URL_PATH = "/learn/streaming/options/"
 DATE = "2026-11-11"
-TITLE = "Streaming options at a glance: fast lane and platform lane"
-DESC = ("Every fast-lane and platform-lane streaming option on AWS, Databricks and Azure in one table: path, delay to "
+TITLE = "Streaming options on AWS at a glance: fast lane and platform lane"
+DESC = ("Every fast-lane and platform-lane streaming option on AWS, with and without Databricks, in one table: path, delay to "
         "the screen, push or pull, Unity Catalog, cost, verdict and why, with links to the details.")
 
 # verdict keys: pursue, alt (pursue with a condition), try, drop
@@ -57,27 +57,23 @@ ROWS = [
      "1 to 3 s", "Pull, then push", "Yes", "~$700 to $1,100", DROP, "Drop (prefer F6)",
      "Same result as F6, but you size and run a fixed always-on cluster.",
      "Real time page, two ways to run it", "/learn/streaming/real-time-mode/#packaging"),
-    ("fast", "F8", "Azure: Fabric Real-Time Intelligence", "IoT Hub, Event Hubs, Fabric Eventstream, Eventhouse, Real-Time Dashboard or Power BI",
-     "2 to 10 s", "Pull (auto-refresh)", "No (Fabric)", "~$650", ALT, "Pursue on Azure",
-     "The Azure way to put live data in Power BI; needs Fabric capacity.",
-     "Simulator, Azure binding", "/learn/streaming/sim/"),
-    ("fast", "F9", "Lakehouse//RT as the fast lane", "Pipelines into Delta, Lakehouse//RT warehouse, dashboard",
+    ("fast", "F8", "Lakehouse//RT as the fast lane", "Pipelines into Delta, Lakehouse//RT warehouse, dashboard",
      "minutes (table freshness)", "Pull", "Yes", "beta pricing", DROP, "Drop as a fast-lane replacement",
      "It makes queries fast, not data fresh: a screen is only as fresh as the table it reads.",
      "Real time page, Lakehouse//RT", "/learn/streaming/real-time-mode/#lakehouse-rt"),
-    ("fast", "F10", "Power BI streaming or push datasets", "Processor pushes rows straight into Power BI",
+    ("fast", "F9", "Power BI streaming or push datasets", "Processor pushes rows straight into Power BI",
      "seconds", "Push", "No", "-", DROP, "Drop",
      "Being retired (no new ones after 31 Oct 2027), rate-limited, and a second copy of the logic.",
      "Simulator, push or pull", "/learn/streaming/sim/"),
-    ("fast", "F11", "Push with no live store", "Processor pushes straight to screens",
+    ("fast", "F10", "Push with no live store", "Processor pushes straight to screens",
      "about 1 s", "Push", "No", "~$100", DROP, "Drop",
      "A screen that opens or reconnects has nothing to show until the next change; no last-hour chart.",
      "Streaming guide, to the UI", "/learn/streaming/#ui"),
-    ("fast", "F12", "Zerobus as the only entry", "Devices straight into a bronze Delta table",
+    ("fast", "F11", "Zerobus as the only entry", "Devices straight into a bronze Delta table",
      "seconds to bronze", "-", "Yes", "-", DROP, "Drop for sensors",
      "One reader only: no shared event log for a live lane and the lake, no replay from the log.",
      "Streaming guide, front door", "/learn/streaming/#physical"),
-    ("fast", "F13", "Timestream LiveAnalytics, IoT Events", "AWS time-series store and detector service",
+    ("fast", "F12", "Timestream LiveAnalytics, IoT Events", "AWS time-series store and detector service",
      "-", "-", "No", "-", DROP, "Drop",
      "Timestream LiveAnalytics is closed to new customers; IoT Events reached end of support on 20 May 2026.",
      "Streaming guide, notes", "/learn/streaming/#notes"),
@@ -106,27 +102,23 @@ ROWS = [
      "15 to 75 min", "Pull", "No (Glue, Lake Formation)", "~$1,000 (whole stack)", ALT, "Pursue only without Databricks",
      "Fewest vendors; you build silver and gold jobs and the semantic layer yourself.",
      "Delta vs Iceberg", "/learn/delta-vs-iceberg/"),
-    ("platform", "P7", "Azure: Fabric reads gold directly", "Lakeflow pipeline into Delta, gold mirrored into Fabric, Power BI Direct Lake",
-     "as the pipeline", "Pull (no refresh copy)", "Yes, mirrored to Fabric", "Fabric capacity", TRY, "Pursue on Azure, check availability",
-     "Power BI reads the Delta files without an import refresh.",
-     "Delta vs Iceberg, which to pick", "/learn/delta-vs-iceberg/#pick"),
-    ("platform", "P8", "DirectQuery refreshing every minute", "Power BI queries the SQL warehouse on a 1-minute timer",
+    ("platform", "P7", "DirectQuery refreshing every minute", "Power BI queries the SQL warehouse on a 1-minute timer",
      "1 min after gold", "Pull", "Yes", "warehouse never sleeps", DROP, "Drop",
      "About 24,000 queries an hour for 50 viewers, almost all returning the same answer while gold changes hourly.",
      "Faster platform lane", "/learn/streaming/sim/faster/"),
-    ("platform", "P9", "Push rows from Databricks into Power BI", "Gold job posts rows to a Power BI push dataset",
+    ("platform", "P8", "Push rows from Databricks into Power BI", "Gold job posts rows to a Power BI push dataset",
      "minutes", "Push", "No", "-", DROP, "Drop",
      "Push datasets are being retired, have limits, and duplicate the logic; push the signal (refresh), not the rows.",
      "Simulator, push or pull", "/learn/streaming/sim/"),
-    ("platform", "P10", "File arrival trigger for irregular files", "Lab or partner file lands, Databricks file arrival trigger, Auto Loader reads every new file",
+    ("platform", "P9", "File arrival trigger for irregular files", "Lab or partner file lands, Databricks file arrival trigger, Auto Loader reads every new file",
      "about 1 to 2 min to silver", "Pull (checks each minute)", "Yes", "~$30", P, "Pursue",
      "Event-driven without glue code; a burst of files is one run; a missed event never loses a file.",
      "Simulator, what starts each step", "/learn/streaming/sim/"),
-    ("platform", "P11", "One pipeline run per file", "S3 event, Lambda, run the pipeline with the file path",
+    ("platform", "P10", "One pipeline run per file", "S3 event, Lambda, run the pipeline with the file path",
      "1 min + start-up", "Push", "Yes", "-", DROP, "Drop",
      "A start-up per file, runs queue, and passing paths skips Auto Loader's bookkeeping, so a missed event loses a file.",
      "Streaming guide, Databricks choices", "/learn/streaming/#dbx"),
-    ("platform", "P12", "Database changes as files", "DMS (or Lakeflow Connect) writes change files to S3; the 15-min run reads them with Auto Loader",
+    ("platform", "P11", "Database changes as files", "DMS (or Lakeflow Connect) writes change files to S3; the 15-min run reads them with Auto Loader",
      "minutes", "Pull", "Yes", "~$60", P, "Pursue",
      "No event log needed until a live reader appears; SCD type 1 and 2 built in silver.",
      "Streaming guide, non-IoT", "/learn/streaming/#noniot"),
@@ -202,7 +194,7 @@ def page():
 <p class="eyebrow" style="margin-top:22px">Data engineering · one table</p>
 <h1>{E(TITLE)}</h1>
 <p class="lede">Every way we looked at to get streaming data to a screen, in one table: {len(ROWS)} options, {n_p} recommended. Each row gives the whole path, how fresh the screen is, whether data is pushed or pulled to it, whether it sits in Unity Catalog, rough cost, the verdict and why, and a link to the details.</p>
-<div class="box-do" style="border:var(--line);border-radius:var(--wob);padding:10px 16px;background:var(--butter-wash);max-width:900px"><b>The short answer:</b> fast lane <b>F1</b> (AWS-native, 1 to 3 s, ~$530) plus platform lane <b>P2</b> (chained, 6 to 22 min, ~$770), with <b>P10</b> for irregular files and <b>P12</b> for database changes. Switch the fast lane to <b>F6</b> only if one governed platform is worth the extra cost; add <b>P5</b> once Lakehouse//RT leaves beta and many users query gold.</div>
+<div class="box-do" style="border:var(--line);border-radius:var(--wob);padding:10px 16px;background:var(--butter-wash);max-width:900px"><b>The short answer:</b> fast lane <b>F1</b> (AWS-native, 1 to 3 s, ~$530) plus platform lane <b>P2</b> (chained, 6 to 22 min, ~$770), with <b>P9</b> for irregular files and <b>P11</b> for database changes. Switch the fast lane to <b>F6</b> only if one governed platform is worth the extra cost; add <b>P5</b> once Lakehouse//RT leaves beta and many users query gold.</div>
 <div class="so-filters">
 <button data-k="lane" data-val="all" class="on">Both lanes</button><button data-k="lane" data-val="fast">Fast lane</button><button data-k="lane" data-val="platform">Platform lane</button>
 <span style="width:14px"></span>
