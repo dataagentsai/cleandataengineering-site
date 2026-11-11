@@ -84,6 +84,7 @@ SECTIONS = [
             ("Hop 3: silver to gold", "/learn/data-platform-architecture/gold/"),
             ("The metadata store", "/learn/data-platform-architecture/metadata-store/"),
             ("Delta vs Iceberg", "/learn/delta-vs-iceberg/"),
+            ("Time travel as SCD Type 2?", "/learn/time-travel-vs-scd2/"),
             ("Who maintains your tables", "/learn/table-maintenance/"),
             ("Streaming", "/learn/streaming/"),
             ("Streaming: all options", "/learn/streaming/options/"),
