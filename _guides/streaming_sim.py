@@ -20,7 +20,7 @@ import components as C  # noqa: E402
 wb = C.wb
 SITE = wb.SITE
 DATE = "2026-11-11"
-JS = "/learn/streaming/sim/stream-sim.js?v=9"
+JS = "/learn/streaming/sim/stream-sim.js?v=11"
 
 CSS = C.CSS + """<style>
   main.wrap { max-width:1320px; }
@@ -61,6 +61,9 @@ CSS = C.CSS + """<style>
   #ssim-svg .dot.run circle { fill:#2f7d5b; } #ssim-svg .dot.bad path { stroke:#c0392b; stroke-width:2.2; }
   #ssim-svg .shard { fill:#fff; stroke:#111; stroke-width:1; } #ssim-svg .shardl { font-size:9px; fill:#666; font-family:var(--mono) !important; }
   #ssim-svg .bt { font-weight:700; }
+  #ssim-svg .pptag rect { stroke:#111; stroke-width:1; } #ssim-svg .pptag.push rect { fill:#cfe9d9; } #ssim-svg .pptag.pull rect { fill:#d9e0f5; }
+  #ssim-svg .pptag text { font-size:8.5px; font-weight:700; font-family:var(--mono) !important; }
+  .ss-rule { border:var(--line); border-radius:var(--wob); padding:8px 14px; background:#fff; }
   #ssim-svg .ppb { font-size:10px; font-family:var(--mono) !important; fill:#555; letter-spacing:.05em; }
   td.pp.push { background:var(--mint-wash); font-weight:700; } td.pp.pull { background:var(--peri-wash); font-weight:700; }
   .ss-costs { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:10px 0; }
@@ -162,7 +165,7 @@ def flow_page():
 <div>Platform lane: hour to gold report<b id="ssim-lat-gold">-</b>target ≤ 75 min</div></div>
 <p class="ss-legend">Dots: filled circle = press reading, ring = connected tyre, triangle = app event, square = database change, diamond = lab file, green = a platform run moving rows, red cross = broken message.</p>
 <h2>Push or pull, chosen and dropped, hop by hop</h2>
-<p>The small label above each box says how data gets into it. <b>PUSH</b>: the sender delivers it as soon as it has it. <b>PULL</b>: the box (or a job) goes and fetches it, on a schedule or in a loop. The table explains each hop for the binding you picked.</p>
+<p>Every arrow in the diagram carries a tag: green <b>PUSH</b> or blue <b>PULL</b>.</p>
 <div id="ssim-pp"></div>
 <h2>What starts each step: continuous, schedule or file event</h2>
 <p>Only the fast lane runs all the time. Everything in the platform lane runs, finishes and stops; what differs is what starts it.</p>

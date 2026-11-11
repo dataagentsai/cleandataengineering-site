@@ -88,24 +88,44 @@
   /* ------------------------------------------------------------ push or pull, per hop (flow page) */
   var SRC = { press: true, tyre: false, app: true, cdc: true, lims: true };
   function PP(bid) {
-    var aws = bid === "aws" || bid === "aws-dbx", az = bid === "az-dbx", dbx = bid === "dbx-only";
+    var aws = bid === "aws" || bid === "aws-dbx", az = bid === "az-dbx", dbx = bid === "dbx-only", L = BINDINGS[bid];
     return [
-      ["gw", "Machines to gateway", "pull", "The gateway reads machine tags over OPC-UA about once a second: it asks, the machines answer."],
-      ["log", "Gateway to " + BINDINGS[bid].log, "push", dbx ? "The gateway sends straight to Zerobus, which writes into a bronze Delta table. There is no log for other readers." : az ? "The gateway sends batches to Event Hubs." : "The gateway sends batches with PutRecords."],
-      ["fast", "Event log to live processor", "pull", aws ? "Flink reads each shard from its checkpoint. With enhanced fan-out, Kinesis streams records to it over an open connection, so it feels like push (about 70 ms)." : az ? "Eventstream reads the Event Hubs partitions." : "Real-time mode reads the bronze table continuously."],
-      ["live", "Live processor to live store", "push", "The processor writes changes (upserts by press and minute) into the live store."],
-      ["push", "Live store to push service", aws ? "push" : "pull", aws ? "DynamoDB Streams records every change. The Lambda service polls the stream for you and calls a function, which sends each change to every connected screen. To your code it is push." : az ? "Real-Time Dashboard tiles re-query Eventhouse on an auto-refresh timer (seconds)." : "The Databricks App polls Lakebase every second and keeps only the differences."],
-      ["ui1", "Push service to screen", az ? "pull" : "push", az ? "Power BI and Real-Time Dashboards refresh on a timer; the screen asks." : "The browser keeps a WebSocket (or server-sent events) open: a snapshot when it connects, then each change as it happens."],
-      ["api", "App to entry", "push", "Apps call an HTTPS endpoint."],
+      ["gw", "Machine to gateway", "pull", "The gateway asks each machine for its tag values about once a second (OPC-UA). The machine never sends on its own."],
+      ["log", "Gateway to " + (dbx ? "Zerobus" : L.log), "push", dbx ? "The gateway sends each batch to Zerobus, which writes it into a bronze table." : "The gateway sends each batch as soon as it has it."],
+      ["fast", "Event log to live processor", "pull", aws ? "Flink reads from Kinesis; Kinesis never sends by itself. With enhanced fan-out, Flink opens a subscription once and records then flow to it within about 70 ms, but the reader still started it." : az ? "Eventstream reads from Event Hubs." : "Real-time mode keeps reading the bronze table."],
+      ["live", "Live processor to live store", "push", "The processor writes each change into the store."],
+      ["push", "Live store to push service", "pull", aws ? "AWS's Lambda service reads the DynamoDB stream for you, several times a second, and calls your function with new changes. You write no polling code, but it is a pull." : az ? "Dashboard tiles re-query Eventhouse every few seconds." : "The Databricks App asks Lakebase for changes every second."],
+      ["ui1", "Push service to screen", az ? "pull" : "push", az ? "The Real-Time Dashboard or Power BI page refreshes on a timer: the screen asks." : "The server sends each change down the browser's open WebSocket (or server-sent events). The browser does not ask."],
+      ["api", "App to entry", "push", "The app calls an HTTPS endpoint when something happens."],
+      ["landA", "App events into landing", "push", "Firehose writes a file about once a minute."],
       ["cdcin", "Database to change capture", "pull", "The capture tool reads the database's transaction log. The database sends nothing."],
-      ["land", "Into file landing", "push", "Firehose, DMS and the lab system write files into the bucket. Each new file raises an event that waits in a queue."],
-      ["ingest", "Landing and event log to the 15-min run", "pull", bid === "aws" ? "Every 15 minutes a Glue job reads what Firehose delivered." : "Every 15 minutes the pipeline reads new records from its checkpoint, and Auto Loader reads the queued file events. Nothing runs between runs."],
-      ["ftrig", "Lab file to its load", bid === "aws" ? "push" : "pull", bid === "aws" ? "S3 sends an event to EventBridge, which starts a Glue job." : "Databricks checks the folder about once a minute and starts the job when new files appear. Auto Loader inside reads every new file."],
-      ["bronze", "Ingest to bronze", "pull", "The same 15-minute run writes what it read."],
-      ["silver", "Bronze to silver", "pull", "The job reads new bronze rows (incremental) and writes silver."],
-      ["gold", "Silver to gold", "pull", "The hourly job at :15 reads silver and recomputes the hours that changed."],
-      ["ui2", "Gold to Power BI", "pull", "Power BI asks: DirectQuery sends queries on each page refresh, or an import refresh reloads the model. The gold job can trigger that refresh: push the signal, not the rows."]
+      ["landC", "Change capture into landing", "push", "The capture tool writes change files every few minutes."],
+      ["landL", "Lab system into landing", "push", "The lab system drops a file once an hour."],
+      ["ingest", "Event log and landing to bronze and silver", "pull", bid === "aws" ? "Firehose delivers into S3 Tables; every 15 minutes a Glue job reads what is new." : "Every 15 minutes a scheduled job reads new records from its checkpoint and new files through Auto Loader, writes bronze and silver, and stops."],
+      ["ftrig", "Lab file to its load", bid === "aws" ? "push" : "pull", bid === "aws" ? "S3 sends an event that starts a Glue job." : "Databricks checks the folder about once a minute; when a new file is there it starts the job."],
+      ["gold", "Silver to gold", "pull", "The hourly job at :15 reads silver."],
+      ["ui2", "Gold to Power BI", "pull", "Power BI asks: a query per visual, or an import refresh. The gold job can start that refresh when it finishes; the start signal is a push, the data still moves by pull."]
     ];
+  }
+  var TAGPOS = { gw: [170, 52], log: [350, 90], fast: [542, 76], live: [711, 76], push: [864, 76], ui1: [1017, 76],
+    api: [170, 272], landA: [350, 272], cdcin: [170, 346], landC: [350, 346], landL: [170, 420], ingest: [540, 205],
+    ftrig: [545, 404], gold: [934, 296], ui2: [1058, 296] };
+  var tagLayer = null, tagEls = {};
+  function renderTags(rows) {
+    if (MODE !== "flow") return;
+    if (!tagLayer) { tagLayer = el("g", { "class": "pptags" }, svg); }
+    rows.forEach(function (r) {
+      var pos = TAGPOS[r[0]]; if (!pos) return;
+      var t = tagEls[r[0]];
+      if (!t) {
+        var g = el("g", {}, tagLayer);
+        var rc = el("rect", { x: pos[0] - 16, y: pos[1] - 8, width: 32, height: 13, rx: 6 }, g);
+        var tx = el("text", { x: pos[0], y: pos[1] + 2, "text-anchor": "middle" }, g);
+        t = tagEls[r[0]] = { g: g, tx: tx };
+      }
+      t.g.setAttribute("class", "pptag " + r[2]);
+      t.tx.textContent = r[2].toUpperCase();
+    });
   }
   var DROPPED = {
     gw: "Our own Python service on a box (we would own buffering, retries and patches). Every machine straight to IoT Core (about $1,000 a month more in message fees).",
@@ -116,21 +136,20 @@
     ui1: "Power BI streaming and push datasets (being retired; no new ones after 31 Oct 2027). Power BI on gold for live screens (minutes, not seconds).",
     api: "Apps writing straight into the lake (no checks, many tiny files).",
     cdcin: "Trigger-based capture (slows every write). Polling a modified-date column (misses deletes). Change capture into Kinesis before any live reader needs it.",
-    land: "One file per event (request costs and millions of tiny files).",
-    ingest: "Always-on streaming tables (about $700 to $1,500 a month more for minutes nobody needs). Auto Loader in continuous mode. Plain batch with our own high-water mark.",
+    landA: "One file per event (request costs and millions of tiny files).",
+    ingest: "DLT for every table (ties the code to Databricks; kept for change-capture tables only, after a trial). Always-on streaming tables (about $700 to $1,500 a month more for minutes nobody needs). Auto Loader in continuous mode. Plain batch with our own high-water mark.",
     ftrig: "S3 event, then Lambda, then one pipeline run per file with the file path passed in (a start-up per file, runs queue, and a missed event loses a file). Waiting for the 15-minute run (works, but adds up to 15 minutes).",
-    bronze: "Deduplicating or fixing values in bronze (it must keep exactly what arrived).",
-    silver: "DLT for every table (ties the code to Databricks); kept for change-capture tables only, after a trial.",
     gold: "Joining facts inside the stream (state held for hours, misses corrections). The live lane writing gold.",
     ui2: "Pushing rows from Databricks into Power BI push datasets (being retired, a second copy of the logic). DirectQuery refreshing every minute (thousands of identical queries)."
   };
   function renderPP() {
     var host = document.getElementById("ssim-pp"); if (!host) return;
-    var rows = PP(state.binding).map(function (r) {
-      if (boxes[r[0]] && boxes[r[0]].pp) boxes[r[0]].pp.textContent = r[2].toUpperCase();
+    var list = PP(state.binding); renderTags(list);
+    var nPush = list.filter(function (r) { return r[2] === "push"; }).length;
+    var rows = list.map(function (r) {
       return "<tr><td>" + r[1] + "</td><td class='pp " + r[2] + "'>" + r[2].toUpperCase() + "</td><td>" + r[3] + "</td><td class='dropc'>" + (DROPPED[r[0]] || "") + "</td></tr>";
     }).join("");
-    host.innerHTML = "<div class='tw'><table class='t'><tr><th>Hop</th><th>Push or pull</th><th>How, for " + BINDINGS[state.binding].name + "</th><th>Dropped options, and why</th></tr>" + rows + "</table></div>";
+    host.innerHTML = "<p class='ss-rule'><b>Rule: whoever starts the transfer.</b> If the sender starts it as soon as it has data, it is <b>PUSH</b>. If the receiver starts it (it asks, polls, or runs on a schedule), it is <b>PULL</b>. For " + BINDINGS[state.binding].name + ": " + nPush + " pushes and " + (list.length - nPush) + " pulls. Each tag on an arrow in the diagram matches a row below.</p><div class='tw'><table class='t'><tr><th>Hop</th><th>Push or pull</th><th>How, for " + BINDINGS[state.binding].name + "</th><th>Dropped options, and why</th></tr>" + rows + "</table></div>";
   }
 
   /* ------------------------------------------------------------ running cost (rough monthly list prices, production scale) */
@@ -190,7 +209,7 @@
     var small = h < 40;
     var c1 = el("text", { x: x + 8, y: y + h - 26, "class": "bc" }, g);
     var c2 = small ? el("text", { x: x + w - 8, y: y + 20, "class": "bc", "text-anchor": "end" }, g) : el("text", { x: x + 8, y: y + h - 10, "class": "bc" }, g);
-    var pp = el("text", { x: x + w - 5, y: y - 3, "class": "ppb", "text-anchor": "end" }, g);
+    var pp = null;
     boxes[id] = { g: g, x: x, y: y, w: w, h: h, role: role, title: title, tt: tt, pr: pr, pp: pp, c1: c1, c2: c2, lane: lane };
     return boxes[id];
   }
