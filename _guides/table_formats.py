@@ -182,7 +182,7 @@ spark.readStream.option("readChangeFeed", "true").option("startingVersion", 12).
 <section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(QA)}</section>
 <section id="sources"><p class="eyebrow">Sources</p><h2>Checked against</h2><ul>{src}</ul></section>
 <section id="next"><p class="eyebrow">Related</p><h2>Where it connects</h2>
-<p><a href="/learn/medallion-architecture/">Medallion architecture</a> · <a href="/learn/streaming/">Streaming on AWS and Databricks</a> · <a href="/learn/data-platform-architecture/aws-databricks/">Data platform on AWS + Databricks</a> · <a href="/learn/data-platform-sim/delta/">Delta Lake internals, recorded</a> · <a href="/data-engineering/">All data engineering</a></p></section>
+<p><a href="/learn/medallion-architecture/">Medallion architecture</a> · <a href="/learn/streaming/">Streaming on AWS and Databricks</a> · <a href="/learn/data-platform-architecture/aws-databricks/">Data platform on AWS + Databricks</a> · <a href="/learn/data-platform-sim/delta/">Delta Lake internals, recorded</a> · <a href="/learn/table-maintenance/">Who maintains your tables</a> · <a href="/data-engineering/">All data engineering</a></p></section>
 </div>"""
     crumbs = [("Data engineering", f"{SITE}/data-engineering/"), ("Delta vs Iceberg", url)]
     items = [{"@type": "ListItem", "position": i + 1, "name": n, "item": u} for i, (n, u) in enumerate(crumbs)]

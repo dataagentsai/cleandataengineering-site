@@ -30,6 +30,7 @@ STORY = [
 GUIDES = [
     ("Data platform architecture", "/learn/data-platform-architecture/", "How we build it: control plane, metadata, three services, streaming lane, agents that only suggest."),
     ("Delta Lake vs Iceberg on Databricks", "/learn/delta-vs-iceberg/", "Same Parquet, two contents pages; which Databricks features differ (change data feed, streaming, pipelines, lineage, masks) and which to pick on AWS."),
+    ("Who maintains your tables", "/learn/table-maintenance/", "Managed, external and AWS-managed Iceberg tables: who runs compaction and VACUUM, why the catalog pointer decides, and the setup to pick on AWS with Databricks."),
     ("Medallion architecture", "/learn/medallion-architecture/", "Bronze, silver and gold, one order through every layer, nine rules, products per platform."),
     ("Streaming options at a glance", "/learn/streaming/options/", "Every fast-lane and platform-lane option in one table: path, delay, push or pull, Unity Catalog, cost, verdict and why, with links."),
     ("Streaming on AWS and Databricks", "/learn/streaming/", "IoT and ordinary sources, seconds and minutes: roles first, then options per part with pros, cons and a verdict; SCD, DLT, Auto Loader, replays, SLA report, cost."),
