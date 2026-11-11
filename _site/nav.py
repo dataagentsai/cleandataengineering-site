@@ -84,6 +84,7 @@ SECTIONS = [
             ("Hop 3: silver to gold", "/learn/data-platform-architecture/gold/"),
             ("The metadata store", "/learn/data-platform-architecture/metadata-store/"),
             ("Delta vs Iceberg", "/learn/delta-vs-iceberg/"),
+            ("Who maintains your tables", "/learn/table-maintenance/"),
             ("Streaming", "/learn/streaming/"),
             ("Streaming: all options", "/learn/streaming/options/"),
             ("Streaming simulator", "/learn/streaming/sim/"),
@@ -95,6 +96,9 @@ SECTIONS = [
         ("BI and analytics", "/concepts/semantic-layer/", [
             ("Hop 4: the semantic layer", "/concepts/semantic-layer/"),
             ("Genie and metric views", "/writing/genie-metric-views/"),
+            ("Power BI vs Databricks AI/BI", "/learn/power-bi-vs-databricks-ai-bi/"),
+            ("Power BI and Fabric, in depth", "/learn/power-bi-vs-databricks-ai-bi/power-bi/"),
+            ("Databricks AI/BI, in depth", "/learn/power-bi-vs-databricks-ai-bi/ai-bi/"),
             ("Know your consumers", "/learn/data-systems/downstreams/"),
         ], "cap"),
         ("ML", "/concepts/#ml-engineering", [
