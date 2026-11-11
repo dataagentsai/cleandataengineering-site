@@ -242,6 +242,7 @@ def faster_page():
     qa = [("How do I make a Databricks to Power BI pipeline faster without streaming continuously?",
            "Chain the steps instead of waiting for clocks: the 15-minute run starts gold, and gold starts the Power BI refresh through the API. The screen then shows data about 6 to 22 minutes old instead of 30 to 90, for little extra cost, but Power BI needs PPU, Premium or Fabric capacity for that many refreshes."),
           ("Is a continuous pipeline worth it for dashboards?", "Rarely. It brings the screen to about 2 to 4 minutes for roughly three to four times the cost. If someone must act in seconds, that belongs in the fast lane; if minutes are fine, chained 15-minute runs are enough."),
+          ("Is continuous Flink cheaper than continuous DLT?", "Usually, for small streams. Managed Flink can run on one or two small processing units (about $160 to $250 a month); the smallest continuous DLT pipeline is a driver and a worker (about $480 to $650 on classic compute, more on serverless). Per CPU-hour they are similar, so the gap shrinks as volume grows."),
           ("Does a faster pipeline make an hour final sooner?", "No. An hour is final only when its slowest input arrives (lab results, nightly master data). A faster lane shows provisional numbers sooner; each hour keeps a 'complete' flag.")]
     crumbs_html = '<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › <a href="/learn/streaming/">Streaming</a> › Simulator</p>'
     body = f"""{crumbs_html}
@@ -279,6 +280,24 @@ def faster_page():
 <tr><td>D · Continuous</td><td>about 2 to 4 min</td><td>~$2,400</td><td>Premium or Fabric</td><td><b>Drop</b></td></tr>
 </table></div>
 <p class="ss-legend">Power BI licence in the diagram: Pro; PPU+ = Premium Per User, Premium or Fabric capacity; Premium = Premium or Fabric capacity. Rough US list prices, production example (300 readings a second); Power BI user licences not included. The simulator measures the age of the newest data on the screen; a single reading can be older if it arrived late. Faster lanes make numbers visible sooner, not final sooner: an hour is final only when its slowest input (lab results, nightly master data) has arrived.</p>
+
+<h2 id="flink-vs-dlt">Continuous Flink or continuous DLT: what each costs</h2>
+<p>Both run all day. Per CPU-hour they cost about the same; the difference is how small each can go. Flink scales down to one small processing unit. A DLT (Lakeflow Declarative Pipelines) pipeline is a Spark cluster with a driver and at least one worker, and on classic compute you pay the machines and the Databricks fee separately.</p>
+<div class="tw"><table class="t"><tr><th></th><th>Managed Flink, continuous</th><th>DLT continuous, classic compute</th><th>DLT continuous, serverless</th></tr>
+<tr><td>How it is billed</td><td>About $0.11 per processing unit an hour (1 vCPU, 4 GB), plus 1 unit per app for orchestration, plus about $0.10 per GB a month of running state</td><td>EC2 machines, plus DBUs at about $0.20 (Core), $0.25 (Pro) or $0.36 (Advanced)</td><td>One DBU price that includes the compute</td></tr>
+<tr><td>Smallest setup</td><td>1 + 1 units: <b>about $160 a month</b></td><td>Driver + 1 worker (2 × m5.xlarge): EC2 about $280 + DBUs about $200 to $360 = <b>about $480 to $650</b></td><td>Not a fixed figure; expect <b>about $600 to $1,500</b> for a small always-on pipeline (measure it)</td></tr>
+<tr><td>Production example (300 readings a second)</td><td>2 + 1 units: <b>about $250</b></td><td>Driver + 2 workers: <b>about $700 to $1,000</b></td><td>About $700 to $1,500</td></tr>
+<tr><td>Stretch example (3,300 readings a second)</td><td>4 to 8 units: <b>about $450 to $750</b></td><td>3 to 5 workers: <b>about $1,000 to $1,800</b></td><td>About $1,200 to $2,500</td></tr>
+<tr><td>Per vCPU-hour</td><td>About $0.11</td><td>About $0.08 to $0.11 (EC2 + DBU)</td><td>Higher: the compute is managed for you</td></tr>
+<tr><td>Delay</td><td>Milliseconds</td><td>Seconds (micro-batches)</td><td>Seconds</td></tr>
+<tr><td>Ways to cut it</td><td>Fewer units; Lambda for simple limit alerts (about $8 a month)</td><td>Graviton machines, committed-use discounts (spot workers are risky for an always-on job)</td><td>Committed-use discounts</td></tr>
+</table></div>
+<div class="tw"><table class="t"><tr><th>Use</th><th>Choice</th><th>Verdict</th></tr>
+<tr><td>Live lane: 1-minute windows and limit alerts into the live store in seconds</td><td>Managed Flink, about $250 a month</td><td><b>Pursue</b></td></tr>
+<tr><td>Platform lane: bronze and silver</td><td>DLT continuous</td><td><b>Drop</b>: the 15-minute pipeline (about $470) meets the minutes promise, and design B gets screens to 6 to 22 minutes</td></tr>
+<tr><td>One engine for both lanes (no Flink)</td><td>DLT continuous for the live lane too</td><td><b>Drop</b>: about 2 to 4 times the cost, seconds instead of milliseconds, and a custom sink to the live store. If a second engine is the real problem, look at Spark real-time mode (fixed always-on classic cluster).</td></tr>
+</table></div>
+<p class="ss-legend">Rough US list prices from 2025 and 2026, not quotes. Check the AWS and Databricks pricing pages, or use the <a href="/learn/data-systems/platform/cost/calculator/#streaming-services">cost calculator</a>.</p>
 
 <h2>What just happened</h2>
 <ul class="ss-feed" id="ssim-feed"></ul>
