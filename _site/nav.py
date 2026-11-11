@@ -33,9 +33,9 @@ CLOUD_HEADS = [("Data systems", "systems"), ("Data engineering", "de"), ("BI and
                ("AI", "ai"), ("Across all of them", "across"), ("Learning paths", "paths"), ("Certifications", "certs")]
 
 
-def cloud(name, pid, heads=None):
+def cloud(name, pid, heads=None, extra=()):
     keys = heads or [k for _, k in CLOUD_HEADS]
-    return (name, f"/platforms/{pid}/", [(n, f"/platforms/{pid}/#{k}") for n, k in CLOUD_HEADS if k in keys])
+    return (name, f"/platforms/{pid}/", [(n, f"/platforms/{pid}/#{k}") for n, k in CLOUD_HEADS if k in keys] + list(extra))
 
 
 ROLE_KIDS = {
@@ -107,6 +107,7 @@ SECTIONS = [
             ("Problems solved: SCD2, late data, duplicates", "/learn/data-platform-sim/problems/"),
             ("On AWS", None),
             ("AWS + Databricks, ETL end to end", "/learn/data-platform-architecture/aws-databricks/"),
+            ("AWS data services catalog", "/learn/aws-data-services/"),
             ("Open specs", None),
             ("DataTwin", "/learn/datatwin/"),
             ("Clean Data Engineering specs", "/projects/data-eng-specs/"),
@@ -146,7 +147,7 @@ SECTIONS = [
     ]),
     ("On your cloud", [
         cloud("Databricks", "databricks"),
-        cloud("AWS", "aws"),
+        cloud("AWS", "aws", extra=[("AWS data services: all 66", "/learn/aws-data-services/")]),
         cloud("Azure and Fabric", "azure"),
         cloud("Google Cloud", "gcp"),
         cloud("Open source", "open"),
