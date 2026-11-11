@@ -85,6 +85,7 @@ SECTIONS = [
             ("The metadata store", "/learn/data-platform-architecture/metadata-store/"),
             ("Delta vs Iceberg", "/learn/delta-vs-iceberg/"),
             ("Time travel as SCD Type 2?", "/learn/time-travel-vs-scd2/"),
+            ("SCD2: AUTO CDC or own PySpark?", "/learn/scd2-auto-cdc-vs-pyspark/"),
             ("Who maintains your tables", "/learn/table-maintenance/"),
             ("Streaming", "/learn/streaming/"),
             ("Streaming: all options", "/learn/streaming/options/"),

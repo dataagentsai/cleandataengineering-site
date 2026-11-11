@@ -1,0 +1,569 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCD Type 2 on Databricks: AUTO CDC vs Own PySpark MERGE</title>
+<meta name="description" content="How to build SCD Type 2 history on Databricks when the input is CDC and when it is a full snapshot: Lakeflow AUTO CDC vs a hand-written PySpark MERGE, clean tested code for both, what each handles, and the cost."><link rel="canonical" href="https://cleandataengineering.ai/learn/scd2-auto-cdc-vs-pyspark/">
+<meta property="og:title" content="SCD Type 2 on Databricks: AUTO CDC vs Own PySpark MERGE"><meta property="og:description" content="How to build SCD Type 2 history on Databricks when the input is CDC and when it is a full snapshot: Lakeflow AUTO CDC vs a hand-written PySpark MERGE, clean tested code for both, what each handles, and the cost."><meta property="og:url" content="https://cleandataengineering.ai/learn/scd2-auto-cdc-vs-pyspark/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .ac .fig { border:var(--line); border-radius:var(--wob); padding:12px 14px; margin:16px 0; background:#fff; overflow-x:auto; }
+  .ac .fig svg { width:100%; min-width:680px; height:auto; display:block; } .ac .fig text { font-family:var(--hand); fill:#111; }
+  .ac .fig p { font-size:13.5px; color:var(--muted); margin:6px 0 0; }
+  .ac .box { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--butter-wash); }
+  .ac .warn { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--rose-wash); }
+  .ac table.t td { font-size:14px; } .ac td.v { font-weight:700; }
+  .ac .calc { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1.2fr); gap:22px; margin:14px 0; }
+  @media (max-width:760px) { .ac .calc { grid-template-columns:1fr; } }
+  .ac .in { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px 12px; align-content:start; }
+  .ac .in label { display:grid; gap:3px; font-size:13px; color:var(--muted); }
+  .ac .in input, .ac .in select { font:15px ui-monospace,Menlo,monospace; padding:5px 8px; border:var(--line); border-radius:8px; background:#fff; color:#111; width:100%; box-sizing:border-box; }
+  .ac .in .g { grid-column:1/-1; font-weight:700; color:#111; margin-top:4px; }
+  .ac .res { border:var(--line); border-radius:var(--wob); padding:10px 14px; margin-bottom:10px; background:#fff; }
+  .ac .res .top { display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .ac .res .amt { font:700 19px ui-monospace,Menlo,monospace; font-variant-numeric:tabular-nums; }
+  .ac .res .sub { font-size:13px; color:var(--muted); }
+  .ac .res .bar { height:7px; border-radius:4px; background:#f1f1f1; margin-top:7px; overflow:hidden; }
+  .ac .res .bar i { display:block; height:100%; }
+  .ac .res.auto .bar i { background:#A3B5DF; } .ac .res.own .bar i { background:#FFD98A; }
+  .ac .low { font-size:12px; border:var(--line); border-radius:999px; padding:0 8px; background:var(--mint-wash, #eaf6ef); }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "SCD Type 2 on Databricks: AUTO CDC or our own PySpark?", "description": "How to build SCD Type 2 history on Databricks when the input is CDC and when it is a full snapshot: Lakeflow AUTO CDC vs a hand-written PySpark MERGE, clean tested code for both, what each handles, and the cost.", "url": "https://cleandataengineering.ai/learn/scd2-auto-cdc-vs-pyspark/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-11", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Data engineering", "item": "https://cleandataengineering.ai/data-engineering/"}, {"@type": "ListItem", "position": 2, "name": "SCD2: AUTO CDC or own PySpark", "item": "https://cleandataengineering.ai/learn/scd2-auto-cdc-vs-pyspark/"}]}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Should I use AUTO CDC or write my own SCD Type 2 MERGE?", "acceptedAnswer": {"@type": "Answer", "text": "If the input is CDC and you can run Lakeflow pipelines, use AUTO CDC: it handles out-of-order events, deletes and duplicates. Write your own when you run only plain jobs at high volume, or need rules AUTO CDC cannot express. Then build one tested writer with an adapter per input type."}}, {"@type": "Question", "name": "How do I build SCD2 from a full snapshot instead of CDC?", "acceptedAnswer": {"@type": "Answer", "text": "If the source is a Delta table you own, turn on its change data feed and treat it as CDC. Otherwise compare the snapshot with the open target rows by a hash of the tracked columns: new keys are inserts, changed hashes are updates, missing keys are deletes. AUTO CDC FROM SNAPSHOT does this for you in Python pipelines."}}, {"@type": "Question", "name": "Is AUTO CDC the same as APPLY CHANGES?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. APPLY CHANGES INTO was renamed AUTO CDC INTO when Delta Live Tables became Lakeflow Declarative Pipelines; the Python function is now create_auto_cdc_flow, and apply_changes_from_snapshot is create_auto_cdc_from_snapshot_flow."}}, {"@type": "Question", "name": "Does AUTO CDC cost more?", "acceptedAnswer": {"@type": "Answer", "text": "On classic compute it needs the Pro pipeline tier, about a third more per DBU than plain jobs compute on AWS list prices. The VM cost is the same, so the total gap is smaller, and often less than the engineering time to own the code. Serverless jobs and serverless pipelines are billed at the same rate."}}, {"@type": "Question", "name": "Can a full refresh delete my SCD2 history?", "acceptedAnswer": {"@type": "Answer", "text": "Yes, for an AUTO CDC target: a full refresh rebuilds from the source, and if bronze no longer holds all events, the history is gone. Set pipelines.reset.allowed = false on the target table."}}, {"@type": "Question", "name": "How do I make a hand-written SCD2 MERGE safe to re-run?", "acceptedAnswer": {"@type": "Answer", "text": "Skip any event whose ordering value is not newer than the latest point already applied for that key, counting closed rows too, so a deleted key is not brought back. The tests on this page cover replay, late events and replay after delete."}}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Concepts</h4><ul><li><details><summary><a href="/leaders/">For leaders</a></summary><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/leaders/spec-driven/">Spec-driven development: agents</a></li><li><a href="/leaders/spec-driven/data-platform/">Spec-driven development: data platforms</a></li><li><a href="/papers/">Technical papers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/">Data systems</a></summary><ul><li><a href="/learn/data-systems/">The whole system, end to end</a></li><li class="sub">Upstreams</li><li><a href="/learn/data-systems/upstreams/">Know your sources</a></li><li><a href="/learn/data-systems/upstreams/apis/">API sources</a></li><li><a href="/learn/data-systems/upstreams/files/">File sources</a></li><li><a href="/learn/data-systems/upstreams/joins/">Learning the joins</a></li><li><a href="/learn/data-systems/upstreams/answers/">Where the answers go</a></li><li><a href="/learn/data-systems/upstreams/questionnaire/">Source system questionnaire</a></li><li class="sub">Downstreams</li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/platform/">Data and AI platform</a></summary><ul><li class="sub">Conceptual architecture</li><li><a href="/learn/data-systems/platform/">The platform, whole</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#hops">Data engineering</a></summary><ul><li><a href="/learn/data-platform-architecture/ingestion/">Hop 1: sources to bronze</a></li><li><a href="/learn/data-platform-architecture/bronze-to-silver/">Hop 2: bronze to silver</a></li><li><a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a></li><li><a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a></li><li><a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a></li><li><a href="/learn/time-travel-vs-scd2/">Time travel as SCD Type 2?</a></li><li><a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD2: AUTO CDC or own PySpark?</a></li><li><a href="/learn/table-maintenance/">Who maintains your tables</a></li><li><a href="/learn/streaming/">Streaming</a></li><li><a href="/learn/streaming/options/">Streaming: all options</a></li><li><a href="/learn/streaming/sim/">Streaming simulator</a></li><li><a href="/learn/streaming/real-time-mode/">Databricks real time: RTM and Lakehouse//RT</a></li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/datatwin/">Open spec: DataTwin</a></li><li><a href="/projects/data-eng-specs/">Open spec: Clean Data Engineering specs</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/semantic-layer/">BI and analytics</a></summary><ul><li><a href="/concepts/semantic-layer/">Hop 4: the semantic layer</a></li><li><a href="/writing/genie-metric-views/">Genie and metric views</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/">Power BI vs Databricks AI/BI</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/power-bi/">Power BI and Fabric, in depth</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/ai-bi/">Databricks AI/BI, in depth</a></li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/#ml-engineering">ML</a></summary><ul><li><a href="/concepts/#ml-engineering">Key ML ideas (pages coming)</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/ai-universe/">AI</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">Open spec: AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">Open spec: AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">Open spec: AgentTwin</a></li><li><a href="/lab/">The AgentTwin Lab</a></li><li><a href="https://github.com/dataagentsai/reference-agent">Code: Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">Code: AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Code: Eval Harness Framework</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#concerns">Across all of them</a></summary><ul><li><a href="/learn/data-systems/platform/#concerns">All 24 concerns</a></li><li><a href="/learn/data-systems/platform/layout/">Layout: catalogs and schemas</a></li><li><a href="/learn/data-systems/platform/environments/">Environments and CI/CD</a></li><li><a href="/learn/data-systems/platform/cost/">Cost and FinOps</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li></ul></details></li><li><a href="/concepts/#a-z">Key concepts, A to Z</a></li></ul><h4>On your cloud</h4><ul><li><details><summary><a href="/platforms/databricks/">Databricks</a></summary><ul><li><a href="/platforms/databricks/#systems">Data systems</a></li><li><a href="/platforms/databricks/#de">Data engineering</a></li><li><a href="/platforms/databricks/#bi">BI and analytics</a></li><li><a href="/platforms/databricks/#ml">ML</a></li><li><a href="/platforms/databricks/#ai">AI</a></li><li><a href="/platforms/databricks/#across">Across all of them</a></li><li><a href="/platforms/databricks/#paths">Learning paths</a></li><li><a href="/platforms/databricks/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/aws/">AWS</a></summary><ul><li><a href="/platforms/aws/#systems">Data systems</a></li><li><a href="/platforms/aws/#de">Data engineering</a></li><li><a href="/platforms/aws/#bi">BI and analytics</a></li><li><a href="/platforms/aws/#ml">ML</a></li><li><a href="/platforms/aws/#ai">AI</a></li><li><a href="/platforms/aws/#across">Across all of them</a></li><li><a href="/platforms/aws/#paths">Learning paths</a></li><li><a href="/platforms/aws/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/azure/">Azure and Fabric</a></summary><ul><li><a href="/platforms/azure/#systems">Data systems</a></li><li><a href="/platforms/azure/#de">Data engineering</a></li><li><a href="/platforms/azure/#bi">BI and analytics</a></li><li><a href="/platforms/azure/#ml">ML</a></li><li><a href="/platforms/azure/#ai">AI</a></li><li><a href="/platforms/azure/#across">Across all of them</a></li><li><a href="/platforms/azure/#paths">Learning paths</a></li><li><a href="/platforms/azure/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/gcp/">Google Cloud</a></summary><ul><li><a href="/platforms/gcp/#systems">Data systems</a></li><li><a href="/platforms/gcp/#de">Data engineering</a></li><li><a href="/platforms/gcp/#bi">BI and analytics</a></li><li><a href="/platforms/gcp/#ml">ML</a></li><li><a href="/platforms/gcp/#ai">AI</a></li><li><a href="/platforms/gcp/#across">Across all of them</a></li><li><a href="/platforms/gcp/#paths">Learning paths</a></li><li><a href="/platforms/gcp/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/open/">Open source</a></summary><ul><li><a href="/platforms/open/#systems">Data systems</a></li><li><a href="/platforms/open/#de">Data engineering</a></li><li><a href="/platforms/open/#bi">BI and analytics</a></li><li><a href="/platforms/open/#ml">ML</a></li><li><a href="/platforms/open/#ai">AI</a></li><li><a href="/platforms/open/#across">Across all of them</a></li><li><a href="/platforms/open/#paths">Learning paths</a></li><li><a href="/platforms/open/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/anthropic/">Claude (Anthropic)</a></summary><ul><li><a href="/platforms/anthropic/#ai">AI</a></li><li><a href="/platforms/anthropic/#certs">Certifications</a></li></ul></details></li><li><a href="/certifications/">All certifications</a></li></ul><h4>Your role</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/data-engineering/">Data Engineering</a></summary><ul><li><a href="/data-engineering/">Start here</a></li><li><a href="/paths/data-engineering/">Learning path</a></li><li><a href="/data-engineering/#tools">Practice and simulators</a></li><li><a href="/projects/?subject=data">Projects to join</a></li><li><a href="/concepts/#data-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/">Learning path</a></li><li><a href="/learn/agent-harness-sim/">Simulator: Agent Harness</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li><li><a href="/projects/?subject=ai">Projects to join</a></li><li><a href="/concepts/#ai-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/">Learning path</a></li><li><a href="/learn/llm-api-sim/">Simulator: Claude API</a></li><li><a href="/projects/?subject=llm">Projects to join</a></li><li><a href="/concepts/#llm-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/">Learning path</a></li><li><a href="/concepts/#ml-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/">Learning path</a></li><li><a href="/concepts/#software-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/paths/forward-deployed/">Learning path</a></li><li><a href="/concepts/#forward-deployed">Key concepts</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li><li><a href="/projects/">All projects to join</a></li></ul><h4>How we work</h4><ul><li><a href="/how-we-work/#thinking">Thinking principles</a></li><li><a href="/how-we-work/#ba">Business analysis</a></li><li><a href="/how-we-work/#pm">Project management</a></li><li><details><summary><a href="/learn/technical-anchor/">The technical anchor</a></summary><ul><li><a href="/learn/technical-anchor/">The role</a></li><li><a href="/learn/technical-anchor/discovery/">Discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li></ul></details></li></ul><h4>Causes and deep tech</h4><ul><li><details><summary><a href="/ai-for-cause/">AI for a cause</a></summary><ul><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul></details></li><li><details><summary><a href="/deep-tech/">Deep tech</a></summary><ul><li><a href="/problems/">Hard problems</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul></details></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li><li><a href="/about/#join">Write or teach</a></li><li><a href="/writing/">Blog</a></li><li><a href="/research/">All open specifications</a></li><li><a href="/assets/">All open-source code</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › SCD2: AUTO CDC or own PySpark</p>
+<p class="eyebrow" style="margin-top:22px">Data engineering · free guide · one page</p>
+<h1>SCD Type 2 on Databricks: AUTO CDC or our own PySpark?</h1>
+<p class="lede">Two ways to keep history of changing records on Databricks: let a Lakeflow pipeline do it with AUTO CDC, or write the MERGE ourselves. This page shows when each is right, for input that arrives as changes (CDC) and input that arrives as full snapshots, with clean code for both and what each costs.</p>
+<div class="ac">
+<div class="box"><b>Input is CDC:</b> use <b>AUTO CDC</b>. It handles events that arrive out of order, deletes and duplicate events, which is where hand-written SCD2 code usually goes wrong.<br>
+<b>Input is not CDC:</b> if the source is a Delta table you own, turn on its change data feed so it <i>becomes</i> CDC. For true full extracts, <b>AUTO CDC FROM SNAPSHOT</b> is fine for small and medium tables; for very large ones our own hash compare can be cheaper because we choose what to compare.<br>
+<b>Write our own</b> when the team runs only plain jobs at high volume, or needs rules AUTO CDC cannot express. Then build <b>one</b> tested SCD2 writer and give each input type a small adapter, never one SCD2 notebook per table.<br>
+<b>Cost:</b> the per-DBU gap is usually smaller than the engineering time to own the code. What really moves the bill is how much each run reads, which the input shape decides, not the tool.</div>
+
+<section id="plain"><p class="eyebrow">In plain words</p><h2>What SCD Type 2 keeps</h2>
+<p>A Slowly Changing Dimension Type 2 never overwrites. When a tracked value changes, the current row is closed and a new one opened, and each row says when it was true: <code>valid_from</code>, <code>valid_to</code>, <code>is_current</code>. See <a href="/concepts/scd/">the SCD concept page</a>.</p>
+<div class="fig"><svg viewBox="0 0 1000 212" role="img" aria-label="SCD Type 2 for customer 42: a Pune row from 4 January to 19 May, a Mumbai row to 2 September, a Delhi row to 1 November, when the customer was deleted in the source and no new row opened."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><text x="500" y="24" font-size="17" text-anchor="middle">customer 42 over one year</text><rect x="60" y="46" width="260" height="56" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="190.0" y="70.0" font-size="15" text-anchor="middle">42 · Pune</text><text x="190.0" y="88.0" font-size="13" text-anchor="middle">from 4 Jan · to 19 May</text><rect x="360" y="46" width="260" height="56" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="490.0" y="70.0" font-size="15" text-anchor="middle">42 · Mumbai</text><text x="490.0" y="88.0" font-size="13" text-anchor="middle">from 19 May · to 2 Sep</text><rect x="660" y="46" width="260" height="56" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="790.0" y="70.0" font-size="15" text-anchor="middle">42 · Delhi</text><text x="790.0" y="88.0" font-size="13" text-anchor="middle">from 2 Sep · to 1 Nov</text><path d="M320,74 L358,74" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M620,74 L658,74" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="380" y="130" width="260" height="44" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="510.0" y="156.66666666666666" font-size="14" text-anchor="middle">1 Nov: deleted in source</text><path d="M790,104 L600,128" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)" stroke-dasharray="5 5"/><text x="500" y="200" font-size="14" text-anchor="middle">nothing is overwritten: each change closes one row and opens the next</text></svg><p>One customer, three cities, then a delete. Facts join to the row valid on their own date.</p></div>
+<p>The hard cases every implementation must handle: two changes for one key in the same batch, an older event arriving after a newer one, a "change" that changes nothing we track, a delete, a delete then a re-insert, and a failed batch that runs again.</p></section>
+
+<section id="inputs"><p class="eyebrow">Step 1</p><h2>Four input shapes, one idea</h2>
+<div class="fig"><svg viewBox="0 0 1000 302" role="img" aria-label="Four input shapes (CDC feed, a Delta table&#x27;s change data feed, a full snapshot, an updated_at pull) all become change events with a key, an operation, an ordering value and the attributes. Those events feed either AUTO CDC in a Lakeflow pipeline or our own PySpark SCD2 writer."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><rect x="10" y="14" width="230" height="54" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="125.0" y="37.166666666666664" font-size="14" text-anchor="middle">CDC feed</text><text x="125.0" y="54.166666666666664" font-size="12" text-anchor="middle">Debezium, SAP SLT, DMS</text><path d="M240,41 L368,150" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="10" y="80" width="230" height="54" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="125.0" y="103.16666666666667" font-size="14" text-anchor="middle">Delta table we own</text><text x="125.0" y="120.16666666666667" font-size="12" text-anchor="middle">change data feed</text><path d="M240,107 L368,150" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="10" y="146" width="230" height="54" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="125.0" y="169.16666666666666" font-size="14" text-anchor="middle">Full snapshot</text><text x="125.0" y="186.16666666666666" font-size="12" text-anchor="middle">daily extract, files</text><path d="M240,173 L368,150" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="10" y="212" width="230" height="54" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="125.0" y="235.16666666666666" font-size="14" text-anchor="middle">updated_at pull</text><text x="125.0" y="252.16666666666666" font-size="12" text-anchor="middle">JDBC incremental</text><path d="M240,239 L368,150" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="370" y="110" width="240" height="80" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="490.0" y="146.0" font-size="15" text-anchor="middle">change events</text><text x="490.0" y="164.0" font-size="13" text-anchor="middle">key · op · order · values</text><path d="M610,135 L700,80" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M610,165 L700,220" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="702" y="46" width="280" height="64" rx="10" fill="#f1eefb" stroke="#111" stroke-width="1.5"/><text x="842.0" y="74.0" font-size="15" text-anchor="middle">AUTO CDC</text><text x="842.0" y="92.0" font-size="13" text-anchor="middle">(Lakeflow pipeline)</text><rect x="702" y="190" width="280" height="64" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="842.0" y="218.0" font-size="15" text-anchor="middle">our SCD2 writer</text><text x="842.0" y="236.0" font-size="13" text-anchor="middle">(PySpark MERGE)</text><text x="500" y="292" font-size="14" text-anchor="middle">turn every input into change events first; then SCD2 is the same problem every time</text></svg><p>Whatever arrives, turn it into change events. After that, SCD2 is one problem, solved once.</p></div>
+<div class="tw"><table class="t"><tr><th>Input you receive</th><th>Typical source</th><th>How it becomes change events</th><th>Deletes?</th></tr><tr><td><b>CDC feed</b></td><td>Debezium on Kafka or MSK, SAP SLT, AWS DMS, ADF CDC, Fivetran</td><td>Already events. Order by commit time plus log position.</td><td>Yes</td></tr><tr><td><b>Delta table we own</b></td><td>Silver tables, other teams&#x27; Delta tables</td><td>Turn on delta.enableChangeDataFeed and read the change feed; order by _commit_version.</td><td>Yes</td></tr><tr><td><b>Full snapshot</b></td><td>SAP table extracts, daily files, JDBC full loads</td><td>Compare with the open rows by hash: new key = insert, different hash = update, missing key = delete.</td><td>Yes, by absence</td></tr><tr><td><b>Pull by updated_at</b></td><td>JDBC &#x27;where updated_at &gt; last run&#x27;</td><td>Each row is an update event, ordered by updated_at.</td><td>No: add a periodic full key-list compare</td></tr></table></div></section>
+
+<section id="decide"><p class="eyebrow">Step 2</p><h2>Which to use</h2><div class="tw"><table class="t"><tr><th>Input</th><th>Situation</th><th>Use</th><th>Verdict</th></tr><tr><td><b>CDC</b></td><td>Already on Lakeflow pipelines, or happy to adopt them</td><td>AUTO CDC</td><td class="v">Pursue: ordering, deletes and duplicates handled; no SCD code to own</td></tr><tr><td><b>CDC</b></td><td>Jobs-only team, very high volume, cost-sensitive</td><td>Own PySpark MERGE</td><td class="v">Pursue: lower DBU rate; only with the table-driven tests below</td></tr><tr><td><b>CDC</b></td><td>Custom rules: business-date effective dates, rewriting history in the middle of the timeline</td><td>Own PySpark MERGE</td><td class="v">Pursue: AUTO CDC orders by one SEQUENCE BY value</td></tr><tr><td><b>Snapshot</b></td><td>Source is a Delta table we control</td><td>Change data feed, then AUTO CDC</td><td class="v">Pursue: reads only changed rows</td></tr><tr><td><b>Snapshot</b></td><td>Full extract, small to medium table</td><td>AUTO CDC FROM SNAPSHOT</td><td class="v">Pursue: simple and correct; Python only</td></tr><tr><td><b>Snapshot</b></td><td>Full extract, hundreds of millions of rows</td><td>Own hash compare</td><td class="v">Pursue: compare only the partitions that changed</td></tr><tr><td><b>Any</b></td><td>A hand-written SCD2 notebook per source table</td><td>None</td><td class="v">Drop: the same bugs fixed many times over</td></tr></table></div></section>
+
+<section id="auto"><p class="eyebrow">Clean implementation 1</p><h2>AUTO CDC in a Lakeflow pipeline</h2>
+<p>AUTO CDC is the new name for <code>APPLY CHANGES</code> in Lakeflow Declarative Pipelines (formerly Delta Live Tables). The target is a streaming table the pipeline owns; it adds <code>__START_AT</code> and <code>__END_AT</code> from the <code>SEQUENCE BY</code> value.</p>
+<h3>Input is CDC, in SQL</h3><pre class="code">CREATE OR REFRESH STREAMING TABLE dim_customer
+  TBLPROPERTIES (&#x27;pipelines.reset.allowed&#x27; = &#x27;false&#x27;);   -- protect history from a full refresh
+
+CREATE FLOW dim_customer_scd2 AS AUTO CDC INTO dim_customer
+FROM STREAM(bronze.customer_cdc)
+KEYS (customer_id)
+APPLY AS DELETE WHEN op = &#x27;D&#x27;
+SEQUENCE BY commit_ts                          -- or struct(commit_ts, lsn) to break ties
+COLUMNS * EXCEPT (op, commit_ts, _rescued_data)
+STORED AS SCD TYPE 2
+TRACK HISTORY ON * EXCEPT (last_login_ts);       -- noisy columns update in place</pre><p class="cap">Lakeflow pipeline SQL; needs a Databricks workspace, not run on this page.</p>
+<h3>Input is CDC, in Python</h3><pre class="code">from pyspark import pipelines as dp
+from pyspark.sql.functions import col, expr
+
+@dp.view
+def customer_cdc():
+    return spark.readStream.table(&quot;bronze.customer_cdc&quot;)
+
+dp.create_streaming_table(&quot;dim_customer&quot;, table_properties={&quot;pipelines.reset.allowed&quot;: &quot;false&quot;})
+
+dp.create_auto_cdc_flow(
+    target=&quot;dim_customer&quot;,
+    source=&quot;customer_cdc&quot;,
+    keys=[&quot;customer_id&quot;],
+    sequence_by=col(&quot;commit_ts&quot;),
+    apply_as_deletes=expr(&quot;op = &#x27;D&#x27;&quot;),
+    except_column_list=[&quot;op&quot;, &quot;commit_ts&quot;, &quot;_rescued_data&quot;],
+    stored_as_scd_type=2,
+    track_history_except_column_list=[&quot;last_login_ts&quot;],
+)</pre><p class="cap">Same flow in the Python API.</p>
+<h3>Input is a Delta table we own: turn on the change feed</h3><pre class="code">ALTER TABLE silver.material SET TBLPROPERTIES (delta.enableChangeDataFeed = true);
+
+-- In the pipeline: drop pre-images, then feed AUTO CDC as above with SEQUENCE BY _commit_version
+CREATE TEMPORARY VIEW material_changes AS
+SELECT *, CASE _change_type WHEN &#x27;delete&#x27; THEN &#x27;D&#x27; ELSE &#x27;U&#x27; END AS op
+FROM STREAM(silver.material) WITH (readChangeFeed = true)
+WHERE _change_type != &#x27;update_preimage&#x27;;</pre>
+<h3>Input is a full snapshot (Python only)</h3><pre class="code">from pyspark import pipelines as dp
+
+dp.create_streaming_table(&quot;dim_material&quot;)
+
+# Each pipeline update reads the latest full snapshot and compares it with the target.
+dp.create_auto_cdc_from_snapshot_flow(
+    target=&quot;dim_material&quot;,
+    source=&quot;bronze.sap_mara_snapshot&quot;,
+    keys=[&quot;material_id&quot;],
+    stored_as_scd_type=2,
+    track_history_except_column_list=[&quot;extract_ts&quot;],
+)
+# For a backfill from many dated snapshots, pass a function instead of a table name:
+# it gets the last processed version and returns (next_df, next_version) or None.</pre><p class="cap">The snapshot flow reads the whole snapshot each update: without a change feed, comparing full key lists is the only way to see deletes.</p></section>
+
+<section id="own"><p class="eyebrow">Clean implementation 2</p><h2>Our own PySpark: one writer, an adapter per input</h2>
+<p>The writer only understands change events. Planning is a pure function from DataFrames to a DataFrame, so it is tested without Delta; the MERGE is a thin wrapper. Each input shape gets a small adapter.</p>
+<div class="fig"><svg viewBox="0 0 1000 230" role="img" aria-label="Our own design: three adapters (CDC stream, Delta change feed, snapshot compare) feed one pure planning function, plan_scd2, which skips late events, drops no-op changes and builds versions; apply_scd2 then runs one Delta MERGE into the dimension table."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><rect x="10" y="16" width="250" height="56" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="135.0" y="40.166666666666664" font-size="14" text-anchor="middle">run_cdc()</text><text x="135.0" y="57.166666666666664" font-size="12" text-anchor="middle">stream, foreachBatch</text><path d="M260,44 L338,116" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="10" y="86" width="250" height="56" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="135.0" y="110.16666666666667" font-size="14" text-anchor="middle">change_feed_events()</text><text x="135.0" y="127.16666666666667" font-size="12" text-anchor="middle">Delta CDF to events</text><path d="M260,114 L338,116" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="10" y="156" width="250" height="56" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="135.0" y="180.16666666666666" font-size="14" text-anchor="middle">snapshot_to_events()</text><text x="135.0" y="197.16666666666666" font-size="12" text-anchor="middle">hash compare to events</text><path d="M260,184 L338,116" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="340" y="76" width="250" height="80" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="465.0" y="103.66666666666667" font-size="14" text-anchor="middle">plan_scd2()</text><text x="465.0" y="120.66666666666667" font-size="12" text-anchor="middle">pure: skip late, drop no-ops,</text><text x="465.0" y="137.66666666666669" font-size="12" text-anchor="middle">build versions</text><path d="M590,116 L650,116" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="652" y="76" width="170" height="80" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="737.0" y="112.16666666666667" font-size="14" text-anchor="middle">apply_scd2()</text><text x="737.0" y="129.16666666666669" font-size="12" text-anchor="middle">one MERGE</text><path d="M822,116 L872,116" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="874" y="76" width="116" height="80" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="932.0" y="112.16666666666667" font-size="14" text-anchor="middle">dim table</text><text x="932.0" y="129.16666666666669" font-size="12" text-anchor="middle">Delta</text><text x="465" y="196" font-size="13" text-anchor="middle">tested with 11 table rows, no Delta needed</text></svg><p>Three adapters, one planning function, one MERGE.</p></div>
+<h3>The writer</h3><pre class="code">&quot;&quot;&quot;One SCD Type 2 writer. Input is always change events: key, seq, op (&#x27;I&#x27;,&#x27;U&#x27;,&#x27;D&#x27;), tracked columns.
+Target columns: key, tracked..., row_hash, valid_from, valid_to, is_current.&quot;&quot;&quot;
+from delta.tables import DeltaTable
+from pyspark.sql import DataFrame, Window, functions as F
+
+
+def row_hash(cols: list[str]):
+    return F.sha2(F.concat_ws(&quot;|&quot;, *[F.coalesce(F.col(c).cast(&quot;string&quot;), F.lit(&quot;&lt;null&gt;&quot;)) for c in cols]), 256)
+
+
+def plan_scd2(events: DataFrame, target: DataFrame, key: str, seq: str, tracked: list[str]) -&gt; DataFrame:
+    &quot;&quot;&quot;Pure planning step. target = all rows of the SCD2 table (open and closed).
+    Returns staged rows for one MERGE:
+    merge_key set  = close that key&#x27;s open row at close_at
+    merge_key null = insert this row as a new version&quot;&quot;&quot;
+    by_key = Window.partitionBy(key).orderBy(seq)
+    cur = target.where(&quot;is_current&quot;).select(key, F.col(&quot;row_hash&quot;).alias(&quot;cur_hash&quot;))
+    # Latest point already applied per key, open or closed (a deleted key has no open row).
+    seen = target.groupBy(key).agg(
+        F.max(F.greatest(&quot;valid_from&quot;, F.coalesce(&quot;valid_to&quot;, &quot;valid_from&quot;))).alias(&quot;last_seq&quot;))
+
+    ev = (
+        events.dropDuplicates([key, seq])
+        .withColumn(&quot;row_hash&quot;, row_hash(tracked))
+        .join(cur, key, &quot;left&quot;)
+        .join(seen, key, &quot;left&quot;)
+        # 1. Late or replayed events (not newer than what is applied) are skipped.
+        #    This makes re-running a failed batch safe, even for deleted keys.
+        .where(F.col(&quot;last_seq&quot;).isNull() | (F.col(seq) &gt; F.col(&quot;last_seq&quot;)))
+        .withColumn(&quot;prev_hash&quot;, F.coalesce(F.lag(&quot;row_hash&quot;).over(by_key), F.col(&quot;cur_hash&quot;)))
+        .withColumn(&quot;prev_op&quot;, F.lag(&quot;op&quot;).over(by_key))
+        # 2. Drop events that change nothing we track.
+        .where((F.col(&quot;op&quot;) == &quot;D&quot;) | (F.col(&quot;prev_op&quot;) == &quot;D&quot;)
+               | ~F.col(&quot;row_hash&quot;).eqNullSafe(F.col(&quot;prev_hash&quot;)))
+        # 3. Each version ends where the next event for the same key starts.
+        .withColumn(&quot;valid_to&quot;, F.lead(seq).over(by_key))
+    )
+
+    closes = (
+        ev.groupBy(key).agg(F.min(seq).alias(&quot;close_at&quot;))
+        .join(cur.select(key), key)                       # only keys that have an open row
+        .withColumn(&quot;merge_key&quot;, F.col(key))
+    )
+    inserts = (
+        ev.where(F.col(&quot;op&quot;) != &quot;D&quot;)
+        .select(key, *tracked, &quot;row_hash&quot;, F.col(seq).alias(&quot;valid_from&quot;), &quot;valid_to&quot;,
+                F.col(&quot;valid_to&quot;).isNull().alias(&quot;is_current&quot;))
+        .withColumn(&quot;merge_key&quot;, F.lit(None).cast(events.schema[key].dataType))
+    )
+    return closes.unionByName(inserts, allowMissingColumns=True)
+
+
+def apply_scd2(target: DeltaTable, staged: DataFrame, key: str, tracked: list[str]) -&gt; None:
+    &quot;&quot;&quot;One atomic MERGE: close old versions and insert new ones together.&quot;&quot;&quot;
+    cols = [key, *tracked, &quot;row_hash&quot;, &quot;valid_from&quot;, &quot;valid_to&quot;, &quot;is_current&quot;]
+    (
+        target.alias(&quot;t&quot;)
+        .merge(staged.alias(&quot;s&quot;), f&quot;t.{key} = s.merge_key AND t.is_current&quot;)
+        .whenMatchedUpdate(set={&quot;valid_to&quot;: &quot;s.close_at&quot;, &quot;is_current&quot;: &quot;false&quot;})
+        .whenNotMatchedInsert(condition=&quot;s.merge_key IS NULL&quot;, values={c: f&quot;s.{c}&quot; for c in cols})
+        .execute()
+    )</pre><p class="cap">Run on Spark 3.5.1 + Delta 3.2.0 on 2026-11-11.</p>
+<h3>The adapters</h3><pre class="code">from delta.tables import DeltaTable
+from pyspark.sql import DataFrame, functions as F
+from scd2 import apply_scd2, plan_scd2, row_hash
+
+
+def run_cdc(spark, source: str, target_name: str, key: str, seq: str, tracked: list[str], checkpoint: str):
+    target = DeltaTable.forName(spark, target_name)
+
+    def each_batch(batch: DataFrame, _batch_id: int):
+        apply_scd2(target, plan_scd2(batch, target.toDF(), key, seq, tracked), key, tracked)
+
+    (spark.readStream.table(source)
+        .writeStream.foreachBatch(each_batch)
+        .option(&quot;checkpointLocation&quot;, checkpoint)
+        .trigger(availableNow=True)
+        .start().awaitTermination())
+
+
+def change_feed_events(spark, table: str, starting_version: int) -&gt; DataFrame:
+    return (spark.readStream.option(&quot;readChangeFeed&quot;, &quot;true&quot;)
+            .option(&quot;startingVersion&quot;, starting_version).table(table)
+            .where(&quot;_change_type != &#x27;update_preimage&#x27;&quot;)
+            .withColumn(&quot;op&quot;, F.expr(&quot;CASE _change_type WHEN &#x27;delete&#x27; THEN &#x27;D&#x27; ELSE &#x27;U&#x27; END&quot;))
+            .withColumnRenamed(&quot;_commit_version&quot;, &quot;seq&quot;))
+
+
+def snapshot_to_events(snapshot: DataFrame, current: DataFrame, key: str, tracked: list[str], snap_ts) -&gt; DataFrame:
+    s = snapshot.select(key, *tracked).withColumn(&quot;new_hash&quot;, row_hash(tracked))
+    c = current.select(key, F.col(&quot;row_hash&quot;).alias(&quot;cur_hash&quot;))
+    op = (F.when(F.col(&quot;cur_hash&quot;).isNull(), &quot;I&quot;)
+           .when(F.col(&quot;new_hash&quot;).isNull(), &quot;D&quot;)
+           .when(F.col(&quot;new_hash&quot;) != F.col(&quot;cur_hash&quot;), &quot;U&quot;))
+    return (s.join(c, key, &quot;full_outer&quot;)
+              .withColumn(&quot;op&quot;, op).where(F.col(&quot;op&quot;).isNotNull())
+              .withColumn(&quot;seq&quot;, F.lit(snap_ts))
+              .drop(&quot;new_hash&quot;, &quot;cur_hash&quot;))
+
+
+def run_snapshot(spark, snapshot_table: str, target_name: str, key: str, tracked: list[str], snap_ts):
+    target = DeltaTable.forName(spark, target_name)
+    rows = target.toDF()
+    events = snapshot_to_events(spark.read.table(snapshot_table), rows.where(&quot;is_current&quot;), key, tracked, snap_ts)
+    apply_scd2(target, plan_scd2(events, rows, key, &quot;seq&quot;, tracked), key, tracked)
+    # Running the same snapshot twice is a no-op: seq is not newer than what is applied.</pre>
+<h3>Target table</h3><pre class="code">CREATE TABLE gold.dim_customer (
+  customer_id BIGINT, name STRING, email STRING, city STRING, segment STRING,
+  row_hash STRING, valid_from TIMESTAMP, valid_to TIMESTAMP, is_current BOOLEAN
+)
+CLUSTER BY (customer_id, is_current)                    -- MERGE reads only matching files
+TBLPROPERTIES (&#x27;delta.enableDeletionVectors&#x27; = &#x27;true&#x27;);  -- cheaper closes</pre><p class="cap">Delta DDL for Databricks; liquid clustering keeps each MERGE small.</p>
+<h3>What the end-to-end run printed</h3><pre class="code">after CDC batch 2 (42 moves then is deleted; 7 gets a late event; 9 gets a no-op)
+customer_id city    segment valid_from  valid_to    is_current
+7           Chennai sme     2026-02-01  NULL        true        &lt;- late Madurai event skipped
+9           Goa     retail  2026-03-01  NULL        true        &lt;- no-op ignored
+42          Pune    retail  2026-01-04  2026-05-19  false
+42          Mumbai  retail  2026-05-19  2026-09-02  false
+42          Delhi   retail  2026-09-02  2026-11-01  false       &lt;- closed by the delete
+replay the whole CDC source -&gt; rows before 5, after 5
+
+after 3 daily snapshots, then day 3 again
+1           Pune    retail  2026-11-01  2026-11-03  false       &lt;- missing on day 3 = deleted
+2           Goa     sme     2026-11-01  2026-11-02  false
+2           Goa     corp    2026-11-02  NULL        true
+3           Delhi   retail  2026-11-02  NULL        true
+re-run day 3 -&gt; rows before 4, after 4
+
+change data feed: insert (v1), update (v2), delete (v3)
+5           Pune    retail  1           2           false
+5           Delhi   retail  2           3           false</pre><p class="cap">From e2e.py: a CDC stream in two batches, a full replay, three daily snapshots plus a re-run, and a Delta change data feed. Columns trimmed for width; arrows are our notes.</p>
+<div class="warn"><b>A bug this run caught:</b> the first version checked late events only against <i>open</i> rows. A deleted customer has none, so replaying an old batch brought them back (5 rows became 8). The fix compares each event with the latest point applied for that key, closed rows included. Two test rows now guard it.</div></section>
+
+<section id="tests"><p class="eyebrow">Proof</p><h2>Table-driven tests</h2>
+<p>Because planning is pure, each hard case is one row. All 11 pass.</p>
+<pre class="code">import pytest
+from scd2 import plan_scd2, row_hash
+
+O, X = True, False   # open row, closed row
+# name                              target rows (id, city, from, to, open)   events (id, op, seq, city)                       closes (id, at)  inserts (id, city, from, to)
+CASES = [
+    (&quot;new key opens a row&quot;,           [],                          [(1, &quot;I&quot;, 1, &quot;Pune&quot;)],                          [],        [(1, &quot;Pune&quot;, 1, None)]),
+    (&quot;no-op update is ignored&quot;,       [(1, &quot;Pune&quot;, 1, None, O)],   [(1, &quot;U&quot;, 2, &quot;Pune&quot;)],                          [],        []),
+    (&quot;change closes and opens&quot;,       [(1, &quot;Pune&quot;, 1, None, O)],   [(1, &quot;U&quot;, 2, &quot;Mumbai&quot;)],                        [(1, 2)],  [(1, &quot;Mumbai&quot;, 2, None)]),
+    (&quot;two changes in one batch&quot;,      [(1, &quot;Pune&quot;, 1, None, O)],   [(1, &quot;U&quot;, 2, &quot;Mumbai&quot;), (1, &quot;U&quot;, 3, &quot;Delhi&quot;)],  [(1, 2)],  [(1, &quot;Mumbai&quot;, 2, 3), (1, &quot;Delhi&quot;, 3, None)]),
+    (&quot;no-op then change&quot;,             [(1, &quot;Pune&quot;, 1, None, O)],   [(1, &quot;U&quot;, 2, &quot;Pune&quot;), (1, &quot;U&quot;, 3, &quot;Delhi&quot;)],    [(1, 3)],  [(1, &quot;Delhi&quot;, 3, None)]),
+    (&quot;delete closes, adds nothing&quot;,   [(1, &quot;Pune&quot;, 1, None, O)],   [(1, &quot;D&quot;, 2, None)],                            [(1, 2)],  []),
+    (&quot;delete then re-insert&quot;,         [(1, &quot;Pune&quot;, 1, None, O)],   [(1, &quot;D&quot;, 2, None), (1, &quot;I&quot;, 3, &quot;Pune&quot;)],       [(1, 2)],  [(1, &quot;Pune&quot;, 3, None)]),
+    (&quot;late event is skipped&quot;,         [(1, &quot;Delhi&quot;, 5, None, O)],  [(1, &quot;U&quot;, 3, &quot;Mumbai&quot;)],                        [],        []),
+    (&quot;replayed batch is a no-op&quot;,     [(1, &quot;Delhi&quot;, 3, None, O)],  [(1, &quot;U&quot;, 2, &quot;Mumbai&quot;), (1, &quot;U&quot;, 3, &quot;Delhi&quot;)],  [],        []),
+    (&quot;replay after delete stays deleted&quot;, [(1, &quot;Pune&quot;, 1, 2, X)],  [(1, &quot;I&quot;, 1, &quot;Pune&quot;), (1, &quot;D&quot;, 2, None)],       [],        []),
+    (&quot;re-insert after delete&quot;,        [(1, &quot;Pune&quot;, 1, 2, X)],      [(1, &quot;I&quot;, 4, &quot;Goa&quot;)],                           [],        [(1, &quot;Goa&quot;, 4, None)]),
+]
+
+
+def by_key_and_start(row):
+    return (row[0], row[2] if len(row) &gt; 2 else row[1])
+
+
+@pytest.mark.parametrize(&quot;name, target, events, closes, inserts&quot;, CASES, ids=[c[0] for c in CASES])
+def test_plan_scd2(spark, name, target, events, closes, inserts):
+    tgt = (spark.createDataFrame(target, &quot;id INT, city STRING, valid_from INT, valid_to INT, is_current BOOLEAN&quot;)
+                .withColumn(&quot;row_hash&quot;, row_hash([&quot;city&quot;])))
+    ev = spark.createDataFrame(events, &quot;id INT, op STRING, seq INT, city STRING&quot;)
+
+    staged = plan_scd2(ev, tgt, key=&quot;id&quot;, seq=&quot;seq&quot;, tracked=[&quot;city&quot;]).collect()
+
+    got_closes = [(r.id, r.close_at) for r in staged if r.merge_key is not None]
+    got_inserts = [(r.id, r.city, r.valid_from, r.valid_to) for r in staged if r.merge_key is None]
+    assert sorted(got_closes, key=by_key_and_start) == sorted(closes, key=by_key_and_start)
+    assert sorted(got_inserts, key=by_key_and_start) == sorted(inserts, key=by_key_and_start)</pre><p class="cap">pytest, 11 passed on 2026-11-11. The Spark fixture is in conftest.py next to it.</p>
+<p>For the snapshot adapter, add a second table: unchanged row gives no event, changed row gives U, new key gives I, missing key gives D. See <a href="/learn/shift-left/">Shift left</a> for testing SCD2 without a cluster.</p></section>
+
+<section id="gaps"><p class="eyebrow">Honest comparison</p><h2>What AUTO CDC gives you that own code must earn</h2>
+<div class="tw"><table class="t"><tr><th>Concern</th><th>AUTO CDC</th><th>Own PySpark (above)</th></tr><tr><td><b>Events out of order</b></td><td>Reorders by SEQUENCE BY, including events older than the current row (history rewritten correctly)</td><td>Skips events not newer than what is applied; rewriting history mid-timeline needs extra code</td></tr><tr><td><b>Several changes per key in one batch</b></td><td>Handled</td><td>Handled with lag and lead (test &#x27;two changes in one batch&#x27;)</td></tr><tr><td><b>Deletes, delete then re-insert</b></td><td>APPLY AS DELETE WHEN, plus tombstones for late deletes</td><td>Handled (tests 6, 7, 10, 11); no tombstones</td></tr><tr><td><b>Changes to untracked columns</b></td><td>TRACK HISTORY ON ... EXCEPT updates them in place</td><td>Ignored; extend apply_scd2 with an in-place update if needed</td></tr><tr><td><b>Re-running a failed batch</b></td><td>Pipeline checkpoint</td><td>Safe through the sequence check, also for deleted keys (tests 9, 10)</td></tr><tr><td><b>Schema changes</b></td><td>Supported in pipelines</td><td>We add columns ourselves</td></tr><tr><td><b>Who can change the target</b></td><td>The pipeline owns it; outside DML is limited</td><td>A plain Delta table</td></tr><tr><td><b>Full refresh</b></td><td>History lost if bronze no longer holds it; set pipelines.reset.allowed = false</td><td>No such switch; a rebuild is our own job</td></tr><tr><td><b>Custom effective dates</b></td><td>One ordering column</td><td>Anything we can code</td></tr></table></div></section>
+
+<section id="cost"><p class="eyebrow">Cost</p><h2>What it costs</h2>
+<p>Three things make up the bill: the <b>DBU rate</b> of the compute type, the <b>amount of work</b> each run does (set by the input shape) and the <b>engineering time</b> to own the code. Pipelines cost more per DBU than plain jobs on classic compute; serverless is one rate for both and removes start-up and idle time.</p>
+<div class="tw"><table class="t"><tr><th>Compute</th><th>AWS $/DBU</th><th>Azure $/DBU (estimate)</th><th>VM cost</th><th>Runs</th></tr><tr><td><b>Jobs compute (classic)</b></td><td>0.15</td><td>0.30</td><td>extra, paid to the cloud</td><td>Own PySpark</td></tr><tr><td><b>Lakeflow pipeline Core (classic)</b></td><td>0.20</td><td>0.30</td><td>extra</td><td>No AUTO CDC</td></tr><tr><td><b>Lakeflow pipeline Pro (classic)</b></td><td>0.25</td><td>0.38</td><td>extra</td><td>AUTO CDC</td></tr><tr><td><b>Lakeflow pipeline Advanced (classic)</b></td><td>0.36</td><td>0.54</td><td>extra</td><td>AUTO CDC plus expectations</td></tr><tr><td><b>Serverless jobs and pipelines</b></td><td>0.35</td><td>0.45</td><td>included</td><td>Either</td></tr></table></div>
+<p class="cap">AWS rates are list prices from the site's price file (checked 2026-11-09); Azure rates are our estimates. Contract discounts change both: use your own price sheet.</p>
+<h3>Where the work comes from</h3><div class="tw"><table class="t"><tr><th>Input shape</th><th>Reads per run</th><th>Cost lever</th></tr><tr><td><b>CDC feed or change data feed</b></td><td>Only new events, plus the matching target rows</td><td>Same for both tools. Cluster the target on the key.</td></tr><tr><td><b>Full snapshot</b></td><td>The whole snapshot plus the target, every run</td><td>The biggest cost driver. Turn it into a change feed where you can; with own code, compare only changed partitions.</td></tr><tr><td><b>Pull by updated_at</b></td><td>Changed rows, plus a weekly key-list compare for deletes</td><td>Cheap, if the source really sets the timestamp.</td></tr></table></div>
+<h3>Calculator</h3><p>The example is 20 dimensions loaded hourly. Change any number.</p>
+<div class="calc">
+<form class="in" id="ac-calc" onsubmit="return false">
+  <label class="g" for="ac-cloud">Cloud<select id="ac-cloud"><option value="aws">AWS</option><option value="azure">Azure</option></select></label>
+  <span class="g">Workload</span>
+  <label for="ac-tables">Tables<input id="ac-tables" type="number" min="1" value="20"></label>
+  <label for="ac-runs">Runs per day<input id="ac-runs" type="number" min="1" value="24"></label>
+  <label for="ac-dbu">DBU per table per run<input id="ac-dbu" type="number" step="0.05" min="0" value="0.5"></label>
+  <label for="ac-ovh">Classic start-up and idle, percent<input id="ac-ovh" type="number" min="0" value="25"></label>
+  <span class="g">Rates, $ (filled by cloud, editable)</span>
+  <label for="ac-jobs">Jobs compute per DBU<input id="ac-jobs" type="number" step="0.01"></label>
+  <label for="ac-pro">Pipeline Pro per DBU<input id="ac-pro" type="number" step="0.01"></label>
+  <label for="ac-srv">Serverless per DBU<input id="ac-srv" type="number" step="0.01"></label>
+  <label for="ac-vm">Classic VM cost per DBU<input id="ac-vm" type="number" step="0.01"></label>
+  <span class="g">Engineering, first year</span>
+  <label for="ac-eown">Own code: days to build and maintain<input id="ac-eown" type="number" min="0" value="18"></label>
+  <label for="ac-eauto">AUTO CDC: days<input id="ac-eauto" type="number" min="0" value="5"></label>
+  <label for="ac-day">Cost per engineer-day<input id="ac-day" type="number" min="0" value="400"></label>
+</form>
+<div id="ac-out" aria-live="polite"></div>
+</div>
+<script>
+(function(){
+  var C = {"aws": {"jobs": 0.15, "pro": 0.25, "srv": 0.35, "vm": 0.3}, "azure": {"jobs": 0.3, "pro": 0.38, "srv": 0.45, "vm": 0.35}};
+  var $ = function(id){ return document.getElementById(id); };
+  var v = function(id){ var n = parseFloat($(id).value); return isNaN(n) ? 0 : n; };
+  var m = function(n){ return '$' + Math.round(n).toLocaleString('en-US'); };
+  function fill(){ var c = C[$('ac-cloud').value]; $('ac-jobs').value = c.jobs; $('ac-pro').value = c.pro; $('ac-srv').value = c.srv; $('ac-vm').value = c.vm; }
+  function calc(){
+    var runs = v('ac-tables') * v('ac-runs') * 30, dbu = v('ac-dbu'), o = 1 + v('ac-ovh') / 100, vm = v('ac-vm'), day = v('ac-day');
+    var rows = [
+      ['Own PySpark, classic jobs', 'own', dbu * o * (v('ac-jobs') + vm), v('ac-eown')],
+      ['AUTO CDC, classic pipeline Pro', 'auto', dbu * o * (v('ac-pro') + vm), v('ac-eauto')],
+      ['Own PySpark, serverless jobs', 'own', dbu * v('ac-srv'), v('ac-eown')],
+      ['AUTO CDC, serverless pipeline', 'auto', dbu * v('ac-srv'), v('ac-eauto')]
+    ].map(function(r){ var mo = r[2] * runs; return {n:r[0], c:r[1], mo:mo, eng:r[3]*day, yr:mo*12 + r[3]*day}; });
+    var max = Math.max.apply(null, rows.map(function(r){ return r.yr; })) || 1;
+    var best = rows.reduce(function(a,b){ return b.yr < a.yr ? b : a; });
+    $('ac-out').innerHTML = rows.map(function(r){
+      return '<div class="res ' + r.c + '"><div class="top"><b>' + r.n + (r === best ? ' <span class="low">lowest</span>' : '') +
+        '</b><span class="amt">' + m(r.yr) + '</span></div><div class="sub">' + m(r.mo) + ' compute a month + ' + m(r.eng) +
+        ' engineering, first year</div><div class="bar"><i style="width:' + (r.yr / max * 100).toFixed(1) + '%"></i></div></div>';
+    }).join('');
+  }
+  $('ac-cloud').addEventListener('change', function(){ fill(); calc(); });
+  ['ac-tables','ac-runs','ac-dbu','ac-ovh','ac-jobs','ac-pro','ac-srv','ac-vm','ac-eown','ac-eauto','ac-day'].forEach(function(id){ $(id).addEventListener('input', calc); });
+  fill(); calc();
+})();
+</script>
+<p class="cap">Serverless rows assume the same DBU per run as classic; real serverless usage differs, so compare a week of system.billing.usage before deciding. Full model: <a href="/learn/data-systems/platform/cost/calculator/">the Databricks cost calculator</a>.</p></section>
+
+<section id="check"><p class="eyebrow">Before going live</p><h2>Checklist</h2><div class="tw"><table class="t"><tr><th>Check</th><th>Why</th></tr><tr><td><b>Ordering value</b></td><td>Unique per key: commit time alone can tie, so add the log position (LSN) or commit version.</td></tr><tr><td><b>Protect AUTO CDC history</b></td><td>pipelines.reset.allowed = false on the target; keep bronze as long as you might rebuild.</td></tr><tr><td><b>Noisy columns</b></td><td>Exclude last-login or extract timestamps from tracking, or every run makes a new version.</td></tr><tr><td><b>Layout</b></td><td>Cluster the target on the key and is_current so each MERGE touches few files; turn on deletion vectors.</td></tr><tr><td><b>Partial snapshots</b></td><td>A partial extract must never read as &#x27;everything else was deleted&#x27;: check row counts before applying.</td></tr><tr><td><b>One valid_to convention</b></td><td>NULL or 9999-12-31, the same everywhere, so Power BI and others filter the same way.</td></tr><tr><td><b>Tests in CI</b></td><td>The table-driven tests run on every change to the writer.</td></tr></table></div></section>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>Should I use AUTO CDC or write my own SCD Type 2 MERGE?</summary><p>If the input is CDC and you can run Lakeflow pipelines, use AUTO CDC: it handles out-of-order events, deletes and duplicates. Write your own when you run only plain jobs at high volume, or need rules AUTO CDC cannot express. Then build one tested writer with an adapter per input type.</p></details><details class="faq"><summary>How do I build SCD2 from a full snapshot instead of CDC?</summary><p>If the source is a Delta table you own, turn on its change data feed and treat it as CDC. Otherwise compare the snapshot with the open target rows by a hash of the tracked columns: new keys are inserts, changed hashes are updates, missing keys are deletes. AUTO CDC FROM SNAPSHOT does this for you in Python pipelines.</p></details><details class="faq"><summary>Is AUTO CDC the same as APPLY CHANGES?</summary><p>Yes. APPLY CHANGES INTO was renamed AUTO CDC INTO when Delta Live Tables became Lakeflow Declarative Pipelines; the Python function is now create_auto_cdc_flow, and apply_changes_from_snapshot is create_auto_cdc_from_snapshot_flow.</p></details><details class="faq"><summary>Does AUTO CDC cost more?</summary><p>On classic compute it needs the Pro pipeline tier, about a third more per DBU than plain jobs compute on AWS list prices. The VM cost is the same, so the total gap is smaller, and often less than the engineering time to own the code. Serverless jobs and serverless pipelines are billed at the same rate.</p></details><details class="faq"><summary>Can a full refresh delete my SCD2 history?</summary><p>Yes, for an AUTO CDC target: a full refresh rebuilds from the source, and if bronze no longer holds all events, the history is gone. Set pipelines.reset.allowed = false on the target table.</p></details><details class="faq"><summary>How do I make a hand-written SCD2 MERGE safe to re-run?</summary><p>Skip any event whose ordering value is not newer than the latest point already applied for that key, counting closed rows too, so a deleted key is not brought back. The tests on this page cover replay, late events and replay after delete.</p></details></section>
+<section id="sources"><p class="eyebrow">Sources</p><h2>Checked against</h2><ul><li><a href="https://docs.databricks.com/aws/en/dlt/cdc">Databricks: AUTO CDC APIs (SCD Type 1 and 2)</a></li><li><a href="https://docs.databricks.com/aws/en/dlt-ref/dlt-sql-ref-apply-changes-into">Databricks: AUTO CDC INTO (SQL reference)</a></li><li><a href="https://docs.databricks.com/aws/en/dlt-ref/dlt-python-ref-apply-changes-from-snapshot">Databricks: create_auto_cdc_from_snapshot_flow</a></li><li><a href="https://docs.delta.io/latest/delta-change-data-feed.html">Delta Lake: change data feed</a></li><li><a href="https://docs.delta.io/latest/delta-update.html">Delta Lake: MERGE (upsert) and SCD Type 2 example</a></li></ul></section>
+<section id="next"><p class="eyebrow">Related</p><h2>Where it connects</h2>
+<p><a href="/concepts/scd/">Slowly changing dimensions</a> · <a href="/learn/data-platform-architecture/bronze-to-silver/">Bronze to silver, with SCD2 code</a> · <a href="/learn/time-travel-vs-scd2/">Time travel as SCD Type 2?</a> · <a href="/learn/delta-vs-iceberg/">Delta vs Iceberg (change data feed)</a> · <a href="/learn/streaming/">Streaming on AWS and Databricks</a> · <a href="/data-engineering/">All data engineering</a></p></section>
+</div>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Concepts</b><a href="/leaders/">For leaders</a><a href="/learn/data-systems/">Data systems</a><a href="/learn/data-systems/platform/">Data and AI platform</a><a href="/learn/data-systems/platform/#hops">Data engineering</a><a href="/concepts/semantic-layer/">BI and analytics</a><a href="/concepts/#ml-engineering">ML</a><a href="/learn/ai-universe/">AI</a><a href="/learn/data-systems/platform/#concerns">Across all of them</a><a href="/concepts/#a-z">Key concepts, A to Z</a></div><div><b>On your cloud</b><a href="/platforms/databricks/">Databricks</a><a href="/platforms/aws/">AWS</a><a href="/platforms/azure/">Azure and Fabric</a><a href="/platforms/gcp/">Google Cloud</a><a href="/platforms/open/">Open source</a><a href="/platforms/anthropic/">Claude (Anthropic)</a><a href="/certifications/">All certifications</a></div><div><b>Your role</b><a href="/paths/">Find your path</a><a href="/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/paths/forward-deployed/">Forward Deployed Engineering</a><a href="/mindset/">Worried about AI?</a><a href="/projects/">All projects to join</a></div><div><b>How we work</b><a href="/how-we-work/#thinking">Thinking principles</a><a href="/how-we-work/#ba">Business analysis</a><a href="/how-we-work/#pm">Project management</a><a href="/learn/technical-anchor/">The technical anchor</a></div><div><b>Causes and deep tech</b><a href="/ai-for-cause/">AI for a cause</a><a href="/deep-tech/">Deep tech</a></div><div><b>About</b><a href="/about/">About this site</a><a href="/about/#join">Write or teach</a><a href="/writing/">Blog</a><a href="/research/">All open specifications</a><a href="/assets/">All open-source code</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
