@@ -243,6 +243,12 @@ CALC_CSS = """<style>
   .dv { font-size:12.5px; color:var(--muted); }
   @media (max-width:700px) { .drv { grid-template-columns:1fr; } }
   .st-checked { color:#1d6b3a; font-weight:700; } .st-docs { color:#8a5a00; font-weight:700; } .st-estimate { color:#a3322b; font-weight:700; }
+  .svh { font-size:19px; margin:14px 0 6px; } .svh:first-child { margin-top:0; }
+  .svtot { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin:6px 0 4px; }
+  .svtot div { border:1.5px solid var(--ink); border-radius:10px; padding:6px 10px; background:#fff; }
+  .svtot .svt { font-family:var(--hand); font-size:36px; line-height:1.1; display:block; }
+  .svwarn { border:1.5px dashed var(--ink); border-radius:var(--wob); background:var(--butter-wash); padding:10px 14px; margin:12px 0; font-size:15px; }
+  table.lines td.num + td.num { padding-left:10px; }
 </style>"""
 
 
@@ -279,7 +285,7 @@ def calculator_page():
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="{BASE}">Data systems</a> › <a href="{P}">Data platform</a> › <a href="{C}">Cost</a> › Calculator</p>
 <p class="eyebrow" style="margin-top:22px">Free tool · Databricks on AWS · list prices as of {E(PRICES['as_of'])}</p>
 <h1>Databricks data platform cost calculator</h1>
-<p class="lede">What a Databricks data platform costs end to end, hop by hop from sources to dashboards and agents, with the streaming lane, real-time serving and the hidden costs most estimates leave out. Answer eight questions; open a hop only if you want to change more.</p>
+<p class="lede">What a Databricks data platform costs end to end, hop by hop from sources to dashboards and agents, with the streaming lane, real-time serving and the hidden costs most estimates leave out. Answer eight questions; open a hop only if you want to change more. The services around a message stream, from devices to live screens, have <a href="#streaming-services">their own estimate below</a>.</p>
 
 <div class="calc">
   <div class="panel"><h2>Eight answers</h2><div id="quick" class="prms"></div></div>
@@ -310,6 +316,36 @@ def calculator_page():
 <p>Every hop has its own settings. "Show expert settings" adds the rest, including the work rates the model uses, so you can replace them with numbers from your own system tables.</p>
 <div class="tools"><label><input type="checkbox" id="expert"> Show expert settings</label><button class="btn" id="share" type="button">Copy a link to these settings</button><button class="btn" id="reset" type="button">Start again</button></div>
 <div id="groups"></div></section>
+
+<section id="streaming-services"><p class="eyebrow">Streaming services</p><h2>Streaming services: from the device to the screen</h2>
+<p>The whole-platform estimate above treats streaming as tables that refresh often. A stream of messages from machines, vehicles or apps also needs services of its own: a <b>front door</b> that accepts the messages, an <b>event log</b> that keeps them in order for a few days so several programs can read them, a <b>live lane</b> that raises alerts and keeps live screens up to date within seconds, and a <b>platform lane</b> that lands the same messages in lake tables every few minutes. This estimate prices those services for two stacks: everything on AWS, and AWS with Databricks for the platform lane. The live lane is the same in both. It is a separate estimate and is not added to the whole-platform total.</p>
+<p>The design behind it, with the reasons for each choice, is in the <a href="/learn/streaming/">streaming guide</a>; its <a href="/learn/streaming/#cost">cost section</a> has the same production example worked by hand.</p>
+<p class="svwarn"><b>Rough US-region list prices from 2025 and 2026, not quotes.</b> Prices change often. Check the AWS Pricing Calculator and Databricks' pricing pages before you plan a budget. People and support costs are not included.</p>
+<div class="calc">
+  <div class="panel"><h2>Your stream</h2><div id="svc_inputs"></div><p class="hlp" style="margin-top:10px">"Show expert settings" above adds the finer settings here too.</p></div>
+  <div class="panel result" aria-live="polite">
+    <p class="eyebrow" style="margin:0">Streaming services, per month</p>
+    <div class="svtot"><div>AWS-only<span class="svt" id="sv_a"></span><span class="hlp" id="sv_ay"></span></div><div>AWS + Databricks<span class="svt" id="sv_d"></span><span class="hlp" id="sv_dy"></span></div></div>
+    <p class="sub" id="sv_shared"></p>
+    <p class="facts" id="sv_facts"></p>
+  </div>
+</div>
+<h3>Every line, side by side</h3>
+<p class="note">Open a line to see the numbers behind it.</p>
+<div class="tw"><table class="t lines"><tr><th>Line</th><th>AWS-only</th><th>AWS + Databricks</th></tr><tbody id="sv_lines"></tbody></table></div>
+<p class="svwarn" id="sv_trap"></p>
+<h3>What moves this bill</h3>
+<p>Each row changes one setting and keeps everything else the same.</p>
+<div class="tw"><table class="t sv"><tr><th>If you change</th><th>AWS-only</th><th>AWS + Databricks</th></tr><tbody id="sv_whatif"></tbody></table></div>
+<ol>
+<li><b>Prices per message</b> (IoT Core, S3 write requests, DynamoDB writes) dominate as the stream grows. Bundle readings at the edge, and send only changes to the live store and to screens.</li>
+<li><b>Compute that is always on</b> (Flink, or a Databricks real-time cluster) is most of the live lane. Keep the live lane to what someone acts on within minutes.</li>
+<li><b>How often the platform lane runs</b> sets the Databricks part, because every run pays a fixed start and checkpoint cost. Every 30 minutes costs about half of every 15 minutes; every 5 minutes about three times as much.</li>
+<li><b>How long the event log keeps messages.</b> Seven days is cheap; history belongs in lake tables.</li>
+</ol>
+<details><summary><b>Unit prices used in this section</b></summary>
+<div class="tw"><table class="t sv"><tr><th>Price</th><th>Value</th></tr><tbody id="sv_prices"></tbody></table></div>
+<p class="note">Databricks DBU rates and the S3 prices come from the price table below and follow the plan and discount chosen at the top. The rest are rough list prices for US regions, kept in the calculator's script.</p></details></section>
 
 <section id="how"><p class="eyebrow">How it works</p><h2>How the estimate is made</h2>
 <p>Each hop turns its data volumes into <b>work</b>, measured in classic DBU-hours: reading new data, merging changes (plus rewriting the files those changes land in), refreshing gold, pre-computing aggregates. The compute you choose turns work into dollars. Serverless multiplies by one DBU price that includes the machines. Classic multiplies by a lower DBU price and adds the EC2 machines, start-up time and network. SQL warehouses are priced by the hours they are on, which depends on users, schedules and auto-stop, not on the number of queries.</p>

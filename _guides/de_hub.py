@@ -37,6 +37,7 @@ GUIDES = [
     ("AWS + Databricks, and the ETL end to end", "/learn/data-platform-architecture/aws-databricks/", "The whole picture with a product in every box, and one ETL followed end to end."),
 ]
 TOOLS = [
+    ("Streaming simulator", "/learn/streaming/sim/", "IoT and database data through the fast lane and the medallion to a live screen and Power BI; then all three lanes over a simulated day."),
     ("Databricks cost calculator", "/learn/data-systems/platform/cost/calculator/", "Whole-platform and per-hop cost, streaming, hidden costs, what drives your bill."),
     ("Source system questionnaire", "/learn/data-systems/upstreams/questionnaire/", "The upstream questions as a printable form for source owners."),
     ("DataTwin Studio", "/learn/data-platform-sim/", "Watch one batch go through a real Spark and Delta Lake platform, then break it."),

@@ -148,6 +148,109 @@
     {id: "k_gold_full", g: "rates", label: "Gold full rebuild: work units per GB read", type: "number", def: 0.02, adv: true, impact: "M"},
     {id: "k_run", g: "rates", label: "Fixed overhead per table per run (work units)", type: "number", def: 0.01, adv: true, impact: "M"}
   ];
+
+  // ---------------------------------------------------------------- streaming services (section "Streaming services")
+  // A separate estimate from the whole-platform total above: the services around a message stream (devices to screens).
+  // Inputs live in SPEC with g: "svc" so the share link and "Start again" cover them; sg = sub-group in the input panel.
+  var SV_PRESETS = {
+    demo:    {sv_rps: 7,    sv_kb: 1,   sv_devices: 35,     sv_batch: 1, sv_front: "gateway", sv_gateways: 1, sv_screens: 5,   sv_changed: 100},
+    prod:    {sv_rps: 300,  sv_kb: 1,   sv_devices: 1500,   sv_batch: 1, sv_front: "gateway", sv_gateways: 5, sv_screens: 50,  sv_changed: 100},
+    stretch: {sv_rps: 3300, sv_kb: 0.5, sv_devices: 200000, sv_batch: 1, sv_front: "iot",     sv_gateways: 0, sv_screens: 200, sv_changed: 1}
+  };
+  var SV_SUB = [["stream", "The stream"], ["door", "Front door and event log"], ["live", "Live lane: alerts and live screens"], ["lake", "Platform lane: into lake tables"]];
+  var SVC_SPEC = [
+    {id: "sv_scale", g: "svc", sg: "stream", label: "Start from an example", type: "select", opts: [["demo", "Demo: 7 readings a second"], ["prod", "Production: 5 plants, 1,500 machines"], ["stretch", "Stretch: 200,000 connected vehicles"]], def: "prod", impact: "M",
+      help: "Fills in the stream with one of the three worked examples from the streaming guide. Change anything afterwards."},
+    {id: "sv_rps", g: "svc", sg: "stream", label: "Readings per second, all devices together", type: "number", def: 300, min: 0, impact: "H",
+      help: "A reading is one device's measurement as it leaves the device. 1,500 machines each sending every 5 seconds is 300 a second, about 778 million a month."},
+    {id: "sv_kb", g: "svc", sg: "stream", label: "Size of one reading (KB)", type: "number", def: 1, min: 0.01, impact: "M"},
+    {id: "sv_devices", g: "svc", sg: "stream", label: "Devices sending readings", type: "number", def: 1500, min: 0, impact: "M",
+      help: "Matters for per-device connection charges (IoT Core) and for the live store, which keeps the latest value per device."},
+    {id: "sv_batch", g: "svc", sg: "stream", label: "Readings bundled into one message at the edge", type: "number", def: 1, min: 1, impact: "H",
+      help: "A plant gateway or a vehicle can bundle readings before sending. Many services charge per message, so 10 readings per message cuts those charges about ten times."},
+    {id: "sv_front", g: "svc", sg: "door", label: "How readings get in (the front door)", type: "select", opts: [["gateway", "Plant gateway writes straight to the event log"], ["iot", "AWS IoT Core: every device connects on its own"], ["api", "API Gateway HTTP API (apps and webhooks)"]], def: "gateway", impact: "H",
+      help: "IoT Core gives each device its own identity and lets you send commands back, but it charges per message, per rule and per connected minute. A gateway pays only the event log's charges."},
+    {id: "sv_gateways", g: "svc", sg: "door", label: "Plant gateways", type: "number", def: 5, min: 0, adv: true, impact: "L", help: "The edge software fee only; the gateway hardware is not counted."},
+    {id: "sv_log", g: "svc", sg: "door", label: "Event log", type: "select", opts: [["kin_prov", "Kinesis Data Streams, provisioned shards"], ["kin_od", "Kinesis Data Streams, on-demand"], ["msk", "MSK (managed Kafka), 3 small brokers"], ["msk_sl", "MSK Serverless"], ["eh", "Azure Event Hubs Standard (for comparison)"]], def: "kin_prov", impact: "H",
+      help: "The event log keeps every message in order for a few days, so several programs can read it and replay it. Provisioned Kinesis is cheapest at a steady load; on-demand needs no sizing while the volume is unknown."},
+    {id: "sv_retention", g: "svc", sg: "door", label: "Days the event log keeps messages", type: "number", def: 7, min: 1, impact: "M",
+      help: "One day is included in the Kinesis price and seven days costs a little more. Longer history belongs in lake tables (bronze), not on the event log."},
+    {id: "sv_readers", g: "svc", sg: "door", label: "Programs reading the stream, each with its own dedicated read", type: "number", def: 2, min: 0, impact: "M",
+      help: "Usually two: the live processor and the platform lane. A dedicated read (Kinesis enhanced fan-out) stops a slow catch-up run holding up the live lane, and is charged per reader."},
+    {id: "sv_headroom", g: "svc", sg: "door", label: "Spare capacity on the event log (%)", type: "number", def: 50, min: 0, adv: true, impact: "L",
+      help: "Shards needed = the larger of MB per second and messages per second divided by 1,000, rounded up, then this much extra."},
+    {id: "sv_live", g: "svc", sg: "live", label: "Live lane on", type: "check", def: true, impact: "H",
+      help: "Alerts and live screens within seconds. Turn it off if nobody acts within minutes: the platform lane alone is then enough."},
+    {id: "sv_proc", g: "svc", sg: "live", label: "Live processing", type: "select", opts: [["flink", "Managed Service for Apache Flink"], ["lambda", "Lambda only (simple limit alerts, no time windows)"], ["dbx_rt", "Databricks real-time mode (small always-on cluster)"]], def: "flink", impact: "H",
+      help: "Flink handles time windows and late data and runs all the time. Lambda is nearly free but only does simple checks such as 'pressure above limit'. Databricks real-time mode keeps one engine for both lanes but needs a cluster that never stops."},
+    {id: "sv_kpu", g: "svc", sg: "live", label: "Flink processing units (0 = pick from volume)", type: "number", def: 0, min: 0, adv: true, impact: "M",
+      help: "One processing unit (KPU) is 1 vCPU and 4 GB of memory. Flink adds one more unit per application to coordinate the work."},
+    {id: "sv_lambda", g: "svc", sg: "live", label: "Lambda for simple limit alerts beside the processor", type: "check", def: true, impact: "L"},
+    {id: "sv_store", g: "svc", sg: "live", label: "Live store (latest values for screens)", type: "select", opts: [["ddb", "DynamoDB on-demand"], ["lakebase", "Lakebase (Databricks Postgres)"], ["ch", "ClickHouse Cloud"]], def: "ddb", impact: "M",
+      help: "DynamoDB charges per write and can push each change on to the screens. Lakebase and ClickHouse charge mostly for compute that stays on; ClickHouse is the one to pick when live screens need to slice the last 48 hours."},
+    {id: "sv_emit", g: "svc", sg: "live", label: "What the live store receives", type: "select", opts: [["changes", "Changes only: one value per device per window"], ["every", "Every reading"]], def: "changes", impact: "H",
+      help: "Writing every reading is the simplest design and the most expensive one. Writing one value per device per time window, and only when it changed, can cut writes 10 to 100 times."},
+    {id: "sv_window", g: "svc", sg: "live", label: "Live store window (seconds)", type: "number", def: 60, min: 1, adv: true, impact: "M"},
+    {id: "sv_changed", g: "svc", sg: "live", label: "Devices whose value changes in a window (%)", type: "number", def: 100, min: 0, max: 100, adv: true, impact: "M",
+      help: "With 'changes only', a device whose value did not change writes nothing."},
+    {id: "sv_screens", g: "svc", sg: "live", label: "Live screens open", type: "number", def: 50, min: 0, impact: "M", help: "Each screen gets updates pushed over a WebSocket, at most one a second."},
+    {id: "sv_ups", g: "svc", sg: "live", label: "Updates per second per screen (at most 1)", type: "number", def: 1, min: 0, max: 1, adv: true, impact: "L"},
+    {id: "sv_hours", g: "svc", sg: "live", label: "Hours a day the screens are open", type: "number", def: 24, min: 0, max: 24, adv: true, impact: "L"},
+    {id: "sv_cadence", g: "svc", sg: "lake", label: "Platform lane runs every (minutes)", type: "number", def: 15, min: 1, impact: "H",
+      help: "How often the stream is landed into lake tables on Databricks. Every run pays a fixed start and checkpoint cost, so 30 minutes costs about half of 15, and 5 minutes about three times as much."},
+    {id: "sv_run_fixed", g: "svc", sg: "lake", label: "Fixed minutes per run (start and checkpoint)", type: "number", def: 2.5, min: 0, adv: true, impact: "M"},
+    {id: "sv_run_dbu", g: "svc", sg: "lake", label: "DBUs per hour while a run is going", type: "number", def: 10, min: 0, adv: true, impact: "M"},
+    {id: "sv_bi", g: "svc", sg: "lake", label: "Include silver, gold and dashboards for this data (rough)", type: "check", def: true, impact: "M"},
+    {id: "sv_raw", g: "svc", sg: "lake", label: "Keep a raw copy of the stream in S3 (insurance)", type: "check", def: false, impact: "L",
+      help: "Firehose writes every message to S3 as it arrives, so you can rebuild the lake tables if the platform lane breaks."}
+  ];
+  SPEC = SPEC.concat(SVC_SPEC);
+
+  // Rough US-region list prices, 2025-2026, not quotes. [key, value, what it is]
+  var SP_LIST = [
+    ["iot_msg", 1.00, "AWS IoT Core: $ per million messages (metered in 5 KB units)"],
+    ["iot_rule", 0.15, "AWS IoT Core: $ per million rule triggers"],
+    ["iot_action", 0.15, "AWS IoT Core: $ per million rule actions"],
+    ["iot_conn", 0.08, "AWS IoT Core: $ per million connection-minutes"],
+    ["greengrass", 0.16, "Edge gateway software: $ per gateway per month"],
+    ["apigw_http", 1.00, "API Gateway HTTP API: $ per million calls"],
+    ["kin_shard_h", 0.015, "Kinesis provisioned: $ per shard-hour"],
+    ["kin_put", 0.014, "Kinesis provisioned: $ per million 25 KB PUT units"],
+    ["kin_ret_h", 0.02, "Kinesis provisioned: $ per shard-hour for retention beyond 24 hours, up to 7 days"],
+    ["kin_ltr_gb", 0.023, "Kinesis: $ per GB-month kept beyond 7 days"],
+    ["kin_efo_h", 0.015, "Kinesis dedicated read (enhanced fan-out): $ per reader-shard-hour"],
+    ["kin_efo_gb", 0.013, "Kinesis dedicated read: $ per GB read"],
+    ["kod_h", 0.04, "Kinesis on-demand: $ per stream-hour"],
+    ["kod_in", 0.08, "Kinesis on-demand: $ per GB written"],
+    ["kod_out", 0.04, "Kinesis on-demand: $ per GB read"],
+    ["kod_ret", 0.10, "Kinesis on-demand: $ per GB-month kept beyond 24 hours (our estimate)"],
+    ["msk_broker_h", 0.204, "MSK provisioned: $ per m7g.large broker-hour"],
+    ["msk_gb", 0.10, "MSK: $ per GB-month of broker storage"],
+    ["msksl_h", 0.75, "MSK Serverless: $ per cluster-hour"],
+    ["msksl_part_h", 0.0015, "MSK Serverless: $ per partition-hour"],
+    ["msksl_in", 0.10, "MSK Serverless: $ per GB written"],
+    ["msksl_out", 0.05, "MSK Serverless: $ per GB read"],
+    ["eh_tu", 22, "Azure Event Hubs Standard: $ per throughput unit per month (1 MB/s or 1,000 events/s)"],
+    ["eh_ev", 0.028, "Azure Event Hubs Standard: $ per million events"],
+    ["flink_kpu_h", 0.11, "Managed Service for Apache Flink: $ per KPU-hour"],
+    ["flink_gb", 0.10, "Managed Flink: $ per GB-month of running storage (50 GB per KPU)"],
+    ["lambda_req", 0.20, "Lambda: $ per million requests"],
+    ["lambda_gbs", 0.0000166667, "Lambda: $ per GB-second"],
+    ["ddb_wru", 0.625, "DynamoDB on-demand: $ per million write units (1 KB each)"],
+    ["ddb_gb", 0.25, "DynamoDB: $ per GB-month stored"],
+    ["lakebase", 200, "Lakebase, small always-on instance: $ per month (rough, $100-300)"],
+    ["ch_dev", 100, "ClickHouse Cloud, development: $ per month (rough, under $100)"],
+    ["ch_prod", 500, "ClickHouse Cloud, production: $ per month (rough, $500-3,000)"],
+    ["ws_msg", 1.00, "API Gateway WebSocket: $ per million messages"],
+    ["ws_conn", 0.25, "API Gateway WebSocket: $ per million connection-minutes"],
+    ["fh_gb", 0.029, "Firehose: $ per GB taken in (each record rounded up to 5 KB)"],
+    ["fh_conv", 0.018, "Firehose format conversion (to Parquet or Iceberg): $ per GB"],
+    ["s3t_compact", 0.05, "S3 Tables compaction: $ per GB processed"],
+    ["bi_aws", 275, "Silver, gold and dashboards, AWS-only (Glue or EMR, Athena, QuickSight): rough $ per month at production scale ($150-400)"],
+    ["bi_dbx", 200, "Silver, gold and dashboards, Databricks (jobs and a share of the SQL warehouse): rough $ per month at production scale ($100-300)"]
+  ];
+  var SP = {}; SP_LIST.forEach(function (p) { SP[p[0]] = p[1]; });
+
   var GROUPS = [
     ["data", "Your data", "The mix of table sizes. Huge tables dominate the bill, so it matters more how many big ones you have than how many tables in total."],
     ["h1", "Hop 1 · Sources to bronze", "Getting data in, exactly as it arrived: landing files and bronze."],
@@ -155,7 +258,7 @@
     ["h3", "Hop 3 · Silver to gold", "Shaping tables for a use. Full rebuilds versus incremental refresh is the big lever."],
     ["h4", "Hop 4 · Gold to semantic", "Metric definitions, and the pre-computed aggregates that make queries cheap."],
     ["h5", "Hop 5 · Semantic to experiences", "Dashboards, ad-hoc questions, Genie, agents and real-time serving, on SQL warehouses and model endpoints."],
-    ["stream", "Streaming lane", "The same layers at a second speed, for the tables that need seconds or minutes."],
+    ["stream", "Streaming lane", "The same layers at a second speed, for the tables that need seconds or minutes. The services around a message stream (event log, live processing, live store, live screens) are priced in the Streaming services section below."],
     ["across", "Across the platform", "People, environments, maintenance, observability and the other costs that belong to no single hop."],
     ["classic", "Classic compute and network", "Only matters when pipelines or warehouses run on your own EC2 machines."],
     ["rates", "Work rates (expert)", "How much work each GB costs. Our calibrated defaults; replace them with numbers from your own system tables."]
@@ -400,6 +503,7 @@
       el.addEventListener(s.type === "number" ? "input" : "change", function () {
         state[s.id] = s.type === "check" ? el.checked : s.type === "number" ? (parseFloat(el.value) || 0) : el.value;
         if (s.id === "size") applyPreset(el.value);
+        if (s.id === "sv_scale") applySvPreset(el.value);
         render();
       });
     });
@@ -418,6 +522,10 @@
       var allAdv = items.every(function (s) { return s.adv; });
       return '<details class="grp' + (allAdv ? " adv" : "") + '" id="g_' + g[0] + '"><summary><b>' + esc(g[1]) + '</b> <span class="gsum" id="gs_' + g[0] + '"></span><span class="gsub">' + esc(g[2]) + "</span></summary>" +
         '<div class="prms">' + items.map(inputHtml).join("") + "</div></details>";
+    }).join("");
+    var sv = $("#svc_inputs");
+    if (sv) sv.innerHTML = SV_SUB.map(function (g) {
+      return '<h3 class="svh">' + esc(g[1]) + '</h3><div class="prms">' + SVC_SPEC.filter(function (s) { return s.sg === g[0]; }).map(inputHtml).join("") + "</div>";
     }).join("");
     bind();
   }
@@ -464,6 +572,7 @@
 
     drivers(r.total);
     savings(r.total);
+    renderSvc();
     saveHash();
   }
 
@@ -519,6 +628,182 @@
     }).join("") : "<tr><td>Nothing obvious left to save with these settings.</td><td></td></tr>";
   }
 
+  // ---------------------------------------------------------------- streaming services: model
+  var SEC_MONTH = HOURS * 3600, MIN_MONTH = HOURS * 60;
+  var SV_GROUPS = [["door", "Front door"], ["log", "Event log"], ["live", "Live lane (the same in both stacks)"], ["lake", "Platform lane: into lake tables"], ["ins", "Insurance"]];
+
+  function svcModel(st) {
+    var L = [];
+    // a: AWS-only, d: AWS + Databricks
+    function add(grp, name, a, d, why) { if (a > 0.005 || d > 0.005) L.push({grp: grp, name: name, a: a, d: d, why: why}); }
+    function both(grp, name, usd, why) { add(grp, name, usd, usd, why); }
+    var rps = Math.max(0, st.sv_rps), batch = Math.max(1, st.sv_batch);
+    var mps = rps / batch;                                     // messages per second after bundling
+    var msgKb = st.sv_kb * batch;
+    var mbs = rps * st.sv_kb / 1000;                           // MB per second
+    var gbDay = mbs * 86400 / 1000, gbMonth = gbDay * DAYS;
+    var msgsMonth = mps * SEC_MONTH, readingsMonth = rps * SEC_MONTH;
+    var days = Math.max(1, st.sv_retention), readers = Math.max(0, st.sv_readers);
+    var rawNeed = Math.max(mbs / 1, mps / 1000);
+    var shards = Math.max(1, Math.ceil(Math.max(1, Math.ceil(rawNeed)) * (1 + st.sv_headroom / 100)));
+
+    // ---- front door
+    if (st.sv_front === "gateway") {
+      both("door", "Plant gateways (edge software fee)", st.sv_gateways * SP.greengrass, st.sv_gateways + " gateway(s) at about $" + SP.greengrass + " a month each. They bundle readings and write straight to the event log, so there is no per-message front-door charge. Hardware not counted.");
+    } else if (st.sv_front === "iot") {
+      var u5 = Math.ceil(msgKb / 5);
+      both("door", "IoT Core: messages", msgsMonth * u5 / 1e6 * SP.iot_msg, fmtN(msgsMonth) + " messages a month" + (u5 > 1 ? ", each " + u5 + " units of 5 KB" : "") + ", at about $" + SP.iot_msg + " per million.");
+      both("door", "IoT Core: rule that forwards to the event log", msgsMonth / 1e6 * (SP.iot_rule + SP.iot_action), "One rule trigger and one action per message, at about $" + SP.iot_rule + " plus $" + SP.iot_action + " per million.");
+      both("door", "IoT Core: connected devices", st.sv_devices * MIN_MONTH / 1e6 * SP.iot_conn, fmtN(st.sv_devices) + " devices connected all month: " + fmtN(st.sv_devices * MIN_MONTH) + " connection-minutes at about $" + SP.iot_conn + " per million.");
+    } else {
+      both("door", "API Gateway HTTP API calls", msgsMonth * Math.ceil(msgKb / 512) / 1e6 * SP.apigw_http, fmtN(msgsMonth) + " calls a month at about $" + SP.apigw_http + " per million.");
+    }
+
+    // ---- event log
+    var lg = st.sv_log;
+    if (lg === "kin_prov") {
+      both("log", "Kinesis shards", shards * HOURS * SP.kin_shard_h, shards + " shard(s): " + fmtN(mbs) + " MB a second and " + fmtN(mps) + " messages a second need " + Math.max(1, Math.ceil(rawNeed)) + " (each shard takes 1 MB a second or 1,000 messages a second), plus " + st.sv_headroom + "% spare. $" + SP.kin_shard_h + " per shard-hour.");
+      both("log", "Kinesis writes (PUT units)", msgsMonth * Math.ceil(msgKb / 25) / 1e6 * SP.kin_put, fmtN(msgsMonth) + " messages a month at about $" + SP.kin_put + " per million 25 KB units.");
+      if (days > 1) both("log", "Kinesis: keeping " + Math.min(days, 7) + " days instead of 1", shards * HOURS * SP.kin_ret_h, "Extended retention, about $" + SP.kin_ret_h + " per shard-hour.");
+      if (days > 7) both("log", "Kinesis: keeping more than 7 days", gbDay * (days - 7) * SP.kin_ltr_gb, fmtGb(gbDay * (days - 7)) + " kept beyond 7 days at about $" + SP.kin_ltr_gb + " per GB-month (reading it back costs extra).");
+      if (readers > 0) both("log", "Kinesis dedicated reads (enhanced fan-out)", readers * shards * HOURS * SP.kin_efo_h + gbMonth * readers * SP.kin_efo_gb, readers + " reader(s) on " + shards + " shard(s) at $" + SP.kin_efo_h + " per reader-shard-hour, plus " + fmtGb(gbMonth * readers) + " read at $" + SP.kin_efo_gb + " per GB.");
+    } else if (lg === "kin_od") {
+      both("log", "Kinesis on-demand: stream", HOURS * SP.kod_h, "One stream all month at about $" + SP.kod_h + " per hour.");
+      both("log", "Kinesis on-demand: data written", gbMonth * SP.kod_in, fmtGb(gbMonth) + " a month at about $" + SP.kod_in + " per GB.");
+      both("log", "Kinesis on-demand: data read", gbMonth * readers * SP.kod_out, readers + " reader(s), " + fmtGb(gbMonth * readers) + " read at about $" + SP.kod_out + " per GB.");
+      if (days > 1) both("log", "Kinesis on-demand: keeping " + Math.min(days, 7) + " days", gbDay * (Math.min(days, 7) - 1) * SP.kod_ret + (days > 7 ? gbDay * (days - 7) * SP.kin_ltr_gb : 0), fmtGb(gbDay * (days - 1)) + " kept beyond the first day.");
+    } else if (lg === "msk") {
+      var brokers = 3 * Math.max(1, Math.ceil(mbs / 20));
+      both("log", "MSK brokers", brokers * HOURS * SP.msk_broker_h, brokers + " m7g.large brokers running all month at about $" + SP.msk_broker_h + " per hour. Someone still sizes, patches and tunes them.");
+      both("log", "MSK storage", gbDay * days * 3 * SP.msk_gb, days + " days of data, three copies: " + fmtGb(gbDay * days * 3) + " at $" + SP.msk_gb + " per GB-month.");
+    } else if (lg === "msk_sl") {
+      var parts = Math.max(6, Math.ceil(rawNeed * 3));
+      both("log", "MSK Serverless: cluster", HOURS * SP.msksl_h, "A floor of about $" + Math.round(HOURS * SP.msksl_h) + " a month before any data.");
+      both("log", "MSK Serverless: partitions", parts * HOURS * SP.msksl_part_h, parts + " partitions at $" + SP.msksl_part_h + " per partition-hour.");
+      both("log", "MSK Serverless: data in and out", gbMonth * SP.msksl_in + gbMonth * readers * SP.msksl_out, fmtGb(gbMonth) + " written at $" + SP.msksl_in + " and " + fmtGb(gbMonth * readers) + " read at $" + SP.msksl_out + " per GB.");
+      both("log", "MSK Serverless: storage", gbDay * days * SP.msk_gb, fmtGb(gbDay * days) + " kept at $" + SP.msk_gb + " per GB-month.");
+    } else {
+      both("log", "Event Hubs throughput units", shards * SP.eh_tu, shards + " throughput unit(s), sized like shards (1 MB a second or 1,000 events a second each, plus spare), at about $" + SP.eh_tu + " a month. Standard keeps at most 7 days.");
+      both("log", "Event Hubs events", msgsMonth * Math.ceil(msgKb / 64) / 1e6 * SP.eh_ev, fmtN(msgsMonth) + " events a month at about $" + SP.eh_ev + " per million.");
+    }
+
+    // ---- live lane
+    var kpu = 0;
+    if (st.sv_live) {
+      if (st.sv_proc === "flink") {
+        kpu = st.sv_kpu > 0 ? Math.ceil(st.sv_kpu) : Math.max(1, Math.ceil(mbs * 2.5 + mps / 1000));
+        both("live", "Managed Flink", (kpu + 1) * HOURS * SP.flink_kpu_h + (kpu + 1) * 50 * SP.flink_gb,
+          kpu + " processing unit(s) plus 1 to coordinate, running all month at $" + SP.flink_kpu_h + " per KPU-hour, plus 50 GB of running storage each.");
+      } else if (st.sv_proc === "dbx_rt") {
+        var ri = P.instances["m5d.xlarge"];
+        both("live", "Databricks real-time mode cluster", 3 * HOURS * (ri.dbu_per_hour * rate("jobs_classic", st) + ri.usd_per_hour),
+          "A small classic cluster that never stops: 3 m5d.xlarge machines, " + ri.dbu_per_hour + " DBU an hour each at $" + rate("jobs_classic", st).toFixed(2) + ", plus $" + ri.usd_per_hour + " an hour each for the machines. Rough $700-1,000.");
+      }
+      if (st.sv_lambda || st.sv_proc === "lambda") {
+        var inv = Math.max(shards, mps / 100) * SEC_MONTH;
+        both("live", "Lambda limit alerts", inv / 1e6 * SP.lambda_req + inv * 0.2 * 0.25 * SP.lambda_gbs, fmtN(inv) + " small calls a month (one per batch of messages), 0.2 seconds at 256 MB each.");
+      }
+      var every = readingsMonth * Math.ceil(st.sv_kb);
+      var chg = Math.min(every, st.sv_devices * st.sv_changed / 100 * SEC_MONTH / Math.max(1, st.sv_window));
+      var writes = st.sv_emit === "every" ? every : chg;
+      if (st.sv_store === "ddb") {
+        both("live", "DynamoDB live store", writes / 1e6 * SP.ddb_wru + writes * 48 / HOURS / 1e6 * SP.ddb_gb,
+          (st.sv_emit === "every" ? "Every reading written: " : "Changes only, one value per device per " + st.sv_window + "-second window: ") + fmtN(writes) + " writes a month at $" + SP.ddb_wru + " per million (" +
+          (st.sv_emit === "every" ? "changes only would be " + fmtN(chg) + ", about " + fmtUsd(chg / 1e6 * SP.ddb_wru) : "every reading would be " + fmtN(every) + ", about " + fmtUsd(every / 1e6 * SP.ddb_wru)) + "). Items expire after 48 hours.");
+      } else if (st.sv_store === "lakebase") {
+        both("live", "Lakebase live store", SP.lakebase, "A small Postgres instance kept on: rough $100-300. It does not push changes, so the push service must ask it every second.");
+      } else {
+        var chp = gbMonth < 50 ? SP.ch_dev : gbMonth < 2000 ? SP.ch_prod : SP.ch_prod * 3;
+        both("live", "ClickHouse Cloud live store", chp, "Rough: development under $100, production $500-3,000, depending on data kept and queries.");
+      }
+      if (st.sv_screens > 0) {
+        var ups = Math.min(1, Math.max(0, st.sv_ups)), scrSec = st.sv_screens * st.sv_hours * 3600 * DAYS;
+        both("live", "Push to live screens (API Gateway WebSocket)", scrSec * ups / 1e6 * SP.ws_msg + st.sv_screens * st.sv_hours * 60 * DAYS / 1e6 * SP.ws_conn,
+          st.sv_screens + " screens, " + ups + " update(s) a second each, " + st.sv_hours + " hours a day: " + fmtN(scrSec * ups) + " messages a month at $" + SP.ws_msg + " per million, plus connection-minutes at $" + SP.ws_conn + " per million.");
+      }
+    }
+
+    // ---- platform lane
+    var cad = Math.max(1, st.sv_cadence), runsMonth = 1440 / cad * DAYS, gbRun = gbDay / (1440 / cad);
+    var runH = Math.min(HOURS, runsMonth * (st.sv_run_fixed + gbRun) / 60);   // about 1 minute of work per GB, plus the fixed part
+    var dbxLake = runH * st.sv_run_dbu * rate("jobs_serverless", st);
+    var fhGb = msgsMonth * Math.ceil(msgKb / 5) * 5 / 1e6;                     // Firehose rounds each record up to 5 KB
+    var gbC = gbDay * 0.2;                                                      // compressed in lake tables
+    var fhLake = fhGb * SP.fh_gb + gbMonth * SP.fh_conv + gbC * DAYS * SP.s3t_compact;
+    add("lake", "Landing the stream in lake tables", fhLake, dbxLake,
+      "AWS-only: Firehose into S3 Tables, " + fmtGb(fhGb) + " billed a month (each message rounded up to 5 KB) at $" + SP.fh_gb + " per GB, plus format conversion and compaction; Firehose buffers up to 15 minutes, so cadence does not change it. " +
+      "AWS + Databricks: a streaming table run every " + cad + " minutes on serverless, " + fmtN(runsMonth) + " runs a month of about " + (Math.round((st.sv_run_fixed + gbRun) * 10) / 10) + " minutes at " + st.sv_run_dbu + " DBU an hour, $" + rate("jobs_serverless", st).toFixed(2) + " per DBU. The biggest unknown: measure it on your own workload.");
+    both("lake", "Lake storage (first-year average)", gbC * 365 / 2 * P.aws.s3_gb_month.value, "About " + fmtGb(gbC) + " a day once compressed; the year's average stored at $" + P.aws.s3_gb_month.value + " per GB-month. It keeps growing every month.");
+    if (st.sv_bi) {
+      var sc = Math.max(0.5, Math.sqrt(gbMonth / 790));
+      add("lake", "Silver, gold and dashboards (rough)", SP.bi_aws * sc, SP.bi_dbx * sc,
+        "Not worked out from unit prices: rough ranges for this data at production scale, scaled by data volume. AWS-only: Glue or EMR jobs, Athena and QuickSight, $150-400. Databricks: jobs and a share of the SQL warehouse, $100-300 more, because the warehouse is shared with batch work (the whole-platform calculator above prices it properly).");
+    }
+    if (st.sv_raw) both("ins", "Raw copy of the stream in S3 (Firehose)", fhGb * SP.fh_gb + gbC * 365 / 2 * P.aws.s3_gb_month.value, fmtGb(fhGb) + " billed through Firehose at $" + SP.fh_gb + " per GB, plus storage of the compressed copy.");
+
+    var tA = L.reduce(function (s, l) { return s + l.a; }, 0), tD = L.reduce(function (s, l) { return s + l.d; }, 0);
+    var live = L.reduce(function (s, l) { return s + (l.grp === "live" || l.grp === "door" || l.grp === "log" ? l.a : 0); }, 0);
+    return {lines: L, a: tA, d: tD, shared: live, mps: mps, mbs: mbs, gbMonth: gbMonth, shards: shards, kpu: kpu,
+      s3trap: msgsMonth / 1000 * P.aws.s3_put_per_1000.value, msgsMonth: msgsMonth};
+  }
+
+  // ---------------------------------------------------------------- streaming services: output
+  function renderSvc() {
+    if (!$("#sv_lines")) return;
+    var r = svcModel(state);
+    $("#sv_a").textContent = fmtUsd(r.a);
+    $("#sv_d").textContent = fmtUsd(r.d);
+    $("#sv_ay").textContent = fmtUsd(r.a * 12) + " a year";
+    $("#sv_dy").textContent = fmtUsd(r.d * 12) + " a year";
+    $("#sv_shared").innerHTML = "Front door, event log and live lane, the same in both: <b>" + fmtUsd(r.shared) + "</b> a month.";
+    $("#sv_facts").textContent = fmtN(r.mps) + " messages a second · " + fmtN(r.mbs) + " MB a second · " + fmtGb(r.gbMonth) + " a month · " +
+      (state.sv_log === "kin_prov" ? r.shards + " Kinesis shard(s)" : state.sv_log === "eh" ? r.shards + " throughput unit(s)" : "") + (r.kpu ? " · " + r.kpu + " + 1 Flink units" : "");
+    $("#sv_lines").innerHTML = SV_GROUPS.map(function (g) {
+      var ls = r.lines.filter(function (l) { return l.grp === g[0]; });
+      if (!ls.length) return "";
+      var sa = ls.reduce(function (s, l) { return s + l.a; }, 0), sd = ls.reduce(function (s, l) { return s + l.d; }, 0);
+      return '<tr class="cat"><td colspan="3">' + esc(g[1]) + "<span>" + (Math.abs(sa - sd) < 0.5 ? fmtUsd(sa) : fmtUsd(sa) + " / " + fmtUsd(sd)) + "</span></td></tr>" +
+        ls.map(function (l) {
+          return "<tr><td><details><summary>" + esc(l.name) + "</summary><p>" + esc(l.why) + "</p></details></td><td class='num'>" + fmtUsd(l.a) + "</td><td class='num'>" + fmtUsd(l.d) + "</td></tr>";
+        }).join("");
+    }).join("") + "<tr><td><b>Total per month</b></td><td class='num'>" + fmtUsd(r.a) + "</td><td class='num'>" + fmtUsd(r.d) + "</td></tr>";
+    $("#sv_trap").innerHTML = "<b>The S3 request trap.</b> If something wrote one S3 object per message, " + fmtN(r.msgsMonth) + " messages a month would cost about <b>" + fmtUsd(r.s3trap) +
+      " a month</b> in write requests alone, at $" + P.aws.s3_put_per_1000.value + " per 1,000. That is why messages go through Firehose or the platform lane, which write a few large files instead. This number is a warning and is not in the totals.";
+    var W = [
+      ["Every device through IoT Core, nothing bundled", {sv_front: "iot", sv_batch: 1}],
+      ["Bundle 10 readings into each message at the edge", {sv_batch: Math.max(10, state.sv_batch * 10)}],
+      ["Live store gets every reading, not just changes", {sv_emit: "every"}],
+      ["Live store gets changes only", {sv_emit: "changes"}],
+      ["Platform lane every 5 minutes", {sv_cadence: 5}],
+      ["Platform lane every 30 minutes", {sv_cadence: 30}],
+      ["Event log keeps 1 day", {sv_retention: 1}],
+      ["Event log keeps 30 days", {sv_retention: 30}],
+      ["Kinesis on-demand instead", {sv_log: "kin_od"}],
+      ["Kinesis provisioned instead", {sv_log: "kin_prov"}],
+      ["Databricks real-time mode instead of Flink", {sv_proc: "dbx_rt", sv_live: true}],
+      ["No live lane (platform lane only)", {sv_live: false}]
+    ];
+    $("#sv_whatif").innerHTML = W.filter(function (w) {
+      return Object.keys(w[1]).some(function (k) { return state[k] !== w[1][k]; });
+    }).map(function (w) {
+      var t = svcModel(Object.assign({}, state, w[1]));
+      function cell(nw, old) { var d = nw - old; return "<td class='num'>" + fmtUsd(nw) + "<br><span class='hlp'>" + (Math.abs(d) < 0.5 ? "no change" : (d > 0 ? "+" : "-") + fmtUsd(Math.abs(d))) + "</span></td>"; }
+      return "<tr><td>" + esc(w[0]) + "</td>" + cell(t.a, r.a) + cell(t.d, r.d) + "</tr>";
+    }).join("");
+  }
+  function svcPrices() {
+    var el = $("#sv_prices"); if (!el) return;
+    el.innerHTML = SP_LIST.map(function (p) { return "<tr><td>" + esc(p[2]) + "</td><td class='num'>$" + (p[1] < 0.001 ? p[1].toFixed(10).replace(/0+$/, "") : p[1]) + "</td></tr>"; }).join("");
+  }
+  function applySvPreset(k) {
+    var p = SV_PRESETS[k]; if (!p) return;
+    Object.keys(p).forEach(function (id) {
+      state[id] = p[id];
+      var el = document.getElementById("p_" + id);
+      if (el) { if (el.type === "checkbox") el.checked = p[id]; else el.value = p[id]; }
+    });
+  }
+
   // ---------------------------------------------------------------- share link
   function saveHash() {
     var diff = {};
@@ -546,9 +831,10 @@
       var url = location.href;
       if (navigator.clipboard) navigator.clipboard.writeText(url).then(function () { $("#share").textContent = "Link copied"; setTimeout(function () { $("#share").textContent = "Copy a link to these settings"; }, 2000); });
     });
+    svcPrices();
     render();
   }
   function applyPresetState(k) { var p = PRESETS[k]; ["n_small", "n_big", "n_vbig", "n_huge", "engineers", "bi_users"].forEach(function (id) { state[id] = p[id]; }); }
-  window.DBX_MODEL = {model: model, state: state, SPEC: SPEC};   // for tests in the console
+  window.DBX_MODEL = {model: model, svcModel: svcModel, state: state, SPEC: SPEC};   // for tests in the console
   if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", init); else init();
 })();

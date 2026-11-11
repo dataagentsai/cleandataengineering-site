@@ -84,6 +84,7 @@ SECTIONS = [
             ("Hop 3: silver to gold", "/learn/data-platform-architecture/gold/"),
             ("The metadata store", "/learn/data-platform-architecture/metadata-store/"),
             ("Streaming", "/learn/streaming/"),
+            ("Streaming simulator", "/learn/streaming/sim/"),
             ("Shift left: fail fast on data code", "/learn/shift-left/"),
             ("Open spec: DataTwin", "/learn/datatwin/"),
             ("Open spec: Clean Data Engineering specs", "/projects/data-eng-specs/"),
