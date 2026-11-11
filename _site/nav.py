@@ -85,6 +85,7 @@ SECTIONS = [
             ("The metadata store", "/learn/data-platform-architecture/metadata-store/"),
             ("Delta vs Iceberg", "/learn/delta-vs-iceberg/"),
             ("Streaming", "/learn/streaming/"),
+            ("Streaming: all options", "/learn/streaming/options/"),
             ("Streaming simulator", "/learn/streaming/sim/"),
             ("Databricks real time: RTM and Lakehouse//RT", "/learn/streaming/real-time-mode/"),
             ("Shift left: fail fast on data code", "/learn/shift-left/"),

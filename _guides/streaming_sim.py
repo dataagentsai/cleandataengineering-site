@@ -103,7 +103,7 @@ def radios(name, opts, first):
 def tabs(on):
     t = [("flow", "/learn/streaming/sim/", "1 · Data flow, hop by hop"), ("lanes", "/learn/streaming/sim/lanes/", "2 · Three lanes together"),
          ("faster", "/learn/streaming/sim/faster/", "3 · A faster platform lane")]
-    return '<div class="ss-tabs">' + "".join(f'<a href="{u}" class="{"on" if k == on else ""}">{E(n)}</a>' for k, u, n in t) + '<a href="/learn/streaming/">The streaming guide</a></div>'
+    return '<div class="ss-tabs">' + "".join(f'<a href="{u}" class="{"on" if k == on else ""}">{E(n)}</a>' for k, u, n in t) + '<a href="/learn/streaming/options/">All options</a><a href="/learn/streaming/">The streaming guide</a></div>'
 
 
 def ld(title, desc, url, qa, crumbs):

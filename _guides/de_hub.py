@@ -31,6 +31,7 @@ GUIDES = [
     ("Data platform architecture", "/learn/data-platform-architecture/", "How we build it: control plane, metadata, three services, streaming lane, agents that only suggest."),
     ("Delta Lake vs Iceberg on Databricks", "/learn/delta-vs-iceberg/", "Same Parquet, two contents pages; which Databricks features differ (change data feed, streaming, pipelines, lineage, masks) and which to pick on AWS."),
     ("Medallion architecture", "/learn/medallion-architecture/", "Bronze, silver and gold, one order through every layer, nine rules, products per platform."),
+    ("Streaming options at a glance", "/learn/streaming/options/", "Every fast-lane and platform-lane option in one table: path, delay, push or pull, Unity Catalog, cost, verdict and why, with links."),
     ("Streaming on AWS and Databricks", "/learn/streaming/", "IoT and ordinary sources, seconds and minutes: roles first, then options per part with pros, cons and a verdict; SCD, DLT, Auto Loader, replays, SLA report, cost."),
     ("Databricks real time: real-time mode and Lakehouse//RT", "/learn/streaming/real-time-mode/", "Real-time mode (GA) moves data in milliseconds; Lakehouse//RT (beta) answers queries in milliseconds. Limits, cost against Flink and DynamoDB, and where each fits."),
     ("Real-time analytics", "/learn/real-time-analytics/", "From a database change to a number on screen in a second: designs, products and cost."),
