@@ -32,7 +32,7 @@ GUIDES = [
     ("Delta Lake vs Iceberg on Databricks", "/learn/delta-vs-iceberg/", "Same Parquet, two contents pages; which Databricks features differ (change data feed, streaming, pipelines, lineage, masks) and which to pick on AWS."),
     ("Medallion architecture", "/learn/medallion-architecture/", "Bronze, silver and gold, one order through every layer, nine rules, products per platform."),
     ("Streaming on AWS and Databricks", "/learn/streaming/", "IoT and ordinary sources, seconds and minutes: roles first, then options per part with pros, cons and a verdict; SCD, DLT, Auto Loader, replays, SLA report, cost."),
-    ("Databricks real-time mode for a 1-second lane", "/learn/streaming/real-time-mode/", "GA status, sources and sinks, limits, cost against Flink and DynamoDB, and a live store inside Unity Catalog."),
+    ("Databricks real time: real-time mode and Lakehouse//RT", "/learn/streaming/real-time-mode/", "Real-time mode (GA) moves data in milliseconds; Lakehouse//RT (beta) answers queries in milliseconds. Limits, cost against Flink and DynamoDB, and where each fits."),
     ("Real-time analytics", "/learn/real-time-analytics/", "From a database change to a number on screen in a second: designs, products and cost."),
     ("Test architecture for data", "/learn/data-platform-architecture/testing/", "Unit, contract, data and simulation tests, and where each runs."),
     ("Shift left: fail fast on data code", "/learn/shift-left/", "Static and offline checks that catch PySpark and SQL problems before they run."),

@@ -86,7 +86,7 @@ SECTIONS = [
             ("Delta vs Iceberg", "/learn/delta-vs-iceberg/"),
             ("Streaming", "/learn/streaming/"),
             ("Streaming simulator", "/learn/streaming/sim/"),
-            ("Databricks real-time mode", "/learn/streaming/real-time-mode/"),
+            ("Databricks real time: RTM and Lakehouse//RT", "/learn/streaming/real-time-mode/"),
             ("Shift left: fail fast on data code", "/learn/shift-left/"),
             ("Open spec: DataTwin", "/learn/datatwin/"),
             ("Open spec: Clean Data Engineering specs", "/projects/data-eng-specs/"),

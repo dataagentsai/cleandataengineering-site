@@ -20,9 +20,9 @@ wb = C.wb
 SITE = wb.SITE
 URL_PATH = "/learn/streaming/real-time-mode/"
 DATE = "2026-11-11"
-TITLE = "Databricks real-time mode for a 1-second lane"
-DESC = ("Can Databricks real-time mode run a 1-second streaming lane? GA status, sources and sinks, limits, "
-        "rough cost against Flink and DynamoDB, and a Unity Catalog live store.")
+TITLE = "Databricks real time: real-time mode and Lakehouse//RT"
+DESC = ("Databricks real-time mode (GA) and the new Lakehouse//RT engine: what each does, sources and sinks, limits, "
+        "rough cost against Flink and DynamoDB, a Unity Catalog live store, and where each fits.")
 
 CSS = C.CSS + """<style>
   .rt .fig { border:var(--line); border-radius:var(--wob); padding:12px 14px; margin:16px 0; background:#fff; overflow-x:auto; }
@@ -62,9 +62,9 @@ def drawing():
 
 STATUS = [
     ("What it is", "A trigger type for Spark Structured Streaming: records are processed as they arrive instead of in micro-batches. Databricks quotes latency under 100 ms, and as low as a few milliseconds."),
-    ("Status", "Announced generally available in March 2026. Some documentation pages still say Public Preview; check your workspace before production."),
+    ("Status", "Structured Streaming jobs: announced generally available in March 2026. Lakeflow (Spark Declarative) pipelines: generally available on 29 October 2026."),
     ("Runtime", "Databricks Runtime 16.4 LTS or later."),
-    ("Compute", "Classic compute with a fixed size: autoscaling off, Photon off, enough task slots for every task in every stage. On serverless, only through Lakeflow pipelines (set at the pipeline level)."),
+    ("Compute", "Jobs: classic compute with a fixed size (autoscaling off, Photon off, enough task slots for every task). Pipelines: serverless, no sizing, pay for the cores the query uses; the pipeline runs in continuous mode."),
 ]
 
 SRC_SINK = [
@@ -72,7 +72,7 @@ SRC_SINK = [
     ("Kinesis", "Yes (enhanced fan-out recommended; polling only on newer runtimes, check)", "No"),
     ("Delta tables", "No", "No"),
     ("Pub/Sub, Pulsar", "No", "No"),
-    ("Custom writer (forEach), e.g. to Lakebase or DynamoDB", "-", "Yes"),
+    ("Custom writer (forEach), e.g. to Lakebase, Redis or DynamoDB", "-", "Yes (a native Lakebase sink is announced as future work)"),
     ("forEachBatch", "-", "No"),
 ]
 
@@ -104,20 +104,37 @@ STORES = [
 VERDICT = [
     ("Keep the AWS-native lane (Flink, DynamoDB, WebSocket)", "Cheapest, true push, milliseconds", "Two engines (Flink and Spark); the live store is outside Unity Catalog", "Pursue (default)"),
     ("Databricks-only lane, real-time mode in a Structured Streaming job (classic cluster)", "One platform, governed end to end, one engine; the proven path (announced GA)", "About $200 to $600 a month more; you size and run a fixed cluster; no Delta sink; the app polls Lakebase", "Pursue only if one governed platform is worth the extra cost"),
-    ("Databricks-only lane, real-time mode in a Lakeflow pipeline (serverless)", "Same engine and lane, but no cluster to size or tune", "Newest path: status, limits and pricing not confirmed; still always on; same no-Delta-sink and polling limits", "Trial in a sandbox, compare with the job version"),
+    ("Databricks-only lane, real-time mode in a Lakeflow pipeline (serverless)", "Same engine and lane, GA since 29 Oct 2026, no cluster to size or tune", "Each real-time query gets its own resources; writes go through a custom writer (no native Lakebase sink yet); still always on; the app polls Lakebase", "Pursue this one if you go Databricks-only (prefer it to the job version)"),
 ]
 
 PACKAGING = [
     ("How you write it", "Ordinary PySpark: readStream, your logic, writeStream with the real-time trigger, run as a Lakeflow Job", "Declarative: a pipeline of flows and sinks, with real-time mode switched on for the pipeline"),
     ("Compute", "A classic cluster you size: fixed size, autoscaling off, Photon off, enough task slots for every task", "Serverless: Databricks picks and manages the machines"),
     ("Who tunes it", "You: machine type, number of workers, task slots", "Databricks"),
-    ("Billing", "EC2 plus jobs DBUs, all day (about $430 to $650 a month in the example)", "Serverless DBUs, all day (still always on, no scale to zero); no published figure, measure it"),
-    ("Status", "Announced generally available, March 2026", "Newer; check status, limits and pricing on your workspace"),
+    ("Billing", "EC2 plus jobs DBUs, all day (about $430 to $650 a month in the example)", "Serverless, paying for the cores the query uses, all day (continuous mode); no published list figure, measure it"),
+    ("Status", "Announced generally available, March 2026", "Generally available, 29 October 2026"),
     ("The same in both", "Engine, sources (Kafka, Kinesis), no Delta sink, Lakebase live store, the app polling it", "Same"),
 ]
 
+RT = [
+    ("What it is", "A new SQL warehouse type, powered by a new engine called Reyden, for read-only queries at very low latency and high concurrency on Delta and Iceberg tables in Unity Catalog. No separate serving copy."),
+    ("Claims", "As low as 10 ms on small datasets, under 100 ms on larger ones, under 100 ms at 12,000 queries a second on standard benchmarks. One independent test found it consistently faster than a normal serverless warehouse but not close to 100 ms; measure on your data."),
+    ("Status", "Beta since 30 June 2026, for selected read-only workloads; ask your Databricks account team. AI/BI dashboards can use it (beta, October 2026)."),
+    ("Price", "No list price published; 30% introductory discount through January 2027."),
+    ("What it does not do", "It does not make data arrive faster. A screen is as fresh as the table it reads; Lakehouse//RT only makes the query fast. It does not write (no INSERT, MERGE or ETL)."),
+]
+
+RT_FIT = [
+    ("Fast, many-user dashboards and apps on gold or silver (slicing, filters, drill-down)", "Lakehouse//RT instead of ClickHouse: same speed class, governed in Unity Catalog, no copy to keep in line with gold", "Pursue once it leaves beta"),
+    ("Power BI DirectQuery on gold", "Point it at a Lakehouse//RT warehouse for fast visuals under load; check connector support during the beta", "Try in the beta"),
+    ("Live board with data seconds old", "Not on its own: tables are updated by pipelines in minutes (or about a minute if continuous). Seconds still need real-time mode into Lakebase, or the AWS-native lane", "Drop as a fast-lane replacement"),
+    ("Platform lane made faster (chained or continuous) plus Lakehouse//RT", "Screen age stays the pipeline's (6 to 22 min chained, 1 to 3 min continuous), but every query answers in milliseconds for hundreds of users", "Pursue when concurrency, not freshness, is the pain"),
+]
+
 QA = [
-    ("Is Databricks real-time mode generally available?", "Databricks announced it generally available in March 2026 for Spark Structured Streaming on Runtime 16.4 LTS and later. Some doc pages still say Public Preview, so check your workspace."),
+    ("Is Databricks real-time mode generally available?", "Yes. For Structured Streaming jobs it was announced generally available in March 2026 (Runtime 16.4 LTS and later), and for Lakeflow (Spark Declarative) pipelines on 29 October 2026."),
+    ("What is Lakehouse//RT?", "A new Databricks SQL warehouse type (engine: Reyden), in beta since June 2026, that answers read-only queries on Delta and Iceberg tables in milliseconds at high concurrency. It makes queries fast; it does not make data fresher."),
+
     ("Can real-time mode write to Delta tables?", "No. Sinks are Kafka and custom forEach writers. For a live store, write to Lakebase or DynamoDB; keep bronze, silver and gold in the platform lane."),
     ("Does real-time mode work with Kinesis?", "Yes, as a source, with enhanced fan-out recommended. Kinesis is not supported as a sink."),
     ("How much does a 1-second lane on Databricks cost?", "Roughly $700 to $1,100 a month for a small plant stream: a fixed classic cluster, Lakebase and a Databricks App. The AWS-native lane (Flink, DynamoDB, WebSocket) is about $530. Rough list prices; measure."),
@@ -127,7 +144,11 @@ QA = [
 SOURCES = [
     ("Real-time mode in Structured Streaming", "https://docs.databricks.com/aws/en/structured-streaming/real-time"),
     ("Real-time mode reference (sources, sinks, limits)", "https://docs.databricks.com/aws/en/structured-streaming/real-time/reference"),
-    ("General availability announcement", "https://www.databricks.com/blog/announcing-general-availability-real-time-mode-apache-spark-structured-streaming-databricks"),
+    ("General availability announcement (Structured Streaming)", "https://www.databricks.com/blog/announcing-general-availability-real-time-mode-apache-spark-structured-streaming-databricks"),
+    ("General availability in Spark Declarative Pipelines (29 Oct 2026)", "https://www.databricks.com/blog/announcing-general-availability-real-time-mode-spark-declarative-pipelines-databricks"),
+    ("Introducing Lakehouse//RT", "https://www.databricks.com/blog/introducing-lakehousert-real-time-performance-unified-lakehouse"),
+    ("Lakehouse//RT press release", "https://www.databricks.com/company/newsroom/press-releases/databricks-launches-lakehousert-bring-real-time-analytics-directly"),
+    ("An independent Lakehouse//RT test (Eraneos)", "https://www.eraneos.com/articles/putting-databricks-lakehousert-to-the-test/"),
 ]
 
 
@@ -141,7 +162,7 @@ def page():
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › <a href="/learn/streaming/">Streaming</a> › Real-time mode</p>
 <p class="eyebrow" style="margin-top:22px">Data engineering · free guide · one page</p>
 <h1>{E(TITLE)}</h1>
-<p class="lede">The fast lane in the <a href="/learn/streaming/">streaming design</a> puts plant readings on a live board within seconds using Flink, DynamoDB and a WebSocket. Databricks real-time mode can do the same job inside Databricks. This page shows how, what it cannot do, what it costs, and when it is worth it.</p>
+<p class="lede">The fast lane in the <a href="/learn/streaming/">streaming design</a> puts plant readings on a live board within seconds using Flink, DynamoDB and a WebSocket. Databricks now has two real-time pieces: <b>real-time mode</b>, which moves data in milliseconds (generally available), and <b>Lakehouse//RT</b>, a new engine that answers queries in milliseconds (beta). This page shows what each does, what it cannot do, what it costs, and where it fits.</p>
 <div class="rt">
 <section id="what"><p class="eyebrow">In plain words</p><h2>What real-time mode is</h2>
 <p>Normal Spark streaming collects records for a moment and processes them as a small batch. Real-time mode processes each record as it arrives, so the delay drops from seconds to milliseconds. It is the same Spark code with a different trigger.</p>
@@ -149,6 +170,13 @@ def page():
 
 <section id="arch"><p class="eyebrow">The picture</p><h2>The 1-second lane, two ways</h2>
 <div class="fig">{drawing()}<p>Tags show who starts each transfer: PUSH, the sender; PULL, the receiver.</p></div></section>
+
+<section id="lakehouse-rt"><p class="eyebrow">The new engine</p><h2>Lakehouse//RT: fast queries, not fresher data</h2>
+<p>Real-time mode moves data quickly. Lakehouse//RT answers questions quickly. They solve different problems, and a 1-second design may use both.</p>
+{C.table(["", ""], RT)}
+<h3>Where it fits in the streaming design</h3>
+<div class="tw"><table class="t"><tr><th>Need</th><th>With Lakehouse//RT</th><th>Verdict</th></tr>{"".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td><b>{E(c)}</b></td></tr>" for a, b, c in RT_FIT)}</table></div>
+<div class="box"><b>The all-Databricks real-time picture:</b> real-time mode in a serverless pipeline writes the latest values to Lakebase for the live board (seconds); the platform lane keeps silver and gold in Delta (minutes); Lakehouse//RT serves dashboards and apps on gold in milliseconds. Everything sits in Unity Catalog. The AWS-native fast lane is still cheaper and gives true push.</div></section>
 
 <section id="io"><p class="eyebrow">Sources and sinks</p><h2>What it can read and write</h2>{C.table(["System", "As a source", "As a sink"], SRC_SINK)}</section>
 
