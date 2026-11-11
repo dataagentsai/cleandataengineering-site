@@ -20,7 +20,7 @@ import components as C  # noqa: E402
 wb = C.wb
 SITE = wb.SITE
 DATE = "2026-11-11"
-JS = "/learn/streaming/sim/stream-sim.js?v=11"
+JS = "/learn/streaming/sim/stream-sim.js?v=13"
 
 CSS = C.CSS + """<style>
   main.wrap { max-width:1320px; }
@@ -71,6 +71,9 @@ CSS = C.CSS + """<style>
   .ss-costs b { display:block; font-family:var(--mono); font-size:21px; color:var(--ink); }
   td.dropc { font-size:13px; color:var(--ink-soft); }
   td.n { text-align:right; font-family:var(--mono); }
+  #ssim-svg .bigage { font-size:17px; font-family:var(--hand) !important; }
+  #ssim-svg .chartbg { fill:#fff; stroke:#111; stroke-width:1; } #ssim-svg .grid { stroke:#bbb; stroke-dasharray:3 3; } #ssim-svg .gridl { font-size:9.5px; fill:#777; font-family:var(--mono) !important; }
+  #ssim-svg polyline.age { fill:none; stroke:#2f4f9c; stroke-width:2; } #ssim-svg polyline.age.B { stroke:#2f7d5b; stroke-width:2.6; }
   #ssim-svg .chip rect { fill:#fff; stroke:#111; stroke-width:1.2; }
   #ssim-svg .chip.complete rect { fill:#cfe9d9; } #ssim-svg .chip.provisional rect { fill:#ffe9b0; }
   #ssim-svg .chip.restated rect { fill:#d9e0f5; } #ssim-svg .chip.running rect { stroke-dasharray:4 3; }
@@ -98,7 +101,8 @@ def radios(name, opts, first):
 
 
 def tabs(on):
-    t = [("flow", "/learn/streaming/sim/", "1 · Data flow, hop by hop"), ("lanes", "/learn/streaming/sim/lanes/", "2 · Three lanes together")]
+    t = [("flow", "/learn/streaming/sim/", "1 · Data flow, hop by hop"), ("lanes", "/learn/streaming/sim/lanes/", "2 · Three lanes together"),
+         ("faster", "/learn/streaming/sim/faster/", "3 · A faster platform lane")]
     return '<div class="ss-tabs">' + "".join(f'<a href="{u}" class="{"on" if k == on else ""}">{E(n)}</a>' for k, u, n in t) + '<a href="/learn/streaming/">The streaming guide</a></div>'
 
 
@@ -231,11 +235,68 @@ def lanes_page():
     return wb.page(title, desc, url, body, CSS + ld(title, desc, url, qa, crumbs))
 
 
+def faster_page():
+    url = f"{SITE}/learn/streaming/sim/faster/"
+    title = "Streaming simulator: making the platform lane faster"
+    desc = "Four platform-lane designs on one clock: today, chained steps, 5-minute runs and continuous. How old the data on the Power BI screen is, best and worst case, and what each costs."
+    qa = [("How do I make a Databricks to Power BI pipeline faster without streaming continuously?",
+           "Chain the steps instead of waiting for clocks: the 15-minute run starts gold, and gold starts the Power BI refresh through the API. The screen then shows data about 6 to 22 minutes old instead of 30 to 90, for little extra cost, but Power BI needs PPU, Premium or Fabric capacity for that many refreshes."),
+          ("Is a continuous pipeline worth it for dashboards?", "Rarely. It brings the screen to about 2 to 4 minutes for roughly three to four times the cost. If someone must act in seconds, that belongs in the fast lane; if minutes are fine, chained 15-minute runs are enough."),
+          ("Does a faster pipeline make an hour final sooner?", "No. An hour is final only when its slowest input arrives (lab results, nightly master data). A faster lane shows provisional numbers sooner; each hour keeps a 'complete' flag.")]
+    crumbs_html = '<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › <a href="/learn/streaming/">Streaming</a> › Simulator</p>'
+    body = f"""{crumbs_html}
+<p class="eyebrow" style="margin-top:22px">Data engineering · simulator · illustrative</p>
+<h1>Streaming simulator: a faster platform lane</h1>
+<p class="lede">The platform lane takes the same readings to Power BI through bronze, silver and gold. Today the screen can show data up to about 90 minutes old. Four designs run here on one clock, so you can see where the waiting goes and what removing it costs.</p>
+{tabs("faster")}
+<div class="ss-bar"><span>Simulated time</span><span class="clk" id="ssim-clock">--:--</span>
+<label>Speed <select id="ssim-speed"><option value="60">1 s = 1 min</option><option value="300" selected>1 s = 5 min</option><option value="900">1 s = 15 min</option></select></label><button id="ssim-pause">Pause</button>
+<span class="ss-legend">Each chart is the age of the newest data on the screen: it climbs while nothing new arrives and drops at each refresh.</span></div>
+<div class="ss-stage" id="ssim" data-mode="faster"><svg id="ssim-svg" role="img" aria-label="Four platform-lane designs compared on one clock"></svg></div>
+
+<h2>Where the waiting is today</h2>
+<div class="tw"><table class="t"><tr><th>Wait</th><th>Today</th><th>What removes it</th></tr>
+<tr><td>Until the next run</td><td>0 to 15 min</td><td>Shorter cadence (C) or continuous (D)</td></tr>
+<tr><td>The run itself</td><td>2 to 5 min</td><td>Smaller runs (C) or always-on compute (D)</td></tr>
+<tr><td>Until gold at :15 each hour</td><td>up to 60 min</td><td><b>Chain gold to the run</b>, provisional every run (B)</td></tr>
+<tr><td>Until Power BI refreshes</td><td>up to 30 min on Pro</td><td><b>The gold job starts the refresh</b> (B): push the signal, pull the data</td></tr>
+</table></div>
+
+<h2>The architecture changes, one by one</h2>
+<div class="tw"><table class="t"><tr><th>Change</th><th>Pros</th><th>Cons</th><th>Verdict</th></tr>
+<tr><td><b>1 · Chain the steps instead of clocks.</b> When the silver run finishes, a table update trigger (or the last task of the same job) starts gold; when gold finishes, a task calls the Power BI refresh API.</td><td>Removes the two biggest waits; no new services</td><td>A failed step must stop the chain and alert</td><td><b>Pursue</b></td></tr>
+<tr><td><b>2 · Provisional gold every run.</b> Each run recomputes the current hour's window, not only closed hours; every hour keeps a "complete" flag.</td><td>Gold within minutes of silver; the same window-recompute code</td><td>A few more small gold runs a day; people must read the flag</td><td><b>Pursue</b></td></tr>
+<tr><td><b>3 · Power BI capacity that can refresh often.</b> Import model refreshed by the API after each gold run, or DirectQuery with change detection.</td><td>Viewers read memory; no idle queries</td><td>Pro allows only 8 refreshes a day; needs Premium Per User, Premium or Fabric</td><td><b>Pursue</b> with change 1</td></tr>
+<tr><td><b>4 · Runs every 5 minutes.</b></td><td>Screen 5 to 10 min old</td><td>About three times the platform-lane compute; more small files to compact</td><td><b>Pursue only</b> if a named user needs under 10 minutes</td></tr>
+<tr><td><b>5 · Continuous pipeline.</b> Always-on streaming tables, gold kept up to date incrementally, a warm SQL warehouse, DirectQuery checks every minute (on Azure, Direct Lake can read gold without a refresh).</td><td>Screen 2 to 4 min old</td><td>Three to four times the cost; always-on compute to watch</td><td><b>Drop</b>: if minutes are not enough, the need belongs in the fast lane</td></tr>
+</table></div>
+
+<h2>Results at a glance</h2>
+<div class="tw"><table class="t"><tr><th>Design</th><th>Screen data age, best to worst</th><th>Rough platform cost a month</th><th>Power BI licence</th><th>Verdict</th></tr>
+<tr><td>A · Today</td><td>about 30 to 90 min</td><td>~$670</td><td>Pro</td><td>Replace</td></tr>
+<tr><td>B · Chained</td><td>about 6 to 22 min</td><td>~$770</td><td>PPU, Premium or Fabric</td><td><b>Pursue</b> (recommended)</td></tr>
+<tr><td>C · Every 5 minutes</td><td>about 5 to 10 min</td><td>~$1,900</td><td>PPU, Premium or Fabric</td><td>Only with a named need</td></tr>
+<tr><td>D · Continuous</td><td>about 2 to 4 min</td><td>~$2,400</td><td>Premium or Fabric</td><td><b>Drop</b></td></tr>
+</table></div>
+<p class="ss-legend">Power BI licence in the diagram: Pro; PPU+ = Premium Per User, Premium or Fabric capacity; Premium = Premium or Fabric capacity. Rough US list prices, production example (300 readings a second); Power BI user licences not included. The simulator measures the age of the newest data on the screen; a single reading can be older if it arrived late. Faster lanes make numbers visible sooner, not final sooner: an hour is final only when its slowest input (lab results, nightly master data) has arrived.</p>
+
+<h2>What just happened</h2>
+<ul class="ss-feed" id="ssim-feed"></ul>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(qa)}</section>
+<section id="next"><p class="eyebrow">Related</p><h2>Where it connects</h2>
+<p><a href="/learn/streaming/#sla">Seconds or minutes</a> in the streaming guide, the <a href="/learn/data-systems/platform/cost/calculator/#streaming-services">cost calculator</a>, and <a href="/simulators/">all simulators</a>.</p></section>
+<script src="{JS}" defer></script>"""
+    crumbs = [("Data engineering", f"{SITE}/data-engineering/"), ("Streaming", f"{SITE}/learn/streaming/"), ("A faster platform lane", url)]
+    return wb.page(title, desc, url, body, CSS + ld(title, desc, url, qa, crumbs))
+
+
 def main():
     out = ROOT / "learn" / "streaming" / "sim"
     (out / "lanes").mkdir(parents=True, exist_ok=True)
     (out / "index.html").write_text(flow_page())
     (out / "lanes" / "index.html").write_text(lanes_page())
+    (out / "faster").mkdir(exist_ok=True)
+    (out / "faster" / "index.html").write_text(faster_page())
     print("streaming sim ->", out, "(flow + lanes)")
 
 

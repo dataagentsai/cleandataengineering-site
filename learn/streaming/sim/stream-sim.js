@@ -740,14 +740,110 @@
     return { tick: tick, visuals: visuals, render: render, maxStep: 30 };
   }
 
+
+  /* =================================================================== FASTER MODE: four platform-lane designs on one clock */
+  function faster() {
+    svg.setAttribute("viewBox", "0 0 1200 560");
+    var D = [
+      { id: "A", name: "A · Today", sub: "15-min runs, gold hourly at :15, Power BI Pro refresh every 30 min", cad: 900, run: 180, gold: "hourly", pbi: "pro30", cost: 670, lic: "Pro" },
+      { id: "B", name: "B · Chained (recommended)", sub: "15-min runs; each run starts gold, gold starts the Power BI refresh", cad: 900, run: 180, gold: "chained", gdur: 120, pbi: "push", rdur: 90, cost: 770, lic: "PPU+" },
+      { id: "C", name: "C · Every 5 minutes", sub: "B, with runs every 5 minutes", cad: 300, run: 120, gold: "chained", gdur: 90, pbi: "push", rdur: 90, cost: 1900, lic: "PPU+" },
+      { id: "D", name: "D · Continuous", sub: "always-on pipeline, gold kept up to date, DirectQuery checks every minute", cad: 0, gold: "cont", pbi: "dq1", cost: 2400, lic: "Premium" }
+    ];
+    var ROWH = 136, CH = { x: 880, w: 305, h: 104 }, WINDOW = 4 * 3600, YMAX = 120 * 60;
+    D.forEach(function (d, i) {
+      var y = 8 + i * ROWH;
+      d.y = y; d.hist = []; d.best = null; d.worst = null; d.sum = 0; d.n = 0;
+      d.silver = null; d.goldAt = null; d.screen = null; d.pend = []; d.lastSlot = null; d.lastPbi = null;
+      var g = el("g", { "class": "bx " + (d.id === "B" ? "nrtb" : "") }, svg);
+      el("rect", { x: 10, y: y, width: 230, height: ROWH - 14, rx: 10 }, g);
+      var t1 = el("text", { x: 20, y: y + 22, "class": "bt" }, g); t1.textContent = d.name;
+      var lines = wrapText(d.sub, 34); lines.slice(0, 3).forEach(function (ln, k) { var t = el("text", { x: 20, y: y + 42 + k * 15, "class": "bp" }, g); t.textContent = ln; });
+      d.costEl = el("text", { x: 20, y: y + ROWH - 22, "class": "bc" }, g);
+      var names = ["15-min run", "Silver", "Gold", "Power BI"]; if (d.cad === 300) names[0] = "5-min run"; if (!d.cad) names[0] = "Continuous";
+      d.cells = names.map(function (nm, k) {
+        var x = 252 + k * 128, gg = el("g", { "class": "bx nrtb" }, svg);
+        el("rect", { x: x, y: y + 6, width: 116, height: 54, rx: 8 }, gg);
+        var a = el("text", { x: x + 8, y: y + 24, "class": "bt" }, gg); a.textContent = nm;
+        var b = el("text", { x: x + 8, y: y + 48, "class": "bc" }, gg);
+        if (k < 3) line([[x + 116, y + 33], [x + 128, y + 33]], "arr nrtw");
+        return b;
+      });
+      d.ageEl = el("text", { x: 254, y: y + 92, "class": "bigage" }, svg);
+      d.statEl = el("text", { x: 254, y: y + 112, "class": "bc" }, svg);
+      el("rect", { x: CH.x, y: y + 4, width: CH.w, height: CH.h, rx: 6, "class": "chartbg" }, svg);
+      [30, 60, 90].forEach(function (m) { var yy = y + 4 + CH.h - m * 60 / YMAX * CH.h; el("line", { x1: CH.x, x2: CH.x + CH.w, y1: yy, y2: yy, "class": "grid" }, svg); var tt = el("text", { x: CH.x + 3, y: yy - 2, "class": "gridl" }, svg); tt.textContent = m + " min"; });
+      d.poly = el("polyline", { "class": "age " + d.id, points: "" }, svg);
+    });
+    caption(CH.x, 552, "Screen data age, last 4 simulated hours");
+
+    SIM.t = 5 * 3600;
+    function tick(dt) {
+      var t0 = SIM.t; SIM.t += dt; var t = SIM.t;
+      D.forEach(function (d) {
+        if (!d.cad) { // continuous
+          d.silver = t - 60; d.goldAt = t - 150;
+          var slot = Math.floor(t / 60);
+          if (slot !== d.lastPbi) { d.lastPbi = slot; d.screen = d.goldAt; }
+        } else {
+          var slot2 = Math.floor(t / d.cad);
+          if (d.lastSlot === null) d.lastSlot = slot2;
+          if (slot2 !== d.lastSlot) { d.lastSlot = slot2; d.pend.push({ kind: "silver", at: slot2 * d.cad + d.run, asof: slot2 * d.cad }); }
+          if (d.gold === "hourly") {
+            var hs = Math.floor((t - 900) / 3600), hs0 = Math.floor((t0 - 900) / 3600);
+            if (hs !== hs0) d.pend.push({ kind: "gold", at: hs * 3600 + 900 + 240, asof: hs * 3600 });
+          }
+          if (d.pbi === "pro30") { var ps = Math.floor(t / 1800), ps0 = Math.floor(t0 / 1800); if (ps !== ps0) d.pend.push({ kind: "screen", at: ps * 1800 + 60 }); }
+          d.pend.sort(function (a, b) { return a.at - b.at; });
+          while (d.pend.length && d.pend[0].at <= t) {
+            var e = d.pend.shift();
+            if (e.kind === "silver") { d.silver = e.asof; if (d.gold === "chained") d.pend.push({ kind: "gold", at: e.at + d.gdur, asof: e.asof }); }
+            else if (e.kind === "gold") { d.goldAt = e.asof; if (d.pbi === "push") d.pend.push({ kind: "screen", at: e.at + d.rdur, asof: e.asof }); }
+            else if (e.kind === "screen") { d.screen = e.asof != null ? e.asof : d.goldAt; }
+            d.pend.sort(function (a, b) { return a.at - b.at; });
+          }
+        }
+        if (d.screen != null) {
+          var age = t - d.screen;
+          if (t > 8 * 3600) { d.best = d.best == null ? age : Math.min(d.best, age); d.worst = d.worst == null ? age : Math.max(d.worst, age); d.sum += age * dt; d.n += dt; }
+          var last = d.hist[d.hist.length - 1];
+          if (!last || t - last[0] >= 30) d.hist.push([t, age]);
+          while (d.hist.length && d.hist[0][0] < t - WINDOW) d.hist.shift();
+        }
+      });
+    }
+    function visuals() {}
+    function render() {
+      var t = SIM.t;
+      $("ssim-clock").textContent = clock(t);
+      D.forEach(function (d) {
+        d.costEl.textContent = "~$" + d.cost.toLocaleString("en-US") + " a month · Power BI " + d.lic;
+        d.cells[0].textContent = d.cad ? "every " + (d.cad / 60) + " min" : "always on";
+        d.cells[1].textContent = d.silver != null ? "as of " + hm(d.silver) : "-";
+        d.cells[2].textContent = d.goldAt != null ? "as of " + hm(d.goldAt) : "-";
+        d.cells[3].textContent = d.screen != null ? "shows " + hm(d.screen) : "-";
+        var age = d.screen != null ? t - d.screen : null;
+        d.ageEl.textContent = age != null ? "Screen data is " + dur(age) + " old" : "";
+        d.statEl.textContent = d.n ? "best " + dur(d.best) + " · worst " + dur(d.worst) + " · average " + dur(d.sum / d.n) : "";
+        var pts = d.hist.map(function (h) {
+          var x = CH.x + CH.w - (t - h[0]) / WINDOW * CH.w, yy = d.y + 4 + CH.h - Math.min(h[1], YMAX) / YMAX * CH.h;
+          return x.toFixed(1) + "," + yy.toFixed(1);
+        }).join(" ");
+        d.poly.setAttribute("points", pts);
+      });
+    }
+    feed("Four designs, one clock. The chart on each row is the age of the newest data on the Power BI screen: it climbs while nothing new arrives and drops when the screen refreshes.");
+    return { tick: tick, visuals: visuals, render: render, maxStep: 10, prerun: 4 * 3600 };
+  }
+
   /* ------------------------------------------------------------ controls + loop */
-  var sim = MODE === "lanes" ? lanes() : flow();
+  var sim = MODE === "lanes" ? lanes() : MODE === "faster" ? faster() : flow();
   SIM.start = SIM.t;
   function applyBinding() {
     renderPP();
     Object.keys(boxes).forEach(function (k) { setProduct(boxes[k]); });
     var b = BINDINGS[state.binding];
-    $("ssim-note").textContent = b.note;
+    if ($("ssim-note")) $("ssim-note").textContent = b.note;
     svg.classList.toggle("nolog", b.log === "No shared event log");
   }
   document.querySelectorAll("[name=ssim-binding]").forEach(function (r) {
@@ -784,7 +880,7 @@
     }
     requestAnimationFrame(loop);
   }
-  var jump = +(new URLSearchParams(location.search).get("run") || 0);
+  var jump = +(new URLSearchParams(location.search).get("run") || 0) + (sim.prerun || 0);
   if (jump > 0) { state.visible = false; var left = Math.min(jump, 3 * 86400); while (left > 0) { var st = Math.min(sim.maxStep, left); sim.tick(st); left -= st; } state.visible = !document.hidden; }
   sim.render(); renderCost();
   requestAnimationFrame(loop);
