@@ -190,6 +190,8 @@
   #ssim-svg .dot circle { fill:#222; } #ssim-svg .dot.tyre circle { fill:#fff; stroke:#222; stroke-width:1.6; }
   #ssim-svg .dot.app path { fill:#5468b0; } #ssim-svg .dot.cdc rect { fill:#a94d77; } #ssim-svg .dot.lims path { fill:#b88a12; }
   #ssim-svg .dot.run circle { fill:#2f7d5b; } #ssim-svg .dot.bad path { stroke:#c0392b; stroke-width:2.2; }
+  #ssim-svg .shard { fill:#fff; stroke:#111; stroke-width:1; } #ssim-svg .shardl { font-size:9px; fill:#666; font-family:var(--mono) !important; }
+  #ssim-svg .bt { font-weight:700; }
   #ssim-svg .chip rect { fill:#fff; stroke:#111; stroke-width:1.2; }
   #ssim-svg .chip.complete rect { fill:#cfe9d9; } #ssim-svg .chip.provisional rect { fill:#ffe9b0; }
   #ssim-svg .chip.restated rect { fill:#d9e0f5; } #ssim-svg .chip.running rect { stroke-dasharray:4 3; }
@@ -301,6 +303,8 @@
 <h2>What to try</h2>
 <ol>
 <li><b>Watch one 15-minute run.</b> Stream readings pile up at lake ingest; at :00, :15, :30 and :45 a run moves them to bronze and silver. At :15 each hour, gold builds the previous hour and the report updates.</li>
+<li><b>Watch Kinesis.</b> Each reading enters one shard, chosen by its press key, so one press stays in order. Two readers read the stream on their own: the live lane a couple of seconds behind, the lake reader up to 15 minutes behind until the next run (normal). Turn on connected tyres and the stream grows from 2 to 6 shards; on Azure the same box is Event Hubs with partitions.</li>
+<li><b>Watch the files.</b> App events (bundled by Firehose) and database changes (written by DMS) land as files in S3 and wait there; the 15-minute run reads them with Auto Loader, which remembers which files it has already loaded. A lab file is different: it lands once an hour at an odd time, so a Databricks file arrival trigger starts a load about a minute after it lands, instead of waiting for the next run. Either way the pipeline is never handed a single file; Auto Loader finds every new file itself.</li>
 <li><b>Switch the route to "Direct".</b> The screen stays live, but database changes and lab files have nowhere to go, and no number is ever final.</li>
 <li><b>Switch to "Through the medallion".</b> Every number is governed, but the screen is 15 to 75 minutes behind.</li>
 <li><b>Take a plant gateway offline.</b> The live screen goes stale, the gateway buffers, and when it returns the late readings are counted and the gold hour is marked provisional.</li>
@@ -311,7 +315,7 @@
 <section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>Is this simulator showing real measured numbers?</summary><p>No. It is an illustrative model of the design on the streaming guide: rates, run times and delays are typical values, not recordings.</p></details><details class="faq"><summary>Why does the platform lane wait for runs instead of streaming continuously?</summary><p>Running every 15 minutes and stopping costs a fraction of an always-on cluster and meets a minutes-level promise. Only the fast lane runs all the time, and it only does light work.</p></details><details class="faq"><summary>Can Power BI show real-time data?</summary><p>Power BI&#x27;s old push and streaming datasets are being retired (no new ones after 31 Oct 2027). For seconds-level screens use Fabric Real-Time Intelligence or a live web board; for reports, Power BI reads gold with automatic page refresh.</p></details></section>
 <section id="next"><p class="eyebrow">Related</p><h2>Where it connects</h2>
 <p><a href="/learn/streaming/">Streaming architecture on AWS and Databricks</a> explains every box and option. <a href="/learn/real-time-analytics/">Real-time analytics</a> covers push to the screen; <a href="/learn/data-systems/upstreams/questionnaire/">the source questionnaire</a> (group O) lists what to ask a streaming source; <a href="/simulators/">all simulators</a>.</p></section>
-<script src="/learn/streaming/sim/stream-sim.js?v=3" defer></script>
+<script src="/learn/streaming/sim/stream-sim.js?v=7" defer></script>
 </main>
 <footer>
   <div class="wrap">

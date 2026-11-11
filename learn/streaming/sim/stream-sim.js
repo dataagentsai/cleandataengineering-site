@@ -11,37 +11,37 @@
   /* ------------------------------------------------------------ bindings */
   var BINDINGS = {
     "aws-dbx": {
-      name: "AWS + Databricks", rec: true,
+      name: "AWS + Databricks", rec: true, unit: "shard",
       gw: "SiteWise Edge + IoT Core", api: "API Gateway, Firehose", cdc: "DMS + S3 file drops",
-      log: "Kinesis Data Streams", land: "S3 landing, Auto Loader", fast: "Managed Flink", live: "DynamoDB",
-      push: "API Gateway WebSocket", ui1: "Live board (web app)", ingest: "Lakeflow streaming table",
+      log: "Kinesis Data Streams", land: "S3 landing, file events on", ftrig: "Databricks file arrival trigger", fast: "Managed Flink", live: "DynamoDB",
+      push: "Lambda + API Gateway WebSocket", ui1: "React live board", ingest: "Lakeflow pipeline",
       bronze: "Bronze (Delta)", silver: "Silver (Delta, SCD)", gold: "Gold (Delta)",
       ui2: "Power BI on Databricks SQL", batch: "Lakeflow Jobs, nightly", ui3: "Power BI daily report",
       note: "Recommended. The live lane is AWS-native; the platform lane is Databricks. Power BI reads gold through Databricks SQL (DirectQuery with automatic page refresh)."
     },
     "aws": {
-      name: "AWS only",
+      name: "AWS only", unit: "shard",
       gw: "SiteWise Edge + IoT Core", api: "API Gateway, Firehose", cdc: "DMS + S3 file drops",
-      log: "Kinesis Data Streams", land: "S3 landing", fast: "Managed Flink", live: "DynamoDB",
-      push: "API Gateway WebSocket", ui1: "Live board (web app)", ingest: "Firehose to S3 Tables",
+      log: "Kinesis Data Streams", land: "S3 landing, event notifications", ftrig: "S3 event, then Glue job", fast: "Managed Flink", live: "DynamoDB",
+      push: "Lambda + API Gateway WebSocket", ui1: "React live board", ingest: "Firehose + Glue job",
       bronze: "Bronze (Iceberg)", silver: "Silver (Glue ETL)", gold: "Gold (Glue, Athena)",
       ui2: "Power BI via Athena, or QuickSight", batch: "Glue jobs, nightly", ui3: "Daily report (QuickSight)",
       note: "Fewest vendors. Silver and gold jobs, Iceberg upkeep and the semantic layer are yours to build."
     },
     "az-dbx": {
-      name: "Azure + Databricks",
+      name: "Azure + Databricks", unit: "partition",
       gw: "IoT Edge + IoT Hub", api: "API Management, Event Hubs", cdc: "Lakeflow Connect + ADLS drops",
-      log: "Event Hubs", land: "ADLS landing, Auto Loader", fast: "Fabric Eventstream", live: "Fabric Eventhouse",
-      push: "Real-Time Dashboard refresh", ui1: "Power BI on Eventhouse (Real-Time Intelligence)", ingest: "Lakeflow streaming table",
+      log: "Event Hubs", land: "ADLS landing, file events on", ftrig: "Databricks file arrival trigger", fast: "Fabric Eventstream", live: "Fabric Eventhouse",
+      push: "Real-Time Dashboard refresh", ui1: "Power BI on Eventhouse (Real-Time Intelligence)", ingest: "Lakeflow pipeline",
       bronze: "Bronze (Delta)", silver: "Silver (Delta, SCD)", gold: "Gold (Delta)",
       ui2: "Power BI on Databricks SQL", batch: "Lakeflow Jobs, nightly", ui3: "Power BI daily report",
       note: "Power BI's old streaming datasets are being retired (no new ones after 31 Oct 2027); live Power BI goes through Fabric Real-Time Intelligence instead."
     },
     "dbx-only": {
-      name: "Databricks only (not recommended)",
+      name: "Databricks only (not recommended)", unit: null,
       gw: "Zerobus Ingest (straight to Delta)", api: "Zerobus Ingest", cdc: "Lakeflow Connect",
-      log: "No shared event log", land: "Volumes, Auto Loader", fast: "Spark real-time mode", live: "Lakebase",
-      push: "Databricks App (polls)", ui1: "Live board (Databricks App)", ingest: "Lakeflow streaming table",
+      log: "No shared event log", land: "UC volume, file events on", ftrig: "Databricks file arrival trigger", fast: "Spark real-time mode", live: "Lakebase",
+      push: "Databricks App (polls)", ui1: "Live board (Databricks App)", ingest: "Lakeflow pipeline",
       bronze: "Bronze (Delta)", silver: "Silver (Delta, SCD)", gold: "Gold (Delta)",
       ui2: "Power BI on Databricks SQL", batch: "Lakeflow Jobs, nightly", ui3: "Power BI daily report",
       note: "One vendor, but no shared event log: the live lane reads the bronze table, replay is from Delta only, and real-time mode needs an always-on fixed cluster."
@@ -95,14 +95,19 @@
     var small = h < 40;
     var c1 = el("text", { x: x + 8, y: y + h - 26, "class": "bc" }, g);
     var c2 = small ? el("text", { x: x + w - 8, y: y + 20, "class": "bc", "text-anchor": "end" }, g) : el("text", { x: x + 8, y: y + h - 10, "class": "bc" }, g);
-    boxes[id] = { g: g, x: x, y: y, w: w, h: h, role: role, pr: pr, c1: c1, c2: c2, lane: lane };
+    boxes[id] = { g: g, x: x, y: y, w: w, h: h, role: role, title: title, tt: tt, pr: pr, c1: c1, c2: c2, lane: lane };
     return boxes[id];
   }
   function setProduct(b) {
     var p = b.role ? BINDINGS[state.binding][b.role] : "";
+    if (!p) return;
+    if (b.h < 40) { b.tt.textContent = p; return; }
+    while (b.tt.firstChild) b.tt.removeChild(b.tt.firstChild);
     while (b.pr.firstChild) b.pr.removeChild(b.pr.firstChild);
-    var lines = wrapText(p || "", Math.max(14, Math.floor(b.w / 7.2)));
-    lines.slice(0, 2).forEach(function (ln, i) { var ts = el("tspan", { x: b.x + 8, dy: i ? 14 : 0 }, b.pr); ts.textContent = ln; });
+    var lines = wrapText(p, Math.max(12, Math.floor(b.w / 7.4))).slice(0, 2);
+    lines.forEach(function (ln, i) { var ts = el("tspan", { x: b.x + 8, dy: i ? 16 : 0 }, b.tt); ts.textContent = ln; });
+    b.pr.setAttribute("y", b.y + 18 + 16 * (lines.length - 1) + 15);
+    var ts2 = el("tspan", { x: b.x + 8 }, b.pr); ts2.textContent = b.title;
   }
   function count(id, a, b) { if (!boxes[id]) return; boxes[id].c1.textContent = a || ""; boxes[id].c2.textContent = b || ""; }
   function line(pts, cls) {
@@ -175,14 +180,16 @@
     drawBox("gw", 180, 30, 160, 138, "gw", "Plant gateway, device entry");
     drawBox("api", 180, 250, 160, 64, "api", "App events entry");
     drawBox("cdcin", 180, 324, 160, 138, "cdc", "Change capture, file drops");
-    drawBox("log", 360, 30, 165, 138, "log", "Event log (kept 7 days)");
-    drawBox("land", 360, 250, 165, 212, "land", "File landing");
+    drawBox("log", 360, 30, 165, 138, "log", "event log, kept 7 days");
+    var shardG = el("g", { "class": "shards" }, svg);
+    drawBox("land", 360, 250, 165, 212, "land", "file landing");
     drawBox("fast", 560, 36, 145, 100, "fast", "Live processor", "fastb");
     drawBox("live", 718, 36, 140, 100, "live", "Live store (48 h)", "fastb");
-    drawBox("push", 871, 36, 140, 100, "push", "Push to screens", "fastb");
+    drawBox("push", 871, 36, 140, 100, "push", "fed by DynamoDB Streams", "fastb");
     drawBox("ui1", 1024, 36, 162, 100, "ui1", "LIVE SCREEN", "fastb ui");
     drawBox("dlq", 560, 140, 145, 30, null, "Dead letter", "fastb small");
-    drawBox("ingest", 560, 252, 120, 110, "ingest", "Lake ingest", "nrtb");
+    drawBox("ingest", 560, 252, 120, 110, "ingest", "Kinesis + Auto Loader", "nrtb");
+    drawBox("ftrig", 560, 368, 236, 34, "ftrig", "", "nrtb small");
     drawBox("bronze", 692, 252, 112, 110, "bronze", "Bronze", "nrtb");
     drawBox("silver", 816, 252, 112, 110, "silver", "Silver", "nrtb");
     drawBox("gold", 940, 252, 112, 110, "gold", "Gold", "nrtb");
@@ -192,6 +199,22 @@
     var pile = el("text", { x: 560, y: 442, "class": "bc runinfo", id: "ssim-pile" }, svg); pile.textContent = "";
     var hourInfo = el("text", { x: 560, y: 460, "class": "bc runinfo", id: "ssim-hourinfo" }, svg); hourInfo.textContent = "";
 
+    function nShards() { return S.on.tyre ? 6 : 2; }
+    var shardSig = "";
+    function shardYs() { var n = nShards(), top = 30 + 50, bot = 30 + 92, ys = []; for (var i = 0; i < n; i++) ys.push(n === 1 ? (top + bot) / 2 : top + i * (bot - top) / (n - 1)); return ys; }
+    function shardY() { var ys = shardYs(); return ys[Math.floor(Math.random() * ys.length)]; }
+    function drawShards() {
+      var b = BINDINGS[state.binding], sig = state.binding + nShards();
+      if (sig === shardSig) return; shardSig = sig;
+      while (shardG.firstChild) shardG.removeChild(shardG.firstChild);
+      if (!b.unit) return;
+      shardYs().forEach(function (y, i) {
+        el("rect", { x: 368, y: y - 3, width: 150, height: 6, rx: 3, "class": "shard" }, shardG);
+        var t = el("text", { x: 516, y: y + 3, "class": "shardl", "text-anchor": "end" }, shardG); t.textContent = (i + 1);
+      });
+    }
+    function short(n) { return n >= 1e6 ? (n / 1e6).toFixed(1) + "M" : n >= 1e3 ? Math.round(n / 1e3) + "k" : String(Math.round(n)); }
+    function sdur(x) { return x < 60 ? Math.round(x) + "s" : Math.round(x / 60) + "m"; }
     var P = {
       press: [[160, 62], [180, 62]], tyre: [[160, 136], [180, 136]],
       gwlog: [[340, 99], [360, 99]], app: [[160, 282], [180, 282], [340, 282], [360, 282]],
@@ -208,6 +231,7 @@
     line([[160, 430], [180, 430]]); line([[340, 430], [360, 430]], "arr");
     line(P.logfast, "arr fastw"); line([[705, 86], [718, 86]], "arr fastw"); line([[858, 86], [871, 86]], "arr fastw"); line([[1011, 86], [1024, 86]], "arr fastw");
     line(P.logingest, "arr nrtw"); line(P.landingest, "arr nrtw");
+    line([[525, 430], [545, 430], [545, 385], [560, 385]], "arr nrtw dotted"); line([[748, 368], [748, 362]], "arr nrtw dotted");
     line([[680, 307], [692, 307]], "arr nrtw"); line([[804, 307], [816, 307]], "arr nrtw"); line([[928, 307], [940, 307]], "arr nrtw"); line([[1052, 307], [1064, 307]], "arr nrtw");
     dotLayer = el("g", {}, svg);
     Object.keys(boxes).forEach(function (k) { setProduct(boxes[k]); });
@@ -273,8 +297,9 @@
         /* LIMS: one file per hour at :05, handled by a file arrival trigger */
         if (S.on.lims && Math.floor((t - 300) / 3600) !== Math.floor((t0 - 300) / 3600)) {
           S.gen.lims += 1200; S.landFiles++; S.bronze += 1200; S.silver += 1180; S.quar += 20;
-          feed("A lab results file landed; the file arrival trigger loaded it into bronze and silver about 2 minutes later.");
-          if (state.visible) launch("lims", P.lims.concat([[525, 430]]), 260);
+          feed("A lab results file landed. It does not wait for the 15-minute run: the file arrival trigger (" + BINDINGS[state.binding].ftrig + ") started a load about a minute later, and Auto Loader inside read every new file into bronze and silver.");
+          S.trigRuns = (S.trigRuns || 0) + 1;
+          if (state.visible) launch("lims", P.lims.concat([[525, 430], [545, 430], [545, 385], [560, 385], [748, 385], [748, 362]]), 240);
         }
       } else { S.pend.length = 0; }
       /* 15-minute platform runs */
@@ -331,22 +356,24 @@
       if (S.on.press) every("press", 260, dtReal, function () {
         var path = P.press.slice();
         if (offline) { launch("press", path, 240); return; }
-        path = path.concat([[340, 62], [340, 99]]).concat(P.gwlog).concat([[525, 99]]);
-        launch("press", path, 260, function () { split("press"); });
+        var sy = shardY();
+        path = path.concat([[340, 62], [340, 99], [350, 99], [360, sy], [525, sy]]);
+        launch("press", path, 260, function () { split("press", sy); });
       });
       if (S.on.tyre) every("tyre", 200, dtReal, function () {
         var path = P.tyre.slice();
         if (offline) { launch("tyre", path, 240); return; }
-        path = path.concat([[340, 136], [340, 99]]).concat(P.gwlog).concat([[525, 99]]);
-        launch("tyre", path, 260, function () { split("tyre"); });
+        var sy = shardY();
+        path = path.concat([[340, 136], [340, 99], [350, 99], [360, sy], [525, sy]]);
+        launch("tyre", path, 260, function () { split("tyre", sy); });
       });
       if (routeHas("nrt")) {
         if (S.on.app) every("app", 900, dtReal, function () { launch("app", P.app.concat([[525, 282]]), 220); });
         if (S.on.cdc) every("cdc", 1300, dtReal, function () { launch("cdc", P.cdc.concat([[525, 356]]), 220); });
       }
-      function split(kind) {
-        if (routeHas("fast") && !fastDown) launch(kind, P.logfast.concat(P.fastlane), 320);
-        if (routeHas("nrt")) launch(kind, P.logingest, 260);
+      function split(kind, sy) {
+        if (routeHas("fast") && !fastDown) launch(kind, [[525, sy], [545, 86], [560, 86]].concat(P.fastlane), 320);
+        if (routeHas("nrt")) launch(kind, [[525, sy], [540, sy], [540, 300], [560, 300]], 260);
       }
       if (!fastDown && S.fastLag > 0 && routeHas("fast")) every("catch", 120, dtReal, function () { launch("press", P.logfast.concat(P.fastlane), 420); });
       if (SIM.t < S.badUntil && routeHas("fast")) every("bad", 700, dtReal, function () { launch("bad", P.logfast.concat(P.todlq), 260); });
@@ -363,8 +390,13 @@
       count("gw", SIM.t < S.gwOfflineUntil ? "OFFLINE, buffering" : (S.gwBuf > 0 ? "sending buffer" : "batches each second"), S.gwBuf > 0 ? "buffered " + num(S.gwBuf) : "late readings " + num(S.lateCount));
       count("api", "", "");
       count("cdcin", "", "files landed " + num(S.landFiles + Math.floor(S.gen.cdc / 1500)));
-      count("log", b.log === "No shared event log" ? "events go straight to bronze" : "in " + num(S.logIn), "");
-      count("land", "for next run", num(S.landPend.reduce(function (a, x) { return a + x.n; }, 0)) + " rows");
+      if (b.log === "No shared event log") count("log", "none: events go", "straight to bronze");
+      else {
+        var pendAge = S.pend.length ? SIM.t - S.pend[0].t : 0;
+        count("log", nShards() + " " + b.unit + "s · in " + short(S.logIn), "lag: live " + (SIM.t < S.fastDownUntil ? "paused" : sdur(S.fastLat)) + ", lake " + sdur(pendAge));
+      }
+      drawShards();
+      count("land", "Auto Loader, next run", num(S.landPend.reduce(function (a, x) { return a + x.n; }, 0)) + " rows");
       var fastDown = SIM.t < S.fastDownUntil;
       count("fast", fastDown ? "RESTARTING from checkpoint" : (S.fastLag > 0 ? "catching up" : "windows, limits"), "lag " + num(S.fastLag));
       count("live", "latest per press", "writes " + num(S.liveWrites));
@@ -379,6 +411,7 @@
       count("gold", "hour facts", num(S.gold));
       count("ui2", S.goldVal != null ? hm(S.lastGoldHour * 3600) + " hr " + S.goldVal.toFixed(1) + "°C" : "first hour at :15", S.goldVal != null ? (S.goldComplete ? "complete" : "provisional") : "");
       count("quar", "", num(S.quar));
+      count("ftrig", "", "loads " + (S.trigRuns || 0));
       $("ssim-runinfo").textContent = S.lastSilverAt ? "Last run " + hm(S.lastSilverAt) + ": silver ≈ " + dur(S.lastSilverLat) + " behind" : "No platform run yet";
       $("ssim-pile").textContent = "Duplicates removed " + num(S.dupRemoved) + " · late readings " + num(S.lateCount);
       $("ssim-hourinfo").textContent = S.lastGoldAt ? "Gold hour ready ≈ " + dur(S.lastGoldLat) + " after the middle of that hour" : "Gold builds each hour at :15";
