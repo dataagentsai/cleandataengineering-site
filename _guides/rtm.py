@@ -103,8 +103,17 @@ STORES = [
 
 VERDICT = [
     ("Keep the AWS-native lane (Flink, DynamoDB, WebSocket)", "Cheapest, true push, milliseconds", "Two engines (Flink and Spark); the live store is outside Unity Catalog", "Pursue (default)"),
-    ("Databricks-only lane with real-time mode", "One platform; governed end to end; one engine for the team", "About $200 to $600 a month more; fixed cluster; no Delta sink; the app polls Lakebase", "Pursue only if one governed platform is worth the extra cost"),
-    ("Lakeflow pipeline in real-time mode (serverless)", "No cluster to size", "Newest path; check limits and pricing on your workspace", "Try in a sandbox first"),
+    ("Databricks-only lane, real-time mode in a Structured Streaming job (classic cluster)", "One platform, governed end to end, one engine; the proven path (announced GA)", "About $200 to $600 a month more; you size and run a fixed cluster; no Delta sink; the app polls Lakebase", "Pursue only if one governed platform is worth the extra cost"),
+    ("Databricks-only lane, real-time mode in a Lakeflow pipeline (serverless)", "Same engine and lane, but no cluster to size or tune", "Newest path: status, limits and pricing not confirmed; still always on; same no-Delta-sink and polling limits", "Trial in a sandbox, compare with the job version"),
+]
+
+PACKAGING = [
+    ("How you write it", "Ordinary PySpark: readStream, your logic, writeStream with the real-time trigger, run as a Lakeflow Job", "Declarative: a pipeline of flows and sinks, with real-time mode switched on for the pipeline"),
+    ("Compute", "A classic cluster you size: fixed size, autoscaling off, Photon off, enough task slots for every task", "Serverless: Databricks picks and manages the machines"),
+    ("Who tunes it", "You: machine type, number of workers, task slots", "Databricks"),
+    ("Billing", "EC2 plus jobs DBUs, all day (about $430 to $650 a month in the example)", "Serverless DBUs, all day (still always on, no scale to zero); no published figure, measure it"),
+    ("Status", "Announced generally available, March 2026", "Newer; check status, limits and pricing on your workspace"),
+    ("The same in both", "Engine, sources (Kafka, Kinesis), no Delta sink, Lakebase live store, the app polling it", "Same"),
 ]
 
 QA = [
@@ -151,6 +160,8 @@ def page():
 <section id="store"><p class="eyebrow">Governance</p><h2>A live store inside Unity Catalog</h2>
 <p>DynamoDB is not governed by Unity Catalog and is not a Lakehouse Federation source. If policy says every store must be in Unity Catalog, the live store becomes Lakebase.</p>{stores}
 <div class="box">The live store holds a 48-hour copy that expires. The record of the same readings is governed in bronze, silver and gold. That is why keeping DynamoDB outside Unity Catalog is usually acceptable.</div></section>
+
+<section id="packaging"><p class="eyebrow">Two ways to run it</p><h2>A Structured Streaming job or a Lakeflow pipeline</h2><p>Both use the same real-time mode engine for the same Databricks-only lane. They differ in how you write the code and who runs the machines.</p>{C.table(["", "Structured Streaming job", "Lakeflow pipeline"], PACKAGING)}</section>
 
 <section id="verdict"><p class="eyebrow">Choosing</p><h2>Verdict</h2>{verdict}</section>
 
