@@ -13,7 +13,7 @@
     "aws-dbx": {
       name: "AWS + Databricks", rec: true, unit: "shard",
       gw: "SiteWise Edge + IoT Core", api: "API Gateway, Firehose", cdc: "DMS + S3 file drops",
-      log: "Kinesis Data Streams", land: "S3 landing, file events on", ftrig: "Databricks file arrival trigger", fast: "Managed Flink", live: "DynamoDB",
+      log: "Kinesis Data Streams", land: "S3 landing, file events on", ftrig: "Databricks file arrival trigger (event)", fast: "Managed Flink", live: "DynamoDB",
       push: "Lambda + API Gateway WebSocket", ui1: "React live board", ingest: "Lakeflow pipeline",
       bronze: "Bronze (Delta)", silver: "Silver (Delta, SCD)", gold: "Gold (Delta)",
       ui2: "Power BI on Databricks SQL", batch: "Lakeflow Jobs, nightly", ui3: "Power BI daily report",
@@ -31,7 +31,7 @@
     "az-dbx": {
       name: "Azure + Databricks", unit: "partition",
       gw: "IoT Edge + IoT Hub", api: "API Management, Event Hubs", cdc: "Lakeflow Connect + ADLS drops",
-      log: "Event Hubs", land: "ADLS landing, file events on", ftrig: "Databricks file arrival trigger", fast: "Fabric Eventstream", live: "Fabric Eventhouse",
+      log: "Event Hubs", land: "ADLS landing, file events on", ftrig: "Databricks file arrival trigger (event)", fast: "Fabric Eventstream", live: "Fabric Eventhouse",
       push: "Real-Time Dashboard refresh", ui1: "Power BI on Eventhouse (Real-Time Intelligence)", ingest: "Lakeflow pipeline",
       bronze: "Bronze (Delta)", silver: "Silver (Delta, SCD)", gold: "Gold (Delta)",
       ui2: "Power BI on Databricks SQL", batch: "Lakeflow Jobs, nightly", ui3: "Power BI daily report",
@@ -40,7 +40,7 @@
     "dbx-only": {
       name: "Databricks only (not recommended)", unit: null,
       gw: "Zerobus Ingest (straight to Delta)", api: "Zerobus Ingest", cdc: "Lakeflow Connect",
-      log: "No shared event log", land: "UC volume, file events on", ftrig: "Databricks file arrival trigger", fast: "Spark real-time mode", live: "Lakebase",
+      log: "No shared event log", land: "UC volume, file events on", ftrig: "Databricks file arrival trigger (event)", fast: "Spark real-time mode", live: "Lakebase",
       push: "Databricks App (polls)", ui1: "Live board (Databricks App)", ingest: "Lakeflow pipeline",
       bronze: "Bronze (Delta)", silver: "Silver (Delta, SCD)", gold: "Gold (Delta)",
       ui2: "Power BI on Databricks SQL", batch: "Lakeflow Jobs, nightly", ui3: "Power BI daily report",
@@ -84,6 +84,101 @@
     while (feedEl.children.length > 40) feedEl.removeChild(feedEl.lastChild);
   }
 
+
+  /* ------------------------------------------------------------ push or pull, per hop (flow page) */
+  var SRC = { press: true, tyre: false, app: true, cdc: true, lims: true };
+  function PP(bid) {
+    var aws = bid === "aws" || bid === "aws-dbx", az = bid === "az-dbx", dbx = bid === "dbx-only";
+    return [
+      ["gw", "Machines to gateway", "pull", "The gateway reads machine tags over OPC-UA about once a second: it asks, the machines answer."],
+      ["log", "Gateway to " + BINDINGS[bid].log, "push", dbx ? "The gateway sends straight to Zerobus, which writes into a bronze Delta table. There is no log for other readers." : az ? "The gateway sends batches to Event Hubs." : "The gateway sends batches with PutRecords."],
+      ["fast", "Event log to live processor", "pull", aws ? "Flink reads each shard from its checkpoint. With enhanced fan-out, Kinesis streams records to it over an open connection, so it feels like push (about 70 ms)." : az ? "Eventstream reads the Event Hubs partitions." : "Real-time mode reads the bronze table continuously."],
+      ["live", "Live processor to live store", "push", "The processor writes changes (upserts by press and minute) into the live store."],
+      ["push", "Live store to push service", aws ? "push" : "pull", aws ? "DynamoDB Streams records every change. The Lambda service polls the stream for you and calls a function, which sends each change to every connected screen. To your code it is push." : az ? "Real-Time Dashboard tiles re-query Eventhouse on an auto-refresh timer (seconds)." : "The Databricks App polls Lakebase every second and keeps only the differences."],
+      ["ui1", "Push service to screen", az ? "pull" : "push", az ? "Power BI and Real-Time Dashboards refresh on a timer; the screen asks." : "The browser keeps a WebSocket (or server-sent events) open: a snapshot when it connects, then each change as it happens."],
+      ["api", "App to entry", "push", "Apps call an HTTPS endpoint."],
+      ["cdcin", "Database to change capture", "pull", "The capture tool reads the database's transaction log. The database sends nothing."],
+      ["land", "Into file landing", "push", "Firehose, DMS and the lab system write files into the bucket. Each new file raises an event that waits in a queue."],
+      ["ingest", "Landing and event log to the 15-min run", "pull", bid === "aws" ? "Every 15 minutes a Glue job reads what Firehose delivered." : "Every 15 minutes the pipeline reads new records from its checkpoint, and Auto Loader reads the queued file events. Nothing runs between runs."],
+      ["ftrig", "Lab file to its load", bid === "aws" ? "push" : "pull", bid === "aws" ? "S3 sends an event to EventBridge, which starts a Glue job." : "Databricks checks the folder about once a minute and starts the job when new files appear. Auto Loader inside reads every new file."],
+      ["bronze", "Ingest to bronze", "pull", "The same 15-minute run writes what it read."],
+      ["silver", "Bronze to silver", "pull", "The job reads new bronze rows (incremental) and writes silver."],
+      ["gold", "Silver to gold", "pull", "The hourly job at :15 reads silver and recomputes the hours that changed."],
+      ["ui2", "Gold to Power BI", "pull", "Power BI asks: DirectQuery sends queries on each page refresh, or an import refresh reloads the model. The gold job can trigger that refresh: push the signal, not the rows."]
+    ];
+  }
+  var DROPPED = {
+    gw: "Our own Python service on a box (we would own buffering, retries and patches). Every machine straight to IoT Core (about $1,000 a month more in message fees).",
+    log: "S3 as the log (no push, about $3,900 a month in requests). SQS, SNS or EventBridge as the log (no replay, one reader). MSK Serverless (about $550 a month before any data). Zerobus as the only entry (one reader, no shared replay).",
+    fast: "Calling Databricks from the fast lane (adds seconds and ties uptime to the platform). Databricks real-time mode for now (always-on fixed cluster). Glue streaming. AWS IoT Events (retired 20 May 2026).",
+    live: "Timestream for LiveAnalytics (closed to new customers). ElastiCache as the only store (no history). OpenSearch (cost). Kept as alternatives: Postgres or Lakebase (SQL), ClickHouse (only if screens need slicing).",
+    push: "Pushing straight from the processor with no store (a screen that opens or reconnects sees nothing). Every screen polling the store.",
+    ui1: "Power BI streaming and push datasets (being retired; no new ones after 31 Oct 2027). Power BI on gold for live screens (minutes, not seconds).",
+    api: "Apps writing straight into the lake (no checks, many tiny files).",
+    cdcin: "Trigger-based capture (slows every write). Polling a modified-date column (misses deletes). Change capture into Kinesis before any live reader needs it.",
+    land: "One file per event (request costs and millions of tiny files).",
+    ingest: "Always-on streaming tables (about $700 to $1,500 a month more for minutes nobody needs). Auto Loader in continuous mode. Plain batch with our own high-water mark.",
+    ftrig: "S3 event, then Lambda, then one pipeline run per file with the file path passed in (a start-up per file, runs queue, and a missed event loses a file). Waiting for the 15-minute run (works, but adds up to 15 minutes).",
+    bronze: "Deduplicating or fixing values in bronze (it must keep exactly what arrived).",
+    silver: "DLT for every table (ties the code to Databricks); kept for change-capture tables only, after a trial.",
+    gold: "Joining facts inside the stream (state held for hours, misses corrections). The live lane writing gold.",
+    ui2: "Pushing rows from Databricks into Power BI push datasets (being retired, a second copy of the logic). DirectQuery refreshing every minute (thousands of identical queries)."
+  };
+  function renderPP() {
+    var host = document.getElementById("ssim-pp"); if (!host) return;
+    var rows = PP(state.binding).map(function (r) {
+      if (boxes[r[0]] && boxes[r[0]].pp) boxes[r[0]].pp.textContent = r[2].toUpperCase();
+      return "<tr><td>" + r[1] + "</td><td class='pp " + r[2] + "'>" + r[2].toUpperCase() + "</td><td>" + r[3] + "</td><td class='dropc'>" + (DROPPED[r[0]] || "") + "</td></tr>";
+    }).join("");
+    host.innerHTML = "<div class='tw'><table class='t'><tr><th>Hop</th><th>Push or pull</th><th>How, for " + BINDINGS[state.binding].name + "</th><th>Dropped options, and why</th></tr>" + rows + "</table></div>";
+  }
+
+  /* ------------------------------------------------------------ running cost (rough monthly list prices, production scale) */
+  function costItems() {
+    var b = state.binding, it = [];
+    function add(lane, name, m) { it.push({ lane: lane, name: name, m: m }); }
+    if (b === "aws-dbx" || b === "aws") {
+      add("shared", "Plant gateways (Greengrass fee)", 1);
+      add("shared", "Kinesis: 2 shards, 7 days, 2 dedicated readers", 126);
+      add("fast", "Managed Flink: 3 units", 256); add("fast", "Lambda limit alerts", 8);
+      add("fast", "DynamoDB live store, changes only", 42); add("fast", "Lambda + API Gateway WebSocket, 50 screens", 132);
+      if (b === "aws-dbx") { add("nrt", "Lakeflow pipeline every 15 min (serverless)", 472); add("nrt", "Silver and gold jobs, SQL warehouse for Power BI", 200); }
+      else { add("nrt", "Firehose into S3 Tables", 136); add("nrt", "Glue jobs, Athena, QuickSight", 275); }
+      if (SRC.cdc) add("nrt", "DMS change capture (small instance)", 60);
+      if (SRC.app) add("nrt", "API Gateway + Firehose for app events", 5);
+      if (SRC.lims) add("nrt", b === "aws" ? "S3 events + Glue job per lab file" : "File arrival trigger loads, 24 a day", 30);
+      add("nrt", "S3 storage, first-year average", 22);
+    } else if (b === "az-dbx") {
+      add("shared", "IoT Hub S1, 2 units", 50); add("shared", "Event Hubs Standard, 2 throughput units", 70);
+      add("fast", "Fabric capacity F4: Eventstream, Eventhouse, Real-Time Dashboard", 525);
+      add("nrt", "Lakeflow pipeline every 15 min (serverless)", 472); add("nrt", "Silver and gold jobs, SQL warehouse for Power BI", 200);
+      if (SRC.cdc) add("nrt", "Lakeflow Connect change capture", 60);
+      if (SRC.lims) add("nrt", "File arrival trigger loads, 24 a day", 30);
+      add("nrt", "ADLS storage, first-year average", 22);
+    } else {
+      add("shared", "Zerobus Ingest (serverless)", 150);
+      add("fast", "Real-time mode cluster, always on", 850); add("fast", "Lakebase live store", 200); add("fast", "Databricks App for the live board", 60);
+      add("nrt", "Lakeflow pipeline every 15 min (serverless)", 400); add("nrt", "Silver and gold jobs, SQL warehouse for Power BI", 200);
+      if (SRC.cdc) add("nrt", "Lakeflow Connect change capture", 60);
+      if (SRC.lims) add("nrt", "File arrival trigger loads, 24 a day", 30);
+      add("nrt", "Storage, first-year average", 22);
+    }
+    if (SRC.tyre) { add("shared", "Connected tyres: device entry (10 readings per message) and more log capacity", 1200); add("fast", "Connected tyres: more processing and live writes", 315); add("nrt", "Connected tyres: bigger 15-min runs", 300); }
+    return it.filter(function (x) { return x.lane === "shared" || routeHas(x.lane === "fast" ? "fast" : "nrt"); });
+  }
+  function money(x) { return x >= 100 ? "$" + Math.round(x).toLocaleString("en-US") : "$" + x.toFixed(2); }
+  function renderCost() {
+    var host = document.getElementById("ssim-cost"); if (!host) return;
+    var it = costItems(), tot = { shared: 0, fast: 0, nrt: 0 }, m = 0;
+    it.forEach(function (x) { tot[x.lane] += x.m; m += x.m; });
+    var spent = m / (30.4 * 86400) * Math.max(0, SIM.t - SIM.start);
+    var lanes = [["fast", "Fast lane"], ["nrt", "Platform lane"], ["shared", "Shared (entry and event log)"]];
+    var rows = it.map(function (x) { return "<tr><td>" + (x.lane === "fast" ? "Fast" : x.lane === "nrt" ? "Platform" : "Shared") + "</td><td>" + x.name + "</td><td class='n'>" + money(x.m) + "</td><td class='n'>" + money(x.m / 30.4) + "</td></tr>"; }).join("");
+    host.innerHTML = "<div class='ss-costs'><div>Per hour<b>" + money(m / 730) + "</b></div><div>Per day<b>" + money(m / 30.4) + "</b></div><div>Per month<b>" + money(m) + "</b></div><div>Per year<b>" + money(m * 12) + "</b></div><div>This run so far<b>" + money(spent) + "</b>" + dur(Math.max(0, SIM.t - SIM.start)) + " simulated</div></div>" +
+      "<p class='ss-legend'>" + lanes.filter(function (l) { return tot[l[0]] > 0; }).map(function (l) { return l[1] + ": " + money(tot[l[0]]) + " a month"; }).join(" · ") + "</p>" +
+      "<details><summary>Line by line</summary><div class='tw'><table class='t'><tr><th>Lane</th><th>Item</th><th>Per month</th><th>Per day</th></tr>" + rows + "</table></div></details>";
+  }
+
   /* ------------------------------------------------------------ drawing */
   var svg = $("ssim-svg");
   var boxes = {};
@@ -95,7 +190,8 @@
     var small = h < 40;
     var c1 = el("text", { x: x + 8, y: y + h - 26, "class": "bc" }, g);
     var c2 = small ? el("text", { x: x + w - 8, y: y + 20, "class": "bc", "text-anchor": "end" }, g) : el("text", { x: x + 8, y: y + h - 10, "class": "bc" }, g);
-    boxes[id] = { g: g, x: x, y: y, w: w, h: h, role: role, title: title, tt: tt, pr: pr, c1: c1, c2: c2, lane: lane };
+    var pp = el("text", { x: x + w - 5, y: y - 3, "class": "ppb", "text-anchor": "end" }, g);
+    boxes[id] = { g: g, x: x, y: y, w: w, h: h, role: role, title: title, tt: tt, pr: pr, pp: pp, c1: c1, c2: c2, lane: lane };
     return boxes[id];
   }
   function setProduct(b) {
@@ -188,7 +284,7 @@
     drawBox("push", 871, 36, 140, 100, "push", "fed by DynamoDB Streams", "fastb");
     drawBox("ui1", 1024, 36, 162, 100, "ui1", "LIVE SCREEN", "fastb ui");
     drawBox("dlq", 560, 140, 145, 30, null, "Dead letter", "fastb small");
-    drawBox("ingest", 560, 252, 120, 110, "ingest", "Kinesis + Auto Loader", "nrtb");
+    drawBox("ingest", 560, 252, 120, 110, "ingest", "scheduled, every 15 min", "nrtb");
     drawBox("ftrig", 560, 368, 236, 34, "ftrig", "", "nrtb small");
     drawBox("bronze", 692, 252, 112, 110, "bronze", "Bronze", "nrtb");
     drawBox("silver", 816, 252, 112, 110, "silver", "Silver", "nrtb");
@@ -238,7 +334,7 @@
 
     /* model */
     var S = {
-      on: { press: true, tyre: false, app: true, cdc: true, lims: true },
+      on: SRC,
       rate: { press: 300, tyre: 3333, app: 2, cdc: 5, lims: 0 },
       gen: { press: 0, tyre: 0, app: 0, cdc: 0, lims: 0 },
       gwBuf: 0, gwOfflineUntil: -1, gwOfflineSince: 0, lateCount: 0,
@@ -627,7 +723,9 @@
 
   /* ------------------------------------------------------------ controls + loop */
   var sim = MODE === "lanes" ? lanes() : flow();
+  SIM.start = SIM.t;
   function applyBinding() {
+    renderPP();
     Object.keys(boxes).forEach(function (k) { setProduct(boxes[k]); });
     var b = BINDINGS[state.binding];
     $("ssim-note").textContent = b.note;
@@ -663,12 +761,12 @@
       sim.visuals(dtReal);
       stepDots(dtReal);
       acc += dtReal;
-      if (acc > 0.1) { acc = 0; sim.render(); }
+      if (acc > 0.1) { acc = 0; sim.render(); renderCost(); }
     }
     requestAnimationFrame(loop);
   }
   var jump = +(new URLSearchParams(location.search).get("run") || 0);
   if (jump > 0) { state.visible = false; var left = Math.min(jump, 3 * 86400); while (left > 0) { var st = Math.min(sim.maxStep, left); sim.tick(st); left -= st; } state.visible = !document.hidden; }
-  sim.render();
+  sim.render(); renderCost();
   requestAnimationFrame(loop);
 })();

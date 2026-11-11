@@ -20,7 +20,7 @@ import components as C  # noqa: E402
 wb = C.wb
 SITE = wb.SITE
 DATE = "2026-11-11"
-JS = "/learn/streaming/sim/stream-sim.js?v=7"
+JS = "/learn/streaming/sim/stream-sim.js?v=9"
 
 CSS = C.CSS + """<style>
   main.wrap { max-width:1320px; }
@@ -61,6 +61,13 @@ CSS = C.CSS + """<style>
   #ssim-svg .dot.run circle { fill:#2f7d5b; } #ssim-svg .dot.bad path { stroke:#c0392b; stroke-width:2.2; }
   #ssim-svg .shard { fill:#fff; stroke:#111; stroke-width:1; } #ssim-svg .shardl { font-size:9px; fill:#666; font-family:var(--mono) !important; }
   #ssim-svg .bt { font-weight:700; }
+  #ssim-svg .ppb { font-size:10px; font-family:var(--mono) !important; fill:#555; letter-spacing:.05em; }
+  td.pp.push { background:var(--mint-wash); font-weight:700; } td.pp.pull { background:var(--peri-wash); font-weight:700; }
+  .ss-costs { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:10px 0; }
+  .ss-costs div { border:var(--line); border-radius:var(--wob); padding:8px 12px; background:#fff; font-size:13.5px; color:var(--muted); }
+  .ss-costs b { display:block; font-family:var(--mono); font-size:21px; color:var(--ink); }
+  td.dropc { font-size:13px; color:var(--ink-soft); }
+  td.n { text-align:right; font-family:var(--mono); }
   #ssim-svg .chip rect { fill:#fff; stroke:#111; stroke-width:1.2; }
   #ssim-svg .chip.complete rect { fill:#cfe9d9; } #ssim-svg .chip.provisional rect { fill:#ffe9b0; }
   #ssim-svg .chip.restated rect { fill:#d9e0f5; } #ssim-svg .chip.running rect { stroke-dasharray:4 3; }
@@ -125,6 +132,9 @@ def shell(mode, h1, lede, ctl_extra, below, qa):
 <span class="ss-legend">Dots move at viewing speed; the numbers run on simulated time.</span></div>
 <div class="ss-stage" id="ssim" data-mode="{mode}"><svg id="ssim-svg" role="img" aria-label="{E(h1)}: animated diagram"></svg></div>
 {below}
+<h2>What it costs to run</h2>
+<p>Rough monthly list prices for the production example (5 plants, 300 readings a second), US regions, 2025 to 2026. They change with the binding, the route and the sources you turn on. Licences for Power BI users are not included. The full model, with every input, is in the <a href="/learn/data-systems/platform/cost/calculator/#streaming-services">cost calculator</a>.</p>
+<div id="ssim-cost"></div>
 <h2>What just happened</h2>
 <ul class="ss-feed" id="ssim-feed"></ul>
 <section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(qa)}</section>
@@ -151,6 +161,22 @@ def flow_page():
 <div>Platform lane: reading to silver<b id="ssim-lat-silver">-</b>target ≤ 20 min</div>
 <div>Platform lane: hour to gold report<b id="ssim-lat-gold">-</b>target ≤ 75 min</div></div>
 <p class="ss-legend">Dots: filled circle = press reading, ring = connected tyre, triangle = app event, square = database change, diamond = lab file, green = a platform run moving rows, red cross = broken message.</p>
+<h2>Push or pull, chosen and dropped, hop by hop</h2>
+<p>The small label above each box says how data gets into it. <b>PUSH</b>: the sender delivers it as soon as it has it. <b>PULL</b>: the box (or a job) goes and fetches it, on a schedule or in a loop. The table explains each hop for the binding you picked.</p>
+<div id="ssim-pp"></div>
+<h2>What starts each step: continuous, schedule or file event</h2>
+<p>Only the fast lane runs all the time. Everything in the platform lane runs, finishes and stops; what differs is what starts it.</p>
+<div class="tw"><table class="t"><tr><th>Step</th><th>Started by</th><th>How it behaves</th><th>Verdict</th></tr>
+<tr><td>Fast lane (Flink, push to screens)</td><td><b>Continuous</b>, always on</td><td>Reads every record as it arrives; seconds behind.</td><td><b>Pursue</b>: someone acts within seconds</td></tr>
+<tr><td>Kinesis records to bronze and silver</td><td><b>Schedule</b>: a Lakeflow job every 15 min</td><td>Starts, reads everything new since its checkpoint ("available now"), writes bronze and silver, stops. Not continuous.</td><td><b>Pursue</b>: minutes are enough, and you pay only for run time</td></tr>
+<tr><td>App event and database change files</td><td><b>Same 15-min schedule</b></td><td>Files wait in S3; their file events wait in a queue; Auto Loader inside the run reads every new file once.</td><td><b>Pursue</b></td></tr>
+<tr><td>Lab result files (once an hour, at odd times)</td><td><b>File event</b>: Databricks file arrival trigger</td><td>Databricks checks the folder about once a minute and starts the job when new files appear; Auto Loader inside reads all of them. A burst of files is one run.</td><td><b>Pursue</b> for irregular drops</td></tr>
+<tr><td>Gold hours</td><td><b>Schedule</b>: hourly at :15</td><td>Recomputes the hours that changed. Option: a table update trigger (start when silver changes) instead of the clock.</td><td><b>Pursue</b> the schedule; try the table trigger later</td></tr>
+<tr><td>SAP and MES masters</td><td><b>Schedule</b>: nightly 01:00</td><td>Batch; refreshes dimensions and reference data for the fast lane.</td><td><b>Pursue</b></td></tr>
+<tr><td>Continuous streaming tables for the platform lane</td><td>Continuous</td><td>Silver about 1 minute behind, but a cluster runs all day.</td><td><b>Drop</b>: about $700 to $1,500 a month for minutes nobody needs</td></tr>
+<tr><td>One pipeline run per file (S3 event, Lambda, run with the file path)</td><td>File event, per file</td><td>A start-up per file; runs queue; a missed event loses a file.</td><td><b>Drop</b></td></tr>
+</table></div>
+
 <h2>What to try</h2>
 <ol>
 <li><b>Watch one 15-minute run.</b> Stream readings pile up at lake ingest; at :00, :15, :30 and :45 a run moves them to bronze and silver. At :15 each hour, gold builds the previous hour and the report updates.</li>
