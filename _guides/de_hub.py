@@ -28,6 +28,7 @@ STORY = [
     ("The data platform, whole", "/learn/data-systems/platform/", "silver", "Five hops along the medallion and 24 cross-cutting concerns, with layout, environments and cost pages."),
 ]
 GUIDES = [
+    ("Where data engineering time goes", "/learn/where-data-engineering-time-goes/", "Understanding what the source data means takes more hours than writing code. Two charts of where the time goes, and how to win the non-technical hours back."),
     ("Data platform architecture", "/learn/data-platform-architecture/", "How we build it: control plane, metadata, three services, streaming lane, agents that only suggest."),
     ("Delta Lake vs Iceberg on Databricks", "/learn/delta-vs-iceberg/", "Same Parquet, two contents pages; which Databricks features differ (change data feed, streaming, pipelines, lineage, masks) and which to pick on AWS."),
     ("SCD Type 2: AUTO CDC or our own PySpark?", "/learn/scd2-auto-cdc-vs-pyspark/", "CDC input or full snapshots: when Lakeflow AUTO CDC is right, when to write the MERGE ourselves, clean tested code for both, and the cost."),

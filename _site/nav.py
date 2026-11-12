@@ -61,6 +61,7 @@ SECTIONS = [
         ]),
         ("Data systems", "/learn/data-systems/", [
             ("The whole system, end to end", "/learn/data-systems/"),
+            ("Where data engineering time goes", "/learn/where-data-engineering-time-goes/"),
             ("Upstreams", None),
             ("Know your sources", "/learn/data-systems/upstreams/"),
             ("API sources", "/learn/data-systems/upstreams/apis/"),
@@ -165,9 +166,17 @@ SECTIONS = [
         ("All projects to join", "/projects/", []),
     ]),
     ("How we work", [
-        ("Thinking principles", "/how-we-work/#thinking", []),
+        ("Thinking principles", "/how-we-work/#thinking", [
+            ("All thinking principles", "/how-we-work/#thinking"),
+            ("Critical thinking in data projects", "/how-we-work/critical-thinking/"),
+        ]),
         ("Business analysis", "/how-we-work/#ba", []),
-        ("Project management", "/how-we-work/#pm", []),
+        ("Project management", "/how-we-work/#pm", [
+            ("All project management", "/how-we-work/#pm"),
+            ("Estimation mistakes in data projects", "/how-we-work/estimation/"),
+            ("Top project management mistakes", "/how-we-work/project-management-mistakes/"),
+            ("Where data engineering time goes", "/learn/where-data-engineering-time-goes/"),
+        ]),
         ("The technical anchor", "/learn/technical-anchor/", [
             ("The role", "/learn/technical-anchor/"),
             ("Discovery", "/learn/technical-anchor/discovery/"),
