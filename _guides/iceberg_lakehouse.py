@@ -328,6 +328,85 @@ ANTI = [
     ("Iceberg maintenance with no owner", "Snapshots and orphan files pile up, queries slow, storage grows", "One owner of chores: Predictive Optimization or S3 Tables"),
 ]
 
+# Added 12 Nov 2026 on request: who is on A, who is on B, where each wins and loses, which AWS
+# services A shops keep, and whether any benchmark tells a clear A-versus-B story.
+WHO = [
+    # company, side, what they run, where they win, where they lose or what to watch, evidence
+    ("United Airlines", "A", "Databricks writes everything into Unity Catalog (Delta with Iceberg reads); Redshift Serverless reads gold through Glue federation and Lake Formation.",
+     "About $30K a month of copy pipelines removed; one catalog; Redshift users keep their tool.",
+     "Redshift is read-only; only Iceberg or UniForm tables are visible; the Lake Formation grant must be on the target table, not the resource link.",
+     "Detailed AWS blog"),
+    ("Mastercard", "A", "Unity Catalog is the single source of truth, federated into AWS Glue so AWS engines can use the same tables.",
+     "Ended the multi-catalog struggle; engineers pick the engine per job without metadata drifting.",
+     "No numbers published.", "Summit talk abstract (2026)"),
+    ("Decathlon", "A, moved from B", "Left the AWS Glue catalog for Unity Catalog because Glue metadata management strained at thousands of tables; kept EMR, Athena, Polars and DuckDB working against Unity Catalog.",
+     "One governance layer at scale while outside engines stay open.",
+     "The only public move between the two we found, and it went from B to A; no numbers published.", "Summit talk abstract"),
+    ("HelloFresh", "A", "Iceberg as the format, Unity Catalog as the Iceberg REST catalog for Spark, Flink and Snowflake.",
+     "One catalog across many tools.", "Design talk, no numbers.", "Summit talk"),
+    ("Riskified", "A", "Writes Iceberg through Unity Catalog so any Iceberg client can read it.",
+     "Avoids tying the data to one engine.", "A press quote, no detail.", "Press release"),
+    ("Indeed", "B, no Databricks", "Moved a 101 PB lake (18,000 datasets, 190,000 queries a day) from Hive to Iceberg on S3 Tables, linked to its existing Glue catalog; Athena and EMR Spark among four engines.",
+     "Expected 10% lower cost, 1,000+ developer hours a year back, 10x more transactions per second, team onboarding from a day to minutes.",
+     "Most numbers are labelled expected, not measured; the talk lists Lake Formation integration, query performance and different logging as the hard parts.", "AWS case study"),
+    ("Razor Group", "B, no Databricks", "S3 Tables in bronze, silver and gold; Glue and Lake Formation; Spark on EC2 Spot; Athena; Redshift Serverless only for Tableau.",
+     "About 40% of compute removed by moving ingestion alone; data minutes old instead of 4 to 6 hours.",
+     "About 30% of 1,000+ SQL models needed a person to convert.", "Detailed AWS blog"),
+    ("Pendulum", "B, no Databricks", "Glue streaming and Glue ETL write three S3 table buckets; Athena, EMR Serverless, OpenSearch and QuickSight read.",
+     "About 40% lower cost (mostly Glue DPUs spent on home-made compaction), daily job 1 hour to 10 minutes, about 70% faster queries.",
+     "The before state was hand-written maintenance scripts, so part of the win is simply having an owner of the chores.", "AWS blog"),
+    ("Tubular Labs", "B, no Databricks", "Spark on EKS writes 70 TB, 25 billion rows, into S3 Tables with write-audit-publish on Iceberg branches.",
+     "Merge job 6 to 8 hours down to under 2; recovery from failures 12 to 16 hours down to about 40 minutes; about half of engineering time back.",
+     "The before state was raw Parquet with no transactions, so most of the win is Iceberg itself, not the catalog.", "AWS blog"),
+    ("Comcast", "B, no Databricks", "GraphQL on API Gateway and Lambda reads S3 Tables through its Iceberg REST endpoint; Athena, EMR and PyIceberg read the same tables.",
+     "80x more concurrent requests, 38% lower cost, median latency 820 to 590 ms.",
+     "Replaced per-team database copies, not another catalog.", "AWS blog"),
+    ("Amica", "B, no Databricks", "S3 table buckets with Lake Formation grants tied to Identity Center groups; Athena reads.",
+     "Fine-grained access for analysts without copies.", "No numbers published.", "AWS blog"),
+]
+
+MOVES = [
+    ("B to A", "Decathlon", "Catalog from AWS Glue to Unity Catalog at thousands of tables; EMR, Athena, Polars and DuckDB kept reading.",
+     "One governance layer that held up at scale; outside engines stayed open.", "No numbers; a summit talk abstract.", "Real move, unmeasured"),
+    ("B to A", "Outreach", "Glue tables brought under Unity Catalog with the one-click foreign-to-managed conversion.",
+     "\"Eliminated months of migration planning\" and sped up adoption of Unity Catalog and serverless.", "One quote in a Databricks post; no cost or speed figures.", "Real move, unmeasured"),
+    ("A to B (roughly)", "Kargo", "ML pipelines left Databricks notebooks and Delta for Glue ETL writing Iceberg, Athena for training slices, SageMaker for training and serving.",
+     "Lower compute cost from removing always-on clusters; pay-per-query Athena; easier CI/CD and reproducibility.", "Qualitative only, in an AWS blog; the catalog is not named and Unity Catalog was not the owner before.", "Weak: left Databricks for an ML-ops reason, not a catalog reason"),
+    ("A to B", "Nobody else we could find", "No public team moved tables from Unity Catalog ownership to S3 Tables, Glue and Lake Formation while keeping Databricks.",
+     "-", "-", "Absence is the finding"),
+]
+
+AWS_IN_A = [
+    ("Amazon S3", "Holds every file of every layer, in your own bucket", "Everyone on A", "Keep"),
+    ("Redshift Serverless", "Reads gold in place through Glue federation; no copy into Redshift storage", "United Airlines", "Keep if analysts already live there"),
+    ("Athena", "Ad-hoc SQL on gold through Glue federation, paid per TB scanned", "Decathlon; AWS federation guide", "Keep for occasional readers"),
+    ("EMR and Glue Spark", "Read, and can write, managed Iceberg through Unity Catalog's Iceberg REST catalog", "Decathlon; AWS EMR with Unity Catalog guide", "Keep where a job must stay on AWS; writes miss Unity Catalog lineage"),
+    ("Glue Data Catalog", "Becomes a door, not an owner: a federated catalog that mirrors Unity Catalog", "United Airlines, Mastercard", "Keep as the door for AWS engines"),
+    ("Lake Formation", "Hands short-lived credentials to AWS readers of gold", "United Airlines", "Keep, read door only"),
+    ("IAM, KMS, PrivateLink", "Roles for the bucket, encryption keys, private network path between Databricks and your VPC", "Databricks and AWS networking guides", "Keep, always"),
+    ("Firehose, DMS, MSK, Kinesis", "Land files or streams in a landing bucket that Auto Loader picks up", "Pattern in the guides; no named case", "Keep for capture"),
+    ("QuickSight", "Dashboards over Athena or Redshift on federated gold", "Pattern in the guides; no named case", "Keep if already paid for"),
+    ("Step Functions, MWAA", "Only for AWS-side jobs; Lakeflow Jobs runs the Databricks side", "Pattern; two schedulers is a cost", "Drop where Lakeflow can do it"),
+]
+
+BENCH = [
+    ("S3 Tables: up to 3x faster queries, up to 10x more transactions per second", "AWS", "S3 Tables against Iceberg in an ordinary bucket that nobody compacts", "No. It measures maintained against unmaintained tables."),
+    ("S3 Tables: about 2x faster than medium-file Iceberg and 4.6x to 37.6x faster than small-file Iceberg on Glue Spark (TPC-H, 104 GB); ingestion 1.7x to 3.1x faster; Athena was slower on S3 Tables than on plain Iceberg; storage about 17.5% dearer", "Loka (AWS partner)", "S3 Tables against self-managed Iceberg, same AWS engines", "No. Same catalog family, different maintenance."),
+    ("Predictive Optimization: up to 20x faster selective queries, 2x lower storage cost; Anker 2x faster queries, 50% lower storage", "Databricks", "Unity Catalog managed tables against unmanaged ones", "No. Same idea as the S3 Tables claim, on the other side."),
+    ("Redshift Serverless on Iceberg over 2x faster in 2025 (TPC-DS 10 TB)", "AWS", "Redshift this year against Redshift last year", "No. Helps both A and B, since Redshift reads Iceberg either way."),
+    ("EMR Spark 4.5x faster than open-source Spark on Iceberg (TPC-DS 3 TB)", "AWS", "EMR runtime against open-source Spark", "No. An engine claim."),
+    ("StarRocks 1.3x faster than Databricks Photon on catalog queries (TPC-DS 1 TB)", "CelerData (vendor)", "Engines; Photon ran on Delta, not managed Iceberg", "No. Engines, and a vendor test."),
+    ("A head-to-head: same data, A against B, both engines, ETL plus queries plus chores plus cost", "Nobody, as of November 2026", "-", "This is the benchmark that would tell the story, and it does not exist."),
+]
+
+FAIR_BENCH = [
+    ("Data", "TPC-DS at 1 TB as gold, plus a daily MERGE of 1% changed rows into silver"),
+    ("Run A", "Databricks serverless writes managed Iceberg in Unity Catalog with Predictive Optimization; Athena and Redshift read gold through Glue federation"),
+    ("Run B", "Glue or EMR Spark writes S3 Tables with Glue and Lake Formation; Databricks reads gold as foreign tables"),
+    ("Measure", "ETL wall time and cost, query time per engine on both sides, maintenance cost (DBUs or S3 Tables fees), freshness from write to readable, and hours of setup"),
+    ("Expected result", "Each side wins where its own engines write and maintain the tables; the guest side pays in features and governance, not speed. That is the claim to test."),
+]
+
 SCORE = [
     ("Databricks does most of the work (pipelines, ML, Genie, most SQL)", "A", "Everything Databricks offers works on owned tables; AWS engines still read gold in place."),
     ("AWS engines do most of the work; Databricks is used by one team, or not at all", "B", "S3 Tables, Glue and Lake Formation are native for Glue, EMR, Athena, Redshift, Firehose and Flink. Databricks reads through federation."),
@@ -359,6 +438,22 @@ SOURCES = [
     ("Insider: migrating a production data lake to Iceberg", "https://medium.com/insiderengineering/how-we-migrated-our-production-data-lake-to-apache-iceberg-4d6892eca6e6"),
     ("LakeOps: cross-catalog sync for Polaris, Glue and Unity (third party)", "https://lakeops.dev/blog/cross-catalog-sync-polaris-glue-unity"),
     ("Onehouse: the catch in Databricks Iceberg support (critic)", "https://www.onehouse.ai/blog/databricks-iceberg-support-has-a-catch-its-called-unity-catalog"),
+    ("Mastercard: breaking data silos with multi-engine catalog federation (talk)", "https://www.databricks.com/dataaisummit/session/sponsored-aws-breaking-data-silos-multi-engine-catalog-federation"),
+    ("Decathlon: race to unified governance, Glue to Unity Catalog (talk)", "https://www.databricks.com/dataaisummit/session/decathlons-race-unified-governance-securing-interoperability-scale"),
+    ("AWS: Indeed moves to S3 Tables", "https://aws.amazon.com/solutions/case-studies/indeed-s3-tables-case-study/"),
+    ("AWS: Pendulum, 6x faster processing with S3 Tables", "https://aws.amazon.com/blogs/storage/how-pendulum-achieves-6x-faster-processing-and-40-cost-reduction-with-amazon-s3-tables"),
+    ("AWS: Tubular Labs rebuilds a 70 TB pipeline on S3 Tables", "https://aws.amazon.com/blogs/storage/how-tubular-labs-reclaimed-50-of-engineering-capacity-by-rebuilding-their-70tb-pipeline-on-apache-iceberg-and-amazon-s3-tables/"),
+    ("AWS: Comcast scales analytics 80x with S3 Tables", "https://aws.amazon.com/blogs/storage/how-comcast-scaled-analytics-80x-while-cutting-costs-38-with-graphql-and-amazon-s3-tables/"),
+    ("AWS: Amica on S3 Tables", "https://aws.amazon.com/blogs/industries/amica-unlocks-value-from-core-insurance-applications-with-amazon-s3-tables/"),
+    ("AWS: S3 Tables compaction, up to 3x faster queries", "https://aws.amazon.com/blogs/storage/how-amazon-s3-tables-use-compaction-to-improve-query-performance-by-up-to-3-times"),
+    ("Loka: test driving S3 Tables (TPC-H)", "https://loka.com/blog/test-driving-s3-tables"),
+    ("Databricks: Predictive Optimization, faster queries and lower cost", "https://www.databricks.com/blog/predictive-optimization-automatically-delivers-faster-queries-and-lower-tco"),
+    ("AWS: 2x faster Iceberg queries on Redshift", "https://aws.amazon.com/blogs/big-data/achieve-2x-faster-data-lake-query-performance-with-apache-iceberg-on-amazon-redshift"),
+    ("AWS: EMR Spark and Iceberg 4.5x faster than open-source Spark", "https://aws.amazon.com/blogs/big-data/run-apache-spark-and-iceberg-4-5x-faster-than-open-source-spark-with-amazon-emr"),
+    ("CelerData: TPC-DS benchmark (vendor)", "https://docs.celerdata.com/BYOC/docs/benchmarking/TPC_DS_Benchmark"),
+    ("Databricks: from the AWS Glue catalog to Unity Catalog, end to end", "https://community.databricks.com/t5/technical-blog/from-aws-glue-catalog-to-databricks-unity-catalog-an-end-to-end/ba-p/157190"),
+    ("Databricks: migrating foreign HMS and Glue tables to Unity Catalog (Outreach quote)", "https://community.databricks.com/t5/technical-blog/upgrade-your-hms-and-aws-glue-tables-how-to-guide-for-migrating/ba-p/138835"),
+    ("AWS: Kargo moves ML workloads from Databricks to AWS", "https://aws.amazon.com/blogs/industries/migrating-enterprise-ml-workloads-from-databricks-to-aws-for-large-scale-ml/"),
 ]
 
 
@@ -411,6 +506,11 @@ def page():
     aw = verdict_table(["Who", "How it works", "Limit", "Verdict"], A_WRITE)
     anti = C.table(["Bad pattern", "Why it hurts", "Good pattern"], ANTI)
     score = verdict_table(["If this is true", "Pick", "Why"], SCORE, bold_last=False)
+    who = verdict_table(["Company", "Side", "What they run", "Where they win", "Where they lose, or what to watch", "Evidence"], WHO, bold_last=False)
+    aws_in_a = verdict_table(["AWS service", "Its job on A", "Who shows it", "Verdict"], AWS_IN_A)
+    bench = verdict_table(["Claim", "Who measured", "What it really compares", "Does it pick A or B?"], BENCH)
+    moves = verdict_table(["Direction", "Company", "What moved", "Gain claimed", "Measured?", "Verdict on the evidence"], MOVES)
+    fair = verdict_table(["Part", "What to do"], FAIR_BENCH, bold_last=False)
     ifa = "".join(f"<li>{E(x)}</li>" for x in IF_A)
     ifb = "".join(f"<li>{E(x)}</li>" for x in IF_B)
     src = "".join(f'<li><a href="{u}">{E(n)}</a></li>' for n, u in SOURCES)
@@ -465,7 +565,33 @@ def page():
 <h3>The bad patterns these teams left behind</h3>
 {anti}</section>
 
-<section id="winner"><p class="eyebrow">Step 9 · synthesis</p><h2>Who wins</h2>
+<section id="market"><p class="eyebrow">Step 9 · the market</p><h2>Who chose A, who chose B, and what the benchmarks really say</h2>
+<p>We looked for every public team running Iceberg on AWS that says which catalog owns its tables. The picture is very clean. <b>Teams with Databricks at the centre chose A. Teams that chose B do not use Databricks at all.</b> We found no public team running B with Databricks as a real writer, and the public moves between the two that keep Databricks (Decathlon, Outreach) all went from B to A.</p>
+{who}
+<div class="two">
+<div class="card"><h3>Where A wins and loses in practice</h3><ul>
+<li><b>Wins:</b> copy pipelines into Redshift disappear (United, about $30K a month); one catalog stays the truth for many engines (Mastercard, HelloFresh); it survived scale where Glue strained (Decathlon).</li>
+<li><b>Loses:</b> AWS readers are read-only; only Iceberg or UniForm tables cross the door; Lake Formation grants have gotchas; almost none of these teams publish numbers, so A's case rests on design talks more than measurements.</li></ul></div>
+<div class="card"><h3>Where B wins and loses in practice</h3><ul>
+<li><b>Wins:</b> big, measured cost and speed gains (Razor 40% compute, Pendulum 40% cost and 6x jobs, Tubular merges 6 to 8 hours down to under 2, Comcast 38% cost).</li>
+<li><b>Loses:</b> those gains are mostly against a bad before state (no maintenance, raw Parquet, an always-on warehouse), not against A; Lake Formation sharing and logging are the hard parts (Indeed; one team lost a month to cross-account sharing); none of them run Databricks.</li></ul></div>
+</div>
+<h3>Has anyone moved from one to the other, and did it pay?</h3>
+<p>Moves are rare and almost never measured. Every B-to-A move we found was a Databricks-centred team leaving the Glue catalog; the only A-to-B-like move left Databricks entirely, for reasons about ML operations rather than the catalog. Nobody published a before-and-after cost or speed number for a pure catalog move in either direction.</p>
+{moves}
+<h3>On A, which AWS services do people still use?</h3>
+<p>Choosing A does not mean leaving AWS. It means AWS stops owning the table pointer. Almost every AWS service keeps a job; Glue and Lake Formation change from owner to door.</p>
+{aws_in_a}
+<h3>Is there a benchmark that names a clear winner?</h3>
+<p><b>No.</b> Every benchmark we found compares one side against a weaker version of itself, or one engine against another. None runs the same data through A and B. Read each claim for what it actually compares:</p>
+{bench}
+<div class="box"><b>The clear story the numbers do tell:</b> the big wins on both sides come from two things, giving the tables one owner of the chores (S3 Tables or Predictive Optimization) and deleting copies. Neither depends on which catalog you pick. So speed and cost do not decide A versus B; <b>where your work runs</b> does, because the side that writes gets every feature and the guest side gets read-only access. That is why Databricks-centred teams land on A and AWS-only teams land on B.</div>
+<h3>The benchmark that would settle it</h3>
+<p>If a client wants numbers, run this small test on their own account before committing. It is a few days of work and answers the question for their workload, which no public benchmark does.</p>
+{fair}
+</section>
+
+<section id="winner"><p class="eyebrow">Step 10 · synthesis</p><h2>Who wins</h2>
 <div class="verdict"><b>Winner for an AWS platform where Databricks does most of the work: Architecture A.</b> One owner for every table, every Databricks feature working on it, automatic lineage and audit, serverless everywhere, AWS engines reading gold in place, and Iceberg engines still able to write through Unity Catalog's REST catalog. It is also the design that moves to Azure, Fabric or Google Cloud with the fewest changes.<br><br>
 <b>Architecture B wins only when AWS is the real home:</b> Glue, EMR, Athena, Redshift, Firehose and Flink do the work, and Databricks is a light guest or absent. Then S3 Tables, Glue and Lake Formation are native, cheaper and simpler, as Razor Group shows.</div>
 {score}
