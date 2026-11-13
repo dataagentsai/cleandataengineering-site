@@ -308,6 +308,15 @@ READS = [
     ("Backfill, history load, rule change", "Full for a declared date range, through the same harness", "Logged, checked, compared before release"),
 ]
 
+INDUSTRY = [
+    ("dbt (incremental and microbatch models, snapshots, tests)", "Incremental loads by time with a lookback (microbatch), SCD2 dimensions from snapshots, generic tests, a surrogate-key macro (a hash), a huge community", "As-of key lookups with late members, per-feed completeness, restatement log, a row ledger, correction plans", "Pursue with care: a strong base for SQL builds; the harness parts become macros or a wrapper"),
+    ("SQLMesh", "Time-range incremental models with lookback (the same idea as our windows), audits, a plan that shows what will change, table diffs, virtual environments for safe releases", "Same gaps as dbt for keys, completeness and restatements", "Pursue with care: the closest match to this harness's window model and regression diff"),
+    ("Databricks Lakeflow (AUTO CDC, materialized views)", "SCD Type 1 and 2 dimensions from change feeds, incremental refresh of materialized views, managed pipelines", "Facts with surrogate keys as of the event, completeness, restatements; works only inside Lakeflow pipelines", "Pursue for dimensions on Databricks if you run Lakeflow; see the SCD2 page"),
+    ("Kimball automation tools (WhereScape and others)", "Generate star schemas, SCD handling, surrogate keys and load code from a model", "Commercial and tool-shaped; testing on a synthetic world; open formats vary", "Pursue with care where a team wants a tool, not code"),
+    ("Data vault automation (datavault4dbt and others)", "Hubs, links, satellites generated from metadata", "A vault is an integration layer; gold stars are still built on top", "Drop for gold itself"),
+    ("Hand-written notebooks per table", "Nothing shared", "Everything", "Drop"),
+]
+
 STATUS = [
     ("The harness: windows, keys as of event, completeness, checks, restatements, run log", "Built", "Gold equal to the simulated truth every day: 14 days on a laptop (1/10 data size); 3 days on Databricks Free Edition with eleven planted incidents (13 Nov 2026, gold step about 200 seconds)"),
     ("Incremental reads with watermarks per input", "Built", "Change sequence for database feeds, file lists for drops, cursor for the API"),
@@ -348,7 +357,7 @@ def page():
         ("watermark", "3. Watermarks"), ("windows", "4. Grain and windows"), ("complete", "5. Completeness and restatements"),
         ("late", "6. Late facts and late dimensions"), ("history", "6b. History load, reloads, bad batches"), ("pure", "7. Pure functions, local tests, regression"),
         ("solves", "8. How the harness answers each problem"), ("reliable", "9. Reliability practices"),
-        ("cost", "10. Cost practices"), ("status", "11. What is built"), ("decide", "12. Decisions"), ("faq", "FAQ")])
+        ("cost", "10. Cost practices"), ("industry", "10b. Has the industry solved this?"), ("status", "11. What is built"), ("decide", "12. Decisions"), ("faq", "FAQ")])
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › <a href="/learn/gold-data-modelling/">Gold data modelling</a> › Silver to gold</p>
 <p class="eyebrow" style="margin-top:22px">Data engineering · guide</p>
 <h1>{E(TITLE)}</h1>
@@ -432,6 +441,10 @@ def page():
 
 <section id="reliable"><p class="eyebrow">9. Reliability</p><h2>Reliability practices</h2>{C.table(["Practice", "How", "What it prevents"], RELIABILITY)}</section>
 <section id="cost"><p class="eyebrow">10. Cost</p><h2>Cost practices</h2>{C.table(["Practice", "Why it saves"], COST)}</section>
+
+<section id="industry"><p class="eyebrow">10b. Reuse first</p><h2>Has the industry solved this layer?</h2>
+<p>Partly. The common mechanics (incremental by time window, SCD2 dimensions, tests, safe releases) are well solved by open tools. What no tool we know gives out of the box is the gold-specific part: keys looked up as of the event with late members, a window being complete only when every owed feed has delivered, a logged restatement when a published number changes, correction plans, and a row ledger. Our recommendation is to build only that part, and to put it on top of an open tool where a team already uses one, not to rebuild what dbt or SQLMesh already do well.</p>
+{vtable(["Tool or approach", "What it solves", "What it leaves to you", "Verdict"], INDUSTRY)}</section>
 
 <section id="status"><p class="eyebrow">11. Status</p><h2>What is built, and what is owed</h2>{C.table(["Part", "State", "Evidence"], STATUS)}</section>
 <section id="decide"><p class="eyebrow">12. Decisions</p><h2>Decisions with verdicts</h2>{vtable(["Decision", "Choice", "Verdict"], DECISIONS)}</section>
