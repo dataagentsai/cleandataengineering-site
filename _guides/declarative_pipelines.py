@@ -80,7 +80,7 @@ COMPARE = [
     ("dry-run: syntax, missing tables or columns, cycles, without data", "Yes", "Yes (validate)"),
     ("Checkpoints, refresh and full refresh per table", "Yes", "Yes"),
     ("Sinks", "Append-only, Python only", "Plus update flows and foreachBatch sinks"),
-    ("AUTO CDC from change records (SCD 1 and 2)", "Disputed: the Apache guide (4.3) documents it (Type 1; Type 2 accepted, docs pending; needs a target with row-level updates such as Iceberg); Databricks' comparison says Lakeflow only", "Yes"),
+    ("AUTO CDC from change records (SCD 1 and 2)", "Checked in Spark's source (13 Nov 2026): none in 4.1, SCD Type 1 only in 4.2, Type 1 and 2 in 4.3. Needs a target with row-level updates (Iceberg or similar). Databricks' comparison page still says Lakeflow only", "Yes"),
     ("AUTO CDC from full snapshots", "No", "Yes"),
     ("Data quality expectations", "No", "Yes"),
     ("Queryable event log", "No", "Yes"),
@@ -157,7 +157,8 @@ DECISIONS = [
 ]
 
 OPEN = [
-    ("Is AUTO CDC open source?", "The Apache guide for Spark 4.3 documents it; Databricks' comparison page says Lakeflow only. Our spike will run it on Iceberg and compare with a known truth."),
+    ("Is AUTO CDC open source?", "Yes, newly: we checked Spark's source on 13 Nov 2026. Spark 4.1 has none, 4.2 has SCD Type 1 only, 4.3 has Type 1 and 2. Databricks' comparison page has not caught up."),
+    ("Can open-source SCD Type 2 run today?", "Not on an open table format. We tried on a laptop: Iceberg's newest runtime (1.12) is built for Spark 4.0 and 4.1 and fails to load on 4.3, and Delta's newest (4.4.1) supports Spark up to 4.2. Until a format supports Spark 4.3, open-source declarative SCD Type 2 waits; on Databricks, Lakeflow does it today."),
     ("Does open-source SDP refresh materialized views incrementally?", "Its guide does not say. Test before relying on it for large aggregates."),
     ("Expectations in open source?", "Not in the guide today. Keep quality rules in your own stage."),
 ]
