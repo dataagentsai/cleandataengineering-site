@@ -93,6 +93,7 @@ SECTIONS = [
             ("History, SCD and facts", None),
             ("Gold data modelling", "/learn/gold-data-modelling/"),
             ("Silver to gold: the harness", "/learn/silver-to-gold/"),
+            ("Declarative pipelines: open source vs Lakeflow", "/learn/spark-declarative-pipelines/"),
             ("SCD2: AUTO CDC or own PySpark?", "/learn/scd2-auto-cdc-vs-pyspark/"),
             ("Gold harness spec: facts and SCD2", "/learn/gold-harness-spec/"),
             ("Time travel as SCD Type 2?", "/learn/time-travel-vs-scd2/"),
