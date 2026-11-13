@@ -147,6 +147,27 @@ FIT = [
     "Run dry-run in continuous integration for every pipeline, declarative or not.",
 ]
 
+RESTRICT = [
+    ("The pipeline owns its tables", "No other job may write to a streaming table. A fix to one bad batch becomes a full refresh, or a correction fed through the change feed.", "Plan recovery around it"),
+    ("Removed or renamed definitions leave tables behind", "We saw it twice: after a redeploy the new pipeline could not write the old tables, and renamed definitions left orphans.", "Drop them in teardown"),
+    ("Creation-time properties need a new table", "Format features set at creation are kept even by a full refresh.", "Decide the format before the first run"),
+    ("Source must be append-only", "A streaming read breaks if source rows are updated or deleted (unless told to skip them).", "Read bronze, not a rewritten table"),
+    ("Full refresh replays only what the source still holds", "If bronze has aged out, history cannot be rebuilt.", "Keep a baseline batch before data ages out"),
+    ("Logic or schema changes may need a full refresh", "Checkpoints belong to the query.", "Treat flow changes as releases"),
+    ("AUTO CDC's fixed shape", "One key set, an orderable sequence column, SCD Type 1 or 2 only, fixed __START_AT and __END_AT columns.", "Other history kinds stay in your own code"),
+    ("Format on Databricks", "Pipeline tables are Delta; to be read as Iceberg they need Iceberg v3 compatibility (UniForm), not native Iceberg.", "Datasets that must be native Iceberg stay on a job"),
+]
+
+TESTED = [
+    ("Our own stage function inside the flow", "Passed: dealer codes cleaned by our hygiene rule"),
+    ("SCD Type 2 versions in sequence order", "Passed: versions 10, 20, 30"),
+    ("A late change with an older sequence", "Passed: kept as history, never current"),
+    ("A delete", "Passed: the key's version is closed"),
+    ("An update to a measure", "Passed: a new version opened"),
+    ("Readable as Iceberg", "Only with Iceberg v3 compatibility; v2 failed (needs column mapping, and deletion vectors off)"),
+    ("Open-source SDP, same test on a laptop", "Blocked: SCD2 AUTO CDC needs Spark 4.3, and no Iceberg or Delta release runs on 4.3 yet"),
+]
+
 DECISIONS = [
     ("Bronze to silver on Databricks", "Lakeflow streaming tables and AUTO CDC around your own cleaning stages", "Pursue"),
     ("Bronze to silver portable across clouds", "Open-source SDP with AUTO CDC on Iceberg, once tested", "Pursue with care"),
@@ -164,6 +185,7 @@ OPEN = [
 ]
 
 QA = [
+    ("Why use a streaming table for a batch load?", "Streaming describes how a streaming table reads, not how long it runs. In triggered mode each run reads only what is new since its checkpoint, writes it and stops: incremental batch, with no cluster left running. AUTO CDC can only write into a streaming table, because SCD history needs a target that remembers which changes it has applied."),
     ("Are jobs and declarative pipelines both serverless?", "On Databricks both can run on serverless or classic compute; on serverless they cost the same rate per DBU with machines included, on classic declarative pipelines cost more by edition. Open-source Spark Declarative Pipelines is not a serverless product: it runs on whatever Spark you give it."),
     ("Can AUTO CDC be used for SCD Type 2 in batch loads?", "Yes. AUTO CDC reads a stream of change records, but a pipeline run in triggered mode processes the changes available and stops, which is a batch run; for full daily copies Lakeflow has AUTO CDC from snapshots. The reasons not to use it are cost (the Pro edition on classic compute), portability and history kinds it does not cover, not batch."),
     ("What is the difference between Apache Spark Declarative Pipelines and Databricks Lakeflow Declarative Pipelines?", "Apache Spark Declarative Pipelines is the open-source engine in Spark 4.1 and later: streaming tables, materialized views, the dependency graph, dry-run and checkpoints. Databricks Lakeflow is built on it and adds AUTO CDC from snapshots, data quality expectations, a queryable event log, update flows, continuous mode, incremental refresh and serverless compute."),
@@ -178,7 +200,7 @@ def page():
     toc = "".join(f'<li><a href="#{a}">{E(b)}</a></li>' for a, b in [
         ("plain", "In plain words"), ("compare", "1. Open source vs Databricks Lakeflow"), ("cost", "2. Does declarative cost the same?"),
         ("helps", "3. Where declarative helps, and where not"), ("b2s", "4. Bronze to silver"), ("s2g", "5. Silver to gold"),
-        ("fit", "6. Declarative and a harness together"), ("decide", "7. Decisions"), ("open", "8. Not settled yet"), ("faq", "FAQ")])
+        ("fit", "6. Declarative and a harness together"), ("restrict", "6b. What declarative restricts"), ("tested", "6c. What we tested"), ("decide", "7. Decisions"), ("open", "8. Not settled yet"), ("faq", "FAQ")])
     sources = [("Apache Spark Declarative Pipelines programming guide", "https://spark.apache.org/docs/latest/declarative-pipelines-programming-guide.html"),
                ("Databricks: Spark Declarative Pipelines vs Lakeflow", "https://docs.databricks.com/aws/en/ldp/concepts/spark-declarative-pipelines"),
                ("Databricks: Lakeflow pipeline concepts", "https://docs.databricks.com/aws/en/ldp/concepts/"),
@@ -217,6 +239,13 @@ def page():
 {vtable(["Gold need", "Declarative feature", "Verdict"], SILVER_GOLD)}</section>
 
 <section id="fit"><p class="eyebrow">6. Together</p><h2>Declarative and a harness, together</h2><ol class="steps">{''.join(f'<li>{E(s)}</li>' for s in FIT)}</ol></section>
+
+<section id="restrict"><p class="eyebrow">6b. Restrictions</p><h2>What declarative restricts</h2>
+{C.table(["Restriction", "What happens", "What to do"], RESTRICT)}</section>
+
+<section id="tested"><p class="eyebrow">6c. Tested</p><h2>What we tested (13 and 14 Nov 2026)</h2>
+<p>A tiny change feed of order lines (insert, update, a late change with an older sequence, a delete) through a declarative flow that calls one of our own stage functions, with AUTO CDC writing SCD Type 2, as two triggered updates on Databricks Free Edition (serverless), then the same on a laptop with open-source Spark.</p>
+{C.table(["Check", "Result"], TESTED)}</section>
 
 <section id="decide"><p class="eyebrow">7. Decisions</p><h2>Decisions with verdicts</h2>{vtable(["Decision", "Choice", "Verdict"], DECISIONS)}</section>
 <section id="open"><p class="eyebrow">8. Not settled yet</p><h2>What is not settled yet</h2>{C.table(["Question", "Where it stands"], OPEN)}</section>
