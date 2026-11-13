@@ -359,7 +359,9 @@ def page():
         ("a-crash", "A5. A crash halfway"), ("a-careless", "A6. A careless join"), ("a-tests", "A7. Tests and the code"),
         ("b-why", "B1. Why so many kinds of fact?"), ("b-rpw", "B2. Reader, processor, writer"), ("b-kinds", "B3. The six kinds with examples"),
         ("c-short", "C1. Declarative pipeline: can it?"), ("c-sketch", "C2. The example on Lakeflow"), ("c-pros", "C3. Pros, cons, verdicts"),
-        ("plain", "D. The rulebook: in plain words"), ("harness", "1. The harness, step by step"), ("one", "1b. One harness for every fact; SQL or PySpark"),
+        ("e-matrix", "D1. Settings × reader, processor, writer"), ("e-sql", "D2. The fact in SQL"), ("e-dbt", "D3. The fact in dbt"),
+        ("e-vs", "D4. Our harness vs dbt"), ("f-what", "E1. Delivery: fact or dimension?"), ("f-versions", "E2. Versioned facts"),
+        ("plain", "F. The rulebook: in plain words"), ("harness", "1. The harness, step by step"), ("one", "1b. One harness for every fact; SQL or PySpark"),
         ("debug", "1c. Troubleshooting, record drops, many-to-many"), ("incr", "2. How incremental loading works"),
         ("watermark", "3. Watermarks"), ("windows", "4. Grain and windows"), ("complete", "5. Completeness and restatements"),
         ("late", "6. Late facts and late dimensions"), ("history", "6b. History load, reloads, bad batches"), ("pure", "7. Pure functions, local tests, regression"),
@@ -375,8 +377,10 @@ def page():
 {LEARN.part_a()}
 {LEARN.part_b()}
 {LEARN.part_c()}
+{LEARN.part_e()}
+{LEARN.part_f()}
 
-<section id="plain" class="part"><p class="eyebrow">Part D · the rulebook</p><h2>Part D. The full rulebook, in plain words</h2>
+<section id="plain" class="part"><p class="eyebrow">Part F · the rulebook</p><h2>Part F. The full rulebook, in plain words</h2>
 <p>Everything below is reference: the rules the harness follows, in tables. If a word is new, it is in the list under <a href="#start">Start here</a>, and Part A shows it happening.</p>
 <p>Silver is clean, but shaped like the sources: an orders table, a deliveries table, a dealers table with history. Gold is shaped for questions: a fact of order lines with on-time flags, a monthly sales fact, dimensions with keys. The silver-to-gold hop is the factory between them. A good factory does the same steps for every product, checks every product before it leaves, and only remakes what changed.</p>
 {fig(d_hop(), "Same steps for every gold table; only the build in the middle is written per fact.")}</section>

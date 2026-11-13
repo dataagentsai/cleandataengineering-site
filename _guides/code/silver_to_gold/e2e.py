@@ -132,6 +132,30 @@ res["not_visited"] = [r.dealer_id for r in t2["dim_dealer"].select("dealer_id").
 pva = B.build_plan_vs_actual(df(X.PLAN, X.PLAN_S), df(X.LINES_R2, X.LINES_S).where("dealer_id != 'TEST01'"), {}).orderBy("dealer_id")
 res["plan_vs_actual"] = [r.asDict() for r in pva.collect()]
 
+# the SQL build gives the same rows as the PySpark build on the whole story's data
+L2 = df(X.LINES_R2, X.LINES_S).where("dealer_id != 'TEST01'")
+D2 = df(X.DELS_R2, X.DELS_S)
+res["sql_equals_pyspark"] = (sorted(map(tuple, B.build_otif(L2, D2, {}).collect()))
+                             == sorted(map(tuple, B.build_otif_sql(L2, D2, {}).collect())))
+
+# versioned fact: keep every version of a row (r1's rows, then what r2 changed)
+from datetime import datetime  # noqa: E402
+fcols = ["line_id", "promised_date", "qty_delivered", "otif", "dealer_key"]
+v1 = df([tuple(r[c] if c != "promised_date" else D.fromisoformat(r[c]) for c in fcols) for r in res["fact"]["after r1"]],
+        "line_id string, promised_date date, qty_delivered int, otif int, dealer_key int")
+v2 = df([tuple(r[c] if c != "promised_date" else D.fromisoformat(r[c]) for c in fcols) for r in res["fact"]["after r2"]],
+        "line_id string, promised_date date, qty_delivered int, otif int, dealer_key int")
+t1, t2 = datetime(2026, 11, 13, 2), datetime(2026, 11, 15, 2)
+versions = v1.withColumn("recorded_from", F.lit(t1)).withColumn("recorded_to", F.lit(None).cast("timestamp"))
+close, insert = B.plan_fact_versions(versions.where("recorded_to IS NULL"), v2, ["line_id"], ["qty_delivered", "otif", "dealer_key"], t2)
+closed_ids = [r.line_id for r in close.collect()]
+versions = (versions.withColumn("recorded_to", F.when(F.col("line_id").isin(closed_ids), F.lit(t2)).otherwise(F.col("recorded_to")))
+            .unionByName(insert))
+res["versions"] = [{k: str(v) if v is not None else None for k, v in r.asDict().items()}
+                   for r in versions.where("line_id IN ('L3', 'L5')").orderBy("line_id", "recorded_from").collect()]
+adj = B.plan_adjustments(v1, v2, ["line_id"], ["qty_delivered", "otif"], "r2")
+res["adjustments"] = [r.asDict() for r in adj.collect()]
+
 (HERE / "results.json").write_text(json.dumps(res, indent=1, default=str))
 print(json.dumps(res, indent=1, default=str))
 spark.stop()

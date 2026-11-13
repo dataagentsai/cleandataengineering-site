@@ -65,3 +65,32 @@ def build_plan_vs_actual(plan: DataFrame, lines: DataFrame, params: dict) -> Dat
                      F.coalesce("plan_qty", F.lit(0)).alias("plan_qty"),
                      F.coalesce("actual_qty", F.lit(0)).alias("actual_qty"))
              .withColumn("gap", F.col("actual_qty") - F.col("plan_qty")))
+
+
+# 1b. The same transaction fact as SQL. The harness hands the frames over as views; the SQL file is the rule.
+def build_otif_sql(lines: DataFrame, deliveries: DataFrame, params: dict) -> DataFrame:
+    from pathlib import Path
+    lines.createOrReplaceTempView("order_lines")
+    deliveries.createOrReplaceTempView("deliveries")
+    return lines.sparkSession.sql((Path(__file__).parent / "fact_otif.sql").read_text())
+
+
+# 7. Versioned fact (writer mode): keep every version of a fact row, like SCD Type 2 but on the fact's grain.
+def plan_fact_versions(current: DataFrame, new: DataFrame, keys: list, measures: list, recorded_at) -> tuple:
+    """current = open versions in gold; new = rows just built. Returns (keys to close, rows to insert)."""
+    cur = current.select(*keys, *[F.col(m).alias(f"_old_{m}") for m in measures])
+    j = new.join(cur, keys, "left")
+    changed = j.where(" OR ".join(f"NOT (`{m}` <=> `_old_{m}`)" for m in measures))
+    to_close = changed.where(F.col(f"_old_{measures[0]}").isNotNull()).select(*keys)
+    to_insert = (changed.drop(*[f"_old_{m}" for m in measures])
+                 .withColumn("recorded_from", F.lit(recorded_at)).withColumn("recorded_to", F.lit(None).cast("timestamp")))
+    return to_close, to_insert
+
+
+# 8. Adjustment rows (accounting style): never change a row; add the difference as a new row.
+def plan_adjustments(published_totals: DataFrame, new: DataFrame, keys: list, measures: list, run_id: str) -> DataFrame:
+    old = published_totals.select(*keys, *[F.col(m).alias(f"_old_{m}") for m in measures])
+    j = new.join(old, keys, "left")
+    diffs = [(F.col(m) - F.coalesce(F.col(f"_old_{m}"), F.lit(0))).alias(m) for m in measures]
+    out = j.select(*keys, *diffs).withColumn("_run_id", F.lit(run_id))
+    return out.where(" OR ".join(f"{m} != 0" for m in measures))

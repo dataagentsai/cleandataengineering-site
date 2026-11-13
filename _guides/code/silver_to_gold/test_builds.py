@@ -106,3 +106,45 @@ def test_plan_vs_actual(spark, name, plan, actual, expected):
     lines = spark.createDataFrame([(f"L{i}", "O", d, "R15", q, D(2026, 11, 10), i) for i, (d, q) in enumerate(actual)], LINES_S)
     out = {r.dealer_id: (r.plan_qty, r.actual_qty, r.gap) for r in B.build_plan_vs_actual(p, lines, {}).collect()}
     assert out == expected
+
+
+# ---------------------------------------------------------------- SQL and PySpark give the same rows
+@pytest.mark.parametrize("name,line,dels,expected", OTIF_CASES, ids=[c[0] for c in OTIF_CASES])
+def test_otif_sql_equals_pyspark(spark, name, line, dels, expected):
+    lines = spark.createDataFrame([("L1", "O1", "D1", "R15", line[0], D(2026, 11, line[1]), 1)], LINES_S)
+    d = spark.createDataFrame([(f"X{i}", "L1", "WH-A", q, D(2026, 11, day), i) for i, (q, day) in enumerate(dels)], DELS_S)
+    a = [r.asDict() for r in B.build_otif(lines, d, {}).collect()]
+    b = [r.asDict() for r in B.build_otif_sql(lines, d, {}).collect()]
+    assert a == b
+
+
+# ---------------------------------------------------------------- versioned facts and adjustment rows
+FACT_S = "line_id string, qty_delivered int, otif int"
+VERSION_CASES = [
+    ("unchanged row: nothing to close or add", [("L3", 6, 0)], [("L3", 6, 0)], [], []),
+    ("changed row: close old version, add new", [("L3", 6, 0)], [("L3", 8, 0)], ["L3"], [("L3", 8)]),
+    ("new row: add only", [], [("L4", 4, 1)], [], [("L4", 4)]),
+]
+
+
+@pytest.mark.parametrize("name,cur,new,closed,added", VERSION_CASES, ids=[c[0] for c in VERSION_CASES])
+def test_fact_versions(spark, name, cur, new, closed, added):
+    from datetime import datetime
+    c, i = B.plan_fact_versions(spark.createDataFrame(cur, FACT_S), spark.createDataFrame(new, FACT_S),
+                                ["line_id"], ["qty_delivered", "otif"], datetime(2026, 11, 15, 2))
+    assert sorted(r.line_id for r in c.collect()) == closed
+    assert sorted((r.line_id, r.qty_delivered) for r in i.collect()) == added
+
+
+ADJ_CASES = [
+    ("late delivery adds +2", [("L3", 6, 0)], [("L3", 8, 0)], [("L3", 2, 0)]),
+    ("nothing changed: no row", [("L3", 6, 0)], [("L3", 6, 0)], []),
+    ("first time: the whole value", [], [("L4", 4, 1)], [("L4", 4, 1)]),
+]
+
+
+@pytest.mark.parametrize("name,old,new,expected", ADJ_CASES, ids=[c[0] for c in ADJ_CASES])
+def test_adjustments(spark, name, old, new, expected):
+    out = B.plan_adjustments(spark.createDataFrame(old, FACT_S), spark.createDataFrame(new, FACT_S),
+                             ["line_id"], ["qty_delivered", "otif"], "r2")
+    assert sorted((r.line_id, r.qty_delivered, r.otif) for r in out.collect()) == expected

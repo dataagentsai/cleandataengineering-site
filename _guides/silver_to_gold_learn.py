@@ -338,7 +338,9 @@ def part_a():
 <ul><li><b>Part A</b>: learn it from zero with one example.</li>
 <li><b>Part B</b>: the six kinds of fact, why there are six, and how each is built as reader, processor and writer.</li>
 <li><b>Part C</b>: can this layer be a Databricks declarative pipeline? Pros, cons and verdicts.</li>
-<li><b>Part D</b>: the full rulebook, for when you are building or reviewing.</li></ul></div>
+<li><b>Part D</b>: which part of the harness uses each setting, the fact in SQL and in dbt, and our harness against dbt.</li>
+<li><b>Part E</b>: is a delivery a fact or a dimension, and what if facts are versioned too.</li>
+<li><b>Part F</b>: the full rulebook, for when you are building or reviewing.</li></ul></div>
 <h3>Words you will meet</h3>{C.table(["Word", "What it means here"], GLOSSARY)}</section>
 
 <section id="a-story" class="part"><p class="eyebrow">Part A · 1</p><h2>The story: a tyre company and one question</h2>
@@ -695,4 +697,135 @@ QA_EXTRA = [
     ("Why are there so many types of fact table?", "Because business questions come in different shapes. Events that happened once need a row per event (transaction). Levels like stock need a row per period even on quiet days (periodic snapshot). Processes with several steps need one row updated as it moves (accumulating snapshot). Events with nothing to measure need rows without numbers (factless). Busy questions need a summary (aggregate), and comparing sources needs one shared grain (consolidated). The kind decides how a pipeline reads changes and how it writes."),
     ("Can the silver to gold layer be built as a Databricks declarative pipeline?", "Yes. AUTO CDC builds SCD Type 2 dimensions and materialized views build facts and aggregates, with expectations for quality. What it does not give is control over which windows are rebuilt, a restatement log, correction plans, a full row ledger or checks across rows. A hybrid works best: Lakeflow for dimensions and aggregates, a harness for facts that need that bookkeeping."),
     ("What are reader, processor and writer in a data pipeline?", "The reader finds what changed since the last run and reads the rows of the windows it touches. The processor is a pure function holding the business rule, which takes data in and returns data out. The writer puts the result into the target safely, by replacing whole windows or merging by key, and only then is the bookmark moved."),
+]
+
+
+# ------------------------------------------------------------------ Part D: settings matrix, SQL, dbt
+DR = json.loads((CODE / "dbt_otif" / "dbt_results.json").read_text())
+Y, O = "✓", "○"
+MATRIX = [
+    ("name", "Which table this is", Y, "", Y, "Reader finds its bookmarks under this name; writer writes the run log and moves them"),
+    ("grain", "One row per order line", "", O, Y, "Writer checks it is unique before writing; the build must produce it but is never given it"),
+    ("window_col", "Rebuild by promised date", Y, "", Y, "Reader turns changed rows into days; writer replaces exactly those days"),
+    ("lookback_days", "35 days", Y, "", "", "Reader refuses windows older than this; they need a correction plan"),
+    ("driver", "order_lines carries the window column", Y, "", "", "Reader reads this input by window"),
+    ("inputs → bookmark", "_seq on each input", Y, "", Y, "Reader reads changes after it; writer moves it to the high mark, last"),
+    ("inputs → window_via", "A delivery's window is its line's", Y, "", "", "Reader maps a changed delivery to its line's day"),
+    ("filters", "No test dealers", Y, "", Y, "Reader applies and counts them; writer's ledger balance uses the count"),
+    ("measures", "qty_ordered, qty_delivered, otif", "", "", Y, "Writer compares them per window to spot restatements"),
+    ("dimension", "dim_dealer, by dealer_id, as of promised_date", Y, "", Y, "Writer looks up keys after the build; reader re-opens days whose unknown dealer has arrived"),
+    ("owed_feeds", "WH-A and WH-B send a file per day", Y, "", Y, "Writer sets _is_complete; reader re-opens incomplete days next night"),
+    ("max_unknown_rate", "25%", "", "", Y, "Writer stops the run if more rows than this have key -1"),
+    ("params", "Settings for the rule (none here)", "", Y, "", "The only setting the processor ever sees, next to its input frames"),
+]
+
+HVD = [
+    ("Writing the business rule", "SQL file or PySpark function", "SQL model or macro (Python models on some platforms)", "Tie: the same SQL ran in both"),
+    ("Bookmarks", "Per input in a metadata store, moved last, with history", "max() of a column in the target table, written in the same step as the data", "dbt is simpler; the harness keeps a history and survives a full refresh"),
+    ("Working out which days to rebuild", "Generic, from settings: changes, unknown members, incomplete days", "Hand-written per model (our CTE), or microbatch, which rebuilds the last N days by time whether they changed or not", "Harness"),
+    ("Replacing windows", "Replaces the listed days, so a day emptied at source is cleared", "delete+insert removes only the days present in the new output; a day whose rows all vanished stays", "Harness"),
+    ("Checks before readers see data", "Checks run before the write; on failure nothing is written", "Data tests run after the table is written (shown above); downstream models are skipped; blocking needs a write-audit-publish setup", "Harness"),
+    ("Table-driven tests of the rule", "pytest, on Spark and DuckDB", "Unit tests in YAML: given rows, expected rows (passed above)", "Tie"),
+    ("Keys as of the event, unknown member", "One generic function", "A join you write in each model, or a macro you write once", "Harness"),
+    ("Surrogate keys", "Key map: stable 1, 2, 3", "A hash (dbt_utils); SCD2 from snapshots", "Harness where integer keys matter"),
+    ("Completeness, restatements, correction plans, row ledger", "Built in", "Not built in; macros and hooks you write", "Harness"),
+    ("Lineage, docs, model selection, IDE support", "Run log only", "Built in and excellent", "dbt"),
+    ("Engines", "Spark and DuckDB through adapters", "30 or more adapters", "dbt"),
+    ("Hiring, community, maturity", "New and ours", "Very large and mature", "dbt"),
+]
+
+
+def part_e():
+    nights = [[n["run"], "0 = ok" if n["run_rc"] == 0 else "failed", n["test_log"][-1].split("Done. ")[-1].split(" WARN")[0], n["rows"], n["bookmarks"]] for n in DR["nights"]]
+    left = DR["careless"]["table_left_behind"]
+    return f"""
+<section id="e-matrix" class="part"><p class="eyebrow">Part D · 1</p><h2>Which part of the harness uses each setting</h2>
+<p>To keep this table simple, every harness step before the build counts as <b>reader</b> and every step after it as <b>writer</b>. That puts key lookup, completeness, checks and restatements on the writer side, because they all happen between the build and the write. ✓ means the part reads the setting. ○ means the part must honour it but is never given it.</p>
+{htable(["Setting", "What it says here", "Reader", "Processor", "Writer", "How it is used"], MATRIX, hl=[12])}
+<p><b>The thing to notice:</b> the processor column is almost empty. The build sees only its input tables and <code>params</code>. Everything that makes the run safe (bookmarks, windows, keys, completeness, checks) lives in the reader and writer, and those are shared by every fact. That is why a build is only a few lines, and why it can be written in SQL.</p>
+</section>
+
+<section id="e-sql" class="part"><p class="eyebrow">Part D · 2</p><h2>Can the fact be written in SQL? Yes</h2>
+<p>Here is the same OTIF rule as a SQL file. The harness hands the build its inputs as two views, <code>order_lines</code> and <code>deliveries</code>, already limited to the days being rebuilt and already filtered. The SQL only has to state the rule. Each step is a named CTE, so you can run any step by itself in a SQL editor.</p>
+{C.code((CODE / "fact_otif.sql").read_text())}
+<p>Tested: the SQL file and the PySpark build return the same rows on all six table-driven cases and on the whole story's data ({"same rows" if R["sql_equals_pyspark"] else "DIFFERENT"}). The harness runs either; you pick per fact.</p>
+{C.code(src("builds.py", "build_otif_sql"))}
+</section>
+
+<section id="e-dbt" class="part"><p class="eyebrow">Part D · 3</p><h2>The same fact in dbt: does reader, processor, writer still work?</h2>
+<p>Yes. We built the same fact in dbt (dbt-core 1.12.7 with DuckDB, run on 14 Nov 2026) and fed it the same three nights. All three parts are there, written in dbt's own way:</p>
+<div class="rpw"><div class="r"><b>Reader</b>The <code>changed_windows</code> CTE inside <code>{{% if is_incremental() %}}</code>. dbt has no metadata store, so the bookmark is stored as two columns in the fact and read back with <code>max()</code>.</div>
+<div class="p"><b>Processor</b>A macro, <code>otif_rule()</code>, holding the same SQL as the file above.</div>
+<div class="w"><b>Writer</b><code>incremental_strategy='delete+insert'</code> with <code>unique_key='promised_date'</code>: dbt deletes those days and inserts the new rows.</div></div>
+<details class="code" open><summary>The processor: macros/otif_rule.sql</summary>{C.code((CODE / "dbt_otif" / "macros" / "otif_rule.sql").read_text())}</details>
+<details class="code"><summary>Reader, keys, completeness and writer: models/fact_otif.sql</summary>{C.code((CODE / "dbt_otif" / "models" / "fact_otif.sql").read_text())}</details>
+<details class="code"><summary>Tests: models/schema.yml (data tests and a table-driven unit test)</summary>{C.code((CODE / "dbt_otif" / "models" / "schema.yml").read_text())}</details>
+<h3>What happened over the three nights</h3>
+{htable(["night", "dbt run", "tests (4 data + 1 unit)", "rows in fact_otif", "bookmarks stored in the fact (lines / deliveries)"], nights)}
+<p>After night r2, dbt's fact_otif is <b>{"identical" if DR["same_as_harness"] else "NOT identical"}</b> to the harness's, row for row: same OTIF flags, the same keys (L3 → 2, L5 → 4) and the same completeness.</p>
+<h3>Where dbt behaves differently: when the checks run</h3>
+<p>We gave dbt a careless model (every delivery joined) with a <code>unique</code> test on line_id and ran <code>dbt build</code>. dbt <b>created the table first</b>, then the test failed. The careless table was left behind, holding L3 {left[0]} times and {left[1]} tyres "ordered" instead of 8. Models downstream of a failed test are skipped, but anything reading that table directly sees the bad rows. The harness checks first and writes nothing on failure (Part A · 6). In dbt you get the same safety by building into a staging schema and swapping only after the tests pass (write-audit-publish), which you set up yourself.</p>
+<div class="warn"><b>Two more dbt details that matter here.</b> (1) <code>delete+insert</code> deletes only the days that appear in the new output. If every line of a day is deleted at source, the new output has no row for that day, so the old rows stay. The harness replaces the list of days it planned, so an emptied day is cleared. (2) dbt's built-in <code>microbatch</code> strategy rebuilds the last N days by the clock, not by what changed. To catch L3's late delivery for 11 Nov on the night of 15 Nov, its lookback must be at least 4 days. We describe microbatch from the dbt docs; we ran the hand-written reader above, not microbatch.</div>
+</section>
+
+<section id="e-vs" class="part"><p class="eyebrow">Part D · 4</p><h2>Our harness against dbt: pros and cons</h2>
+{vtable(["Topic", "Our harness", "dbt", "Better"], HVD)}
+<div class="box"><b>Verdict.</b> For writing builds, dbt and the harness are equal: it is the same SQL. dbt wins on everything around the team: lineage, docs, model selection, adapters, hiring. The harness wins on everything around the numbers: choosing the right days, checking before writing, completeness, restatements and stable keys. <b>If your team already uses dbt, keep dbt</b> and add the harness parts as a dbt package (macros for changed days, as-of keys and completeness, a post-hook for restatements, write-audit-publish for checks). If you have no dbt yet and need an audit trail, use the harness with SQL builds. Either way the rule stays one SQL file, so moving later is cheap.</div>
+</section>"""
+
+
+# ------------------------------------------------------------------ Part E: what is a delivery, versioned facts
+WHAT_IS = [
+    ("Order line", "Fact (the grain of fact_otif)", "An event with numbers: tyres ordered. One row per line."),
+    ("Order (header)", "Degenerate dimension: order_id kept on the fact", "Nothing to describe beyond its id; no table of its own needed."),
+    ("Delivery", "Fact. Here a silver input folded into fact_otif; it can also be its own gold fact", "An event with numbers (tyres, a date). Nobody filters 'by delivery' the way they filter by dealer, so it is not a dimension."),
+    ("Dealer", "Dimension, SCD Type 2", "Describes who: name, region. Changes slowly; history matters for as-of lookups."),
+    ("Warehouse, product, date", "Dimensions", "Describe where, what, when."),
+    ("Delivery file received", "Neither: control data in the metadata store", "Says whether a day is complete. It describes the pipeline, not the business."),
+]
+
+VERSION_WAYS = [
+    ("1. Current state + restatement log (our default)", "Gold shows today's truth. Each changed published number is logged with old and new value. Table versions (time travel) cover recent history.",
+     "Simple queries; one row per grain", "'What did we show on 14 Nov?' needs the log or time travel, and time travel expires", "Pursue: the default"),
+    ("2. Versioned fact rows (SCD Type 2 on the fact's grain)", "Every change closes the old row (recorded_to) and adds a new one (recorded_from).",
+     "Exact 'as we reported it on any day' with one filter", "More rows; every query must pick current rows, or totals double", "Pursue where auditors or regulators ask 'what did you report then?'"),
+    ("3. Adjustment rows (accounting style)", "Rows are never changed; a correction adds the difference as a new row (+2 tyres).",
+     "Append-only; summing gives today's truth; filtering by run gives the past", "Works only for numbers you can add; flags and ratios cannot be 'adjusted'", "Pursue for money ledgers; Drop for flags like on-time"),
+]
+
+
+def part_f():
+    vers = htable(["line_id", "qty_delivered", "otif", "dealer_key", "recorded_from", "recorded_to"],
+                  [[v["line_id"], v["qty_delivered"], v["otif"], v["dealer_key"], v["recorded_from"][:16], (v["recorded_to"] or "open (current)")[:16]] for v in R["versions"]],
+                  hl=[1, 3])
+    adj = htable(["line_id", "qty_delivered", "otif", "_run_id", "meaning"],
+                 [["L3", 6, 0, "r1", "first published"]] + [[a["line_id"], f"+{a['qty_delivered']}", a["otif"], a["_run_id"], "the late 2 tyres, added as a new row"] for a in R["adjustments"]], hl=[1])
+    return f"""
+<section id="f-what" class="part"><p class="eyebrow">Part E · 1</p><h2>In this example, is a delivery a fact, a dimension, or neither?</h2>
+<p><b>A delivery is a fact.</b> It is an event with numbers (6 tyres, on 11 Nov). In our example it is not a gold table of its own. It is a silver input that the OTIF build adds up per line, because the question is about order lines. If people start asking delivery questions (how many trucks per warehouse, how many split deliveries), add <code>fact_delivery</code> at one row per delivery, with keys to the line, warehouse and date. It is never a dimension. Dimensions describe the who, what and where you filter and group by, and nobody filters "by delivery".</p>
+{C.table(["Thing", "What it is in gold", "Why"], WHAT_IS)}
+<p>A quick test: <b>does it have numbers you add up, and does it happen at a moment?</b> Then it is a fact. <b>Does it describe something you filter or group by, and change slowly?</b> Then it is a dimension. <b>Does it describe the pipeline rather than the business?</b> Then it belongs in the metadata store.</p>
+</section>
+
+<section id="f-versions" class="part"><p class="eyebrow">Part E · 2</p><h2>What if facts are versioned too?</h2>
+<p>Dimensions keep versions because descriptions change: D7 moved region. Facts change too: L3 went from 6 to 8 tyres delivered, and L5's dealer went from unknown to D9. There are three ways to keep a fact's history. Here are the real rows from our two nights, done each way.</p>
+<h3>Way 2: versioned fact rows</h3>
+<p>Same idea as SCD Type 2, but on the fact's grain and dated by when <i>we recorded</i> it. "What did the dashboard show on 14 Nov?" becomes one filter: recorded_from on or before 14 Nov, and recorded_to empty or after it.</p>
+{vers}
+<p>Note L5: its version 1 has key -1 and its version 2 has key 4. Both use the dealer version true on the <b>promised date</b>. Two different dates are at work: the business date picks the dimension version, and the record date picks the fact version. Keeping both is called bitemporal.</p>
+<h3>Way 3: adjustment rows</h3>
+{adj}
+<p>Sum the rows and you get 8, today's truth. Filter to run r1 and you get 6, what was first published. Nothing is ever updated. But it only works for numbers you can add: there is no sensible "+1 on time".</p>
+<h3>Which to choose</h3>
+{vtable(["Way", "How", "Good at", "Weak at", "Verdict"], VERSION_WAYS)}
+<p><b>A useful rule:</b> if silver keeps the full history of its sources (it does in our platform), you can always rebuild any past state of gold. So you need versioned gold facts only when you must show "exactly what we published then" quickly and provably, for example to an auditor. In our harness, both writer modes are written and tested (below) but not yet wired in as fact modes. That is owed.</p>
+<details class="code"><summary>The two writer modes (builds.py), with table-driven tests in test_builds.py</summary>{C.code(src("builds.py", "plan_fact_versions", "plan_adjustments"))}</details>
+</section>"""
+
+
+QA_EXTRA += [
+    ("Can a fact table be written in SQL?", "Yes. The business rule of a fact is usually a few CTEs: add child rows up per parent, apply the rule, select the grain. The harness or dbt does the rest: picks the days, looks up keys, checks and writes. Our SQL and PySpark builds return the same rows."),
+    ("How does a custom gold harness compare with dbt?", "For the business rule they are equal: the same SQL. dbt is better at lineage, docs, adapters and community. A harness is better at choosing which days to rebuild, checking before writing (dbt's data tests run after the table is written), completeness, restatements and stable integer keys. Teams on dbt can add those as macros and a write-audit-publish step."),
+    ("Is a delivery a fact or a dimension?", "A fact: it is an event with numbers. It can be an input to another fact (order lines with OTIF flags) or its own fact at one row per delivery. Dimensions describe what you filter and group by, such as dealer, warehouse and product."),
+    ("What is a versioned fact table?", "A fact that keeps every version of a row, dated by when it was recorded, like SCD Type 2 on the fact's grain. It answers 'what did we report on that day?'. The alternatives are current-state facts with a restatement log, or append-only adjustment rows."),
 ]

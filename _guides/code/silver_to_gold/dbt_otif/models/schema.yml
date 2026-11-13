@@ -1,0 +1,42 @@
+version: 2
+models:
+  - name: fact_otif
+    columns:
+      - name: line_id
+        data_tests: [unique, not_null]        # the grain check
+      - name: dealer_key
+        data_tests: [not_null]
+      - name: otif
+        data_tests:
+          - accepted_values: {values: [0, 1], quote: false}
+  - name: fact_otif_careless
+    columns:
+      - name: line_id
+        data_tests: [unique]
+
+unit_tests:                                    # table-driven: rows in, rows out (dbt 1.8 and later)
+  - name: otif_late_short_and_split_delivery
+    model: fact_otif
+    overrides:
+      macros: {is_incremental: false}
+    given:
+      - input: ref('order_lines')
+        rows:
+          - {line_id: L2, dealer_id: D1, qty_ordered: 5, promised_date: 2026-11-10, _seq: 1}
+          - {line_id: L3, dealer_id: D7, qty_ordered: 8, promised_date: 2026-11-11, _seq: 2}
+      - input: ref('deliveries')
+        rows:
+          - {line_id: L2, qty: 5, delivered_date: 2026-11-11, _seq: 1}
+          - {line_id: L3, qty: 6, delivered_date: 2026-11-11, _seq: 2}
+          - {line_id: L3, qty: 2, delivered_date: 2026-11-14, _seq: 3}
+      - input: ref('dim_dealer')
+        rows:
+          - {dealer_key: 1, dealer_id: D1, valid_from: 2024-01-01, valid_to: 9999-12-31}
+          - {dealer_key: 2, dealer_id: D7, valid_from: 2024-03-01, valid_to: 2026-11-12}
+      - input: ref('delivery_files')
+        rows:
+          - {warehouse: WH-A, file_date: 2026-11-10}
+    expect:
+      rows:
+        - {line_id: L2, qty_delivered: 5, on_time: 0, in_full: 1, otif: 0, dealer_key: 1}
+        - {line_id: L3, qty_delivered: 8, on_time: 0, in_full: 1, otif: 0, dealer_key: 2}
