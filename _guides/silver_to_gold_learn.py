@@ -336,7 +336,7 @@ def part_a():
 <section id="start" class="part"><p class="eyebrow">Start here</p><h2>How to read this page</h2>
 <div class="start"><p><b>If this layer feels complex, read Part A first and nothing else.</b> It follows one tiny tyre company through two nights. Every idea on this page (watermarks, windows, keys, completeness, restatements, checks) shows up there as something that happens to real rows, in a picture and in a table. Every number in Part A came out of a real run of the code shown, on Spark 3.5.1 and Delta 3.2.0.</p>
 <ul><li><b>Part A</b>: learn it from zero with one example.</li>
-<li><b>Part B</b>: the six kinds of fact, why there are six, and how each is built as reader, processor and writer.</li>
+<li><b>Part B</b>: the six kinds of fact from zero: everyday analogies, one bank over three days, nine businesses, how to pick a kind, then how each is built as reader, processor and writer.</li>
 <li><b>Part C</b>: can this layer be a Databricks declarative pipeline? Pros, cons and verdicts.</li>
 <li><b>Part D</b>: which part of the harness uses each setting, the fact in SQL and in dbt, and our harness against dbt.</li>
 <li><b>Part E</b>: is a delivery a fact or a dimension, and what if facts are versioned too.</li>
@@ -530,7 +530,7 @@ def part_b():
         ("Aggregate", "windows the source fact rebuilt", "group by", "replace windows", "Pursue only where a question is slow and frequent"),
         ("Consolidated", "changed periods of each source", "bring each to one grain, full outer join", "replace windows", "Pursue for plan vs actual, budget vs spend"),
     ]
-    return f"""
+    return part_b_feel() + f"""
 <section id="b-why" class="part"><p class="eyebrow">Part B · 1</p><h2>Why are there so many kinds of fact?</h2>
 <p>Because business questions come in a few different shapes, and each shape needs rows that behave differently over time. "What happened?" needs a row per event that never changes. "How much is in stock?" needs a row per day even on quiet days. "How far along is each order?" needs one row that keeps changing. Put the wrong shape in the wrong kind of table and the numbers come out wrong, or the queries crawl.</p>
 <p>So the kind is not decoration. <b>It decides how the reader finds the windows and how the writer writes.</b> That is why the harness asks for it in the settings file, and why one harness can build all six: it knows six ways to read and two ways to write, and the business rule stays in the small build.</p>
@@ -550,7 +550,7 @@ def part_b():
 <p>All six examples were run. The tables show their real output.</p>
 {''.join(blocks)}
 <h3>All six on one page</h3>{vtable(["Kind", "Reader finds windows by", "Processor", "Writer", "Verdict"], summary)}
-</section>"""
+</section>""" + part_b_more()
 
 
 # ------------------------------------------------------------------ Part C content
@@ -828,4 +828,190 @@ QA_EXTRA += [
     ("How does a custom gold harness compare with dbt?", "For the business rule they are equal: the same SQL. dbt is better at lineage, docs, adapters and community. A harness is better at choosing which days to rebuild, checking before writing (dbt's data tests run after the table is written), completeness, restatements and stable integer keys. Teams on dbt can add those as macros and a write-audit-publish step."),
     ("Is a delivery a fact or a dimension?", "A fact: it is an event with numbers. It can be an input to another fact (order lines with OTIF flags) or its own fact at one row per delivery. Dimensions describe what you filter and group by, such as dealer, warehouse and product."),
     ("What is a versioned fact table?", "A fact that keeps every version of a row, dated by when it was recorded, like SCD Type 2 on the fact's grain. It answers 'what did we report on that day?'. The alternatives are current-state facts with a restatement log, or append-only adjustment rows."),
+]
+
+
+# ------------------------------------------------------------------ Part B, from zero: feel, domains, picking, adding up
+ANALOGY = [
+    ("1. Transaction", "The shop's till roll", "One line printed per sale, the moment it happens. Lines are never rewritten. A quiet day prints nothing."),
+    ("2. Periodic snapshot", "A photo of the shelves every evening", "Taken every evening, busy day or not. Each photo shows how much is there, not what happened."),
+    ("3. Accumulating snapshot", "A parcel's tracking card", "One card per parcel. Boxes get ticked as it moves: packed, shipped, delivered. The same card is updated."),
+    ("4. Factless", "The attendance register", "A tick says someone was there. No amounts, just 'it happened'. A blank shows who did not come."),
+    ("5. Aggregate", "The total at the bottom of each page", "Written from the lines above it, so nobody re-adds the page every time they ask."),
+    ("6. Consolidated", "The target chart on the office wall", "This month's target and this month's actual, side by side, from two different notebooks."),
+]
+
+BANK = {
+    "1. Transaction: fact_card_txn (one row per card transaction)": (
+        ["account", "date", "what", "amount"],
+        [["A1", "1 Nov", "groceries", "-1,200"], ["A1", "2 Nov", "salary", "+50,000"]],
+        "3 Nov had no transactions, so it has no row. Add the amounts up any way you like: by day, month, account, merchant."),
+    "2. Periodic snapshot: fact_daily_balance (one row per account per day)": (
+        ["account", "date", "closing balance"],
+        [["A1", "1 Nov", "8,800"], ["A1", "2 Nov", "58,800"], ["A1", "3 Nov", "58,800"]],
+        "The account opened November with 10,000. 3 Nov was quiet, but it still has a row, so a balance chart has no gaps. Never add balances across days: 8,800 + 58,800 + 58,800 is not money anyone has."),
+    "3. Accumulating snapshot: fact_loan_application (one row per application)": (
+        ["application", "applied", "documents in", "approved", "money paid", "days to approve"],
+        [["LN-77", "1 Nov", "2 Nov", "3 Nov", "(not yet)", "2"]],
+        "One row, updated on each of the three days as the loan moved. 'Money paid' is still empty and will be filled in on the day it happens. 'How long do approvals take?' is the average of days_to_approve across applications."),
+    "4. Factless: fact_branch_visit (one row per customer per branch per day)": (
+        ["customer", "branch", "date"],
+        [["Asha", "MG Road", "1 Nov"], ["Ravi", "MG Road", "2 Nov"]],
+        "No amounts. Count rows to get footfall. Who did NOT visit this month? Compare with the customer list (a dimension), or keep a coverage table of who was invited."),
+    "5. Aggregate: fact_branch_month (one row per branch per month)": (
+        ["branch", "month", "transactions", "debits", "credits"],
+        [["MG Road", "Nov", "2", "-1,200", "+50,000"]],
+        "Built from fact_card_txn, never from silver, so it always agrees with it. On 2 Nov the November row was replaced (1 transaction became 2)."),
+    "6. Consolidated: fact_loans_plan_vs_actual (one row per branch per month)": (
+        ["branch", "month", "loans planned", "loans approved", "gap"],
+        [["MG Road", "Nov", "40", "1", "-39"]],
+        "Plan comes from the finance budget, approved loans from fact_loan_application; both brought to branch and month first, then put side by side."),
+}
+
+DOMAINS = [
+    ("Retail shop", "A sale line: one row per item on a receipt", "Stock per store per product per day", "Online order: placed, packed, shipped, delivered, returned", "A product on promotion in a store on a day", "Sales per store per week", "Sales against target per store per month"),
+    ("Bank", "A card transaction", "Account balance at the end of each day", "Loan application: applied, documents, approved, paid", "A customer attended a webinar", "Transactions per branch per month", "Planned against actual loans per branch"),
+    ("Hospital", "A lab test result; a medicine dose given", "Beds occupied per ward at midnight", "A patient stay: admitted, operated, discharged, billed", "A patient booked into a clinic slot (no-shows from coverage)", "Admissions per ward per month", "Planned against actual operations per theatre per week"),
+    ("Airline", "A ticket sold: one row per flight segment", "Seats sold per flight, each day before departure", "A booking: booked, checked in, boarded, bags delivered", "A crew member rostered on a flight", "Passengers per route per month", "Forecast against actual passengers per route"),
+    ("Telecom", "A call or a data session", "Active subscribers per plan at month end", "New connection: ordered, SIM sent, activated, first recharge", "A customer was eligible for an offer", "Data used per mast per hour", "Capacity plan against actual traffic per region"),
+    ("School or university", "A fee payment", "Students enrolled per course on census day", "Admission: applied, interviewed, offered, joined", "A student was present in a class", "Average marks per class per term", "Planned against actual intake per course"),
+    ("HR", "A payroll payment line", "Headcount per department at month end", "A hire: job opened, interviews, offer, joined", "An employee completed a training", "Leavers per department per quarter", "Hiring plan against actual hires"),
+    ("Streaming app", "A play: one row per play", "Paying subscribers per plan per day", "A new user: signed up, first play, subscribed, cancelled", "A user was shown a title (an impression)", "Minutes watched per show per day", "Forecast against actual subscribers per country"),
+    ("Tyre maker (this page)", "An order line with OTIF flags", "Stock per warehouse per day", "An order line: ordered, shipped, delivered, invoiced", "A sales rep visited a dealer", "OTIF per region per day", "Plan against actual per dealer per month"),
+]
+
+ADDING = [
+    ("Transaction", "Yes", "Yes", "Amounts and quantities add up any way."),
+    ("Periodic snapshot", "Yes (stock in all warehouses)", "No: take the last day, or the average", "Levels and balances. The classic trap: summing a month of daily balances."),
+    ("Accumulating snapshot", "Counts yes; durations no", "Count by a milestone's date", "Durations (days to approve) are averaged or put in bands, never summed."),
+    ("Factless", "Count rows", "Count rows", "There is nothing else to add."),
+    ("Aggregate", "Same as the fact it came from", "Same as the fact it came from", "Store counts (lines, on-time lines), never only a percent: percents cannot be added or averaged."),
+    ("Consolidated", "Yes, per side", "Yes, per side, at the shared grain", "Only after both sides are at the same grain; otherwise the plan is repeated and multiplied."),
+]
+
+CONFUSE = [
+    ("'A daily balance is just the sum of transactions. Why store it?'", "You could compute it, but every chart would re-add years of transactions for every day. Some sources only send balances (a bank statement, a stock count). And the quiet days must exist as rows. So the snapshot is stored as its own fact."),
+    ("'Is an order a transaction or an accumulating snapshot?'", "Both, for different questions. 'What did we sell?' reads the order lines as events (transaction). 'Where is each order and how long do steps take?' reads one row per order that keeps changing (accumulating). Many businesses have both, built from the same silver."),
+    ("'Is attendance a fact or a dimension?'", "The student list is a dimension (who exists). The attendance register is a factless fact (who was where, when). Rule: if it happens at a time and links several things (student, class, day), it is a fact, even with no numbers."),
+    ("'Is an aggregate the same as a metric view or a dashboard total?'", "An aggregate is a stored table, kept in step with its fact. A metric view or a dashboard computes the total each time someone asks. Build an aggregate only when that is too slow and the question is asked often."),
+    ("'Why not join plan and actual in the dashboard?'", "Every dashboard would have to know the grain trap (a monthly plan joined to daily sales repeats the plan 30 times). A consolidated fact does it once, correctly, in gold."),
+    ("'Is OTIF a transaction fact? It changes when a late delivery arrives.'", "Yes: one row per order line, an event. Its flags can change while late deliveries arrive inside the lookback, and each change is logged as a restatement. If you mainly track the journey of each line, model it as an accumulating snapshot instead."),
+    ("'How many kinds will my project need?'", "Most marts are mostly transaction facts, a few periodic snapshots for levels, one or two accumulating snapshots for key processes, and aggregates only where speed demands. Factless and consolidated appear when someone asks 'who did not' or 'against plan'."),
+]
+
+
+def d_three_days():
+    kinds = [
+        ("1. Transaction", [["groceries -1,200"], ["groceries -1,200", "salary +50,000"], ["groceries -1,200", "salary +50,000"]],
+         [[0], [1], []], [[], [], []], "quiet day: no new row"),
+        ("2. Periodic", [["1 Nov: 8,800"], ["1 Nov: 8,800", "2 Nov: 58,800"], ["1 Nov: 8,800", "2 Nov: 58,800", "3 Nov: 58,800"]],
+         [[0], [1], [2]], [[], [], []], "quiet day: still a row"),
+        ("3. Accumulating", [["LN-77 applied 1 Nov, rest empty"], ["LN-77 applied, documents 2 Nov"], ["LN-77 ... approved 3 Nov"]],
+         [[0], [], []], [[], [0], [0]], "same row, filled in"),
+        ("4. Factless", [["Asha visited, 1 Nov"], ["Asha visited, 1 Nov", "Ravi visited, 2 Nov"], ["Asha visited, 1 Nov", "Ravi visited, 2 Nov"]],
+         [[0], [1], []], [[], [], []], "rows with no numbers"),
+        ("5. Aggregate", [["Nov: 1 txn, -1,200"], ["Nov: 2 txns, +48,800"], ["Nov: 2 txns, +48,800"]],
+         [[0], [], []], [[], [0], []], "summary row replaced"),
+        ("6. Consolidated", [["Nov: plan 40, approved 0"], ["Nov: plan 40, approved 0"], ["Nov: plan 40, approved 1"]],
+         [[0], [], []], [[], [], [0]], "two sources, one row"),
+    ]
+    i = t(90, 26, "kind", 15, "middle")
+    for d, s in enumerate(["day 1 (1 Nov)", "day 2 (2 Nov)", "day 3 (3 Nov)"]):
+        i += t(300 + d * 250, 26, s, 15, "middle")
+    for k, (name, days, new, chg, note) in enumerate(kinds):
+        y = 40 + k * 108
+        i += f'<path d="M10,{y - 4} L990,{y - 4}" stroke="#ccc" stroke-width="1"/>'
+        i += t(90, y + 36, name, 15, "middle") + t(90, y + 58, note, 12, "middle")
+        for d, rows in enumerate(days):
+            x = 185 + d * 250
+            for j, r in enumerate(rows):
+                f = "g" if j in new[d] else ("y" if j in chg[d] else "w")
+                i += bx(x, y + 4 + j * 30, 230, 26, [r], f, 12)
+    i += t(500, 700, "green = new row, yellow = an existing row changed, white = unchanged", 13, "middle")
+    return svg(1000, 712, "Six kinds of fact table watched over three days at a bank. Transaction: a row per card payment, "
+                          "groceries on day 1, salary on day 2, nothing new on the quiet day 3. Periodic snapshot: a balance "
+                          "row every day, including the quiet day 3. Accumulating snapshot: one loan application row, filled in "
+                          "as documents arrive on day 2 and approval on day 3. Factless: rows saying a customer visited, with no "
+                          "numbers. Aggregate: one November summary row, replaced on day 2 when a second transaction arrives. "
+                          "Consolidated: one row with 40 loans planned and loans approved, changed on day 3 when the loan is approved.", i)
+
+
+def d_pick():
+    i = ""
+    qs = [("Is it built from other gold facts?", 20), ("Is it a process with steps over days?", 120),
+          ("Is it a level at a moment (balance, stock, headcount)?", 220), ("Something happened. Does it have numbers to add?", 320)]
+    for q, y in qs:
+        i += bx(20, y, 400, 64, [q], "w", 14)
+    for y in (84, 184, 284):
+        i += ar(220, y, 220, y + 34) + t(232, y + 22, "no", 13)
+    i += ar(420, 52, 480, 52) + t(450, 44, "yes", 13, "middle")
+    i += bx(482, 14, 250, 76, ["to answer one question fast:", "5. Aggregate"], "l", 14)
+    i += bx(742, 14, 250, 76, ["to compare two sources:", "6. Consolidated"], "r", 14)
+    i += ar(420, 152, 480, 152) + t(450, 144, "yes", 13, "middle") + bx(482, 124, 250, 56, ["3. Accumulating snapshot"], "y", 14)
+    i += ar(420, 252, 480, 252) + t(450, 244, "yes", 13, "middle") + bx(482, 224, 250, 56, ["2. Periodic snapshot"], "b", 14)
+    i += ar(420, 352, 480, 352) + t(450, 344, "yes", 13, "middle") + bx(482, 324, 250, 56, ["1. Transaction"], "g", 14)
+    i += ar(220, 384, 220, 418) + t(232, 406, "no", 13) + bx(20, 420, 400, 56, ["4. Factless (count the rows)"], "w", 14)
+    return svg(1000, 488, "How to pick the kind, as four questions. Is it built from other gold facts? If yes: to answer one "
+                          "question fast it is an aggregate; to compare two sources it is consolidated. If no: is it a process "
+                          "with steps over days? Then accumulating snapshot. Is it a level at a moment, like a balance, stock or "
+                          "headcount? Then periodic snapshot. Something happened: does it have numbers to add? If yes, "
+                          "transaction; if no, factless.", i)
+
+
+def part_b_feel():
+    return f"""
+<section id="b-feel" class="part"><p class="eyebrow">Part B · 0</p><h2>The six kinds of fact, from zero</h2>
+<p>A fact table is a business's notebook of what happened or what was measured. Real businesses keep several kinds of notebook, because they need to remember different kinds of things. Picture a small shop:</p>
+{C.table(["Kind", "In a shop", "What you see"], ANALOGY)}
+<p>The feel comes from watching the tables <b>change</b>. Here are all six at one bank, over three days. Day 1, a customer buys groceries. Day 2, her salary arrives. Day 3 nothing happens on her account, but her loan gets approved. Look at what each table does on each day.</p>
+{fig(d_three_days(), "Transaction adds rows only when something happens. Periodic adds a row every day. Accumulating fills one row in. Factless adds rows with no numbers. Aggregate and consolidated replace a summary row.")}
+<p>That picture is the whole idea:</p>
+<ul><li><b>Transaction:</b> rows only get <b>added</b>, and only when something happens.</li>
+<li><b>Periodic snapshot:</b> a row for <b>every</b> period, even a quiet one.</li>
+<li><b>Accumulating snapshot:</b> <b>one</b> row per process, <b>updated</b> as it moves.</li>
+<li><b>Factless:</b> rows with <b>no numbers</b>; you count them.</li>
+<li><b>Aggregate</b> and <b>consolidated:</b> <b>built from other facts</b>, and their rows are <b>replaced</b> when their sources change.</li></ul>
+</section>"""
+
+
+def part_b_more():
+    bank = ""
+    for title, (head, rows, note) in BANK.items():
+        bank += f"<h3>{E(title)}</h3>{htable(head, rows)}<p>{E(note)}</p>"
+    return f"""
+<section id="b-bank" class="part"><p class="eyebrow">Part B · 4</p><h2>One bank, all six kinds, with rows</h2>
+<p>The same customer, Asha, account A1, branch MG Road, in all six tables. These rows are made up to teach, not from a run. Read each note: it says what you may and may not add up.</p>
+{bank}</section>
+
+<section id="b-domains" class="part"><p class="eyebrow">Part B · 5</p><h2>The same six kinds in nine businesses</h2>
+<p>Every business has all six shapes of question. Read one row to see a whole business. Read one column to get the feel of one kind.</p>
+{htable(["Business", "1. Transaction", "2. Periodic snapshot", "3. Accumulating snapshot", "4. Factless", "5. Aggregate", "6. Consolidated"], DOMAINS)}
+<p>Patterns to notice down the columns:</p>
+<ul><li><b>Transaction</b> is always a single event with an amount: a sale, a payment, a call, a play.</li>
+<li><b>Periodic</b> always has a level and a time point: "at midnight", "at month end", "each day before departure".</li>
+<li><b>Accumulating</b> always reads like a journey with three to five named steps.</li>
+<li><b>Factless</b> is always "X was with Y at time Z": attended, rostered, eligible, shown.</li>
+<li><b>Aggregate</b> always says "per something per period".</li>
+<li><b>Consolidated</b> always says "against": plan against actual, forecast against actual.</li></ul>
+</section>
+
+<section id="b-pick" class="part"><p class="eyebrow">Part B · 6</p><h2>Which kind is it? Four questions</h2>
+<p>Ask the questions in this order. The first "yes" is your kind.</p>
+{fig(d_pick(), "Built from other facts? Process? Level? Event with numbers? The first yes wins.")}
+<p>Try it: "seats sold per flight, each day before departure". Not built from other facts. Not a journey. A level at a moment (seats sold so far, as of each day). So: periodic snapshot. "A user was shown a title": not built from facts, not a process, not a level; it happened, with no number to add. So: factless.</p>
+</section>
+
+<section id="b-add" class="part"><p class="eyebrow">Part B · 7</p><h2>What you may add up, per kind</h2>
+<p>Most wrong numbers in reports come from adding up something that must not be added. Each kind has its own rule:</p>
+{C.table(["Kind", "Add across things (stores, accounts)?", "Add across time?", "Note"], ADDING)}
+</section>
+
+<section id="b-confuse" class="part"><p class="eyebrow">Part B · 8</p><h2>Questions people get stuck on</h2>
+{C.table(["Question", "Answer"], CONFUSE)}
+</section>"""
+
+
+QA_EXTRA += [
+    ("What are the types of fact tables?", "Six: transaction (a row per event), periodic snapshot (a row per thing per period, quiet periods included), accumulating snapshot (one row per process, updated as it moves), factless (rows with no numbers, counted), aggregate (a summary built from another fact) and consolidated (two sources brought to one grain to compare)."),
+    ("What is the difference between a periodic and an accumulating snapshot?", "A periodic snapshot adds a new row for every thing every period, like a daily account balance; old rows never change. An accumulating snapshot keeps one row per process, like a loan application, and updates it as each step happens."),
 ]
