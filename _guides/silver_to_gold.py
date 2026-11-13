@@ -19,13 +19,14 @@ sys.path.insert(0, str(ROOT / "_paths"))
 import components as C  # noqa: E402
 from bi_choice import ar, bx, svg, t, vtable  # noqa: E402
 from gold_harness_spec import CSS, fig  # noqa: E402
+import silver_to_gold_learn as LEARN  # noqa: E402
 
 wb = C.wb
 SITE = wb.SITE
 URL_PATH = "/learn/silver-to-gold/"
 DATE = "2026-11-13"
 TITLE = "Silver to gold: the harness that builds facts and dimensions"
-DESC = ("How gold is built from silver by one harness: incremental loading with watermarks, rebuilding changed windows at "
+DESC = ("A worked example from zero, the six kinds of fact with reader, processor and writer, whether it can be a Databricks declarative pipeline, and how gold is built from silver by one harness: incremental loading with watermarks, rebuilding changed windows at "
         "a declared grain, completeness and restatements, late facts and late dimensions, pure functions tested locally "
         "on a synthetic world, how the harness answers each gold problem, and reliability and cost practices.")
 
@@ -352,7 +353,13 @@ QA = [
 def page():
     url = f"{SITE}{URL_PATH}"
     toc = "".join(f'<li><a href="#{a}">{E(b)}</a></li>' for a, b in [
-        ("plain", "In plain words"), ("harness", "1. The harness, step by step"), ("one", "1b. One harness for every fact; SQL or PySpark"),
+        ("start", "Start here: how to read this page"),
+        ("a-story", "A1. The story: a tyre company"), ("a-night", "A2. One nightly run in seven steps"),
+        ("a-night1", "A3. Night 1, step by step"), ("a-night2", "A4. Night 2: late data, late dealer"),
+        ("a-crash", "A5. A crash halfway"), ("a-careless", "A6. A careless join"), ("a-tests", "A7. Tests and the code"),
+        ("b-why", "B1. Why so many kinds of fact?"), ("b-rpw", "B2. Reader, processor, writer"), ("b-kinds", "B3. The six kinds with examples"),
+        ("c-short", "C1. Declarative pipeline: can it?"), ("c-sketch", "C2. The example on Lakeflow"), ("c-pros", "C3. Pros, cons, verdicts"),
+        ("plain", "D. The rulebook: in plain words"), ("harness", "1. The harness, step by step"), ("one", "1b. One harness for every fact; SQL or PySpark"),
         ("debug", "1c. Troubleshooting, record drops, many-to-many"), ("incr", "2. How incremental loading works"),
         ("watermark", "3. Watermarks"), ("windows", "4. Grain and windows"), ("complete", "5. Completeness and restatements"),
         ("late", "6. Late facts and late dimensions"), ("history", "6b. History load, reloads, bad batches"), ("pure", "7. Pure functions, local tests, regression"),
@@ -361,12 +368,16 @@ def page():
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › <a href="/learn/gold-data-modelling/">Gold data modelling</a> › Silver to gold</p>
 <p class="eyebrow" style="margin-top:22px">Data engineering · guide</p>
 <h1>{E(TITLE)}</h1>
-<p class="lede"><a href="/learn/gold-data-modelling/">Gold data modelling</a> said what to build: facts at a declared grain, conformed dimensions, surrogate keys. This page is how to build it from silver, every day, without losing, doubling or silently changing a number, and without the cost growing with history. It describes the harness as we built and run it, and links to the <a href="/learn/gold-harness-spec/">gold harness spec</a> for the full requirements.</p>
+<p class="lede"><a href="/learn/gold-data-modelling/">Gold data modelling</a> said what to build: facts and dimensions. This page is how to build them from silver every night, without losing, doubling or silently changing a number, and without the cost growing with history. It starts from zero with one small worked example, then covers the six kinds of fact and whether this layer can be a Databricks declarative pipeline, and ends with the full rulebook.</p>
 <div class="gh">
 <div class="box"><b>In one paragraph.</b> One harness builds every gold table the same way. It reads only what changed in silver since its watermark, works out which windows of the fact (days, months, hours) those changes touch, rebuilds just those windows with a small pure build per fact, looks up keys as of each event, checks everything before writing, replaces the windows, logs any number that changed after it was published, and moves the watermark last. Because the build is pure, it is tested on a laptop with small tables and with a whole synthetic company that plants problems on purpose.</div>
 <ul class="toc">{toc}</ul>
+{LEARN.part_a()}
+{LEARN.part_b()}
+{LEARN.part_c()}
 
-<section id="plain"><p class="eyebrow">Lesson first</p><h2>In plain words</h2>
+<section id="plain" class="part"><p class="eyebrow">Part D · the rulebook</p><h2>Part D. The full rulebook, in plain words</h2>
+<p>Everything below is reference: the rules the harness follows, in tables. If a word is new, it is in the list under <a href="#start">Start here</a>, and Part A shows it happening.</p>
 <p>Silver is clean, but shaped like the sources: an orders table, a deliveries table, a dealers table with history. Gold is shaped for questions: a fact of order lines with on-time flags, a monthly sales fact, dimensions with keys. The silver-to-gold hop is the factory between them. A good factory does the same steps for every product, checks every product before it leaves, and only remakes what changed.</p>
 {fig(d_hop(), "Same steps for every gold table; only the build in the middle is written per fact.")}</section>
 
@@ -448,7 +459,7 @@ def page():
 
 <section id="status"><p class="eyebrow">11. Status</p><h2>What is built, and what is owed</h2>{C.table(["Part", "State", "Evidence"], STATUS)}</section>
 <section id="decide"><p class="eyebrow">12. Decisions</p><h2>Decisions with verdicts</h2>{vtable(["Decision", "Choice", "Verdict"], DECISIONS)}</section>
-<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(QA)}</section>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(QA + LEARN.QA_EXTRA)}</section>
 <section id="next"><p class="eyebrow">Related</p><h2>Where it connects</h2>
 <p><a href="/learn/gold-data-modelling/">← Gold data modelling</a> · <a href="/learn/gold-harness-spec/">Gold harness spec</a> · <a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD Type 2 on Databricks</a> · <a href="/learn/metric-views/">Metric views</a> · <a href="/learn/table-maintenance/">Table maintenance</a> · <a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a> · <a href="/data-engineering/">All data engineering</a></p></section>
 </div>"""
@@ -458,8 +469,8 @@ def page():
            "isAccessibleForFree": True, "dateModified": DATE, "author": {"@type": "Person", "name": "Basant Choudhary", "url": f"{SITE}/#about"},
            "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": SITE}},
           {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": items},
-          {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in QA]}]
-    head = CSS + "".join(f'<script type="application/ld+json">{json.dumps(x, ensure_ascii=False)}</script>' for x in ld)
+          {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in QA + LEARN.QA_EXTRA]}]
+    head = CSS + LEARN.EXTRA_CSS + "".join(f'<script type="application/ld+json">{json.dumps(x, ensure_ascii=False)}</script>' for x in ld)
     return wb.page(TITLE, DESC, url, body, head)
 
 
