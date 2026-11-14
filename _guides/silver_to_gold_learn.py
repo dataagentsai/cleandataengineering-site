@@ -372,6 +372,7 @@ def part_a():
 {htable(["input", "watermark (from last run)", "high mark (fixed at start)", "rows read"], [
         ["order_lines", r1["read_from"]["order_lines"], r1["read_to"]["order_lines"], "L1 to L6 (6 rows)"],
         ["deliveries", r1["read_from"]["deliveries"], r1["read_to"]["deliveries"], "X1 to X5 (5 rows)"]])}
+<p><b>Who makes these change numbers, and can gold miss a change?</b> In this story they are a simple column. In a real platform, read <a href="#a-bookmark">A8</a> first: the bookmark should be the table's own commit version, because silver is written in many ways.</p>
 <p><b>Why change numbers and not times?</b> Two rows can have the same time, and clocks on different servers disagree. A change number only goes up and never repeats, so nothing is skipped or read twice.</p>
 <h3>Step 3: which windows do the changes touch?</h3>
 <p>The fact is rebuilt one day of promised date at a time. Each changed row points at one day. A delivery has no promised date of its own, so it points at the day of its order line.</p>
@@ -1015,4 +1016,85 @@ def part_b_more():
 QA_EXTRA += [
     ("What are the types of fact tables?", "Six: transaction (a row per event), periodic snapshot (a row per thing per period, quiet periods included), accumulating snapshot (one row per process, updated as it moves), factless (rows with no numbers, counted), aggregate (a summary built from another fact) and consolidated (two sources brought to one grain to compare)."),
     ("What is the difference between a periodic and an accumulating snapshot?", "A periodic snapshot adds a new row for every thing every period, like a daily account balance; old rows never change. An accumulating snapshot keeps one row per process, like a loan application, and updates it as each step happens."),
+]
+
+
+# ------------------------------------------------------------------ A8: who makes the bookmark; silver write topologies
+BM = json.loads((HERE / "code" / "silver_bookmark" / "results.json").read_text())
+BMI = {r["op"]: r for r in json.loads((HERE / "code" / "silver_bookmark" / "iceberg_results.json").read_text())}
+
+
+def d_topo():
+    i = t(110, 20, "many ways to write silver", 14, "middle") + t(500, 20, "silver table", 14, "middle") + t(860, 20, "one way to read it", 14, "middle")
+    ws = ["append new rows", "MERGE: Type 1 update", "MERGE: Type 2 close + new", "delete rows", "full overwrite", "two writers at once"]
+    for k, w in enumerate(ws):
+        y = 34 + k * 40
+        i += bx(10, y, 200, 32, [w], "w", 13) + ar(210, y + 16, 378, 140)
+    i += bx(380, 60, 240, 170, ["the table's own change log", "v0 WRITE", "v1 WRITE", "v2 UPDATE", "v3 MERGE  ...", "numbered at commit, in order"], "b", 13)
+    i += ar(620, 145, 738, 145) + bx(740, 95, 250, 100, ["gold reader", "'all changes after", "version N, up to M'"], "g", 14)
+    i += t(500, 284, "Writers can work any way they like. The reader only asks the table what changed since its bookmark.", 14, "middle")
+    return svg(1000, 296, "Many ways to write silver (append, Type 1 MERGE, Type 2 close and insert, deletes, full overwrite, "
+                          "two writers at once) all land in the table's own change log, numbered at commit time in order. The "
+                          "gold reader asks only for all changes after version N up to M, whatever the writer did.", i)
+
+
+def d_order():
+    i = '<path d="M30,120 L970,120" stroke="#111" stroke-width="1.5" marker-end="url(#bia)"/>' + t(965, 144, "time", 13, "end")
+    ev = [(80, "batch 8 starts", "gets number 8", "w"), (240, "batch 9 starts", "gets number 9", "w"), (400, "batch 9 commits", "table version 7", "b"),
+          (560, "gold runs", "bookmark: 9 / v7", "g"), (720, "batch 8 commits", "table version 8", "b"), (880, "gold runs", "", "g")]
+    for x, a, b2, f in ev:
+        i += bx(x - 70, 40, 140, 56, [a, b2] if b2 else [a], f, 13) + f'<circle cx="{x}" cy="120" r="5" fill="#111"/>'
+    i += t(880, 170, "by number: 8 is not after 9, so MISSED", 13, "middle") + t(880, 190, "by table version: v8 is after v7, caught", 13, "middle")
+    return svg(1000, 204, "Two writers. Batch 8 starts and takes number 8; batch 9 starts and takes number 9; batch 9 commits "
+                          "first as table version 7; gold runs and bookmarks number 9 or version 7; batch 8 commits as version 8. "
+                          "Reading by number, 8 is not after 9, so it is missed. Reading by table version, 8 is after 7, so it "
+                          "is caught.", i)
+
+
+def part_a8():
+    names = {"_src_seq_first": "source number, set on insert only", "_src_seq": "source number, updated on change",
+             "_batch": "silver batch number on every touched row", "change_feed": "Delta change data feed (table version)"}
+    head = ["How silver was written"] + [names[r] for r in BM["readers"]] + ["Iceberg changelog view"]
+    rows = []
+    for x in BM["table"]:
+        ice = BMI.get(x["op"], {}).get("verdict", "not run")
+        rows.append([x["op"]] + list(x["verdicts"]) + [ice])
+    ow = BM["overwrite_change_feed"]
+    return f"""
+<section id="a-bookmark" class="part"><p class="eyebrow">Part A · 8</p><h2>Who makes the bookmark, and can gold miss a change?</h2>
+<p>In the story, each silver row had a <code>_seq</code> column and gold read "rows with _seq after my bookmark". That was a simplification, and it hides a real danger. Silver is written in many ways: new rows appended, Type 1 updates, Type 2 close-and-insert, deletes, full overwrites, sometimes two writers at once. A column that every writer must remember to set correctly will, one day, be set wrong, and gold will silently miss a change.</p>
+<p><b>The rule: how gold reads silver must not depend on how silver was written.</b> So the bookmark should not be a column the writers fill in. It should be the table's own change log, which the table format keeps for every write, numbered when the write commits.</p>
+{fig(d_topo(), "Writers vary; the reader asks the table for changes since a version.")}
+<h3>The test: seven ways of writing silver, four ways of reading it</h3>
+<p>We wrote one silver dealer table in each of these ways and, after each write, ran four gold readers from their own bookmarks. "caught" means the reader saw the changed dealer. "caught+" means it saw it, plus unchanged rows (safe, but extra work). "MISSED" means gold would never pick the change up. Delta 3.2 on Spark 3.5.1; the expected results are a table in the test, and the run fails on any difference. The Iceberg column is a separate run on Iceberg 1.9.2 (Type 2 and two-writer cases not run there).</p>
+{htable(head, rows)}
+<h3>What each miss means, in plain words</h3>
+<ul><li><b>A number set on insert and never updated</b> misses every update. Your worry was right: if <code>_seq</code> only goes up for new records, an updated record is never picked up again.</li>
+<li><b>The source's change number, updated on each change</b>, catches updates but misses three things. A hard delete leaves no row to read. A full overwrite from a full copy brings no new change numbers. And when two loads commit out of order, a lower number commits after gold has passed it.</li>
+<li><b>A silver batch number stamped on every row a write touches</b> is better: it catches updates and overwrites. But it only works if every writer follows the rule, it still misses hard deletes, and it still misses out-of-order commits, because the number is taken when a batch starts, not when it commits.</li>
+<li><b>The table's change log</b> (Delta change data feed, Iceberg changelog view) caught every case. The table numbers each commit itself, in commit order, and records inserts, updates, deletes and overwrites, whoever wrote them and however.</li></ul>
+{fig(d_order(), "A number taken at the start of a batch can arrive late. A table version is given at commit.")}
+<h3>Your question about a full overwrite of silver</h3>
+<p>A full overwrite replaces every row. In our run, Delta's change log recorded it as <b>{ow.get("delete", 0)} deletes and {ow.get("insert", 0)} inserts</b>: every row looks changed, so gold rebuilds the windows of every row. That is correct (nothing is missed), but it costs a full rebuild. Iceberg's changelog view removed the rows that did not really change and reported only D1. Either way, the better habit is <b>not to overwrite silver</b>: compare the full copy with silver's current rows and write only the differences (a MERGE on a row hash). Then the change log stays small and gold rebuilds only what changed. This is what the rulebook means by "silver turns the copy into changes".</p>
+<h3>So who generates the bookmark?</h3>
+<div class="box"><b>The table does.</b> Gold keeps, per silver input, the last table version (Delta) or snapshot id (Iceberg) it has read. A run fixes the high mark as the latest version at its start, reads all changes between the two, and moves the bookmark last. No writer has to set anything, so any number of writing styles can feed the same gold.</div>
+<p>There are still two different numbers, with two different jobs. Do not mix them up:</p>
+{C.table(["Number", "Job", "Who makes it"], [
+        ("The source's change sequence (CDC log position, source timestamp)", "Orders changes going INTO silver: which update came last, out-of-order arrivals, SCD Type 2 ordering", "The source system; carried through bronze into silver"),
+        ("The table's commit version or snapshot id", "Bookmarks reads coming OUT of silver: what has gold already seen", "The table format, at commit")])}
+<h3>What this needs, and the catches</h3>
+{C.table(["Need", "Why"], [
+        ("Turn the change log on when the table is created", "Delta: delta.enableChangeDataFeed = true. Iceberg keeps snapshots anyway; the changelog view reads them."),
+        ("Keep history longer than gold can fall behind", "VACUUM (Delta) or snapshot expiry (Iceberg) deletes old versions. If gold's bookmark is older than the oldest version left, the harness must notice and do a logged full rebuild instead."),
+        ("Write SCD Type 2 as one MERGE", "Our test wrote close and insert as two commits (UPDATE, then WRITE). A reader between them would see a closed version with no new one. One MERGE is one commit."),
+        ("Turn full copies into differences", "Overwrites are correct but make every row look changed."),
+        ("A column bookmark only where there is no change log", "Files dropped in folders or API pages: then every writer must follow the contract, and deletes must be soft deletes.")])}
+<div class="warn"><b>In our build:</b> the harness today bookmarks silver inputs by change sequence, as in the story. Moving the silver-to-gold reader to the table change log (Delta change data feed and Iceberg changelog, behind one reader port) is <b>owed</b>.</div>
+<details class="code"><summary>The writers and readers used in this test (topologies.py)</summary>{C.code((HERE / "code" / "silver_bookmark" / "topologies.py").read_text())}</details>
+</section>"""
+
+
+QA_EXTRA += [
+    ("Can incremental loading from silver to gold miss records?", "Yes, if gold bookmarks by a column the writers fill in: a number set only on insert misses updates; a source change number misses hard deletes, full overwrites and out-of-order commits; even a silver batch number misses deletes and out-of-order commits. Reading the table's own change log (Delta change data feed or Iceberg changelog), bookmarked by commit version, caught every case in our test."),
+    ("What happens to Delta change data feed on a full overwrite?", "Every old row is recorded as a delete and every new row as an insert, so a downstream reader sees the whole table as changed. It misses nothing but rebuilds everything. Writing only the differences with a MERGE keeps the change feed small."),
 ]

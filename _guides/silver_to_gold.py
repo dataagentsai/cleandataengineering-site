@@ -115,7 +115,7 @@ INCR = [
 
 WATERMARK = [
     ("What it is", "A bookmark per gold table and per input: the last change this table has already used. Stored in the metadata store's run log, never in a notebook or a file."),
-    ("What it is measured in", "A value that only goes up and never ties: a change sequence from the source, a table commit version, an ordered file list, an API cursor. Timestamps tie and go backwards with clock skew; use them only when nothing better exists, with an overlap and a dedupe."),
+    ("What it is measured in", "For silver inputs: the table's own commit version (Delta change data feed, Iceberg snapshot), so it does not matter how silver was written (see A8). Elsewhere, a value that only goes up and never ties: an ordered file list, an API cursor. Timestamps tie and go backwards with clock skew; use them only when nothing better exists, with an overlap and a dedupe."),
     ("Fixed high mark", "Fixed at the start of the run, so the run reads a closed range and a rerun reads the same range."),
     ("Moves last", "Only after the write and the checks succeed. A crash before that repeats work; it never leaves a gap."),
     ("Never past unsaved data", "If a window was held back (incomplete, failed check), the watermark does not pass it."),
@@ -321,6 +321,7 @@ INDUSTRY = [
 STATUS = [
     ("The harness: windows, keys as of event, completeness, checks, restatements, run log", "Built", "Gold equal to the simulated truth every day: 14 days on a laptop (1/10 data size); 3 days on Databricks Free Edition with eleven planted incidents (13 Nov 2026, gold step about 200 seconds)"),
     ("Incremental reads with watermarks per input", "Built", "Change sequence for database feeds, file lists for drops, cursor for the API"),
+    ("Silver-to-gold reads from the table change log (commit version), not a column", "Owed", "Tested on Delta change data feed and Iceberg changelog view (14 Nov 2026): caught every write style; column bookmarks missed deletes, overwrites and out-of-order commits"),
     ("Pure builds tested on two engines", "Built", "Same stage and build tests on Spark and DuckDB; a 3-day local run on DuckDB takes about 2 minutes"),
     ("Iceberg and Delta through one table port", "Built", "Unity Catalog managed Iceberg on Databricks"),
     ("Gold rerun after a silver rebuild", "Owed", "When a bad batch is voided and silver rebuilt, the affected gold windows must be redone"),
@@ -333,7 +334,7 @@ DECISIONS = [
     ("How gold tables are built", "One harness with metadata; one small build per fact", "Pursue"),
     ("Fact refresh", "Replace changed windows with a lookback", "Pursue"),
     ("Row-level MERGE into large facts", "Only for accumulating snapshots that update by grain key", "Pursue with care"),
-    ("Watermark unit", "Change sequence or commit version, never a wall-clock timestamp alone", "Pursue"),
+    ("Watermark unit", "The silver table's commit version, read through its change log; a column bookmark only where there is no change log; never a wall-clock timestamp alone", "Pursue"),
     ("Incomplete windows", "Publish flagged by default; hold only where readers cannot handle a flag", "Pursue"),
     ("Corrections", "Correction plans with declared windows, never edits in the source", "Pursue"),
     ("Testing", "Pure builds, table-driven tests on two engines, a synthetic world with planted incidents every day", "Pursue"),
@@ -356,7 +357,7 @@ def page():
         ("start", "Start here: how to read this page"),
         ("a-story", "A1. The story: a tyre company"), ("a-night", "A2. One nightly run in seven steps"),
         ("a-night1", "A3. Night 1, step by step"), ("a-night2", "A4. Night 2: late data, late dealer"),
-        ("a-crash", "A5. A crash halfway"), ("a-careless", "A6. A careless join"), ("a-tests", "A7. Tests and the code"),
+        ("a-crash", "A5. A crash halfway"), ("a-careless", "A6. A careless join"), ("a-tests", "A7. Tests and the code"), ("a-bookmark", "A8. Who makes the bookmark? Can gold miss a change?"),
         ("b-feel", "B0. The six kinds from zero"), ("b-why", "B1. Why so many kinds of fact?"), ("b-rpw", "B2. Reader, processor, writer"), ("b-kinds", "B3. The six kinds with examples"),
         ("b-bank", "B4. One bank, all six"), ("b-domains", "B5. Six kinds in nine businesses"), ("b-pick", "B6. Which kind is it?"),
         ("b-add", "B7. What you may add up"), ("b-confuse", "B8. Questions people get stuck on"),
@@ -377,6 +378,7 @@ def page():
 <div class="box"><b>In one paragraph.</b> One harness builds every gold table the same way. It reads only what changed in silver since its watermark, works out which windows of the fact (days, months, hours) those changes touch, rebuilds just those windows with a small pure build per fact, looks up keys as of each event, checks everything before writing, replaces the windows, logs any number that changed after it was published, and moves the watermark last. Because the build is pure, it is tested on a laptop with small tables and with a whole synthetic company that plants problems on purpose.</div>
 <ul class="toc">{toc}</ul>
 {LEARN.part_a()}
+{LEARN.part_a8()}
 {LEARN.part_b()}
 {LEARN.part_c()}
 {LEARN.part_e()}
