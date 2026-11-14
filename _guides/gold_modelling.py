@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "_paths"))
 import components as C  # noqa: E402
 from bi_choice import ar, bx, svg, t, vtable  # noqa: E402
 from gold_harness_spec import CSS, fig  # noqa: E402
+import gold_keys_learn as KL  # noqa: E402
 
 wb = C.wb
 SITE = wb.SITE
@@ -447,8 +448,8 @@ def page():
     url = f"{SITE}{URL_PATH}"
     toc = "".join(f'<li><a href="#{a}">{E(b)}</a></li>' for a, b in [
         ("plain", "In plain words"), ("kimball", "Where Kimball helps, and where not"), ("ontology", "How a business ontology helps"), ("grain", "1. Start with the grain"),
-        ("keys", "2. Keys: business, primary, surrogate"), ("join", "3. Join on surrogate key or business key"),
-        ("scd2join", "4. SCD Type 2 joins"), ("dims", "5. Dimensions"), ("facts", "6. Facts: the kinds"),
+        ("keys-zero", "2a. Keys from zero: one dealer, one story"), ("keys", "2. Keys: business, primary, surrogate"), ("join", "3. Join on surrogate key or business key"),
+        ("scd2join", "4. SCD Type 2 joins"), ("dims", "5. Dimensions"), ("dim-kinds", "5a. Kinds of dimension, with examples"), ("bridge", "5b. Bridge tables: why and when"), ("facts", "6. Facts: the kinds"),
         ("factcols", "7. What goes in a fact (only IDs?)"), ("facthist", "8. A 'Type 1 fact' or a 'Type 2 fact'?"),
         ("design", "9. How to design a fact properly"), ("patterns", "10. Requirement patterns and their designs"),
         ("bus", "11. The bus matrix"), ("more", "12. What else lives in gold"), ("dash", "13. What depends on dashboards"),
@@ -483,6 +484,7 @@ def page():
 <li><b>One grain per table.</b> Order headers and order lines are two facts, or header values are shared out onto lines.</li></ul>
 {fig(d_ladder(), "Coarser grains are built by adding up the atomic one. Ratios are the exception: add up their parts, then divide.")}</section>
 
+{KL.part_keys()}
 <section id="keys"><p class="eyebrow">2. Keys</p><h2>Business key, primary key, surrogate key</h2>
 <p>Three kinds of key are easy to mix up. The <b>business key</b> is the source's name for a thing (dealer D-0042). The <b>primary key</b> is whatever makes a row unique in its own table. The <b>surrogate key</b> is a meaningless number the warehouse gives each dimension row, and it is the only thing a fact uses to point at a dimension.</p>
 {fig(d_keys(), "The source's code is kept as a column, but facts link through warehouse keys, so history and source changes never break them.")}
@@ -509,6 +511,8 @@ def page():
 <h3>Kinds of dimension</h3>{vtable(["Kind", "What it is", "Verdict"], DIMS)}
 <div class="warn"><b>As of then, or as of today?</b> With Type 2, a fact can show the dealer's region on the order date (store the version key) or today's region (store the durable key). Ask which the reports need; many need both, and storing both keys costs little. See <a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD Type 2: AUTO CDC or own PySpark</a> and <a href="/learn/time-travel-vs-scd2/">time travel as SCD2</a>.</div></section>
 
+{KL.part_dims()}
+{KL.part_bridge()}
 <section id="facts"><p class="eyebrow">6. Facts</p><h2>The kinds of fact table</h2>
 <p>Facts differ by how their rows behave over time. Pick the kind from the business process, not from the source table.</p>
 {fig(d_fact_kinds(), "Transaction facts collect events, periodic snapshots take a picture every period, accumulating snapshots follow one thing through its milestones.")}
@@ -580,7 +584,7 @@ def page():
 {C.table(["Table", "Grain", "Kind and refresh", "Dimension lookups", "What we would change"], TYRE)}</section>
 
 <section id="decide"><p class="eyebrow">23. Decisions</p><h2>Decisions with verdicts</h2>{vtable(["Decision", "Choice", "Verdict"], DECISIONS)}</section>
-<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(QA)}</section>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(QA + KL.QA_EXTRA)}</section>
 <section id="next"><p class="eyebrow">Next</p><h2>Where it connects</h2>
 <p><b><a href="/learn/silver-to-gold/">Next: Silver to gold, the harness that builds this →</a></b></p>
 <p><a href="/learn/gold-harness-spec/">Gold harness spec</a> · <a href="/learn/metric-views/">Metric views</a> · <a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD Type 2 on Databricks</a> · <a href="/learn/medallion-architecture/">Medallion architecture</a> · <a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a> · <a href="/data-engineering/">All data engineering</a></p></section>
@@ -591,8 +595,8 @@ def page():
            "isAccessibleForFree": True, "dateModified": DATE, "author": {"@type": "Person", "name": "Basant Choudhary", "url": f"{SITE}/#about"},
            "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": SITE}},
           {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": items},
-          {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in QA]}]
-    head = CSS + "".join(f'<script type="application/ld+json">{json.dumps(x, ensure_ascii=False)}</script>' for x in ld)
+          {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in QA + KL.QA_EXTRA]}]
+    head = CSS + KL.EXTRA_CSS + "".join(f'<script type="application/ld+json">{json.dumps(x, ensure_ascii=False)}</script>' for x in ld)
     return wb.page(TITLE, DESC, url, body, head)
 
 
