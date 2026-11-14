@@ -131,8 +131,8 @@ BRONZE_SILVER = [
 ]
 
 SILVER_GOLD = [
-    ("Dimensions, facts and aggregates in dependency order", "The graph", "Pursue"),
-    ("Simple aggregates and summaries", "Materialized views (incremental on Lakeflow)", "Pursue"),
+    ("Dimensions, facts and aggregates in dependency order", "The graph", "Pursue with care: a job running the harness in order does this too"),
+    ("Simple aggregates and summaries", "Materialized views (incremental on Lakeflow)", "Pursue with care: optional"),
     ("Facts rebuilt by changed window with a lookback", "No: a materialized view is one batch flow over the whole table", "Keep a harness"),
     ("Surrogate keys as of the event, unknown members, re-keying", "No", "Keep a harness"),
     ("Completeness from every owed feed, restatements, correction plans, row ledger", "No", "Keep a harness"),
@@ -171,7 +171,7 @@ TESTED = [
 DECISIONS = [
     ("Bronze to silver on Databricks", "Lakeflow streaming tables and AUTO CDC around your own cleaning stages", "Pursue"),
     ("Bronze to silver portable across clouds", "Open-source SDP with AUTO CDC on Iceberg, once tested", "Pursue with care"),
-    ("Silver to gold facts", "A harness; SDP for the graph and aggregates", "Pursue"),
+    ("Silver to gold", "A harness for facts and dimensions; SDP only for some aggregates, as an option", "Pursue"),
     ("Data quality rules", "Declared once in your metadata; bound to expectations on Lakeflow, to your own stage elsewhere", "Pursue"),
     ("Classic compute with Advanced edition for every pipeline", "Paying 2.4 times the jobs rate for features most tables do not use", "Drop: pick the edition per pipeline, or use serverless"),
     ("All logic written in SDP decorators", "Ties tests to Spark 4.x and the engine", "Drop: decorators wrap plain functions"),

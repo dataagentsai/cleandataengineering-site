@@ -272,12 +272,12 @@ def d_ripple():
 
 
 def d_three():
-    cols = [("A. All declarative", "y", ["dim_dealer: AUTO CDC (SCD2)", "fact_otif: materialized view", "aggregates: materialized views",
-                                         "checks: expectations"], "Pursue with care"),
-            ("B. Hybrid", "g", ["dims + aggregates: Lakeflow", "facts: the harness (a job task)", "one Databricks job runs",
-                                "pipeline, then harness, then MVs"], "Pursue"),
-            ("C. Harness only", "b", ["everything in the harness", "run by a Databricks job", "or any Spark, any cloud",
-                                      "same code on a laptop"], "Pursue where portability matters")]
+    cols = [("1. Harness (our default)", "g", ["facts, dims, aggregates: harness", "run by a Databricks job", "or any Spark, any cloud",
+                                                "same code on a laptop"], "Pursue"),
+            ("2. Hybrid", "y", ["facts and dims: the harness", "some aggregates: materialized", "views, where a team wants them",
+                                "one job runs harness, then MVs"], "Pursue with care"),
+            ("3. All declarative", "r", ["dim_dealer: AUTO CDC (SCD2)", "fact_otif: materialized view", "aggregates: materialized views",
+                                         "checks: expectations"], "Only small marts nobody audits")]
     i = ""
     for k, (n, f, lines, v) in enumerate(cols):
         xx = 10 + k * 330
@@ -285,11 +285,11 @@ def d_three():
         for j, s in enumerate(lines):
             i += bx(xx + 20, 56 + j * 42, 270, 34, [s], f, 13)
         i += t(xx + 155, 240, v, 14, "middle")
-    return svg(1000, 268, "Three ways to run silver to gold on Databricks. A, all declarative: dimensions by AUTO CDC, facts and "
-                          "aggregates as materialized views, checks as expectations; pursue with care. B, hybrid: dimensions and "
-                          "aggregates in Lakeflow, facts in the harness as a job task, one Databricks job running pipeline, "
-                          "harness, then materialized views; pursue. C, harness only, run by a job or any Spark on any cloud, "
-                          "same code on a laptop; pursue where portability matters.", i)
+    return svg(1000, 268, "Three ways to run silver to gold. 1, the harness, our default: facts, dimensions and aggregates in "
+                          "the harness, run by a Databricks job or any Spark on any cloud, same code on a laptop; pursue. 2, "
+                          "hybrid: facts and dimensions in the harness, some aggregates as materialized views where a team wants "
+                          "them; pursue with care. 3, all declarative: dimensions by AUTO CDC, facts and aggregates as "
+                          "materialized views, checks as expectations; only for small marts nobody audits.", i)
 
 
 # ------------------------------------------------------------------ Part A content
@@ -625,7 +625,7 @@ STEP_MAP = [
 PROS = [
     ("Far less plumbing", "No bookmarks, run order, retries or checkpoints to write and test", "Small teams, many simple tables"),
     ("The dependency graph is drawn for you", "Tables run in the right order; lineage and a UI come free", "Many tables depending on each other"),
-    ("SCD Type 2 dimensions in a few lines", "AUTO CDC handles out-of-order changes, repeats and deletes", "Every gold star on Databricks"),
+    ("SCD Type 2 dimensions in a few lines", "AUTO CDC handles out-of-order changes, repeats and deletes", "Silver does not keep history already"),
     ("Late dimension members fixed by themselves", "A materialized view is recomputed against today's dimension, so L5's -1 becomes 4 with no extra code", "Facts built as materialized views"),
     ("Quality rules and run history in one place", "Expectations with keep, drop or fail; a queryable event log", "Teams without their own run log"),
     ("Aggregates kept up to date cheaply", "Incremental refresh of materialized views on serverless, when the engine can", "Dashboards over big facts"),
@@ -648,9 +648,9 @@ CONS = [
 ]
 
 FIT_KINDS = [
-    ("SCD Type 2 dimensions", "AUTO CDC", "Pursue"),
-    ("Aggregate facts", "Materialized views", "Pursue"),
-    ("Factless facts", "Materialized views", "Pursue"),
+    ("SCD Type 2 dimensions", "AUTO CDC", "Drop when silver keeps history (ours does): use the harness's dimension pipeline for stable keys. Pursue with care otherwise"),
+    ("Aggregate facts", "Materialized views", "Pursue with care: optional, on serverless, check the refresh technique"),
+    ("Factless facts", "Materialized views", "Pursue with care"),
     ("Transaction facts, small to medium history, no audit need", "Materialized views over silver", "Pursue with care: watch the refresh technique"),
     ("Transaction facts, large or finance-grade (restatements, correction plans)", "Harness as a job task", "Keep the harness"),
     ("Periodic snapshots", "Materialized view if small; a carried-forward level over years is costly to recompute", "Pursue with care"),
@@ -662,9 +662,10 @@ FIT_KINDS = [
 def part_c():
     return f"""
 <section id="c-short" class="part"><p class="eyebrow">Part C · 1</p><h2>Can silver to gold be a Databricks declarative pipeline?</h2>
-<div class="box"><b>Short answer.</b> Yes, it can run as a Lakeflow Spark Declarative Pipeline. Dimensions, aggregates and simple facts fit very well. What a declarative pipeline does not give you is the bookkeeping: choosing which windows to rebuild, logging restatements, correction plans, a full row ledger, and checks across rows. Our recommendation is the <b>hybrid</b>: Lakeflow for dimensions and aggregates, the harness for facts that need that bookkeeping, both in one Databricks job. Go fully declarative only for small, simple marts where no one audits past numbers.</div>
+<div class="box"><b>Short answer.</b> It <i>can</i> run as a Lakeflow Spark Declarative Pipeline, but we do <b>not</b> recommend it for this layer. Gold is where the bookkeeping lives: choosing which days to rebuild, checking before writing, completeness, restatements, correction plans, the row ledger and stable keys. A declarative pipeline gives none of these. <b>Our default is the harness</b>, run as a Databricks job (or on any Spark). Two optional exceptions: materialized views for some aggregates, where a Databricks team wants them, and AUTO CDC for dimensions, but only if silver does not already keep history. Go fully declarative only for small marts where nobody audits past numbers.</div>
+<p><b>Why dimensions stay in the harness.</b> In our platform, silver already keeps SCD Type 2 history (our own PySpark engine). Gold only adds stable keys (1, 2, 3 from a key map) on top of those versions. AUTO CDC would redo history that silver already holds, and give hash keys instead of stable integers. Declarative pipelines do have a natural home in our platform: bronze to silver, as an optional engine for teams that ask for it.</p>
 <p>First, what "declarative" means: you say <i>what</i> each table is ("fact_otif is build_otif over these silver tables"), and the engine works out <i>how</i>: order, what is new, retries, refresh. The harness is the opposite. You (well, the shared code) say exactly how each night runs. More on the idea itself: <a href="/learn/spark-declarative-pipelines/">Declarative or not</a>.</p>
-{fig(d_three(), "Three ways to run this layer on Databricks.")}
+{fig(d_three(), "Three ways to run this layer. The harness is the default; the other two are options.")}
 </section>
 
 <section id="c-sketch" class="part"><p class="eyebrow">Part C · 2</p><h2>What Part A's example looks like as a declarative pipeline</h2>
@@ -685,9 +686,9 @@ def part_c():
 <h3>Cons</h3>{C.table(["Con", "What goes wrong", "What to do about it"], CONS)}
 <h3>Verdict per kind of table</h3>{vtable(["Gold table", "Declarative way", "Verdict"], FIT_KINDS)}
 <h3>How to choose</h3>
-<ul><li><b>Go all declarative</b> when you are on Databricks, the facts are small to medium, nobody needs a record of changed past numbers, and the team wants the least code.</li>
-<li><b>Go hybrid</b> (our default) when some facts feed finance or regulators, when history is large, or when late data is common. Lakeflow builds the dimensions and aggregates, the harness builds those facts, and one Databricks job runs them in order.</li>
-<li><b>Go harness only</b> when the same platform must run on other clouds or engines, or when every gold table needs the same audit trail.</li>
+<ul><li><b>Harness (our default)</b> for every gold table: facts, dimensions and aggregates. It runs as a Databricks job, or on any Spark, on any cloud, with Delta or Iceberg, and the same code is tested on a laptop. It is the only choice that gives every table the same audit trail.</li>
+<li><b>Hybrid</b> when a team is Databricks-only and wants some aggregates as materialized views. Facts and dimensions stay in the harness; one Databricks job runs the harness, then refreshes the views.</li>
+<li><b>All declarative</b> only for a small mart on Databricks where nobody needs a record of changed past numbers and the team wants the least code.</li>
 <li>In all three, keep the build a plain pure function. Then moving between them is a change of wrapper, not a rewrite.</li></ul>
 <p>Cost per DBU, open source vs Lakeflow, and where declarative helps in bronze to silver: <a href="/learn/spark-declarative-pipelines/">Declarative or not</a>. SCD Type 2 with AUTO CDC against our own code: <a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD Type 2 on Databricks</a>.</p>
 </section>"""
@@ -695,7 +696,7 @@ def part_c():
 
 QA_EXTRA = [
     ("Why are there so many types of fact table?", "Because business questions come in different shapes. Events that happened once need a row per event (transaction). Levels like stock need a row per period even on quiet days (periodic snapshot). Processes with several steps need one row updated as it moves (accumulating snapshot). Events with nothing to measure need rows without numbers (factless). Busy questions need a summary (aggregate), and comparing sources needs one shared grain (consolidated). The kind decides how a pipeline reads changes and how it writes."),
-    ("Can the silver to gold layer be built as a Databricks declarative pipeline?", "Yes. AUTO CDC builds SCD Type 2 dimensions and materialized views build facts and aggregates, with expectations for quality. What it does not give is control over which windows are rebuilt, a restatement log, correction plans, a full row ledger or checks across rows. A hybrid works best: Lakeflow for dimensions and aggregates, a harness for facts that need that bookkeeping."),
+    ("Can the silver to gold layer be built as a Databricks declarative pipeline?", "It can: AUTO CDC builds SCD Type 2 dimensions, and materialized views build facts and aggregates, with expectations for quality. But it does not give control over which days are rebuilt, a restatement log, correction plans, a full row ledger, checks across rows or stable integer keys. We recommend a harness for gold, run as a Databricks job, with materialized views only as an option for some aggregates."),
     ("What are reader, processor and writer in a data pipeline?", "The reader finds what changed since the last run and reads the rows of the windows it touches. The processor is a pure function holding the business rule, which takes data in and returns data out. The writer puts the result into the target safely, by replacing whole windows or merging by key, and only then is the bookmark moved."),
 ]
 
