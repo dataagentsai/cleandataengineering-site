@@ -183,7 +183,7 @@ FACT_PK = [
 ]
 
 SK_WAYS = [
-    ("Key map (assign once, store)", "The first time a version is seen, it gets the next number (102, 103...) and the pair is saved. Later runs look it up.", "Stable forever; small integers; survives rebuilds and source renames", "Needs a small table and one writer at a time", "Pursue: our default"),
+    ("Key map (assign once, store)", "The first time a version is seen, it gets the next number (102, 103...) and the pair is saved. Later runs look it up.", "Stable forever; small integers; survives rebuilds and source renames", "Needs a small table and one writer at a time", "Pursue: our recommendation"),
     ("Hash of business key + version date", "dealer_sk = hash('D7', 12 Nov 2026). No table: compute it anywhere.", "No lookup table; same number on every rerun and every engine", "Changes if the business key changes (our run: different hash for D7 and DLR-0007); 64-bit numbers; rare collisions to check", "Pursue with care: when one stable source owns the code"),
     ("Identity or row number at build", "Number the rows each time the dimension is built.", "Simple", "A rebuild renumbers everything; old facts silently point at other dealers (our run below)", "Drop"),
     ("The source's code as the key", "Facts store D7 directly.", "No work", "Breaks with history (which version?), with two systems, and when codes are reused", "Drop"),
@@ -305,6 +305,7 @@ def part_keys():
 
 <h3>How to make surrogate keys</h3>
 {vtable(["Way", "How", "Good", "Bad", "Verdict"], SK_WAYS)}
+<div class="warn"><b>What our build does today:</b> our framework uses hash keys (a SHA-256 of the source dataset, the business key and, for history, the version start; ADR-004), with -1 and -2 reserved, and has no durable key yet. That works while each dealer has one stable code in one source. It breaks in the step 4 case: a new system with new codes, or the same dealer in two sources, gives new keys. Moving to a key map with a durable key is proposed, not decided.</div>
 <details class="code" open><summary>The key map and version keys, as tested (keys.py)</summary>{C.code(src("keys.py", "assign_durable_keys", "assign_version_keys"))}</details>
 <details class="code"><summary>The lookup that stores keys on a fact, and the two other ways (keys.py)</summary>{C.code(src("keys.py", "lookup_via_keymap", "hash_key", "identity_key"))}</details>
 <p>All code and the 14 table-driven tests: <code>_guides/code/gold_keys/</code>.</p>

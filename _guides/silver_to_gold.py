@@ -320,8 +320,8 @@ INDUSTRY = [
 
 STATUS = [
     ("The harness: windows, keys as of event, completeness, checks, restatements, run log", "Built", "Gold equal to the simulated truth every day: 14 days on a laptop (1/10 data size); 3 days on Databricks Free Edition with eleven planted incidents (13 Nov 2026, gold step about 200 seconds)"),
-    ("Incremental reads with watermarks per input", "Built", "Change sequence for database feeds, file lists for drops, cursor for the API"),
-    ("Silver-to-gold reads from the table change log (commit version), not a column", "Owed", "Tested on Delta change data feed and Iceberg changelog view (14 Nov 2026): caught every write style; column bookmarks missed deletes, overwrites and out-of-order commits"),
+    ("Incremental reads with watermarks per input", "Built", "Ingestion bookmarks: change sequence for database feeds, file lists for drops, cursor for the API. Gold uses each input's watermark for completeness and recomputes every window in the lookback range, replacing only windows whose numbers changed"),
+    ("A change-log reader for gold (Delta change data feed, Iceberg changelog)", "Owed", "To skip unchanged runs, shrink the recompute to changed windows, and raise changes older than the lookback. Tested 14 Nov 2026: the change log caught every write style; column bookmarks missed deletes, overwrites and out-of-order commits"),
     ("Pure builds tested on two engines", "Built", "Same stage and build tests on Spark and DuckDB; a 3-day local run on DuckDB takes about 2 minutes"),
     ("Iceberg and Delta through one table port", "Built", "Unity Catalog managed Iceberg on Databricks"),
     ("Gold rerun after a silver rebuild", "Owed", "When a bad batch is voided and silver rebuilt, the affected gold windows must be redone"),

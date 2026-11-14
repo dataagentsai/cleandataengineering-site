@@ -372,7 +372,7 @@ def part_a():
 {htable(["input", "watermark (from last run)", "high mark (fixed at start)", "rows read"], [
         ["order_lines", r1["read_from"]["order_lines"], r1["read_to"]["order_lines"], "L1 to L6 (6 rows)"],
         ["deliveries", r1["read_from"]["deliveries"], r1["read_to"]["deliveries"], "X1 to X5 (5 rows)"]])}
-<p><b>Who makes these change numbers, and can gold miss a change?</b> In this story they are a simple column. In a real platform, read <a href="#a-bookmark">A8</a> first: the bookmark should be the table's own commit version, because silver is written in many ways.</p>
+<p><b>Who makes these change numbers, and can gold miss a change?</b> In this story they are a simple column. In a real platform, read <a href="#a-bookmark">A8</a>: a column bookmark can miss changes, because silver is written in many ways. Our own build avoids the problem differently: it recomputes every window in the lookback range each night and replaces only those whose numbers changed.</p>
 <p><b>Why change numbers and not times?</b> Two rows can have the same time, and clocks on different servers disagree. A change number only goes up and never repeats, so nothing is skipped or read twice.</p>
 <h3>Step 3: which windows do the changes touch?</h3>
 <p>The fact is rebuilt one day of promised date at a time. Each changed row points at one day. A delivery has no promised date of its own, so it points at the day of its order line.</p>
@@ -1089,7 +1089,7 @@ def part_a8():
         ("Write SCD Type 2 as one MERGE", "Our test wrote close and insert as two commits (UPDATE, then WRITE). A reader between them would see a closed version with no new one. One MERGE is one commit."),
         ("Turn full copies into differences", "Overwrites are correct but make every row look changed."),
         ("A column bookmark only where there is no change log", "Files dropped in folders or API pages: then every writer must follow the contract, and deletes must be soft deletes.")])}
-<div class="warn"><b>In our build:</b> the harness today bookmarks silver inputs by change sequence, as in the story. Moving the silver-to-gold reader to the table change log (Delta change data feed and Iceberg changelog, behind one reader port) is <b>owed</b>.</div>
+<div class="warn"><b>What our build does today (checked in the framework code, 14 Nov):</b> the real harness does not read "rows changed since a bookmark" at all. Every run, it recomputes <b>every window in the lookback range</b> from silver's current rows, compares each window's numbers with what is published, and replaces only the windows that differ. Its watermarks only say how far each input has loaded, for completeness. So no way of writing silver can make it miss a change <b>inside</b> the lookback: deletes, overwrites and out-of-order commits are all simply recomputed. The price is a rebuild of the whole lookback range every night, and a change <b>older</b> than the lookback is only picked up through a correction plan, or the owed gold rerun after a silver rebuild. The table change log is therefore owed as an <b>addition</b>, not a fix: to skip a run when silver did not change, to shrink the work to the changed windows, and to spot changes older than the lookback and raise them instead of missing them. The story in Part A shows the change-driven variant because it is easier to follow.</div>
 <details class="code"><summary>The writers and readers used in this test (topologies.py)</summary>{C.code((HERE / "code" / "silver_bookmark" / "topologies.py").read_text())}</details>
 </section>"""
 
