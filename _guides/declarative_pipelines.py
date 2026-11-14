@@ -165,6 +165,10 @@ TESTED = [
     ("A delete", "Passed: the key's version is closed"),
     ("An update to a measure", "Passed: a new version opened"),
     ("Readable as Iceberg", "Only with Iceberg v3 compatibility; v2 failed (needs column mapping, and deletion vectors off)"),
+    ("The same 8-case SCD Type 2 contract our own engine passes", "Passed: 8 of 8, compared by meaning (closed versus flagged deletes)"),
+    ("Our whole silver stage chain over real tyre bronze, six datasets", "Passed: equal to our job engine's silver on every dataset (two SCD2, one SCD1, three append), 0 differing rows"),
+    ("Streaming read of Iceberg bronze", "Passed: a declarative pipeline stream-reads Unity Catalog managed Iceberg"),
+    ("Bad rows planted in bronze", "Quarantined with their rule names; the test also exposed a gap in our own engine (contract value rules were not run), now fixed in both"),
     ("Open-source SDP, same test on a laptop", "Blocked: SCD2 AUTO CDC needs Spark 4.3, and no Iceberg or Delta release runs on 4.3 yet"),
 ]
 
