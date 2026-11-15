@@ -197,7 +197,7 @@ def page():
 <p class="eyebrow" style="margin-top:22px">Data platform architecture · testing</p>
 <h1>Test architecture for a data platform</h1>
 <p class="lede">How to know the numbers are right before anyone sees them: nine kinds of test, from reading the code to comparing a new version with production on real data, and one release report that decides.</p>
-<div class="sib"><a href="{BASE}">↑ Data platform architecture</a><a href="/learn/shift-left/">Shift left</a><a href="/learn/datatwin/">DataTwin</a><a href="{BASE}aws-databricks/">On AWS + Databricks</a></div>
+<div class="sib"><a href="{BASE}">↑ Data platform architecture</a><a href="/learn/shift-left/">Shift left</a><a href="/learn/datatwin/">DataTwin</a><a href="{BASE}aws-databricks/">On AWS + Databricks</a><a href="{BASE}test-strategy/">Test strategy in practice</a></div>
 <nav class="toc"><b>On this page</b><ol>
 <li><a href="#minute">The one-minute version</a></li><li><a href="#pure">Logic in pure functions</a></li><li><a href="#kinds">Nine kinds of test</a></li>
 <li><a href="#hops">One integration test per hop</a></li><li><a href="#real">Simulation and real data</a></li><li><a href="#ab">Parallel run, canary, A/B</a></li>
@@ -252,6 +252,7 @@ def page():
 <section id="faq"><p class="eyebrow">Questions</p><h2>Questions people ask</h2>{faq}</section>
 
 <section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2>
+<p><b>The strategy in practice:</b> <a href="{BASE}test-strategy/">Test strategy for a data platform</a>, with seventeen kinds of test on a reference build, what blocks a release and what is proven so far.</p>
 <p><b>The checks themselves:</b> <a href="/learn/shift-left/">Shift left: fail fast on data code</a>, with pure functions, table-driven tests, SCD2 tests, coverage and mutation testing.</p>
 <p><b>The faults to test for:</b> <a href="/learn/data-platform-sim/problems/">the Problem Lab</a>, nineteen data problems run for real, each with the naive fix and the right one.</p>
 <p><b>Simulation:</b> <a href="/learn/datatwin/">DataTwin, explained</a>. <b>On a real stack:</b> <a href="{BASE}aws-databricks/#testing">testing on AWS + Databricks</a>.</p></section>"""

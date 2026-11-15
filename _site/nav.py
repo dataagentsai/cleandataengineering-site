@@ -150,6 +150,7 @@ SECTIONS = [
             ("Environments and CI/CD", "/learn/data-systems/platform/environments/"),
             ("Cost and FinOps", "/learn/data-systems/platform/cost/"),
             ("Test architecture for data", "/learn/data-platform-architecture/testing/"),
+            ("Test strategy in practice", "/learn/data-platform-architecture/test-strategy/"),
         ], "cap"),
         ("Key concepts, A to Z", "/concepts/#a-z", []),
     ]),

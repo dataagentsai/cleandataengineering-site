@@ -45,6 +45,7 @@ GUIDES = [
     ("Databricks real time: real-time mode and Lakehouse//RT", "/learn/streaming/real-time-mode/", "Real-time mode (GA) moves data in milliseconds; Lakehouse//RT (beta) answers queries in milliseconds. Limits, cost against Flink and DynamoDB, and where each fits."),
     ("Real-time analytics", "/learn/real-time-analytics/", "From a database change to a number on screen in a second: designs, products and cost."),
     ("Test architecture for data", "/learn/data-platform-architecture/testing/", "Unit, contract, data and simulation tests, and where each runs."),
+    ("Test strategy in practice", "/learn/data-platform-architecture/test-strategy/", "Seventeen kinds of test on a reference build: when each runs, what blocks a release, what is proven, and how each works."),
     ("Shift left: fail fast on data code", "/learn/shift-left/", "Static and offline checks that catch PySpark and SQL problems before they run."),
     ("AWS + Databricks, and the ETL end to end", "/learn/data-platform-architecture/aws-databricks/", "The whole picture with a product in every box, and one ETL followed end to end."),
 ]
