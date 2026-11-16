@@ -21,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(ROOT / "_paths"))
 import components as C  # noqa: E402
+import harness_intro_reqs as R  # noqa: E402
 import harness_intro_sims as S  # noqa: E402
 
 wb = C.wb
@@ -39,10 +40,12 @@ STOPS = [
     (4, "loop-sim/", "Simulation: the agent loop", "What goes to the model, what comes back, and why does it go round?", "Simulation"),
     (5, "no-guardrails-sim/", "Simulation: no guardrails", "What goes wrong without guardrails, and what does it cost?", "Simulation"),
     (6, None, "The horse and the harness", "What is an agent harness, in one picture?", "Page"),
-    (7, "architecture/", "The architecture, simple then zoomed in", "Where does everything sit, and what are the five families of concerns?", "Page"),
-    (8, None, "Worked example: one claim, end to end", "How does it all work in one real agent?", "Page and simulation"),
+    (7, "requirements/", "What a harness must do", "What are all the requirements, one simple picture at a time?", "Pages"),
+    (8, "architecture/", "The architecture, simple then zoomed in", "Where does everything sit, and what are the five families of concerns?", "Page"),
+    (9, None, "Worked example: one claim, end to end", "How does it all work in one real agent?", "Page and simulation"),
 ]
-EXTERNAL = {6: TUTORIAL + "arch-horse.html", 8: TUTORIAL + "flow.html"}
+EXTERNAL = {6: TUTORIAL + "arch-horse.html", 9: TUTORIAL + "flow.html"}
+REQ_BASE = BASE + "requirements/"
 
 
 def url(n):
@@ -50,7 +53,7 @@ def url(n):
     return EXTERNAL[n] if stop[1] is None else BASE + stop[1]
 
 
-CSS = C.CSS + wb.kit_css() + """<style>
+CSS = C.CSS + wb.kit_css() + R.CSS + """<style>
   .hi h2 { margin-top:38px; } .hi .lede { font-size:20px; }
   .stops { display:flex; flex-wrap:wrap; gap:6px; align-items:center; margin:14px 0 4px; font-size:14px; }
   .stops a, .stops span { border:1.5px solid var(--ink); border-radius:999px; padding:1px 11px; text-decoration:none; color:var(--ink); background:#fff; }
@@ -80,26 +83,43 @@ def d_roadmap():
     cards = [(["Three kinds of", "AI application"], "who decides the next step?", "bx"),
              (["Autonomous", "agents"], "why businesses want them", "bx"),
              (["Same job,", "two ways"], "the code, side by side", "bx"),
-             (["Simulation:", "the agent loop"], "request, response, tool, again", "bxs"),
-             (["Simulation:", "no guardrails"], "what goes wrong, what it costs", "bxs"),
+             (["Simulation:", "the agent loop"], "request, response, repeat", "bxs"),
+             (["Simulation:", "no guardrails"], "what goes wrong, the cost", "bxs"),
              (["The horse and", "the harness"], "keep it on the green road", "solid"),
-             (["The architecture"], "simple first, then zoomed in", "bx"),
+             (["What a harness", "must do"], "one picture for each need", "bx"),
+             (["The architecture"], "simple, then zoomed in", "bx"),
              (["Worked example:", "one claim"], "a real agent, end to end", "bx")]
-    xs = [20, 265, 510, 755]
     d = ""
     for i, (title, sub, kind) in enumerate(cards):
-        row, col = divmod(i, 4)
-        x = xs[col] if row == 0 else xs[3 - col]
-        y = 34 if row == 0 else 184
-        d += b(x, y, 220, 96, title, sub, kind, href=url(i + 1), tag="open") + n(x + 12, y + 2, i + 1)
-        if i in (0, 1, 2):
-            d += a(x + 222, y + 48, x + 243, y + 48)
-        if i in (4, 5, 6):
-            d += a(x - 2, y + 48, x - 23, y + 48)
-    d += a(865, 132, 865, 182)
+        top = i < 5
+        col = i if top else 4 - (i - 5)
+        x, y = 10 + col * 198, 34 if top else 184
+        d += b(x, y, 184, 96, title, sub, kind, href=url(i + 1), tag="open") + n(x + 12, y + 2, i + 1)
+        if top and i < 4:
+            d += a(x + 186, y + 48, x + 196, y + 48)
+        if not top and i < 8:
+            d += a(x - 2, y + 48, x - 12, y + 48)
+    d += a(894, 132, 894, 182)
     d += t(500, 312, "yellow = a simulation you can play · lavender = the picture everything else hangs on", "sm", "middle")
-    return fig(1000, 325, d, "A road of eight numbered stops in two rows. Top row, left to right: three kinds of AI application, autonomous agents, same job two ways, the agent loop simulation. Bottom row, right to left: the no-guardrails simulation, the horse and the harness, the architecture, and a worked example.",
+    return fig(1000, 325, d, "A road of nine numbered stops in two rows. Top row, left to right: three kinds of AI application, autonomous agents, same job two ways, the agent loop simulation, the no-guardrails simulation. Bottom row, right to left: the horse and the harness, what a harness must do, the architecture, and a worked example.",
                "The whole road on one picture. Click any stop to open it.")
+
+
+def d_reqs():
+    b, a, t = kit.box, kit.arrow, kit.text
+    g = {slug: (title, len(reqs)) for slug, title, _blurb, reqs in R.GROUPS}
+    d = t(40, 22, "ON THE PATH OF EVERY REQUEST", "lbl")
+    path = [("receive", ["Receive", "the request"], "bxs"), ("think", ["Think: the loop", "and the model"], "solid"), ("act", ["Act: tools,", "checks, people"], "bx")]
+    for i, (slug, title, kind) in enumerate(path):
+        d += b(40 + i * 320, 40, 280, 92, title, f"{g[slug][1]} requirements", kind, href=REQ_BASE + slug + "/", tag="open")
+        if i < 2:
+            d += a(322 + i * 320, 86, 358 + i * 320, 86)
+    d += t(10, 172, "AROUND EVERY REQUEST", "lbl")
+    around = [("keep-going", ["Keep going"], "failures, speed, scale"), ("see", ["See"], "logs, traces, cost"), ("change", ["Prove and change"], "evals, tests, release"), ("protect", ["Protect"], "secrets, data, the law")]
+    for i, (slug, title, sub) in enumerate(around):
+        d += b(10 + i * 248, 190, 236, 92, title, [sub, f"{g[slug][1]} requirements"], "bxm", href=REQ_BASE + slug + "/", tag="open")
+    return fig(1000, 296, d, "Seven groups of requirements. On the path of every request: receive the request, think with the loop and the model, act with tools, checks and people. Around every request: keep going, see, prove and change, protect.",
+               "Seven groups. The top row is what an agent does. The bottom row is how well and how safely it does it.")
 
 
 def d_kinds():
@@ -147,12 +167,12 @@ def loop_body(ids=False):
     d += a(424, 72, 518, 72) + a(636, 116, 636, 248) + a(518, 292, 424, 292) + a(306, 248, 306, 116)
     d += a(754, 72, 828, 72) + a(188, 292, 154, 292)
     d += t(646, 186, "it asked for a tool", "sm") + t(296, 186, "go again", "sm", "end")
-    d += t(471, 176, "the agent loop", "bd", "middle") + t(471, 198, "one lap = one model call", "sm", "middle")
+    d += t(471, 176, "the agent loop", "bd", "middle") + t(471, 198, "one turn = one model call", "sm", "middle")
     return d
 
 
 LOOP_LABEL = ("A loop of four boxes. One: our code sends the request with all messages and the tool list. Two: the model replies with an answer or a tool request. "
-              "Three: our code runs the tool. Four: the result is added to the messages, and the loop goes again. Two exits: goal reached when the model asks for no tool, and limit reached when there have been too many laps.")
+              "Three: our code runs the tool. Four: the result is added to the messages, and the loop goes again. Two exits: goal reached when the model asks for no tool, and limit reached when there have been too many turns.")
 
 
 def d_loop():
@@ -227,10 +247,11 @@ def say(title, body):
     return f'<div class="say"><b>{title}</b>{body}</div>'
 
 
-def sub_page(cur, lede, body, desc, extra_css="", title=None):
+def sub_page(cur, lede, body, desc, extra_css="", title=None, path=None, crumb=""):
     title = title or STOPS[cur - 1][2]
+    path = STOPS[cur - 1][1] if path is None else path
     html = f"""<div class="hi">
-<p class="crumbs"><a href="/learn/">Learn</a> › <a href="{BASE}">Agent Harness, the big picture</a> › Stop {cur}</p>
+<p class="crumbs"><a href="/learn/">Learn</a> › <a href="{BASE}">Agent Harness, the big picture</a> › Stop {cur}{crumb}</p>
 {stepper(cur)}
 <p class="zoom">Stop {cur} of {len(STOPS)} · {E(STOPS[cur - 1][4])}</p>
 <h1>{E(title)}</h1>
@@ -238,7 +259,7 @@ def sub_page(cur, lede, body, desc, extra_css="", title=None):
 {body}
 {prevnext(cur)}
 </div>"""
-    return wb.page(f"{title} · Agent Harness, the big picture", desc, SITE + BASE + STOPS[cur - 1][1], html, CSS + extra_css)
+    return wb.page(f"{title} · Agent Harness, the big picture", desc, SITE + BASE + path, html, CSS + extra_css)
 
 
 def tbl(head, rows, cls="t"):
@@ -259,8 +280,8 @@ def index_page():
     body = f"""<div class="hi">
 <p class="crumbs"><a href="/learn/">Learn</a> › Agent Harness, the big picture</p>
 <h1>Agent Harness, the big picture</h1>
-<p class="lede">Before any design or any cloud: what kinds of AI application exist, what an agent really does on each lap of its loop,
-what goes wrong when nothing holds it, and what an agent harness is. Eight stops, one simple picture each, two simulations you can play.</p>
+<p class="lede">Before any design or any cloud: what kinds of AI application exist, what an agent really does on each turn of its loop,
+what goes wrong when nothing holds it, and what an agent harness is. Nine stops, one simple picture each, two simulations you can play.</p>
 <p class="note">No vendor names on this road. Everything here is the idea; the products come later.</p>
 
 <h2 id="roadmap">The roadmap</h2>
@@ -295,8 +316,8 @@ and the result going back in. Then watch it stop for one of two reasons: the goa
 
 <h2 id="s5">5 · Simulation: no guardrails</h2>
 {wb.drawing_planted_note()}
-<p>Three short stories with the guardrails switched off: a document with hidden orders, a stranger who simply asks for someone else's data,
-and a loop that runs all night. Each ends with what it cost the business. Then switch the guardrails on and play it again. Six real incidents follow.</p>
+<p>Six short stories with the guardrails switched off, among them a document with hidden orders, a stranger who simply asks for someone else's data,
+a refund nobody approved and a loop that runs all night. Each ends with what it cost the business. Then switch the guardrails on and play it again. Six real incidents follow.</p>
 <p><a class="go" href="{url(5)}">Play the simulation →</a></p>
 
 <h2 id="s6">6 · The horse and the harness</h2>
@@ -305,16 +326,23 @@ and a loop that runs all night. Each ends with what it cost the business. Then s
 reins, blinkers, a driver and a cart. This is the picture the rest of the course hangs on.</p>
 <p><a class="go" href="{url(6)}">Open the horse page →</a></p>
 
-<h2 id="s7">7 · The architecture, simple then zoomed in</h2>
-{d_arch_simple()}
-<p>Five bands and two rails. Then one band, the shared parts, opened up into five families of concerns: Think, Act, Control, See and Change.</p>
+<h2 id="s7">7 · What a harness must do</h2>
+{d_reqs()}
+<p>Before the big picture, every requirement by itself: a front door, knowing who is asking, running the loop, calling the model, tools, four kinds of guardrails,
+logs and traces, cost, evals, safe release, secrets and more. Thirty-three requirements, one small picture each, the way an architect would walk an engineer through them.</p>
 <p><a class="go" href="{url(7)}">Open stop 7 →</a></p>
 
-<h2 id="s8">8 · Worked example: one claim, end to end</h2>
+<h2 id="s8">8 · The architecture, simple then zoomed in</h2>
+{d_arch_simple()}
+<p>Five bands and two rails. Then one band, the shared parts, opened up into five families of concerns: Think, Act, Control, See and Change.
+By now every box in it is a requirement you have already met.</p>
+<p><a class="go" href="{url(8)}">Open stop 8 →</a></p>
+
+<h2 id="s9">9 · Worked example: one claim, end to end</h2>
 {d_fnol()}
 <p>Everything above, in one working agent: a claims assistant that takes the first report of a car accident.
 Follow one message from start to finish, then send your own in the simulator.</p>
-<p><a class="go" href="{url(8)}">Follow one message →</a><a class="go alt" href="/learn/agent-harness-sim/">Open the simulator →</a></p>
+<p><a class="go" href="{url(9)}">Follow one message →</a><a class="go alt" href="/learn/agent-harness-sim/">Open the simulator →</a></p>
 </div>"""
     desc = ("A simple road into AI agents and the agent harness: three kinds of AI application, autonomous agents and why businesses want them, "
             "code side by side, a step-by-step agent loop simulation, a no-guardrails prompt injection simulation, and the architecture in five families.")
@@ -393,7 +421,7 @@ and acts by itself inside limits that someone set in advance.</p>
     ["<b>It can be tricked</b>", "A sentence hidden in a document becomes an order", f'<a href="{url(5)}">Stop 5</a>: the no-guardrails simulation'],
     ["<b>It can reach too much</b>", "It reads or changes things the person asking has no right to", f'<a href="{url(5)}">Stop 5</a>, second story'],
     ["<b>Small mistakes add up</b>", "A wrong reading at step 3 becomes a wrong payment at step 9", f'<a href="{url(6)}">Stop 6</a>: reins that pull it back early'],
-    ["<b>Nobody can see what it did</b>", "A customer complains and there is no record of why", f'<a href="{url(7)}">Stop 7</a>: the See family'],
+    ["<b>Nobody can see what it did</b>", "A customer complains and there is no record of why", f'<a href="{url(8)}">Stop 8</a>: the See family'],
 ])}
 <p>Next: enough talk. Stop 3 puts ordinary code and an agent side by side, doing the same job.</p>"""
     return sub_page(2, "What autonomous agents are, the five levels of autonomy, why businesses want them, and the catch.", body,
@@ -418,26 +446,26 @@ def code_page():
 {C.code("$ python3 deterministic.py\n" + run_code("deterministic.py"), "What it prints.")}
 
 <h2>Version 2: an agent</h2>
-<p>We write one small loop and a list of tools. The model decides which tool to use next, lap by lap. The caller hands us a sentence.</p>
+<p>We write one small loop and a list of tools. The model decides which tool to use next, turn by turn. The caller hands us a sentence.</p>
 {C.code(src["agent.py"])}
 {C.code("$ python3 agent.py\n" + run_code("agent.py"), "What it prints. The second request is a question, which version 1 has no code for.")}
-{say("Read the five numbered comments.", "Ask the model. If it asks for no tool, that is the answer. Otherwise run the tool, show it the result, and go round again. After five laps, stop. That is the whole agent, and stop 4 turns those five lines into a simulation.")}
+{say("Read the five numbered comments.", "Ask the model. If it asks for no tool, that is the answer. Otherwise run the tool, show it the result, and go round again. After five turns, stop. That is the whole agent, and stop 4 turns those five lines into a simulation.")}
 
 <h2>What is different</h2>
 {tbl(["Question", "Ordinary code", "Agent"], [
     ["<b>Who decides the next step?</b>", "We do, when we write the code", "The model does, each time round the loop"],
     ["<b>What does the input look like?</b>", "Three typed values, like a form", "A sentence in the person's own words"],
     ["<b>A request nobody planned for?</b>", "Needs a new function (\"what does my policy cover?\" is not handled)", "The same loop handles it, with no new code"],
-    ["<b>Can you predict the path?</b>", "Yes: the same four steps every time", "No: anything from one lap to five"],
+    ["<b>Can you predict the path?</b>", "Yes: the same four steps every time", "No: anything from one turn to five"],
     ["<b>How do you test it?</b>", "A table of inputs and expected outputs", "The same table, plus checks on which tools it used, plus watching real runs"],
-    ["<b>What does a run cost?</b>", "Almost nothing", "One model call for each lap, and each lap sends more text than the last"],
+    ["<b>What does a run cost?</b>", "Almost nothing", "One model call for each turn, and each turn sends more text than the last"],
     ["<b>What can go wrong?</b>", "A bug you can read in the code", "A wrong step, a costly step or an endless loop, and the code looks fine"],
     ["<b>Use it when</b>", "You know the steps in advance", "The steps depend on what turns up along the way"],
 ])}
 
 <h2>Look at what the agent does not have</h2>
 <p>Line 3 of the loop runs <b>whatever tool the model names, with whatever input the model gives, for whoever is asking</b>. Nothing checks any of it.
-The only protection in the whole file is line 5, the limit of five laps. Stop 5 shows what that costs.</p>
+The only protection in the whole file is line 5, the limit of five turns. Stop 5 shows what that costs.</p>
 
 <h2>The rest of the files</h2>
 <details class="faq"><summary>world.py: the pretend insurance company</summary>{C.code(src["world.py"])}</details>
@@ -457,37 +485,36 @@ def loop_sim_page():
     js = (S.LOOP_JS.replace("__SCENARIOS__", json.dumps(S.LOOP_SCENARIOS)).replace("__TOOLS__", json.dumps(S.LOOP_TOOLS))
           .replace("__SYSTEM__", json.dumps(S.LOOP_SYSTEM)).replace("__CODE__", json.dumps(S.LOOP_CODE)))
     body = f"""<p class="note">Nothing here calls a real model. The replies are scripted so that every run is the same. The shapes of the request and the response are the real ones.</p>
+{say("How to read this page.", "One <b>turn</b> is one request from our code to the model and one response back. The page lays the turns out one under the other, so you can count them and read what crossed in each. Blue rows go to the model. Lavender rows come back from it. Yellow rows are our own code running a tool.")}
+<figure class="drawing loopfig">{kit.DEFS}<svg viewBox="0 0 1000 350" role="img" aria-label="{E(LOOP_LABEL)}">{loop_body(ids=True)}</svg></figure>
 <div class="simbar">
 <div><label for="scn">What the person asks</label><select id="scn"></select></div>
-<div><label for="max">Limit on laps</label><input id="max" type="number" min="1" max="8" value="5"></div>
-<button class="act" id="next">Next step</button><button class="act alt" id="play">Play</button><button class="act alt" id="again">Start again</button>
+<div><label for="max">Limit on turns</label><input id="max" type="number" min="1" max="8" value="5"></div>
+<button class="act" id="next">Next step</button><button class="act" id="turn">Next turn</button><button class="act alt" id="play">Play</button><button class="act alt" id="again">Start again</button>
+<label class="chk"><input type="checkbox" id="json" checked> Show the exact JSON</label>
 </div>
 <p class="task" id="task"></p>
-<figure class="drawing loopfig">{kit.DEFS}<svg viewBox="0 0 1000 350" role="img" aria-label="{E(LOOP_LABEL)}">{loop_body(ids=True)}</svg></figure>
-<div class="meter"><span id="m1"></span><span id="m2"></span><span id="m3"></span><span id="reqsize">nothing sent yet</span></div>
-<div class="explain" id="explain"></div>
-<div class="panes">
-<div class="pane"><h3>Request: our code → the model</h3><p class="s">Highlighted = new since the last lap.</p><pre id="req"></pre></div>
-<div class="pane"><h3>Response: the model → our code</h3><p class="s">Highlighted = what our code looks at.</p><pre id="res"></pre></div>
-</div>
+<div class="score"><div class="big" id="big"></div><div class="chips" id="chips"></div></div>
+<div id="ladder"></div>
 <h3>The line of code that is running</h3>
 <pre class="loopcode" id="code"></pre>
 <p class="note">These are the five numbered lines from <a href="{url(3)}">stop 3</a>, shortened to fit.</p>
 
 <h2>Things to try</h2>
 <ol>
-<li><b>Play "Register a claim".</b> Count the laps: three model calls for one request. Nobody told the model the order of the steps.</li>
-<li><b>Watch the request grow.</b> Every lap sends the whole conversation again, because the model remembers nothing between calls. More laps means more text sent each time, which is what you pay for.</li>
-<li><b>Switch to "Only a question".</b> Same loop, same tools, two laps. No new code was written for it.</li>
+<li><b>Press "Next turn" three times on "Register a claim".</b> Count them: three requests and three responses for one sentence from the person. Nobody told the model the order of the steps.</li>
+<li><b>Compare request 1 with request 3.</b> Request 3 carries five messages, because the model remembers nothing between turns and our code sends the whole conversation again. More turns means more text sent each time, which is what you pay for.</li>
+<li><b>Switch to "Only a question".</b> Same loop, same tools, two turns. No new code was written for it.</li>
 <li><b>Play "A tool that keeps failing".</b> The model would retry for ever. The only thing that stops it is our limit.</li>
 <li><b>Set the limit to 2 and play "Register a claim" again.</b> The loop stops before the claim is created. A limit protects you, and a limit that is too tight breaks real work. Choosing it is a design decision.</li>
+<li><b>Untick "Show the exact JSON"</b> when you want to explain the idea first and the detail later.</li>
 </ol>
 
 <h2>What the simulation shows</h2>
 {tbl(["What you saw", "Why it matters"], [
     ["<b>The model never runs a tool.</b> It only asks.", "Our code runs every tool. So our code is the place to put every check."],
     ["<b>A reply with no tool request is the answer.</b>", "That is how the loop knows the goal is reached. There is no separate \"done\" signal."],
-    ["<b>The model has no memory.</b> We send everything, every lap.", "What the model knows is exactly what we choose to send. That is a control, and a cost."],
+    ["<b>The model has no memory.</b> We send everything, every turn.", "What the model knows is exactly what we choose to send. That is a control, and a cost."],
     ["<b>The loop stops for one of two reasons.</b>", "The model says it is done, or our code says \"enough\". Only the second one is under our control."],
 ])}
 <script>{js}</script>
@@ -502,23 +529,24 @@ def loop_sim_page():
 def guard_sim_page():
     js = S.GUARD_JS.replace("__SCENARIOS__", json.dumps(S.GUARD_SCENARIOS))
     rows = [[f"<b>{E(who)}</b><br>{when}", E(what), E(kind), E(missing), f'<a href="{src}">source</a>'] for who, when, what, kind, missing, src in S.INCIDENTS]
-    body = f"""<p class="note">The three stories are illustrations with made-up people and amounts. They are built to show the mechanism. The six incidents further down are real.</p>
+    body = f"""<p class="note">The six stories are illustrations with made-up people and amounts. They are built to show the mechanism. The six incidents further down are real.</p>
+{say("How to read this page.", "Each story is laid out turn by turn, exactly like the loop simulation in stop 4: the request our code sends, the response the model returns, and the tool our code runs. Watch what is inside each request. Rose means harm. Green means a harness check.")}
 <div class="tabs2" id="tabs"></div>
+<p class="kind" id="kind"></p><p class="intro" id="intro"></p><p class="real" id="real"></p>
 <div class="simbar">
-<span><b>Guardrails</b></span><span class="switch"><button id="goff" class="off">Off</button><button id="gon" class="onn">On</button></span>
-<button class="act" id="next">Next step</button><button class="act alt" id="play">Play</button><button class="act alt" id="again">Start again</button>
-<span class="progress" id="progress"></span>
+<div><label>Guardrails</label><span class="switch"><button id="goff" class="off">Off</button><button id="gon" class="onn">On</button></span></div>
+<button class="act" id="next">Next step</button><button class="act" id="turn">Next turn</button><button class="act alt" id="play">Play</button><button class="act alt" id="again">Start again</button>
 </div>
-<p class="kind" id="kind"></p><p class="intro" id="intro"></p>
-<ol class="steps" id="steps"></ol>
-<div class="impact" id="impact" style="display:none"></div>
+<p class="task" id="task"></p>
+<div class="score"><div class="big" id="big"></div><div class="chips" id="chips"></div></div>
+<div id="ladder"></div>
 <script>{js}</script>
 
 <h2>What is prompt injection?</h2>
 <p>A model reads its instructions and its data as one stream of text. <b>Prompt injection</b> is text that arrives as data and gets treated as an instruction.
-It can be typed by the user (the second story), or it can hide inside something the agent reads: a document, an email, a web page, a note in a record (the first story).
-The second kind is worse, because the person using the agent did nothing wrong.</p>
-{say("The model is not the fix.", "A better model is fooled less often, and never zero times. In both stories with the guardrails on, the model is still fooled. What changes is that being fooled no longer matters, because ordinary code checks every action before it happens.")}
+It can be typed by the user (the second and third stories), or it can hide inside something the agent reads: a document, an email, a web page, a note in a record (the first story).
+The hidden kind is worse, because the person using the agent did nothing wrong. The last three stories have no attacker at all: an agent with no guardrails can do damage by itself.</p>
+{say("The model is not the fix.", "A better model is fooled less often, and never zero times. In every story with the guardrails on, the model still makes the same mistake. What changes is that being fooled no longer matters, because ordinary code checks every action before it happens.")}
 
 <h2>It has already happened</h2>
 <p>Six public cases. Most involve assistants far simpler than the agent above.</p>
@@ -527,15 +555,15 @@ The second kind is worse, because the person using the agent did nothing wrong.<
 
 <h2>What a business actually loses</h2>
 {tbl(["Loss", "How it happens", "Seen above in"], [
-    ["<b>Money</b>", "A payment, a refund or a discount that nobody approved; or a bill for work that produced nothing", "Story 1, story 3"],
+    ["<b>Money</b>", "A payment, a refund or a discount that nobody approved; or a bill for work that produced nothing", "Stories 1, 3 and 6"],
     ["<b>Data</b>", "Personal or confidential data shown to the wrong person", "Story 2, Slack AI, EchoLeak"],
-    ["<b>Legal standing</b>", "The company answers for what its assistant says and does", "Air Canada, story 2"],
-    ["<b>Systems</b>", "Records changed or deleted with no way back", "Replit"],
+    ["<b>Legal standing</b>", "The company answers for what its assistant says and does", "Air Canada, stories 2 and 5"],
+    ["<b>Systems</b>", "Records changed or deleted with no way back", "Replit, story 4"],
     ["<b>Trust</b>", "Screenshots travel faster than apologies", "Chevrolet, DPD"],
 ])}
-{say("This is why an agent harness exists.", "None of the fixes above made the model cleverer. Each one was a piece of ordinary software placed around the model: a fence, a check before a tool runs, a login that limits what a tool can reach, a limit on laps. Put those pieces together and give them a name, and you have the harness.")}
+{say("This is why an agent harness exists.", "None of the fixes above made the model cleverer. Each one was a piece of ordinary software placed around the model: a fence, a check before a tool runs, a login that limits what a tool can reach, a limit on turns. Put those pieces together and give them a name, and you have the harness.")}
 <p>Next: stop 6 draws that idea as one picture, a horse on a road.</p>"""
-    return sub_page(5, "Three short stories with the guardrails switched off, each ending with what it cost the business. Then switch them on and play it again.", body,
+    return sub_page(5, "Six short stories with the guardrails switched off, each laid out turn by turn and ending with what it cost the business. Then switch them on and play it again.", body,
                     "A simulation of an AI agent with no guardrails: prompt injection hidden in a document, a user asking for someone else's data, and a loop with no limit, each with its business impact. Plus six real incidents and the guardrail each one was missing.",
                     S.GUARD_CSS)
 
@@ -565,13 +593,17 @@ def architecture_page():
 <p>Twelve parts is too many to hold in your head, so they are grouped into five families. Each family answers one question that a business will ask about any agent.</p>
 {tbl(["Family", "The question it answers", "Parts", "Without it"], fam_rows)}
 
+<h2>Where each requirement lives</h2>
+<p>Stop 7 listed what a harness must do. Here is where each of those requirements sits in the picture.</p>
+{tbl(["Part of the picture", "The requirements it answers"], [[f"<b>{part}</b>", ", ".join(req_link(n) for n in nums)] for part, nums in LIVES_IN])}
+
 <h2>Where the earlier stops land</h2>
 {tbl(["What you saw", "The family that owns it"], [
     [f'The request and response in the loop (<a href="{url(4)}">stop 4</a>)', "<b>Think</b>: the model gateway sends it; memory and state hold the messages"],
     [f'The tool our code ran (<a href="{url(4)}">stop 4</a>)', "<b>Act</b>: the tool hub"],
     [f'The check before the payout, and the handover to a person (<a href="{url(5)}">stop 5</a>)', "<b>Control</b>: guardrails and the human desk"],
     [f'The tool running with the user\'s authority (<a href="{url(5)}">stop 5</a>)', "<b>Control</b>: identity and access"],
-    [f'The limit on laps and on spend (<a href="{url(4)}">stops 4</a> and <a href="{url(5)}">5</a>)', "<b>See</b>: cost control"],
+    [f'The limit on turns and on spend (<a href="{url(4)}">stops 4</a> and <a href="{url(5)}">5</a>)', "<b>See</b>: cost control"],
     ["The record of the refused payout", "<b>See</b>: observability"],
     ["Knowing the fix still works after the next change", "<b>Change</b>: the eval library and release"],
 ])}
@@ -579,21 +611,113 @@ def architecture_page():
 <h2>Go deeper when you are ready</h2>
 <p>The same architecture exists at more zoom levels in the Agent Harness tutorial. Nothing new is added there; each picture opens one more level.</p>
 <p><a class="go alt" href="{TUTORIAL}arch-abstract.html">The full abstract picture: seven bands, two rails</a><a class="go alt" href="{TUTORIAL}arch-assets.html">The five families, part by part</a><a class="go alt" href="{TUTORIAL}arch-northstar.html">A north star, not a checklist</a></p>
-<p>Next: stop 8 follows one real message through all of it.</p>"""
-    return sub_page(7, "The whole system in five bands and two rails. Then one band opened up into five families of concerns.", body,
+<p>Next: stop 9 follows one real message through all of it.</p>"""
+    return sub_page(8, "The whole system in five bands and two rails. Then one band opened up into five families of concerns.", body,
                     "A simple agent harness architecture with no vendor names: people, the front door, agents, shared parts and business systems, then the shared parts zoomed into five families of concerns: Think, Act, Control, See and Change.")
+
+
+# ----------------------------------------------------------------------------- stop 7: requirements
+
+REQS = []  # (number, group slug, group title, the requirement tuple)
+for _slug, _title, _blurb, _reqs in R.GROUPS:
+    for _r in _reqs:
+        REQS.append((len(REQS) + 1, _slug, _title, _r))
+
+LIVES_IN = [("The front door", [1, 2, 4, 5]), ("Orchestration: the router and the loop", [6]), ("Think", [7, 8, 9, 15, 18, 19]), ("Act", [10, 16]),
+            ("Control", [3, 11, 12, 13, 14, 17, 30, 32]), ("See", [20, 21, 22, 23]), ("Change", [25, 26, 27, 28, 29]), ("The governance rail", [24, 31, 33])]
+
+
+def req_link(n):
+    _n, slug, _g, r = REQS[n - 1]
+    return f'<a href="{REQ_BASE}{slug}/#r{n}">{n} · {E(r[0])}</a>'
+
+
+def group_nav(cur_slug=None):
+    out = [f'<a href="{REQ_BASE}">All requirements</a>' if cur_slug else '<span class="on">All requirements</span>']
+    for slug, title, _b, _r in R.GROUPS:
+        short = title.split(":")[0]
+        out.append(f'<span class="on">{E(short)}</span>' if slug == cur_slug else f'<a href="{REQ_BASE}{slug}/">{E(short)}</a>')
+    return f'<nav class="groups" aria-label="Groups of requirements">{"".join(out)}</nav>'
+
+
+def req_section(n, r):
+    name, aka, q, items, caption, why, think, without, where = r
+    label = f"{name}. " + ", then ".join(it[1] + (" " + " ".join(it[2]) if it[2] else "") for it in items) + "."
+    return f"""<section class="req" id="r{n}">
+<span class="no">Requirement {n} of {len(REQS)}</span>
+<h2>{E(name)}</h2>
+<p class="aka">Also called: {E(aka)}</p>
+<p class="q">{E(q)}</p>
+{R.picture(kit, wb.figure, items, label, E(caption))}
+<div class="cols">
+<div><h4>Why</h4><p>{E(why)}</p></div>
+<div class="without"><h4>Without it</h4><p>{E(without)}</p></div>
+</div>
+<div class="cols" style="margin-top:14px"><div style="grid-column:1 / -1"><h4>Think about</h4><ul>{"".join(f"<li>{E(x)}</li>" for x in think)}</ul></div></div>
+<p class="where">In the big picture: <b>{E(where)}</b></p>
+</section>"""
+
+
+def reqs_hub_page():
+    rows = [[str(n), f'<a href="{REQ_BASE}{slug}/#r{n}"><b>{E(r[0])}</b></a>', E(r[1]), E(r[2]), E(g.split(":")[0])] for n, slug, g, r in REQS]
+    body = f"""{group_nav()}
+{say("How to read every picture.", "Left: what comes in. Lavender, in the middle: the requirement. Right: what comes out. A pink cross on an arrow means \"stopped here\".")}
+{d_reqs()}
+<p>The top row follows a request: it is <b>received</b>, the agent <b>thinks</b>, and the agent <b>acts</b>. These are the functional requirements, the things an agent does.
+The bottom row applies to every request at once: <b>keep going</b>, <b>see</b>, <b>prove and change</b>, and <b>protect</b>. These are the non-functional requirements, how well and how safely it does them.</p>
+<p>{"".join(f'<a class="go alt" href="{REQ_BASE}{slug}/">{E(title.split(":")[0])} →</a>' for slug, title, _b, _r in R.GROUPS)}</p>
+
+<h2>All {len(REQS)} requirements</h2>
+{tbl(["", "Requirement", "Also called", "The question an engineer asks", "Group"], rows, "t road")}
+
+<h2>Guardrails come in four kinds</h2>
+<p>"We need guardrails" is four different requirements, because there are four different places to stand.</p>
+{tbl(["Where it stands", "Name", "What it catches", "Group"], [[f"<b>{E(a)}</b>", E(b), E(c), E(d)] for a, b, c, d in R.GUARDRAIL_KINDS])}
+
+<h2>The usual names for the non-functional requirements</h2>
+<p>If your team uses the standard words, this is where each one is covered.</p>
+{tbl(["The usual word", "Covered by"], [
+    ["<b>Security</b>", ", ".join(req_link(n) for n in (2, 3, 4, 11, 12, 30, 32))],
+    ["<b>Privacy and compliance</b>", ", ".join(req_link(n) for n in (24, 31, 33))],
+    ["<b>Reliability</b>", ", ".join(req_link(n) for n in (7, 15, 16, 17))],
+    ["<b>Performance and scale</b>", ", ".join(req_link(n) for n in (5, 18, 19))],
+    ["<b>Observability</b>", ", ".join(req_link(n) for n in (20, 21, 22))],
+    ["<b>Cost</b>", ", ".join(req_link(n) for n in (5, 23))],
+    ["<b>Quality</b>", ", ".join(req_link(n) for n in (14, 25, 26))],
+    ["<b>Ease of change</b>", ", ".join(req_link(n) for n in (27, 28, 29))],
+])}
+{say("Not every agent needs all of them.", "A small internal helper needs a slice. An agent that moves money needs nearly everything. The risk level of the job decides, and that is the last requirement on the list.")}
+<p>Next: stop 8 puts all of these into one picture. Every box in it will be a requirement you have already met.</p>"""
+    return sub_page(7, f"Before the big picture: everything a harness has to do, one need at a time. {len(REQS)} requirements in seven groups, one small picture each.", body,
+                    f"The requirements of an AI agent harness, functional and non-functional, one simple picture each: {len(REQS)} requirements from the front door and sign-in to the loop, the model call, tools, four kinds of guardrails, logs, traces, cost, evals, release and data protection.")
+
+
+def reqs_group_page(gi):
+    slug, title, blurb, _reqs = R.GROUPS[gi]
+    mine = [(n, r) for n, s_, _g, r in REQS if s_ == slug]
+    jump = "".join(f'<li><a href="#r{n}">{n} · {E(r[0])}</a></li>' for n, r in mine)
+    prev = (f'<a class="go alt" href="{REQ_BASE}{R.GROUPS[gi - 1][0]}/">← {E(R.GROUPS[gi - 1][1].split(":")[0])}</a>' if gi else f'<a class="go alt" href="{REQ_BASE}">← All requirements</a>')
+    nxt = (f'<a class="go" href="{REQ_BASE}{R.GROUPS[gi + 1][0]}/">{E(R.GROUPS[gi + 1][1].split(":")[0])} →</a>' if gi + 1 < len(R.GROUPS) else f'<a class="go" href="{url(8)}">Stop 8 · The architecture →</a>')
+    body = f"""{group_nav(slug)}
+<ul class="jump" style="list-style:none">{jump}</ul>
+{"".join(req_section(n, r) for n, r in mine)}
+<p style="margin-top:34px">{prev}{nxt}</p>"""
+    return sub_page(7, E(blurb), body, f"{title}: {len(mine)} requirements of an AI agent harness, one simple picture each. " + "; ".join(r[0] for _n, r in mine) + ".",
+                    title=title, path=f"requirements/{slug}/", crumb=f' › <a href="{REQ_BASE}">What a harness must do</a>')
 
 
 FAMILY_WHY = {
     "Think": "The agent guesses from what the model happens to remember",
     "Act": "The agent can talk but cannot do anything",
-    "Control": "The three stories in stop 5",
+    "Control": "The six stories in stop 5",
     "See": "Nobody can say what happened, or what it cost",
     "Change": "Every improvement is a gamble, so nothing gets improved",
 }
 
 PAGES = {"": index_page, "kinds/": kinds_page, "autonomous-agents/": autonomous_page, "code/": code_page,
-         "loop-sim/": loop_sim_page, "no-guardrails-sim/": guard_sim_page, "architecture/": architecture_page}
+         "loop-sim/": loop_sim_page, "no-guardrails-sim/": guard_sim_page, "requirements/": reqs_hub_page, "architecture/": architecture_page}
+for _i, _g in enumerate(R.GROUPS):
+    PAGES[f"requirements/{_g[0]}/"] = (lambda i=_i: reqs_group_page(i))
 
 
 def main():
