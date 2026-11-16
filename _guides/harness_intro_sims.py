@@ -162,7 +162,7 @@ function reset(){
   document.querySelectorAll('#sugg button').forEach(b => b.classList.toggle('on', b.dataset.id === sc.id));
   light(null); draw(false);
 }
-function send(){ if (sent) return; sent = true; next(); }
+function send(){ if (sent) return; sent = true; $('msg').value = ''; next(); }
 function light(id, cls){ document.querySelectorAll('.st').forEach(g => g.classList.remove('on','goal','limit')); if (id) $(id).classList.add(cls || 'on'); }
 
 function makeReply(s, i){
@@ -521,7 +521,7 @@ function draw(scroll){
   $('goff').classList.toggle('on', !on); $('gon').classList.toggle('on', on);
   $('kind').textContent = sc.kind; $('intro').textContent = sc.intro; $('real').textContent = sc.real;
   const shown = rows.slice(0, k), done = k >= rows.length;
-  $('msg').value = sc.person.text; $('who').textContent = 'Typing as: ' + sc.person.name;
+  $('msg').value = sent ? '' : sc.person.text; $('who').textContent = 'Typing as: ' + sc.person.name;
   let chat = '';
   if (!sent) chat = '<p class="hint">Press Send to give this message to the assistant.</p>';
   else {
