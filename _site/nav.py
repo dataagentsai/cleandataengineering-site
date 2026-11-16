@@ -133,6 +133,7 @@ SECTIONS = [
         ], "cap"),
         ("AI", "/learn/ai-universe/", [
             ("The AI Universe", "/learn/ai-universe/"),
+            ("Agent Harness, the big picture", "/learn/agent-harness-intro/"),
             ("Agent Harness", "/learn/agent-harness/"),
             ("Eval Harness", "/learn/eval-harness/"),
             ("Agent guardrails", "/learn/agent-guardrails/"),
