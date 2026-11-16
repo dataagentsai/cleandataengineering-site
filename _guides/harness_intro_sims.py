@@ -107,6 +107,25 @@ LADDER_CSS = """<style>
   .recap.limit, .recap.off { background:var(--rose-wash); } .recap h3 { font-family:var(--hand); font-weight:400; font-size:27px; margin:0 0 4px; }
   .recap table.t { background:#fff; border:1.5px solid var(--ink); border-radius:10px; margin:8px 0 4px; } .recap p { margin:4px 0; font-size:15.5px; }
   pre.loopcode { font-family:var(--mono); font-size:12.2px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:10px 12px; margin:0; overflow-x:auto; }
+  .chat { border:var(--line); border-radius:16px; background:var(--surface-2); padding:10px 12px; margin:10px 0 16px; }
+  .chat .top { font-size:12px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); margin:0 2px 6px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .sugg { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 8px; }
+  .sugg button { font:13.5px var(--sans); text-align:left; border:1.5px solid var(--ink); border-radius:14px; padding:4px 12px; background:#fff; color:var(--ink); cursor:pointer; }
+  .sugg button.on { background:var(--butter); }
+  .bubbles { min-height:54px; display:flex; flex-direction:column; gap:8px; margin:0 0 8px; }
+  .bubbles .hint { font-size:14px; color:var(--faint); margin:14px 4px; }
+  .bubble { max-width:82%; border:1.5px solid var(--ink); border-radius:16px; padding:6px 14px 8px; font-size:15.5px; background:#fff; }
+  .bubble b { display:block; font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
+  .bubble.me { align-self:flex-end; background:var(--peri-wash); border-bottom-right-radius:4px; } .bubble.me.attacker { background:var(--rose-wash); }
+  .bubble.agent { align-self:flex-start; border-bottom-left-radius:4px; } .bubble.agent.good { background:var(--mint-wash); } .bubble.agent.bad { background:var(--rose-wash); }
+  .bubble.agent.none { border-style:dashed; color:var(--muted); } .bubble.busy { color:var(--muted); }
+  .dots i { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--muted); margin-left:4px; animation:dot 1.2s infinite; } .dots i:nth-child(2) { animation-delay:.2s; } .dots i:nth-child(3) { animation-delay:.4s; }
+  @keyframes dot { 0%, 80%, 100% { opacity:.25; } 40% { opacity:1; } }
+  .composer { display:flex; gap:8px; }
+  .composer input { flex:1; min-width:0; font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:999px; padding:7px 16px; background:#fff; color:var(--ink); }
+  .behind { font-family:var(--hand); font-weight:400; font-size:26px; margin:22px 0 0; }
+  pre .l { display:block; } pre .l::before { content:attr(data-n); display:inline-block; width:2.2em; margin-right:1em; padding-right:.7em; text-align:right; color:var(--faint); border-right:1px solid var(--rule-firm); user-select:none; }
+  pre .l.hit { background:#FFE59A; }
   .tabs2 { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 8px; }
   .tabs2 button { font:600 14px var(--sans); border:1.5px solid var(--ink); border-radius:var(--wob); padding:5px 14px; background:#fff; color:var(--ink); cursor:pointer; }
   .tabs2 button.on { background:var(--ink); color:#fff; }
@@ -130,18 +149,20 @@ const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 const J = o => JSON.stringify(o);
 const cut = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
 const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
-let sc, max, n, phase, messages, sentCount, turns, over, timer;
+let sc, max, n, phase, messages, sentCount, turns, over, timer, sent, scId = SC[0].id;
 
 function scriptAt(i){ const s = sc.script; return i <= s.length ? s[i-1] : s[s.length-1]; }
 function cur(){ return turns[turns.length - 1]; }
 
 function reset(){
-  stop(); sc = SC.find(s => s.id === $('scn').value) || SC[0];
+  stop(); sc = SC.find(s => s.id === scId) || SC[0];
   max = Math.max(1, Math.min(8, parseInt($('max').value, 10) || 5)); $('max').value = max;
   n = 0; phase = 'idle'; messages = [{role:'user', content: sc.task}]; sentCount = 0; turns = []; over = null;
-  $('task').innerHTML = '<b>The person asks</b>' + esc(sc.task);
+  sent = false; $('msg').value = sc.task;
+  document.querySelectorAll('#sugg button').forEach(b => b.classList.toggle('on', b.dataset.id === sc.id));
   light(null); draw(false);
 }
+function send(){ if (sent) return; sent = true; next(); }
 function light(id, cls){ document.querySelectorAll('.st').forEach(g => g.classList.remove('on','goal','limit')); if (id) $(id).classList.add(cls || 'on'); }
 
 function makeReply(s, i){
@@ -230,11 +251,19 @@ function draw(scroll){
   $('big').textContent = turns.length ? (over === 'goal' ? 'Finished in ' + plural(turns.length, 'turn') : over === 'limit' ? 'Stopped after ' + plural(turns.length, 'turn') : 'Turn ' + n + ' of at most ' + max) : 'Not started · at most ' + plural(max, 'turn');
   let chips = turns.map(t => t.shown < 2 ? '<span class="wait">Turn ' + t.n + ': waiting for the model…</span>' : t.step.tool ? '<span class="tool">Turn ' + t.n + ': model asks for ' + t.step.tool + '</span>' : '<span class="ans">Turn ' + t.n + ': model answers</span>').join('');
   if (over === 'limit') chips += '<span class="stop">Limit reached: our code stops the loop</span>';
-  $('chips').innerHTML = chips || '<span class="wait">Press "Next step" to send the first request, or "Next turn" to see a whole turn at once.</span>';
+  $('chips').innerHTML = chips || '<span class="wait">Press "Send" above. Then "Next step" shows one move at a time, and "Next turn" a whole turn.</span>';
+  let chat = '';
+  if (!sent) chat = '<p class="hint">Pick a message, then press Send.</p>';
+  else {
+    chat = '<div class="bubble me"><b>You</b>' + esc(sc.task) + '</div>';
+    if (!over) chat += '<div class="bubble agent busy"><b>Claims assistant</b>Working… turn ' + n + ' of at most ' + max + '<span class="dots"><i></i><i></i><i></i></span></div>';
+    else chat += '<div class="bubble agent"><b>Claims assistant</b>' + esc(over === 'goal' ? cur().step.text : "I couldn't finish this in time, so I am handing over to a person.") + '</div>';
+  }
+  $('chat').innerHTML = chat;
   $('ladder').innerHTML = turns.map((t, i) => turnHtml(t, i === turns.length - 1, json)).join('') + (over ? recap() : '');
   const on = over === 'limit' ? '5' : over === 'goal' ? '2' : ({request:'1', response:'2', tool:'3', append:'4'})[phase];
-  $('code').innerHTML = CODE.map(c => (c[0] && (c[0] === on || (over === 'goal' && c[0] === '2g'))) ? '<mark>' + esc(c[1]) + '</mark>' : esc(c[1])).join('\n');
-  $('next').disabled = !!over; $('turn').disabled = !!over; $('play').disabled = !!over;
+  $('code').innerHTML = CODE.map(c => '<span class="l' + ((sent && c[1] && (c[1] === on || (over === 'goal' && c[1] === '2g'))) ? ' hit' : '') + '" data-n="' + c[0] + '">' + esc(c[2]) + '</span>').join('');
+  const idle = !sent || !!over; $('next').disabled = idle; $('turn').disabled = idle; $('play').disabled = idle; $('send').disabled = sent;
   if (scroll) { const e = document.querySelector(over ? '.recap' : '.row.latest'); if (e) e.scrollIntoView({block:'center', behavior:'smooth'}); }
 }
 function stop(){ if (timer) { clearInterval(timer); timer = null; } $('play').textContent = 'Play'; }
@@ -242,8 +271,10 @@ $('next').onclick = () => { stop(); next(); };
 $('turn').onclick = () => { stop(); nextTurn(); };
 $('play').onclick = () => { if (timer) { stop(); return; } $('play').textContent = 'Pause'; next(); timer = setInterval(next, 2600); };
 $('again').onclick = () => { reset(); window.scrollTo({top:0, behavior:'smooth'}); };
-$('scn').onchange = reset; $('max').onchange = reset; $('json').onchange = () => draw(false);
-$('scn').innerHTML = SC.map(s => '<option value="' + s.id + '">' + esc(s.label) + '</option>').join('');
+$('max').onchange = reset; $('json').onchange = () => draw(false);
+$('send').onclick = send; $('msg').onkeydown = e => { if (e.key === 'Enter') send(); };
+$('sugg').innerHTML = SC.map(s => '<button data-id="' + s.id + '">' + esc(s.task) + '</button>').join('');
+document.querySelectorAll('#sugg button').forEach(b => b.onclick = () => { scId = b.dataset.id; reset(); });
 reset();
 })();
 """
@@ -412,6 +443,7 @@ GUARD_SCENARIOS = [
      "real": "This one rarely makes the news. It arrives as a bill.",
      "tools": ["get_claim_status"],
      "person": {"who": "customer", "name": "Rohan, a customer, at 11:02 pm", "text": "Where is my claim C-777?"},
+     "final_off": "", "final_on": "I couldn't reach the claims system just now. I've passed this to a colleague, who will reply by morning.",
      "off": [
          dict(_BUSY, note="A sensible first step."), _BUSY,
          dict(_BUSY, after=[{"cls": "bad", "hd": "Turns 4 to 4,000 · the same, all night", "j": {"turns": 4000, "replies_sent_to_the_customer": 0},
@@ -439,7 +471,7 @@ const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>
 const J = o => JSON.stringify(o);
 const cut = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
 const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
-let sc = SC[0], on = false, k = 0, rows = [], timer = null;
+let sc = SC[0], on = false, k = 0, rows = [], timer = null, sent = false;
 
 // Turn the story into rows. Each row knows which turn it belongs to.
 function build(){
@@ -488,8 +520,20 @@ function draw(scroll){
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.id === sc.id));
   $('goff').classList.toggle('on', !on); $('gon').classList.toggle('on', on);
   $('kind').textContent = sc.kind; $('intro').textContent = sc.intro; $('real').textContent = sc.real;
-  $('task').className = 'task ' + sc.person.who; $('task').innerHTML = '<b>' + esc(sc.person.name) + ' asks</b>' + esc(sc.person.text);
   const shown = rows.slice(0, k), done = k >= rows.length;
+  $('msg').value = sc.person.text; $('who').textContent = 'Typing as: ' + sc.person.name;
+  let chat = '';
+  if (!sent) chat = '<p class="hint">Press Send to give this message to the assistant.</p>';
+  else {
+    chat = '<div class="bubble me' + (sc.person.who === 'attacker' ? ' attacker' : '') + '"><b>' + esc(sc.person.name) + '</b>' + esc(sc.person.text) + '</div>';
+    if (!done) chat += '<div class="bubble agent busy"><b>Assistant</b>Working…<span class="dots"><i></i><i></i><i></i></span></div>';
+    else {
+      const story = on ? sc.on : sc.off, key = on ? 'final_on' : 'final_off';
+      let fin = sc[key]; if (fin === undefined) { const a = story.filter(t => t.answer && !t.check).pop(); fin = a ? a.answer : ''; }
+      chat += fin ? '<div class="bubble agent ' + (on ? 'good' : 'bad') + '"><b>Assistant</b>' + esc(fin) + '</div>' : '<div class="bubble agent none"><b>Assistant</b>No reply. ' + esc(sc.person.name.split(',')[0]) + ' is still waiting.</div>';
+    }
+  }
+  $('chat').innerHTML = chat;
   let h = '', last = 0;
   shown.forEach((r, i) => {
     if (r.turn !== last) { h += '<div class="turnh"><b>Turn ' + r.turn + '</b><span>request ' + r.turn + ' goes to the model, response ' + r.turn + ' comes back</span></div>'; last = r.turn; }
@@ -498,7 +542,7 @@ function draw(scroll){
   const turns = last, tools = shown.filter(r => r.counts === 'tool').length, checks = shown.filter(r => r.counts === 'check' || (r.cls === 'check' && !r.counts)).length;
   $('big').textContent = k ? 'Turn ' + turns + (done ? ' · finished' : '') + ' · guardrails ' + (on ? 'on' : 'off') : 'Not started · guardrails ' + (on ? 'on' : 'off');
   $('chips').innerHTML = k ? '<span>' + plural(turns, 'turn') + ' with the model</span><span class="tool">' + plural(tools, 'tool') + ' run</span><span class="' + (checks ? 'good' : on ? '' : 'bad') + '">' + plural(checks, 'harness check') + '</span>'
-    : '<span class="wait">Press "Next step" to send the first request, or "Next turn" to see a whole turn at once.</span>';
+    : '<span class="wait">Press "Send" above. Then "Next step" shows one move at a time, and "Next turn" a whole turn.</span>';
   if (done && k) {
     const tiles = on ? sc.impact_on : sc.impact_off;
     h += '<div class="recap ' + (on ? 'on' : 'off') + '"><h3>' + (on ? 'With the harness: what it cost the business' : 'No guardrails: what it cost the business') + '</h3>'
@@ -506,11 +550,12 @@ function draw(scroll){
       + (on ? '' : '<p style="margin-top:10px">Now switch <b>Guardrails</b> to <b>On</b> and play the same story again.</p>') + '</div>';
   }
   $('ladder').innerHTML = h;
-  $('next').disabled = done; $('turn').disabled = done; $('play').disabled = done;
+  const idle = !sent || done; $('next').disabled = idle; $('turn').disabled = idle; $('play').disabled = idle; $('send').disabled = sent;
   if (scroll) { const e = document.querySelector(done ? '.recap' : '.row.latest'); if (e) e.scrollIntoView({block:'center', behavior:'smooth'}); }
 }
 function stop(){ if (timer) { clearInterval(timer); timer = null; } $('play').textContent = 'Play'; }
-function restart(){ stop(); rows = build(); k = 0; draw(false); }
+function restart(){ stop(); rows = build(); k = 0; sent = false; draw(false); }
+function send(){ if (sent) return; sent = true; next(); }
 function next(){ if (k < rows.length) k++; if (k >= rows.length) stop(); draw(true); }
 function nextTurn(){ if (k >= rows.length) return; const t = rows[k].turn; while (k < rows.length && rows[k].turn === t) k++; if (k >= rows.length) stop(); draw(true); }
 $('tabs').innerHTML = SC.map(s => '<button data-id="' + s.id + '">' + esc(s.label) + '</button>').join('');
@@ -520,6 +565,7 @@ $('next').onclick = () => { stop(); next(); };
 $('turn').onclick = () => { stop(); nextTurn(); };
 $('play').onclick = () => { if (timer) { stop(); return; } $('play').textContent = 'Pause'; next(); timer = setInterval(next, 2600); };
 $('again').onclick = restart;
+$('send').onclick = send; $('msg').onkeydown = e => { if (e.key === 'Enter') send(); };
 restart();
 })();
 """

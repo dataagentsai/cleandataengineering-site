@@ -210,6 +210,7 @@
   .say b:first-child { font-family:var(--hand); font-weight:400; font-size:22px; display:block; }
   .hi table.t td { font-size:14.5px; } .hi pre.code { font-size:12.2px; }
   .hi .drawing a.lk:hover rect.ol { stroke-width:3.5px; }
+  pre .l { display:block; } pre .l::before { content:attr(data-n); display:inline-block; width:2.2em; margin-right:1em; padding-right:.7em; text-align:right; color:var(--faint); border-right:1px solid var(--rule-firm); user-select:none; }
 </style><style>
   .simbar { display:flex; flex-wrap:wrap; gap:10px; align-items:end; border:var(--line); border-radius:var(--wob); background:var(--butter-wash); padding:10px 14px; margin:12px 0 10px; }
   .simbar label { display:block; font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin-bottom:2px; }
@@ -255,6 +256,25 @@
   .recap.limit, .recap.off { background:var(--rose-wash); } .recap h3 { font-family:var(--hand); font-weight:400; font-size:27px; margin:0 0 4px; }
   .recap table.t { background:#fff; border:1.5px solid var(--ink); border-radius:10px; margin:8px 0 4px; } .recap p { margin:4px 0; font-size:15.5px; }
   pre.loopcode { font-family:var(--mono); font-size:12.2px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:10px 12px; margin:0; overflow-x:auto; }
+  .chat { border:var(--line); border-radius:16px; background:var(--surface-2); padding:10px 12px; margin:10px 0 16px; }
+  .chat .top { font-size:12px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); margin:0 2px 6px; display:flex; justify-content:space-between; gap:10px; flex-wrap:wrap; }
+  .sugg { display:flex; flex-wrap:wrap; gap:6px; margin:0 0 8px; }
+  .sugg button { font:13.5px var(--sans); text-align:left; border:1.5px solid var(--ink); border-radius:14px; padding:4px 12px; background:#fff; color:var(--ink); cursor:pointer; }
+  .sugg button.on { background:var(--butter); }
+  .bubbles { min-height:54px; display:flex; flex-direction:column; gap:8px; margin:0 0 8px; }
+  .bubbles .hint { font-size:14px; color:var(--faint); margin:14px 4px; }
+  .bubble { max-width:82%; border:1.5px solid var(--ink); border-radius:16px; padding:6px 14px 8px; font-size:15.5px; background:#fff; }
+  .bubble b { display:block; font-size:11px; letter-spacing:.07em; text-transform:uppercase; color:var(--muted); }
+  .bubble.me { align-self:flex-end; background:var(--peri-wash); border-bottom-right-radius:4px; } .bubble.me.attacker { background:var(--rose-wash); }
+  .bubble.agent { align-self:flex-start; border-bottom-left-radius:4px; } .bubble.agent.good { background:var(--mint-wash); } .bubble.agent.bad { background:var(--rose-wash); }
+  .bubble.agent.none { border-style:dashed; color:var(--muted); } .bubble.busy { color:var(--muted); }
+  .dots i { display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--muted); margin-left:4px; animation:dot 1.2s infinite; } .dots i:nth-child(2) { animation-delay:.2s; } .dots i:nth-child(3) { animation-delay:.4s; }
+  @keyframes dot { 0%, 80%, 100% { opacity:.25; } 40% { opacity:1; } }
+  .composer { display:flex; gap:8px; }
+  .composer input { flex:1; min-width:0; font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:999px; padding:7px 16px; background:#fff; color:var(--ink); }
+  .behind { font-family:var(--hand); font-weight:400; font-size:26px; margin:22px 0 0; }
+  pre .l { display:block; } pre .l::before { content:attr(data-n); display:inline-block; width:2.2em; margin-right:1em; padding-right:.7em; text-align:right; color:var(--faint); border-right:1px solid var(--rule-firm); user-select:none; }
+  pre .l.hit { background:#FFE59A; }
   .tabs2 { display:flex; flex-wrap:wrap; gap:8px; margin:16px 0 8px; }
   .tabs2 button { font:600 14px var(--sans); border:1.5px solid var(--ink); border-radius:var(--wob); padding:5px 14px; background:#fff; color:var(--ink); cursor:pointer; }
   .tabs2 button.on { background:var(--ink); color:#fff; }
@@ -340,31 +360,36 @@
 <p class="lede">One request, one move at a time: what our code sends to the model, what comes back, the tool we run, and round again until the goal or the limit.</p>
 <p class="note">Nothing here calls a real model. The replies are scripted so that every run is the same. The shapes of the request and the response are the real ones.</p>
 <div class="say"><b>How to read this page.</b>One <b>turn</b> is one request from our code to the model and one response back. The page lays the turns out one under the other, so you can count them and read what crossed in each. Blue rows go to the model. Lavender rows come back from it. Yellow rows are our own code running a tool.</div>
+<div class="chat">
+<p class="top"><span>What the person sees</span><span>Replies are scripted, so pick one of these messages</span></p>
+<div class="sugg" id="sugg"></div>
+<div class="bubbles" id="chat"></div>
+<div class="composer"><input id="msg" readonly aria-label="Message to the assistant"><button class="act" id="send">Send</button></div>
+</div>
+<p class="behind">What happens behind it</p>
 <figure class="drawing loopfig"><svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
 <filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
 <pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
 <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
 </defs></svg><svg viewBox="0 0 1000 350" role="img" aria-label="A loop of four boxes. One: our code sends the request with all messages and the tool list. Two: the model replies with an answer or a tool request. Three: our code runs the tool. Four: the result is added to the messages, and the loop goes again. Two exits: goal reached when the model asks for no tool, and limit reached when there have been too many turns."><rect class="bxm ol" x="10" y="30" width="142" height="84" rx="12"/><text class="tt" x="81.0" y="68.5" text-anchor="middle">A person</text><text class="sm" x="81.0" y="92.5" text-anchor="middle">asks</text><line class="ln" x1="154" y1="72" x2="186" y2="72" marker-end="url(#ar)"/><g class="st" id="s1"><rect class="pf pf-bx" x="194" y="34" width="230" height="82" rx="12"/><rect class="bx ol" x="190" y="30" width="232" height="84" rx="12"/><text class="tt" x="306.0" y="68.5" text-anchor="middle">1 · Send the request</text><text class="sm" x="306.0" y="92.5" text-anchor="middle">all messages + the tool list</text></g><g class="st" id="s2"><rect class="pf pf-solid" x="524" y="34" width="230" height="82" rx="12"/><rect class="solid ol" x="520" y="30" width="232" height="84" rx="12"/><text class="tt inv" x="636.0" y="68.5" text-anchor="middle">2 · The model replies</text><text class="inv sm2" x="636.0" y="92.5" text-anchor="middle">an answer, or &quot;run this tool&quot;</text></g><g class="st" id="s3"><rect class="pf pf-bxs" x="524" y="254" width="230" height="82" rx="12"/><rect class="bxs ol" x="520" y="250" width="232" height="84" rx="12"/><text class="tt" x="636.0" y="288.5" text-anchor="middle">3 · Run the tool</text><text class="sm" x="636.0" y="312.5" text-anchor="middle">our code runs it, not the model</text></g><g class="st" id="s4"><rect class="pf pf-bx" x="194" y="254" width="230" height="82" rx="12"/><rect class="bx ol" x="190" y="250" width="232" height="84" rx="12"/><text class="tt" x="306.0" y="288.5" text-anchor="middle">4 · Add the result</text><text class="sm" x="306.0" y="312.5" text-anchor="middle">to the messages</text></g><g class="st" id="sgoal"><rect class="bxm ol" x="830" y="30" width="160" height="84" rx="12"/><text class="tt" x="910.0" y="59.0" text-anchor="middle">Goal reached</text><text class="sm" x="910.0" y="83.0" text-anchor="middle">no tool asked for:</text><text class="sm" x="910.0" y="102.0" text-anchor="middle">that is the answer</text></g><g class="st" id="slimit"><rect class="bxm ol" x="10" y="250" width="142" height="84" rx="12"/><text class="tt" x="81.0" y="279.0" text-anchor="middle">Limit reached</text><text class="sm" x="81.0" y="303.0" text-anchor="middle">stop, and</text><text class="sm" x="81.0" y="322.0" text-anchor="middle">hand over</text></g><line class="ln" x1="424" y1="72" x2="518" y2="72" marker-end="url(#ar)"/><line class="ln" x1="636" y1="116" x2="636" y2="248" marker-end="url(#ar)"/><line class="ln" x1="518" y1="292" x2="424" y2="292" marker-end="url(#ar)"/><line class="ln" x1="306" y1="248" x2="306" y2="116" marker-end="url(#ar)"/><line class="ln" x1="754" y1="72" x2="828" y2="72" marker-end="url(#ar)"/><line class="ln" x1="188" y1="292" x2="154" y2="292" marker-end="url(#ar)"/><text class="sm" x="646" y="186" text-anchor="start">it asked for a tool</text><text class="sm" x="296" y="186" text-anchor="end">go again</text><text class="bd" x="471" y="176" text-anchor="middle">the agent loop</text><text class="sm" x="471" y="198" text-anchor="middle">one turn = one model call</text></svg></figure>
 <div class="simbar">
-<div><label for="scn">What the person asks</label><select id="scn"></select></div>
 <div><label for="max">Limit on turns</label><input id="max" type="number" min="1" max="8" value="5"></div>
 <button class="act" id="next">Next step</button><button class="act" id="turn">Next turn</button><button class="act alt" id="play">Play</button><button class="act alt" id="again">Start again</button>
 <label class="chk"><input type="checkbox" id="json" checked> Show the exact JSON</label>
 </div>
-<p class="task" id="task"></p>
 <div class="score"><div class="big" id="big"></div><div class="chips" id="chips"></div></div>
 <div id="ladder"></div>
 <h3>The line of code that is running</h3>
 <pre class="loopcode" id="code"></pre>
-<p class="note">These are the five numbered lines from <a href="/learn/agent-harness-intro/code/">stop 3</a>, shortened to fit.</p>
+<p class="note">This is the loop from agent.py in <a href="/learn/agent-harness-intro/code/">stop 3</a>, with the same line numbers.</p>
 
 <h2>Things to try</h2>
 <ol>
-<li><b>Press "Next turn" three times on "Register a claim".</b> Count them: three requests and three responses for one sentence from the person. Nobody told the model the order of the steps.</li>
+<li><b>Send the first message, then press "Next turn" three times.</b> Count them: three requests and three responses for one sentence from the person. Nobody told the model the order of the steps.</li>
 <li><b>Compare request 1 with request 3.</b> Request 3 carries five messages, because the model remembers nothing between turns and our code sends the whole conversation again. More turns means more text sent each time, which is what you pay for.</li>
-<li><b>Switch to "Only a question".</b> Same loop, same tools, two turns. No new code was written for it.</li>
-<li><b>Play "A tool that keeps failing".</b> The model would retry for ever. The only thing that stops it is our limit.</li>
-<li><b>Set the limit to 2 and play "Register a claim" again.</b> The loop stops before the claim is created. A limit protects you, and a limit that is too tight breaks real work. Choosing it is a design decision.</li>
+<li><b>Send "What does my policy P-1001 cover?".</b> Same loop, same tools, two turns. No new code was written for it.</li>
+<li><b>Send "Where is my claim C-777?".</b> The claims system is busy. The model would retry for ever. The only thing that stops it is our limit.</li>
+<li><b>Set the limit to 2 and send the first message again.</b> The loop stops before the claim is created. A limit protects you, and a limit that is too tight breaks real work. Choosing it is a design decision.</li>
 <li><b>Untick "Show the exact JSON"</b> when you want to explain the idea first and the detail later.</li>
 </ol>
 
@@ -372,24 +397,26 @@
 <div class="tw"><table class="t"><tr><th>What you saw</th><th>Why it matters</th></tr><tr><td><b>The model never runs a tool.</b> It only asks.</td><td>Our code runs every tool. So our code is the place to put every check.</td></tr><tr><td><b>A reply with no tool request is the answer.</b></td><td>That is how the loop knows the goal is reached. There is no separate "done" signal.</td></tr><tr><td><b>The model has no memory.</b> We send everything, every turn.</td><td>What the model knows is exactly what we choose to send. That is a control, and a cost.</td></tr><tr><td><b>The loop stops for one of two reasons.</b></td><td>The model says it is done, or our code says "enough". Only the second one is under our control.</td></tr></table></div>
 <script>
 (function(){
-const SC = [{"id": "register", "label": "Register a claim (3 turns)", "task": "I had a car accident yesterday. My policy is P-1001. Please register my claim.", "script": [{"say": "I'll look up the policy first.", "tool": "get_policy", "input": {"policy_id": "P-1001"}, "result": {"holder": "Rohan", "active": true, "covers": ["accident", "theft"]}, "why": "The model cannot register a claim on a policy it has not seen, so it asks for the policy first."}, {"say": "The policy is active and covers accidents. I'll register the claim.", "tool": "create_claim", "input": {"policy_id": "P-1001", "accident_date": "2026-11-15", "what_happened": "car accident"}, "result": {"claim_id": "C-501", "status": "registered"}, "why": "It has read the policy in the tool result. Now it picks the next step by itself: create the claim."}, {"text": "Your claim C-501 is registered on policy P-1001. A claims handler will contact you about the next steps.", "why": "It has everything it needs, so it asks for no tool. A reply with no tool request is the answer."}]}, {"id": "cover", "label": "Only a question (2 turns)", "task": "What does my policy P-1001 cover?", "script": [{"say": "I'll look up the policy.", "tool": "get_policy", "input": {"policy_id": "P-1001"}, "result": {"holder": "Rohan", "active": true, "covers": ["accident", "theft"]}, "why": "Same first step as before, but nobody wrote a separate path for questions. The model chose it."}, {"text": "Your policy P-1001 is active and covers accident and theft.", "why": "One lookup was enough. The same loop handled a different job in fewer turns."}]}, {"id": "stuck", "label": "A tool that keeps failing (hits the limit)", "task": "Where is my claim C-777?", "script": [{"say": "I'll check the claim.", "tool": "get_claim_status", "input": {"claim_id": "C-777"}, "result": {"error": "The claims system is busy. Try again."}, "why": "A sensible first step. The tool fails, which is nobody's fault.", "repeat": true}]}], TOOLS = [{"name": "get_policy", "description": "Look up an insurance policy by its number, like P-1001.", "input_schema": {"type": "object", "properties": {"policy_id": {"type": "string"}}, "required": ["policy_id"]}}, {"name": "create_claim", "description": "Register a new claim on a policy.", "input_schema": {"type": "object", "properties": {"policy_id": {"type": "string"}, "accident_date": {"type": "string"}, "what_happened": {"type": "string"}}, "required": ["policy_id", "accident_date", "what_happened"]}}, {"name": "get_claim_status", "description": "Look up a claim by its number, like C-501.", "input_schema": {"type": "object", "properties": {"claim_id": {"type": "string"}}, "required": ["claim_id"]}}], SYSTEM = "You are a claims assistant for an insurance company. Use the tools. Answer briefly.", CODE = [["", "for step in range(1, MAX_STEPS + 1):"], ["1", "    reply = call_model(SYSTEM, tools, messages)        # 1. ask the model what to do next"], ["2", "    if reply[\"stop_reason\"] != \"tool_use\":             # 2. no tool asked for: that is the answer"], ["2g", "        return reply[\"content\"][0][\"text\"]"], ["3", "    output = TOOLS[block[\"name\"]](**block[\"input\"])     # 3. run the tool the model asked for"], ["4", "    messages.append(tool_result(output))               # 4. show the model the result"], ["5", "return \"I couldn't finish this in time.\"                # 5. the limit: stop, even if the model hasn't"]];
+const SC = [{"id": "register", "label": "Register a claim (3 turns)", "task": "I had a car accident yesterday. My policy is P-1001. Please register my claim.", "script": [{"say": "I'll look up the policy first.", "tool": "get_policy", "input": {"policy_id": "P-1001"}, "result": {"holder": "Rohan", "active": true, "covers": ["accident", "theft"]}, "why": "The model cannot register a claim on a policy it has not seen, so it asks for the policy first."}, {"say": "The policy is active and covers accidents. I'll register the claim.", "tool": "create_claim", "input": {"policy_id": "P-1001", "accident_date": "2026-11-15", "what_happened": "car accident"}, "result": {"claim_id": "C-501", "status": "registered"}, "why": "It has read the policy in the tool result. Now it picks the next step by itself: create the claim."}, {"text": "Your claim C-501 is registered on policy P-1001. A claims handler will contact you about the next steps.", "why": "It has everything it needs, so it asks for no tool. A reply with no tool request is the answer."}]}, {"id": "cover", "label": "Only a question (2 turns)", "task": "What does my policy P-1001 cover?", "script": [{"say": "I'll look up the policy.", "tool": "get_policy", "input": {"policy_id": "P-1001"}, "result": {"holder": "Rohan", "active": true, "covers": ["accident", "theft"]}, "why": "Same first step as before, but nobody wrote a separate path for questions. The model chose it."}, {"text": "Your policy P-1001 is active and covers accident and theft.", "why": "One lookup was enough. The same loop handled a different job in fewer turns."}]}, {"id": "stuck", "label": "A tool that keeps failing (hits the limit)", "task": "Where is my claim C-777?", "script": [{"say": "I'll check the claim.", "tool": "get_claim_status", "input": {"claim_id": "C-777"}, "result": {"error": "The claims system is busy. Try again."}, "why": "A sensible first step. The tool fails, which is nobody's fault.", "repeat": true}]}], TOOLS = [{"name": "get_policy", "description": "Look up an insurance policy by its number, like P-1001.", "input_schema": {"type": "object", "properties": {"policy_id": {"type": "string"}}, "required": ["policy_id"]}}, {"name": "create_claim", "description": "Register a new claim on a policy.", "input_schema": {"type": "object", "properties": {"policy_id": {"type": "string"}, "accident_date": {"type": "string"}, "what_happened": {"type": "string"}}, "required": ["policy_id", "accident_date", "what_happened"]}}, {"name": "get_claim_status", "description": "Look up a claim by its number, like C-501.", "input_schema": {"type": "object", "properties": {"claim_id": {"type": "string"}}, "required": ["claim_id"]}}], SYSTEM = "You are a claims assistant for an insurance company. Use the tools. Answer briefly.", CODE = [[12, "", "def run(task, call_model, log=print):"], [13, "", "    messages = [{\"role\": \"user\", \"content\": task}]"], [14, "", "    for step in range(1, MAX_STEPS + 1):"], [15, "1", "        reply = call_model(SYSTEM, list(TOOLS), messages)  # 1. ask the model what to do next"], [16, "", "        messages.append({\"role\": \"assistant\", \"content\": reply[\"content\"]})"], [17, "2", "        if reply[\"stop_reason\"] != \"tool_use\":  # 2. no tool asked for: that is the answer"], [18, "2g", "            return reply[\"content\"][0][\"text\"]"], [19, "", "        results = []"], [20, "3", "        for block in reply[\"content\"]:  # 3. run each tool the model asked for"], [21, "3", "            if block[\"type\"] == \"tool_use\":"], [22, "3", "                log(f\"step {step}: the model asks for {block['name']}({block['input']})\")"], [23, "3", "                output = TOOLS[block[\"name\"]](**block[\"input\"])"], [24, "3", "                results.append({\"type\": \"tool_result\", \"tool_use_id\": block[\"id\"], \"content\": json.dumps(output)})"], [25, "4", "        messages.append({\"role\": \"user\", \"content\": results})  # 4. show the model the results"], [26, "5", "    return \"I couldn't finish this in time, so I am handing over to a person.\"  # 5. the limit"]];
 const $ = id => document.getElementById(id);
 const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 const J = o => JSON.stringify(o);
 const cut = (s, n) => s.length > n ? s.slice(0, n - 1) + '…' : s;
 const plural = (n, w) => n + ' ' + w + (n === 1 ? '' : 's');
-let sc, max, n, phase, messages, sentCount, turns, over, timer;
+let sc, max, n, phase, messages, sentCount, turns, over, timer, sent, scId = SC[0].id;
 
 function scriptAt(i){ const s = sc.script; return i <= s.length ? s[i-1] : s[s.length-1]; }
 function cur(){ return turns[turns.length - 1]; }
 
 function reset(){
-  stop(); sc = SC.find(s => s.id === $('scn').value) || SC[0];
+  stop(); sc = SC.find(s => s.id === scId) || SC[0];
   max = Math.max(1, Math.min(8, parseInt($('max').value, 10) || 5)); $('max').value = max;
   n = 0; phase = 'idle'; messages = [{role:'user', content: sc.task}]; sentCount = 0; turns = []; over = null;
-  $('task').innerHTML = '<b>The person asks</b>' + esc(sc.task);
+  sent = false; $('msg').value = sc.task;
+  document.querySelectorAll('#sugg button').forEach(b => b.classList.toggle('on', b.dataset.id === sc.id));
   light(null); draw(false);
 }
+function send(){ if (sent) return; sent = true; next(); }
 function light(id, cls){ document.querySelectorAll('.st').forEach(g => g.classList.remove('on','goal','limit')); if (id) $(id).classList.add(cls || 'on'); }
 
 function makeReply(s, i){
@@ -478,11 +505,19 @@ function draw(scroll){
   $('big').textContent = turns.length ? (over === 'goal' ? 'Finished in ' + plural(turns.length, 'turn') : over === 'limit' ? 'Stopped after ' + plural(turns.length, 'turn') : 'Turn ' + n + ' of at most ' + max) : 'Not started · at most ' + plural(max, 'turn');
   let chips = turns.map(t => t.shown < 2 ? '<span class="wait">Turn ' + t.n + ': waiting for the model…</span>' : t.step.tool ? '<span class="tool">Turn ' + t.n + ': model asks for ' + t.step.tool + '</span>' : '<span class="ans">Turn ' + t.n + ': model answers</span>').join('');
   if (over === 'limit') chips += '<span class="stop">Limit reached: our code stops the loop</span>';
-  $('chips').innerHTML = chips || '<span class="wait">Press "Next step" to send the first request, or "Next turn" to see a whole turn at once.</span>';
+  $('chips').innerHTML = chips || '<span class="wait">Press "Send" above. Then "Next step" shows one move at a time, and "Next turn" a whole turn.</span>';
+  let chat = '';
+  if (!sent) chat = '<p class="hint">Pick a message, then press Send.</p>';
+  else {
+    chat = '<div class="bubble me"><b>You</b>' + esc(sc.task) + '</div>';
+    if (!over) chat += '<div class="bubble agent busy"><b>Claims assistant</b>Working… turn ' + n + ' of at most ' + max + '<span class="dots"><i></i><i></i><i></i></span></div>';
+    else chat += '<div class="bubble agent"><b>Claims assistant</b>' + esc(over === 'goal' ? cur().step.text : "I couldn't finish this in time, so I am handing over to a person.") + '</div>';
+  }
+  $('chat').innerHTML = chat;
   $('ladder').innerHTML = turns.map((t, i) => turnHtml(t, i === turns.length - 1, json)).join('') + (over ? recap() : '');
   const on = over === 'limit' ? '5' : over === 'goal' ? '2' : ({request:'1', response:'2', tool:'3', append:'4'})[phase];
-  $('code').innerHTML = CODE.map(c => (c[0] && (c[0] === on || (over === 'goal' && c[0] === '2g'))) ? '<mark>' + esc(c[1]) + '</mark>' : esc(c[1])).join('\n');
-  $('next').disabled = !!over; $('turn').disabled = !!over; $('play').disabled = !!over;
+  $('code').innerHTML = CODE.map(c => '<span class="l' + ((sent && c[1] && (c[1] === on || (over === 'goal' && c[1] === '2g'))) ? ' hit' : '') + '" data-n="' + c[0] + '">' + esc(c[2]) + '</span>').join('');
+  const idle = !sent || !!over; $('next').disabled = idle; $('turn').disabled = idle; $('play').disabled = idle; $('send').disabled = sent;
   if (scroll) { const e = document.querySelector(over ? '.recap' : '.row.latest'); if (e) e.scrollIntoView({block:'center', behavior:'smooth'}); }
 }
 function stop(){ if (timer) { clearInterval(timer); timer = null; } $('play').textContent = 'Play'; }
@@ -490,8 +525,10 @@ $('next').onclick = () => { stop(); next(); };
 $('turn').onclick = () => { stop(); nextTurn(); };
 $('play').onclick = () => { if (timer) { stop(); return; } $('play').textContent = 'Pause'; next(); timer = setInterval(next, 2600); };
 $('again').onclick = () => { reset(); window.scrollTo({top:0, behavior:'smooth'}); };
-$('scn').onchange = reset; $('max').onchange = reset; $('json').onchange = () => draw(false);
-$('scn').innerHTML = SC.map(s => '<option value="' + s.id + '">' + esc(s.label) + '</option>').join('');
+$('max').onchange = reset; $('json').onchange = () => draw(false);
+$('send').onclick = send; $('msg').onkeydown = e => { if (e.key === 'Enter') send(); };
+$('sugg').innerHTML = SC.map(s => '<button data-id="' + s.id + '">' + esc(s.task) + '</button>').join('');
+document.querySelectorAll('#sugg button').forEach(b => b.onclick = () => { scId = b.dataset.id; reset(); });
 reset();
 })();
 </script>

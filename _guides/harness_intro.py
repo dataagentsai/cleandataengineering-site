@@ -69,6 +69,7 @@ CSS = C.CSS + wb.kit_css() + R.CSS + """<style>
   .say b:first-child { font-family:var(--hand); font-weight:400; font-size:22px; display:block; }
   .hi table.t td { font-size:14.5px; } .hi pre.code { font-size:12.2px; }
   .hi .drawing a.lk:hover rect.ol { stroke-width:3.5px; }
+  pre .l { display:block; } pre .l::before { content:attr(data-n); display:inline-block; width:2.2em; margin-right:1em; padding-right:.7em; text-align:right; color:var(--faint); border-right:1px solid var(--rule-firm); user-select:none; }
 </style>"""
 
 
@@ -262,6 +263,38 @@ def sub_page(cur, lede, body, desc, extra_css="", title=None, path=None, crumb="
     return wb.page(f"{title} · Agent Harness, the big picture", desc, SITE + BASE + path, html, CSS + extra_css)
 
 
+def code_ln(src, cap=""):
+    """Code with a line number in front of every line."""
+    lines = "".join(f'<span class="l" data-n="{i}">{E(ln)}</span>' for i, ln in enumerate(src.rstrip("\n").split("\n"), 1))
+    return f'<pre class="code ln">{lines}</pre>' + (f'<p class="cap">{E(cap)}</p>' if cap else "")
+
+
+def loop_lines():
+    """The loop in agent.py with its real line numbers, each tagged with the numbered comment it belongs to."""
+    out, tag, inside = [], "", False
+    for no, ln in enumerate((CODE_DIR / "agent.py").read_text().split("\n"), 1):
+        if ln.startswith("def run("):
+            inside = True
+        if not inside:
+            continue
+        for k in "12345":
+            if f"# {k}." in ln:
+                tag = k
+        this = tag
+        if tag == "2" and "return" in ln:
+            this = "2g"
+        if tag in ("1", "2", "4") and f"# {tag}." not in ln and this != "2g":
+            this = ""
+        out.append([no, this if no > 0 and not ln.startswith("def run(") and "messages = [" not in ln and not ln.strip().startswith("for step") else "", ln])
+        if "# 5." in ln:
+            break
+    return out
+
+
+def line_of(marker):
+    return next(no for no, ln in enumerate((CODE_DIR / "agent.py").read_text().split("\n"), 1) if marker in ln)
+
+
 def tbl(head, rows, cls="t"):
     """A table whose cells may contain HTML."""
     h = "".join(f"<th>{c}</th>" for c in head)
@@ -442,14 +475,14 @@ def code_page():
 
 <h2>Version 1: ordinary code</h2>
 <p>We decide every step and the order. The caller must hand us three tidy values, the way a web form would.</p>
-{C.code(src["deterministic.py"])}
+{code_ln(src["deterministic.py"])}
 {C.code("$ python3 deterministic.py\n" + run_code("deterministic.py"), "What it prints.")}
 
 <h2>Version 2: an agent</h2>
 <p>We write one small loop and a list of tools. The model decides which tool to use next, turn by turn. The caller hands us a sentence.</p>
-{C.code(src["agent.py"])}
+{code_ln(src["agent.py"])}
 {C.code("$ python3 agent.py\n" + run_code("agent.py"), "What it prints. The second request is a question, which version 1 has no code for.")}
-{say("Read the five numbered comments.", "Ask the model. If it asks for no tool, that is the answer. Otherwise run the tool, show it the result, and go round again. After five turns, stop. That is the whole agent, and stop 4 turns those five lines into a simulation.")}
+{say(f"Read the five numbered comments, on lines {line_of('# 1.')} to {line_of('# 5.')}.", "Ask the model. If it asks for no tool, that is the answer. Otherwise run the tool, show it the result, and go round again. After five turns, stop. That is the whole agent, and stop 4 turns those five lines into a simulation.")}
 
 <h2>What is different</h2>
 {tbl(["Question", "Ordinary code", "Agent"], [
@@ -464,15 +497,15 @@ def code_page():
 ])}
 
 <h2>Look at what the agent does not have</h2>
-<p>Line 3 of the loop runs <b>whatever tool the model names, with whatever input the model gives, for whoever is asking</b>. Nothing checks any of it.
-The only protection in the whole file is line 5, the limit of five turns. Stop 5 shows what that costs.</p>
+<p>Line {line_of("output = TOOLS[")} runs <b>whatever tool the model names, with whatever input the model gives, for whoever is asking</b>. Nothing checks any of it.
+The only protection in the whole file is line {line_of("# 5.")}, the limit of five turns. Stop 5 shows what that costs.</p>
 
 <h2>The rest of the files</h2>
-<details class="faq"><summary>world.py: the pretend insurance company</summary>{C.code(src["world.py"])}</details>
+<details class="faq"><summary>world.py: the pretend insurance company</summary>{code_ln(src["world.py"])}</details>
 <details class="faq"><summary>pretend_model.py: the stand-in for a real model</summary>
 <p>So that the example runs with no account and no cost, the model here is a few plain rules that return replies in the same shape a real model does.
-It shows the loop, not intelligence. Replace it with a call to a real model and agent.py does not change.</p>{C.code(src["pretend_model.py"])}</details>
-<details class="faq"><summary>test_both.py: a table of checks for both versions</summary>{C.code(src["test_both.py"])}{C.code("$ python3 test_both.py\n" + checks)}</details>
+It shows the loop, not intelligence. Replace it with a call to a real model and agent.py does not change.</p>{code_ln(src["pretend_model.py"])}</details>
+<details class="faq"><summary>test_both.py: a table of checks for both versions</summary>{code_ln(src["test_both.py"])}{C.code("$ python3 test_both.py\n" + checks)}</details>
 <p><a class="go alt" href="{CODE_URL}">The five files on GitHub</a></p>
 <p>Next: stop 4 runs the loop slowly, so you can see every message that crosses between our code and the model.</p>"""
     return sub_page(3, "One job, written twice: once as ordinary code where we decide every step, and once as an agent where the model does.", body,
@@ -483,30 +516,35 @@ It shows the loop, not intelligence. Replace it with a call to a real model and 
 
 def loop_sim_page():
     js = (S.LOOP_JS.replace("__SCENARIOS__", json.dumps(S.LOOP_SCENARIOS)).replace("__TOOLS__", json.dumps(S.LOOP_TOOLS))
-          .replace("__SYSTEM__", json.dumps(S.LOOP_SYSTEM)).replace("__CODE__", json.dumps(S.LOOP_CODE)))
+          .replace("__SYSTEM__", json.dumps(S.LOOP_SYSTEM)).replace("__CODE__", json.dumps(loop_lines())))
     body = f"""<p class="note">Nothing here calls a real model. The replies are scripted so that every run is the same. The shapes of the request and the response are the real ones.</p>
 {say("How to read this page.", "One <b>turn</b> is one request from our code to the model and one response back. The page lays the turns out one under the other, so you can count them and read what crossed in each. Blue rows go to the model. Lavender rows come back from it. Yellow rows are our own code running a tool.")}
+<div class="chat">
+<p class="top"><span>What the person sees</span><span>Replies are scripted, so pick one of these messages</span></p>
+<div class="sugg" id="sugg"></div>
+<div class="bubbles" id="chat"></div>
+<div class="composer"><input id="msg" readonly aria-label="Message to the assistant"><button class="act" id="send">Send</button></div>
+</div>
+<p class="behind">What happens behind it</p>
 <figure class="drawing loopfig">{kit.DEFS}<svg viewBox="0 0 1000 350" role="img" aria-label="{E(LOOP_LABEL)}">{loop_body(ids=True)}</svg></figure>
 <div class="simbar">
-<div><label for="scn">What the person asks</label><select id="scn"></select></div>
 <div><label for="max">Limit on turns</label><input id="max" type="number" min="1" max="8" value="5"></div>
 <button class="act" id="next">Next step</button><button class="act" id="turn">Next turn</button><button class="act alt" id="play">Play</button><button class="act alt" id="again">Start again</button>
 <label class="chk"><input type="checkbox" id="json" checked> Show the exact JSON</label>
 </div>
-<p class="task" id="task"></p>
 <div class="score"><div class="big" id="big"></div><div class="chips" id="chips"></div></div>
 <div id="ladder"></div>
 <h3>The line of code that is running</h3>
 <pre class="loopcode" id="code"></pre>
-<p class="note">These are the five numbered lines from <a href="{url(3)}">stop 3</a>, shortened to fit.</p>
+<p class="note">This is the loop from agent.py in <a href="{url(3)}">stop 3</a>, with the same line numbers.</p>
 
 <h2>Things to try</h2>
 <ol>
-<li><b>Press "Next turn" three times on "Register a claim".</b> Count them: three requests and three responses for one sentence from the person. Nobody told the model the order of the steps.</li>
+<li><b>Send the first message, then press "Next turn" three times.</b> Count them: three requests and three responses for one sentence from the person. Nobody told the model the order of the steps.</li>
 <li><b>Compare request 1 with request 3.</b> Request 3 carries five messages, because the model remembers nothing between turns and our code sends the whole conversation again. More turns means more text sent each time, which is what you pay for.</li>
-<li><b>Switch to "Only a question".</b> Same loop, same tools, two turns. No new code was written for it.</li>
-<li><b>Play "A tool that keeps failing".</b> The model would retry for ever. The only thing that stops it is our limit.</li>
-<li><b>Set the limit to 2 and play "Register a claim" again.</b> The loop stops before the claim is created. A limit protects you, and a limit that is too tight breaks real work. Choosing it is a design decision.</li>
+<li><b>Send "What does my policy P-1001 cover?".</b> Same loop, same tools, two turns. No new code was written for it.</li>
+<li><b>Send "Where is my claim C-777?".</b> The claims system is busy. The model would retry for ever. The only thing that stops it is our limit.</li>
+<li><b>Set the limit to 2 and send the first message again.</b> The loop stops before the claim is created. A limit protects you, and a limit that is too tight breaks real work. Choosing it is a design decision.</li>
 <li><b>Untick "Show the exact JSON"</b> when you want to explain the idea first and the detail later.</li>
 </ol>
 
@@ -533,11 +571,16 @@ def guard_sim_page():
 {say("How to read this page.", "Each story is laid out turn by turn, exactly like the loop simulation in stop 4: the request our code sends, the response the model returns, and the tool our code runs. Watch what is inside each request. Rose means harm. Green means a harness check.")}
 <div class="tabs2" id="tabs"></div>
 <p class="kind" id="kind"></p><p class="intro" id="intro"></p><p class="real" id="real"></p>
+<div class="simbar"><div><label>Guardrails</label><span class="switch"><button id="goff" class="off">Off</button><button id="gon" class="onn">On</button></span></div></div>
+<div class="chat">
+<p class="top"><span>What the person sees</span><span id="who"></span></p>
+<div class="bubbles" id="chat"></div>
+<div class="composer"><input id="msg" readonly aria-label="Message to the assistant"><button class="act" id="send">Send</button></div>
+</div>
+<p class="behind">What happens behind it</p>
 <div class="simbar">
-<div><label>Guardrails</label><span class="switch"><button id="goff" class="off">Off</button><button id="gon" class="onn">On</button></span></div>
 <button class="act" id="next">Next step</button><button class="act" id="turn">Next turn</button><button class="act alt" id="play">Play</button><button class="act alt" id="again">Start again</button>
 </div>
-<p class="task" id="task"></p>
 <div class="score"><div class="big" id="big"></div><div class="chips" id="chips"></div></div>
 <div id="ladder"></div>
 <script>{js}</script>

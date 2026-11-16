@@ -210,6 +210,7 @@
   .say b:first-child { font-family:var(--hand); font-weight:400; font-size:22px; display:block; }
   .hi table.t td { font-size:14.5px; } .hi pre.code { font-size:12.2px; }
   .hi .drawing a.lk:hover rect.ol { stroke-width:3.5px; }
+  pre .l { display:block; } pre .l::before { content:attr(data-n); display:inline-block; width:2.2em; margin-right:1em; padding-right:.7em; text-align:right; color:var(--faint); border-right:1px solid var(--rule-firm); user-select:none; }
 </style><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Clean Data Engineering">
@@ -286,180 +287,34 @@
 
 <h2>Version 1: ordinary code</h2>
 <p>We decide every step and the order. The caller must hand us three tidy values, the way a web form would.</p>
-<pre class="code">&quot;&quot;&quot;Register a claim with ordinary code. Our code decides every step, in the same order, every time.&quot;&quot;&quot;
-
-from world import create_claim, get_policy
-
-
-def register_claim(policy_id, accident_date, what_happened):
-    policy = get_policy(policy_id)  # step 1: always look up the policy
-    if &quot;error&quot; in policy:
-        return &quot;I can&#x27;t find that policy number.&quot;
-    if not policy[&quot;active&quot;]:  # step 2: always check that it is active
-        return &quot;This policy is not active, so I can&#x27;t register a claim.&quot;
-    if &quot;accident&quot; not in policy[&quot;covers&quot;]:  # step 3: always check the cover
-        return &quot;This policy does not cover accidents.&quot;
-    claim = create_claim(policy_id, accident_date, what_happened)  # step 4: always create the claim
-    return f&quot;Your claim {claim[&#x27;claim_id&#x27;]} is registered.&quot;
-
-
-if __name__ == &quot;__main__&quot;:
-    print(register_claim(&quot;P-1001&quot;, &quot;2026-11-15&quot;, &quot;Hit from behind at a signal&quot;))</pre>
+<pre class="code ln"><span class="l" data-n="1">&quot;&quot;&quot;Register a claim with ordinary code. Our code decides every step, in the same order, every time.&quot;&quot;&quot;</span><span class="l" data-n="2"></span><span class="l" data-n="3">from world import create_claim, get_policy</span><span class="l" data-n="4"></span><span class="l" data-n="5"></span><span class="l" data-n="6">def register_claim(policy_id, accident_date, what_happened):</span><span class="l" data-n="7">    policy = get_policy(policy_id)  # step 1: always look up the policy</span><span class="l" data-n="8">    if &quot;error&quot; in policy:</span><span class="l" data-n="9">        return &quot;I can&#x27;t find that policy number.&quot;</span><span class="l" data-n="10">    if not policy[&quot;active&quot;]:  # step 2: always check that it is active</span><span class="l" data-n="11">        return &quot;This policy is not active, so I can&#x27;t register a claim.&quot;</span><span class="l" data-n="12">    if &quot;accident&quot; not in policy[&quot;covers&quot;]:  # step 3: always check the cover</span><span class="l" data-n="13">        return &quot;This policy does not cover accidents.&quot;</span><span class="l" data-n="14">    claim = create_claim(policy_id, accident_date, what_happened)  # step 4: always create the claim</span><span class="l" data-n="15">    return f&quot;Your claim {claim[&#x27;claim_id&#x27;]} is registered.&quot;</span><span class="l" data-n="16"></span><span class="l" data-n="17"></span><span class="l" data-n="18">if __name__ == &quot;__main__&quot;:</span><span class="l" data-n="19">    print(register_claim(&quot;P-1001&quot;, &quot;2026-11-15&quot;, &quot;Hit from behind at a signal&quot;))</span></pre>
 <pre class="code">$ python3 deterministic.py
 Your claim C-501 is registered.</pre><p class="cap">What it prints.</p>
 
 <h2>Version 2: an agent</h2>
 <p>We write one small loop and a list of tools. The model decides which tool to use next, turn by turn. The caller hands us a sentence.</p>
-<pre class="code">&quot;&quot;&quot;Do the same job with an agent. The model decides the next step; our code runs it and goes round again.&quot;&quot;&quot;
-
-import json
-
-from world import create_claim, get_policy
-
-MAX_STEPS = 5
-SYSTEM = &quot;You are a claims assistant for an insurance company. Use the tools. Answer briefly.&quot;
-TOOLS = {&quot;get_policy&quot;: get_policy, &quot;create_claim&quot;: create_claim}  # what the agent is able to do
-
-
-def run(task, call_model, log=print):
-    messages = [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: task}]
-    for step in range(1, MAX_STEPS + 1):
-        reply = call_model(SYSTEM, list(TOOLS), messages)  # 1. ask the model what to do next
-        messages.append({&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: reply[&quot;content&quot;]})
-        if reply[&quot;stop_reason&quot;] != &quot;tool_use&quot;:  # 2. no tool asked for: that is the answer
-            return reply[&quot;content&quot;][0][&quot;text&quot;]
-        results = []
-        for block in reply[&quot;content&quot;]:  # 3. run each tool the model asked for
-            if block[&quot;type&quot;] == &quot;tool_use&quot;:
-                log(f&quot;step {step}: the model asks for {block[&#x27;name&#x27;]}({block[&#x27;input&#x27;]})&quot;)
-                output = TOOLS[block[&quot;name&quot;]](**block[&quot;input&quot;])
-                results.append({&quot;type&quot;: &quot;tool_result&quot;, &quot;tool_use_id&quot;: block[&quot;id&quot;], &quot;content&quot;: json.dumps(output)})
-        messages.append({&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: results})  # 4. show the model the results
-    return &quot;I couldn&#x27;t finish this in time, so I am handing over to a person.&quot;  # 5. the limit
-
-
-if __name__ == &quot;__main__&quot;:
-    from pretend_model import pretend_model
-
-    print(run(&quot;I had a car accident yesterday. My policy is P-1001. Please register my claim.&quot;, pretend_model))
-    print(run(&quot;What does my policy P-1001 cover?&quot;, pretend_model))</pre>
+<pre class="code ln"><span class="l" data-n="1">&quot;&quot;&quot;Do the same job with an agent. The model decides the next step; our code runs it and goes round again.&quot;&quot;&quot;</span><span class="l" data-n="2"></span><span class="l" data-n="3">import json</span><span class="l" data-n="4"></span><span class="l" data-n="5">from world import create_claim, get_policy</span><span class="l" data-n="6"></span><span class="l" data-n="7">MAX_STEPS = 5</span><span class="l" data-n="8">SYSTEM = &quot;You are a claims assistant for an insurance company. Use the tools. Answer briefly.&quot;</span><span class="l" data-n="9">TOOLS = {&quot;get_policy&quot;: get_policy, &quot;create_claim&quot;: create_claim}  # what the agent is able to do</span><span class="l" data-n="10"></span><span class="l" data-n="11"></span><span class="l" data-n="12">def run(task, call_model, log=print):</span><span class="l" data-n="13">    messages = [{&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: task}]</span><span class="l" data-n="14">    for step in range(1, MAX_STEPS + 1):</span><span class="l" data-n="15">        reply = call_model(SYSTEM, list(TOOLS), messages)  # 1. ask the model what to do next</span><span class="l" data-n="16">        messages.append({&quot;role&quot;: &quot;assistant&quot;, &quot;content&quot;: reply[&quot;content&quot;]})</span><span class="l" data-n="17">        if reply[&quot;stop_reason&quot;] != &quot;tool_use&quot;:  # 2. no tool asked for: that is the answer</span><span class="l" data-n="18">            return reply[&quot;content&quot;][0][&quot;text&quot;]</span><span class="l" data-n="19">        results = []</span><span class="l" data-n="20">        for block in reply[&quot;content&quot;]:  # 3. run each tool the model asked for</span><span class="l" data-n="21">            if block[&quot;type&quot;] == &quot;tool_use&quot;:</span><span class="l" data-n="22">                log(f&quot;step {step}: the model asks for {block[&#x27;name&#x27;]}({block[&#x27;input&#x27;]})&quot;)</span><span class="l" data-n="23">                output = TOOLS[block[&quot;name&quot;]](**block[&quot;input&quot;])</span><span class="l" data-n="24">                results.append({&quot;type&quot;: &quot;tool_result&quot;, &quot;tool_use_id&quot;: block[&quot;id&quot;], &quot;content&quot;: json.dumps(output)})</span><span class="l" data-n="25">        messages.append({&quot;role&quot;: &quot;user&quot;, &quot;content&quot;: results})  # 4. show the model the results</span><span class="l" data-n="26">    return &quot;I couldn&#x27;t finish this in time, so I am handing over to a person.&quot;  # 5. the limit</span><span class="l" data-n="27"></span><span class="l" data-n="28"></span><span class="l" data-n="29">if __name__ == &quot;__main__&quot;:</span><span class="l" data-n="30">    from pretend_model import pretend_model</span><span class="l" data-n="31"></span><span class="l" data-n="32">    print(run(&quot;I had a car accident yesterday. My policy is P-1001. Please register my claim.&quot;, pretend_model))</span><span class="l" data-n="33">    print(run(&quot;What does my policy P-1001 cover?&quot;, pretend_model))</span></pre>
 <pre class="code">$ python3 agent.py
 step 1: the model asks for get_policy({&#x27;policy_id&#x27;: &#x27;P-1001&#x27;})
 step 2: the model asks for create_claim({&#x27;policy_id&#x27;: &#x27;P-1001&#x27;, &#x27;accident_date&#x27;: &#x27;2026-11-15&#x27;, &#x27;what_happened&#x27;: &#x27;car accident&#x27;})
 Your claim C-501 is registered.
 step 1: the model asks for get_policy({&#x27;policy_id&#x27;: &#x27;P-1001&#x27;})
 Your policy covers: accident, theft.</pre><p class="cap">What it prints. The second request is a question, which version 1 has no code for.</p>
-<div class="say"><b>Read the five numbered comments.</b>Ask the model. If it asks for no tool, that is the answer. Otherwise run the tool, show it the result, and go round again. After five turns, stop. That is the whole agent, and stop 4 turns those five lines into a simulation.</div>
+<div class="say"><b>Read the five numbered comments, on lines 15 to 26.</b>Ask the model. If it asks for no tool, that is the answer. Otherwise run the tool, show it the result, and go round again. After five turns, stop. That is the whole agent, and stop 4 turns those five lines into a simulation.</div>
 
 <h2>What is different</h2>
 <div class="tw"><table class="t"><tr><th>Question</th><th>Ordinary code</th><th>Agent</th></tr><tr><td><b>Who decides the next step?</b></td><td>We do, when we write the code</td><td>The model does, each time round the loop</td></tr><tr><td><b>What does the input look like?</b></td><td>Three typed values, like a form</td><td>A sentence in the person's own words</td></tr><tr><td><b>A request nobody planned for?</b></td><td>Needs a new function ("what does my policy cover?" is not handled)</td><td>The same loop handles it, with no new code</td></tr><tr><td><b>Can you predict the path?</b></td><td>Yes: the same four steps every time</td><td>No: anything from one turn to five</td></tr><tr><td><b>How do you test it?</b></td><td>A table of inputs and expected outputs</td><td>The same table, plus checks on which tools it used, plus watching real runs</td></tr><tr><td><b>What does a run cost?</b></td><td>Almost nothing</td><td>One model call for each turn, and each turn sends more text than the last</td></tr><tr><td><b>What can go wrong?</b></td><td>A bug you can read in the code</td><td>A wrong step, a costly step or an endless loop, and the code looks fine</td></tr><tr><td><b>Use it when</b></td><td>You know the steps in advance</td><td>The steps depend on what turns up along the way</td></tr></table></div>
 
 <h2>Look at what the agent does not have</h2>
-<p>Line 3 of the loop runs <b>whatever tool the model names, with whatever input the model gives, for whoever is asking</b>. Nothing checks any of it.
-The only protection in the whole file is line 5, the limit of five turns. Stop 5 shows what that costs.</p>
+<p>Line 23 runs <b>whatever tool the model names, with whatever input the model gives, for whoever is asking</b>. Nothing checks any of it.
+The only protection in the whole file is line 26, the limit of five turns. Stop 5 shows what that costs.</p>
 
 <h2>The rest of the files</h2>
-<details class="faq"><summary>world.py: the pretend insurance company</summary><pre class="code">&quot;&quot;&quot;A tiny pretend insurance company: two policies and a list of claims.&quot;&quot;&quot;
-
-POLICIES = {
-    &quot;P-1001&quot;: {&quot;holder&quot;: &quot;Rohan&quot;, &quot;active&quot;: True, &quot;covers&quot;: [&quot;accident&quot;, &quot;theft&quot;]},
-    &quot;P-2002&quot;: {&quot;holder&quot;: &quot;Meera&quot;, &quot;active&quot;: False, &quot;covers&quot;: [&quot;accident&quot;]},
-}
-CLAIMS = {}
-
-
-def get_policy(policy_id):
-    return POLICIES.get(policy_id) or {&quot;error&quot;: f&quot;No policy called {policy_id}&quot;}
-
-
-def create_claim(policy_id, accident_date, what_happened):
-    claim_id = f&quot;C-{501 + len(CLAIMS)}&quot;
-    CLAIMS[claim_id] = {&quot;policy_id&quot;: policy_id, &quot;accident_date&quot;: accident_date, &quot;what_happened&quot;: what_happened}
-    return {&quot;claim_id&quot;: claim_id, &quot;status&quot;: &quot;registered&quot;}</pre></details>
+<details class="faq"><summary>world.py: the pretend insurance company</summary><pre class="code ln"><span class="l" data-n="1">&quot;&quot;&quot;A tiny pretend insurance company: two policies and a list of claims.&quot;&quot;&quot;</span><span class="l" data-n="2"></span><span class="l" data-n="3">POLICIES = {</span><span class="l" data-n="4">    &quot;P-1001&quot;: {&quot;holder&quot;: &quot;Rohan&quot;, &quot;active&quot;: True, &quot;covers&quot;: [&quot;accident&quot;, &quot;theft&quot;]},</span><span class="l" data-n="5">    &quot;P-2002&quot;: {&quot;holder&quot;: &quot;Meera&quot;, &quot;active&quot;: False, &quot;covers&quot;: [&quot;accident&quot;]},</span><span class="l" data-n="6">}</span><span class="l" data-n="7">CLAIMS = {}</span><span class="l" data-n="8"></span><span class="l" data-n="9"></span><span class="l" data-n="10">def get_policy(policy_id):</span><span class="l" data-n="11">    return POLICIES.get(policy_id) or {&quot;error&quot;: f&quot;No policy called {policy_id}&quot;}</span><span class="l" data-n="12"></span><span class="l" data-n="13"></span><span class="l" data-n="14">def create_claim(policy_id, accident_date, what_happened):</span><span class="l" data-n="15">    claim_id = f&quot;C-{501 + len(CLAIMS)}&quot;</span><span class="l" data-n="16">    CLAIMS[claim_id] = {&quot;policy_id&quot;: policy_id, &quot;accident_date&quot;: accident_date, &quot;what_happened&quot;: what_happened}</span><span class="l" data-n="17">    return {&quot;claim_id&quot;: claim_id, &quot;status&quot;: &quot;registered&quot;}</span></pre></details>
 <details class="faq"><summary>pretend_model.py: the stand-in for a real model</summary>
 <p>So that the example runs with no account and no cost, the model here is a few plain rules that return replies in the same shape a real model does.
-It shows the loop, not intelligence. Replace it with a call to a real model and agent.py does not change.</p><pre class="code">&quot;&quot;&quot;A pretend model, so the example runs with no account and no cost.
-
-It returns replies in the same shape a real model does: a list of content blocks and a stop_reason.
-A real model reads the words and decides; this one follows three simple rules, which is enough to
-show the loop. Replace it with a call to a real model and agent.py does not change.
-&quot;&quot;&quot;
-
-import json
-import re
-
-
-def _results(messages):
-    &quot;&quot;&quot;Every tool result the loop has shown the model so far.&quot;&quot;&quot;
-    out = []
-    for m in messages:
-        if m[&quot;role&quot;] == &quot;user&quot; and isinstance(m[&quot;content&quot;], list):
-            out += [json.loads(b[&quot;content&quot;]) for b in m[&quot;content&quot;] if b[&quot;type&quot;] == &quot;tool_result&quot;]
-    return out
-
-
-def _ask(n, name, args):
-    return {&quot;stop_reason&quot;: &quot;tool_use&quot;, &quot;content&quot;: [{&quot;type&quot;: &quot;tool_use&quot;, &quot;id&quot;: f&quot;call_{n}&quot;, &quot;name&quot;: name, &quot;input&quot;: args}]}
-
-
-def _say(text):
-    return {&quot;stop_reason&quot;: &quot;end_turn&quot;, &quot;content&quot;: [{&quot;type&quot;: &quot;text&quot;, &quot;text&quot;: text}]}
-
-
-def pretend_model(system, tools, messages):
-    task = messages[0][&quot;content&quot;]
-    seen = _results(messages)
-    policy_id = re.search(r&quot;P-\d+&quot;, task).group()
-    if not seen:  # nothing looked up yet: start with the policy
-        return _ask(1, &quot;get_policy&quot;, {&quot;policy_id&quot;: policy_id})
-    policy = seen[0]
-    if &quot;error&quot; in policy:
-        return _say(&quot;I can&#x27;t find that policy number.&quot;)
-    if &quot;register&quot; not in task:  # only a question: answer from the policy
-        return _say(f&quot;Your policy covers: {&#x27;, &#x27;.join(policy[&#x27;covers&#x27;])}.&quot;)
-    if not policy[&quot;active&quot;]:
-        return _say(&quot;This policy is not active, so I can&#x27;t register a claim.&quot;)
-    if len(seen) == 1:  # policy is fine: now create the claim
-        return _ask(2, &quot;create_claim&quot;, {&quot;policy_id&quot;: policy_id, &quot;accident_date&quot;: &quot;2026-11-15&quot;, &quot;what_happened&quot;: &quot;car accident&quot;})
-    return _say(f&quot;Your claim {seen[1][&#x27;claim_id&#x27;]} is registered.&quot;)
-
-
-def stuck_model(system, tools, messages):
-    &quot;&quot;&quot;A model that never finishes: it asks for the same tool every time.&quot;&quot;&quot;
-    return _ask(len(messages), &quot;get_policy&quot;, {&quot;policy_id&quot;: &quot;P-1001&quot;})</pre></details>
-<details class="faq"><summary>test_both.py: a table of checks for both versions</summary><pre class="code">&quot;&quot;&quot;Table-driven checks for both versions. Run: python3 test_both.py&quot;&quot;&quot;
-
-import world
-from agent import run
-from deterministic import register_claim
-from pretend_model import pretend_model, stuck_model
-
-DETERMINISTIC = [
-    # policy, expected reply
-    (&quot;P-1001&quot;, &quot;Your claim C-501 is registered.&quot;),
-    (&quot;P-2002&quot;, &quot;This policy is not active, so I can&#x27;t register a claim.&quot;),
-    (&quot;P-9999&quot;, &quot;I can&#x27;t find that policy number.&quot;),
-]
-
-AGENT = [
-    # task, model, expected reply
-    (&quot;I had a car accident yesterday. My policy is P-1001. Please register my claim.&quot;, pretend_model, &quot;Your claim C-501 is registered.&quot;),
-    (&quot;Please register my claim on P-2002.&quot;, pretend_model, &quot;This policy is not active, so I can&#x27;t register a claim.&quot;),
-    (&quot;What does my policy P-1001 cover?&quot;, pretend_model, &quot;Your policy covers: accident, theft.&quot;),
-    (&quot;Please register my claim on P-1001.&quot;, stuck_model, &quot;I couldn&#x27;t finish this in time, so I am handing over to a person.&quot;),
-]
-
-for policy, expected in DETERMINISTIC:
-    world.CLAIMS.clear()
-    got = register_claim(policy, &quot;2026-11-15&quot;, &quot;car accident&quot;)
-    assert got == expected, (policy, got)
-
-for task, model, expected in AGENT:
-    world.CLAIMS.clear()
-    got = run(task, model, log=lambda line: None)
-    assert got == expected, (task, got)
-
-print(f&quot;{len(DETERMINISTIC) + len(AGENT)} cases passed&quot;)</pre><pre class="code">$ python3 test_both.py
+It shows the loop, not intelligence. Replace it with a call to a real model and agent.py does not change.</p><pre class="code ln"><span class="l" data-n="1">&quot;&quot;&quot;A pretend model, so the example runs with no account and no cost.</span><span class="l" data-n="2"></span><span class="l" data-n="3">It returns replies in the same shape a real model does: a list of content blocks and a stop_reason.</span><span class="l" data-n="4">A real model reads the words and decides; this one follows three simple rules, which is enough to</span><span class="l" data-n="5">show the loop. Replace it with a call to a real model and agent.py does not change.</span><span class="l" data-n="6">&quot;&quot;&quot;</span><span class="l" data-n="7"></span><span class="l" data-n="8">import json</span><span class="l" data-n="9">import re</span><span class="l" data-n="10"></span><span class="l" data-n="11"></span><span class="l" data-n="12">def _results(messages):</span><span class="l" data-n="13">    &quot;&quot;&quot;Every tool result the loop has shown the model so far.&quot;&quot;&quot;</span><span class="l" data-n="14">    out = []</span><span class="l" data-n="15">    for m in messages:</span><span class="l" data-n="16">        if m[&quot;role&quot;] == &quot;user&quot; and isinstance(m[&quot;content&quot;], list):</span><span class="l" data-n="17">            out += [json.loads(b[&quot;content&quot;]) for b in m[&quot;content&quot;] if b[&quot;type&quot;] == &quot;tool_result&quot;]</span><span class="l" data-n="18">    return out</span><span class="l" data-n="19"></span><span class="l" data-n="20"></span><span class="l" data-n="21">def _ask(n, name, args):</span><span class="l" data-n="22">    return {&quot;stop_reason&quot;: &quot;tool_use&quot;, &quot;content&quot;: [{&quot;type&quot;: &quot;tool_use&quot;, &quot;id&quot;: f&quot;call_{n}&quot;, &quot;name&quot;: name, &quot;input&quot;: args}]}</span><span class="l" data-n="23"></span><span class="l" data-n="24"></span><span class="l" data-n="25">def _say(text):</span><span class="l" data-n="26">    return {&quot;stop_reason&quot;: &quot;end_turn&quot;, &quot;content&quot;: [{&quot;type&quot;: &quot;text&quot;, &quot;text&quot;: text}]}</span><span class="l" data-n="27"></span><span class="l" data-n="28"></span><span class="l" data-n="29">def pretend_model(system, tools, messages):</span><span class="l" data-n="30">    task = messages[0][&quot;content&quot;]</span><span class="l" data-n="31">    seen = _results(messages)</span><span class="l" data-n="32">    policy_id = re.search(r&quot;P-\d+&quot;, task).group()</span><span class="l" data-n="33">    if not seen:  # nothing looked up yet: start with the policy</span><span class="l" data-n="34">        return _ask(1, &quot;get_policy&quot;, {&quot;policy_id&quot;: policy_id})</span><span class="l" data-n="35">    policy = seen[0]</span><span class="l" data-n="36">    if &quot;error&quot; in policy:</span><span class="l" data-n="37">        return _say(&quot;I can&#x27;t find that policy number.&quot;)</span><span class="l" data-n="38">    if &quot;register&quot; not in task:  # only a question: answer from the policy</span><span class="l" data-n="39">        return _say(f&quot;Your policy covers: {&#x27;, &#x27;.join(policy[&#x27;covers&#x27;])}.&quot;)</span><span class="l" data-n="40">    if not policy[&quot;active&quot;]:</span><span class="l" data-n="41">        return _say(&quot;This policy is not active, so I can&#x27;t register a claim.&quot;)</span><span class="l" data-n="42">    if len(seen) == 1:  # policy is fine: now create the claim</span><span class="l" data-n="43">        return _ask(2, &quot;create_claim&quot;, {&quot;policy_id&quot;: policy_id, &quot;accident_date&quot;: &quot;2026-11-15&quot;, &quot;what_happened&quot;: &quot;car accident&quot;})</span><span class="l" data-n="44">    return _say(f&quot;Your claim {seen[1][&#x27;claim_id&#x27;]} is registered.&quot;)</span><span class="l" data-n="45"></span><span class="l" data-n="46"></span><span class="l" data-n="47">def stuck_model(system, tools, messages):</span><span class="l" data-n="48">    &quot;&quot;&quot;A model that never finishes: it asks for the same tool every time.&quot;&quot;&quot;</span><span class="l" data-n="49">    return _ask(len(messages), &quot;get_policy&quot;, {&quot;policy_id&quot;: &quot;P-1001&quot;})</span></pre></details>
+<details class="faq"><summary>test_both.py: a table of checks for both versions</summary><pre class="code ln"><span class="l" data-n="1">&quot;&quot;&quot;Table-driven checks for both versions. Run: python3 test_both.py&quot;&quot;&quot;</span><span class="l" data-n="2"></span><span class="l" data-n="3">import world</span><span class="l" data-n="4">from agent import run</span><span class="l" data-n="5">from deterministic import register_claim</span><span class="l" data-n="6">from pretend_model import pretend_model, stuck_model</span><span class="l" data-n="7"></span><span class="l" data-n="8">DETERMINISTIC = [</span><span class="l" data-n="9">    # policy, expected reply</span><span class="l" data-n="10">    (&quot;P-1001&quot;, &quot;Your claim C-501 is registered.&quot;),</span><span class="l" data-n="11">    (&quot;P-2002&quot;, &quot;This policy is not active, so I can&#x27;t register a claim.&quot;),</span><span class="l" data-n="12">    (&quot;P-9999&quot;, &quot;I can&#x27;t find that policy number.&quot;),</span><span class="l" data-n="13">]</span><span class="l" data-n="14"></span><span class="l" data-n="15">AGENT = [</span><span class="l" data-n="16">    # task, model, expected reply</span><span class="l" data-n="17">    (&quot;I had a car accident yesterday. My policy is P-1001. Please register my claim.&quot;, pretend_model, &quot;Your claim C-501 is registered.&quot;),</span><span class="l" data-n="18">    (&quot;Please register my claim on P-2002.&quot;, pretend_model, &quot;This policy is not active, so I can&#x27;t register a claim.&quot;),</span><span class="l" data-n="19">    (&quot;What does my policy P-1001 cover?&quot;, pretend_model, &quot;Your policy covers: accident, theft.&quot;),</span><span class="l" data-n="20">    (&quot;Please register my claim on P-1001.&quot;, stuck_model, &quot;I couldn&#x27;t finish this in time, so I am handing over to a person.&quot;),</span><span class="l" data-n="21">]</span><span class="l" data-n="22"></span><span class="l" data-n="23">for policy, expected in DETERMINISTIC:</span><span class="l" data-n="24">    world.CLAIMS.clear()</span><span class="l" data-n="25">    got = register_claim(policy, &quot;2026-11-15&quot;, &quot;car accident&quot;)</span><span class="l" data-n="26">    assert got == expected, (policy, got)</span><span class="l" data-n="27"></span><span class="l" data-n="28">for task, model, expected in AGENT:</span><span class="l" data-n="29">    world.CLAIMS.clear()</span><span class="l" data-n="30">    got = run(task, model, log=lambda line: None)</span><span class="l" data-n="31">    assert got == expected, (task, got)</span><span class="l" data-n="32"></span><span class="l" data-n="33">print(f&quot;{len(DETERMINISTIC) + len(AGENT)} cases passed&quot;)</span></pre><pre class="code">$ python3 test_both.py
 7 cases passed</pre></details>
 <p><a class="go alt" href="https://github.com/dataagentsai/cleandataengineering-site/tree/main/_guides/code/harness_intro">The five files on GitHub</a></p>
 <p>Next: stop 4 runs the loop slowly, so you can see every message that crosses between our code and the model.</p>
