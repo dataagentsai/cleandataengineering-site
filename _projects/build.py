@@ -23,7 +23,7 @@ spec.loader.exec_module(wb)
 kit = wb.kit
 
 PROJECTS = []
-for name in ("data_a", "data_b", "data_c"):
+for name in ("data_a", "data_b", "data_c", "data_d"):
     try:
         PROJECTS += __import__(name).PROJECTS
     except ImportError:
