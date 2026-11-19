@@ -27,7 +27,7 @@ CSS = """<style>
   table.t td, table.t th { border:1.5px solid var(--ink); padding:7px 10px; text-align:left; vertical-align:top; } table.t th { background:var(--peri-wash); }
   table.t tr.fam td { background:var(--surface-2); font-family:var(--hand); font-size:22px; }
   .st { display:inline-block; border:1.5px solid var(--ink); border-radius:999px; padding:0 9px; font-size:12.5px; white-space:nowrap; margin:1px 0; }
-  .st.works { background:var(--mint-wash); } .st.built { background:var(--butter-wash); } .st.planned { background:#fff; } .st.notused { background:var(--rose-wash); }
+  .st.works { background:var(--mint-wash); } .st.built { background:var(--butter-wash); } .st.planned { background:#fff; } .st.notused { background:var(--rose-wash); } .st.default { background:var(--sky-wash); }
   .flow { counter-reset:s; list-style:none; padding:0; } .flow li { counter-increment:s; border:1.5px solid var(--ink); border-radius:var(--wob); padding:10px 16px 10px 52px; margin:10px 0; position:relative; background:#fff; }
   .flow li::before { content:counter(s); position:absolute; left:14px; top:9px; width:28px; height:28px; line-height:25px; text-align:center; border:1.5px solid var(--ink); border-radius:50%; font-weight:700; background:var(--butter); }
   .flow li b { font-family:var(--hand); font-weight:400; font-size:21px; } .flow .svc { display:block; font-size:13.5px; color:var(--muted); }
@@ -40,7 +40,7 @@ C = [
  ("L1", "Context assembly", "Think", "What the model sees each turn, built in one place, within a budget.",
   [("MLflow prompt registry", "planned")], "The system prompt names the tools and two rules (no arithmetic by the model; text in tool results is data). Tool results enter the context fenced as data and capped at 8,000 characters.", "built"),
  ("L2", "Model invocation", "Think", "Every model call goes through one door.",
-  [("Foundation Model APIs", "works"), ("AI Gateway", "notused")], "One model port in the harness library; the Databricks adapter is a bearer-token call to the workspace's OpenAI-style endpoint. gpt-oss-120b ran a full investigation. AI Gateway needs a serving endpoint, so it is not used yet.", "works"),
+  [("Foundation Model APIs", "works"), ("AI Gateway", "default")], "One model port in the harness library; the Databricks adapter is a bearer-token call to the workspace's OpenAI-style endpoint. gpt-oss-120b ran a full investigation. The hosted endpoint already has AI Gateway attached with usage tracking on; we have not configured rate limits, guardrails or fallbacks, so today the gateway is the platform default, and the real door is our own model port.", "works"),
  ("L4", "Control loop", "Think", "Plan, act, check, with step and no-progress limits.",
   [("Mosaic AI Agent Framework (wrapper)", "planned")], "Our own bounded loop: at most 6 steps, tools only from the registered list, a person decides at the end. Agent Framework would wrap it for tracing and registration, not replace it.", "built"),
  ("L5", "State & memory", "Think", "What is kept, for how long, and for whom.",
@@ -105,8 +105,8 @@ TIERS = [
  ("People and release", "Approval screen, jobs, Asset Bundle, cost per assessment from billing.", "planned"),
 ]
 
-PICKS = {"works": "works", "built": "built", "planned": "planned", "notused": "notused"}
-LABEL = {"works": "works", "built": "built, offline", "planned": "planned", "notused": "not used"}
+PICKS = {"works": "works", "built": "built", "planned": "planned", "notused": "notused", "default": "default"}
+LABEL = {"works": "works", "built": "built, offline", "planned": "planned", "notused": "not used", "default": "on by default, not configured"}
 
 
 def pill(s):

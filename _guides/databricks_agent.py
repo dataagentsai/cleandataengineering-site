@@ -45,12 +45,14 @@ USING = [
     ("Databricks Apps", "Small web apps that run inside the workspace, signed in as the user.", "The screen where the safety scientist approves, edits or rejects a draft.", "planned"),
     ("Lakeflow Jobs", "Scheduled and triggered runs with retries.", "Runs an investigation as a job; a wait for a person ends the run and a new run starts on the decision.", "planned"),
     ("System tables", "Databricks' own usage, billing and audit records as tables.", "Cost per assessment from real billing rows.", "planned"),
+    ("AI Gateway (default settings only)", "A control point in front of model endpoints: usage tracking, rate limits, guardrails, fallbacks.", "Usage tracking is on for the hosted model endpoint by default, so every call is counted by the platform. We configure nothing else on it.", "works"),
     ("Genie", "Ask a governed table a question in plain English.", "A comparison, not part of the agent: what can Genie answer about the counts alone, and where does it stop?", "planned"),
 ]
 NOT = [
     ("Agent Bricks", "Higher-level builders for common agents (question answering over documents, information extraction, a supervisor over several agents), mostly without code.", "It hides the parts this build exists to learn, and our agent has a typed tool contract, an approval step and its own checks. Worth knowing for a customer who wants a quick answer over documents."),
     ("AI Functions (ai_query, ai_classify and similar)", "SQL functions that call a model once per row.", "Our agent decides which tools to call per case. It is not a per-row batch job. They would fit tagging thousands of report narratives."),
-    ("Custom Model Serving and AI Gateway", "Host your own model or agent as a web service, with limits, guardrails and logging in front.", "A person reviews each investigation later, so a job is enough and a live endpoint adds cost and a way in. Revisit when the agent is used interactively. AI Gateway sits in front of serving endpoints, so it comes back with them."),
+    ("Custom Model Serving", "Host your own model or agent as a web service.", "A person reviews each investigation later, so a job is enough and a live endpoint adds cost and a way in. Revisit when the agent is used interactively."),
+    ("AI Gateway: limits, guardrails and fallbacks", "A control point in front of model endpoints.", "The hosted model endpoint we call already has AI Gateway attached with usage tracking on, by default. We have not configured rate limits, guardrails, request logging or fallbacks: our own harness enforces the step limit, the output contract and the grounding check. Worth configuring before more than one team uses the same endpoint."),
     ("Feature engineering, model training and fine-tuning", "Build and tune your own models.", "There is no model to train: the statistics are formulas and the language model is used as it is."),
     ("Provisioned throughput", "Reserved model capacity.", "Pay-per-use is enough at this volume."),
     ("Lakehouse Monitoring", "Profiles data and tracks drift in tables.", "Optional here; the eval harness watches the agent, not the tables."),
@@ -84,11 +86,11 @@ SERVICES = [
      "POST /serving-endpoints/databricks-gpt-oss-120b/invocations with a list of chat messages",
      "The reasoning model runs the loop: it chooses which tool to call, reads the results and drafts the assessment.",
      "Pay-per-token and provisioned throughput are two ways of buying the same models: share a pool, or reserve capacity."),
-    ("Model Serving and AI Gateway", "2 · Models", "Host your own model or agent as a web service; put limits, guardrails and logging in front.",
+    ("Model Serving and AI Gateway", "2 · Models", "Host your own model or agent as a web service; AI Gateway puts limits, guardrails and logging in front of model endpoints.",
      "Without a control point, every team enforces its own rate limit, privacy rule and cost report.",
      "Serving turns a registered model or agent into an endpoint that scales up and down. AI Gateway adds rate limits, guardrails, usage tracking and fallbacks in front of endpoints.",
      "an endpoint with a rate limit of N calls per minute per user",
-     "Not used yet. Each investigation is reviewed by a person afterwards, so a job is enough. They come into play when the agent is used interactively.",
+     "Custom Model Serving is not used: each investigation is reviewed by a person afterwards, so a job is enough. AI Gateway is attached to the hosted model endpoint with usage tracking on by default (we checked the endpoint); we have not configured rate limits, guardrails or fallbacks.",
      "Foundation Model APIs are hosted for you. Model Serving is where you host your own."),
     ("Unity Catalog functions as tools", "3 · Tools and knowledge", "A small named SQL or Python function, registered in Unity Catalog, that an agent may call.",
      "Letting a model write SQL is unsafe: it can read anything its login can, and text in the data can talk it into doing so.",
@@ -182,7 +184,7 @@ PARTS = [
 ]
 
 QA = [
-    ("Are we using Mosaic AI?", "Yes, in part. Mosaic AI is Databricks' name for its AI products as a group: Foundation Model APIs, Model Serving, Vector Search, Agent Framework, Agent Evaluation and AI Gateway. We use Foundation Model APIs today, and Vector Search, Agent Framework and evaluation are planned. Model Serving and AI Gateway are deliberately not used yet. Databricks renames products often, so check the current docs."),
+    ("Are we using Mosaic AI?", "Yes, in part. Mosaic AI is Databricks' name for its AI products as a group: Foundation Model APIs, Model Serving, Vector Search, Agent Framework, Agent Evaluation and AI Gateway. We use Foundation Model APIs today, and Vector Search, Agent Framework and evaluation are planned. Custom Model Serving is deliberately not used; AI Gateway is on for the model endpoint by default but we configure nothing on it. Databricks renames products often, so check the current docs."),
     ("Are we using Agent Bricks?", "No, on purpose. It builds common agents for you; we are building one by hand to learn the parts, and ours needs its own approval step and checks."),
     ("Why Unity Catalog functions and not letting the model write SQL?", "A function has typed inputs, a permission and an audit trail. A model that writes SQL can read anything its login can read, and can be talked into it by text in the data."),
     ("Why keep our own loop instead of Agent Framework's?", "The loop is where step limits, stop rules, approval and cost limits live, and we want them the same on every cloud. Agent Framework wraps the loop for packaging, tracing and registration."),
