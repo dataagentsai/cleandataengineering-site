@@ -146,7 +146,7 @@ def frameworks_html():
         caps = ", ".join('<a href="#c%d">%d</a>' % (n, n) for n in ns)
         cross += f"<tr><td><b>{E(ob)}</b></td><td>{caps}</td><td>{E(nist)}</td><td>{E(eu)}</td><td>{E(iso)}</td></tr>"
     case = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td><td>{E(e)}</td></tr>" for a, b, c, d, e in CASE)
-    read = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td></tr>" for a, b, c, d in READING)
+    read = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td><td>" + " · ".join(f'<a href="{u}">{E(t)}</a>' for t, u in ls) + "</td></tr>" for a, b, c, d, ls in READING)
     return f"""<section id="frameworks"><h2>Do you need to learn NIST, ISO/IEC 42001 and the EU AI Act?</h2>
 <p>Yes, but not to the same depth. The three do different jobs. The EU AI Act is a law, so it says what you must have. NIST AI RMF is a free framework, so it gives you a way to organize the work. ISO/IEC 42001 is an auditable standard, so it lets you prove to others that you do the work. Learn the law in depth, NIST as your working vocabulary, and ISO/IEC 42001 at overview level.</p>
 <div class="tw"><table class="g"><tr><th>Framework</th><th>What it is</th><th>What it is for</th><th>How deep to go</th><th>Verdict</th></tr>{learn}</table></div>
@@ -159,7 +159,7 @@ def frameworks_html():
 <div class="tw"><table class="g"><tr><th>Step</th><th>What the team does</th><th>NIST AI RMF</th><th>EU AI Act</th><th>ISO/IEC 42001</th></tr>{case}</table></div>
 <p>Notice that the team does one piece of work at each step, and all three frameworks are satisfied by it. That is the point of the crosswalk.</p>
 <h3>What to read, and in what order</h3>
-<div class="tw"><table class="g"><tr><th>Read</th><th>Cost</th><th>Time</th><th>Note</th></tr>{read}</table></div>
+<div class="tw"><table class="g"><tr><th>Read</th><th>Cost</th><th>Time</th><th>Note</th><th>Links</th></tr>{read}</table></div>
 <p>Read NIST first, then the EU risk tiers, then come back to the crosswalk above. The article and clause numbers here follow the official texts as we understand them; check each one against the source before you quote it in a compliance document.</p></section>"""
 
 

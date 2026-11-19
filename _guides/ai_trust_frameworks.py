@@ -108,8 +108,16 @@ CASE = [
 ]
 
 READING = [
-    ("NIST AI RMF 1.0 and the NIST AI 600-1 generative AI profile", "Free", "About 2 hours", "Start here. It sets the vocabulary."),
-    ("EU AI Act official text on EUR-Lex, with the Commission's AI Act explorer", "Free", "About 3 hours", "Risk tiers, Articles 9 to 15, 26, 27, 50, 72 and 73."),
-    ("ISO/IEC 42001 public summaries and the Annex A control list", "Free summaries; the standard itself is paid", "About 1 hour", "Do not buy it until a customer or auditor asks for it."),
-    ("Your own region's privacy and AI rules", "Free", "About 1 hour", "Only what applies to you."),
+    ("NIST AI RMF 1.0 and the NIST AI 600-1 generative AI profile", "Free", "About 2 hours", "Start here. It sets the vocabulary.",
+     [("AI RMF home", "https://www.nist.gov/itl/ai-risk-management-framework"), ("AI RMF 1.0 (PDF)", "https://nvlpubs.nist.gov/nistpubs/ai/nist.ai.100-1.pdf"),
+      ("AI 600-1 (PDF)", "https://nvlpubs.nist.gov/nistpubs/ai/nist.ai.600-1.pdf"), ("Playbook", "https://airc.nist.gov/AI_RMF_Knowledge_Base/Playbook")]),
+    ("EU AI Act official text on EUR-Lex, with an article-by-article explorer", "Free", "About 3 hours", "Risk tiers, Articles 9 to 15, 26, 27, 50, 72 and 73.",
+     [("Official text", "https://eur-lex.europa.eu/eli/reg/2024/1689/oj"), ("AI Act Explorer (Future of Life Institute)", "https://artificialintelligenceact.eu/ai-act-explorer/"),
+      ("European Commission overview", "https://digital-strategy.ec.europa.eu/en/policies/regulatory-framework-ai")]),
+    ("ISO/IEC 42001 public summaries and the Annex A control list", "Free summaries; the standard itself is paid", "About 1 hour", "Do not buy it until a customer or auditor asks for it.",
+     [("ISO page for the standard", "https://www.iso.org/standard/81230.html")]),
+    ("OWASP LLM Top 10 and MITRE ATLAS", "Free", "About 2 hours", "Read when you build or test language-model apps.",
+     [("OWASP LLM Top 10", "https://genai.owasp.org/llm-top-10/"), ("MITRE ATLAS", "https://atlas.mitre.org/")]),
+    ("OECD AI Principles", "Free", "15 minutes", "Background only.", [("OECD.AI", "https://oecd.ai/en/ai-principles")]),
+    ("Your own region's privacy and AI rules", "Free", "About 1 hour", "Only what applies to you.", []),
 ]
