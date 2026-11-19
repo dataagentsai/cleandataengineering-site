@@ -68,6 +68,7 @@ PLATFORMS = {
                ("DataTwin Studio", "/learn/data-platform-sim/", "One batch through Spark and Delta Lake, recorded from a real run."),
                ("Streaming on Databricks without the pain", "/writing/databricks-streaming/", "Blog: when and how to stream.")],
         "bi": [("Genie and metric views", "/writing/genie-metric-views/", "Blog: talk to your data the right way.")],
+        "ai": [("Build an agent on Databricks", "/learn/databricks-ai-agent/", "The whole design end to end: which Databricks AI services we use and which we do not, and why.")],
         "across": [("Databricks cost calculator", "/learn/data-systems/platform/cost/calculator/", "Whole-platform and per-hop cost with streaming and hidden costs."),
                    ("Unity Catalog done right", "/writing/unity-catalog-done-right/", "Blog: one governance model for data and AI."),
                    ("CI/CD with Asset Bundles", "/writing/databricks-asset-bundles/", "Blog: deploying Databricks like software."),
