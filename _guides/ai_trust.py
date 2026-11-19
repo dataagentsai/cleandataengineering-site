@@ -18,6 +18,7 @@ wb = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(wb)
 from ai_trust_auto import AUTO, BIGCO, HONEST, LEVELS, PRODUCTS  # noqa: E402
 from ai_trust_data import C, GROUPS, KINDS, ORDER, WORDS  # noqa: E402
+from ai_trust_frameworks import CASE, CASE_INTRO, CROSSWALK, LEARN, READING  # noqa: E402
 from diagrams import box, svg, text  # noqa: E402
 
 E = wb.E
@@ -138,8 +139,32 @@ def order_html():
     return f'<div class="tw"><table class="g"><tr><th>Stage</th><th>Theme</th><th>Capabilities</th><th>What exists at the end</th></tr>{rows}</table></div>'
 
 
+def frameworks_html():
+    learn = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td><td>{E(v)}</td></tr>" for a, b, c, d, v in LEARN)
+    cross = ""
+    for ob, ns, nist, eu, iso in CROSSWALK:
+        caps = ", ".join('<a href="#c%d">%d</a>' % (n, n) for n in ns)
+        cross += f"<tr><td><b>{E(ob)}</b></td><td>{caps}</td><td>{E(nist)}</td><td>{E(eu)}</td><td>{E(iso)}</td></tr>"
+    case = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td><td>{E(e)}</td></tr>" for a, b, c, d, e in CASE)
+    read = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td></tr>" for a, b, c, d in READING)
+    return f"""<section id="frameworks"><h2>Do you need to learn NIST, ISO/IEC 42001 and the EU AI Act?</h2>
+<p>Yes, but not to the same depth. The three do different jobs. The EU AI Act is a law, so it says what you must have. NIST AI RMF is a free framework, so it gives you a way to organize the work. ISO/IEC 42001 is an auditable standard, so it lets you prove to others that you do the work. Learn the law in depth, NIST as your working vocabulary, and ISO/IEC 42001 at overview level.</p>
+<div class="tw"><table class="g"><tr><th>Framework</th><th>What it is</th><th>What it is for</th><th>How deep to go</th><th>Verdict</th></tr>{learn}</table></div>
+<h3>One job, three vocabularies</h3>
+<p>The three mostly ask for the same things in different words. Once you see that, you stop memorizing three lists. The table lists fifteen things a trustworthy AI program needs. The second column links to the capability on this page that covers it. The other three columns say where each framework asks for it.</p>
+<div class="tw"><table class="g"><tr><th>What you need</th><th>Capability</th><th>NIST AI RMF</th><th>EU AI Act</th><th>ISO/IEC 42001</th></tr>{cross}</table></div>
+<p>Two notes on reading it. First, the EU AI Act puts most duties on <i>providers</i> (who build or sell the system) and some on <i>deployers</i> (who use it), so check which you are. Second, where a column names a broad area (a whole clause or Annex A group) the framework asks in general words; where it names an article, the ask is specific.</p>
+<h3>Worked example: a CV-ranking assistant</h3>
+<p>{E(CASE_INTRO)}</p>
+<div class="tw"><table class="g"><tr><th>Step</th><th>What the team does</th><th>NIST AI RMF</th><th>EU AI Act</th><th>ISO/IEC 42001</th></tr>{case}</table></div>
+<p>Notice that the team does one piece of work at each step, and all three frameworks are satisfied by it. That is the point of the crosswalk.</p>
+<h3>What to read, and in what order</h3>
+<div class="tw"><table class="g"><tr><th>Read</th><th>Cost</th><th>Time</th><th>Note</th></tr>{read}</table></div>
+<p>Read NIST first, then the EU risk tiers, then come back to the crosswalk above. The article and clause numbers here follow the official texts as we understand them; check each one against the source before you quote it in a compliance document.</p></section>"""
+
+
 def page():
-    jump = "".join(f'<a href="#{g[0]}">{E(g[1])}</a>' for g in GROUPS) + '<a href="#automate">What can be automated</a><a href="#order">Order to build</a>'
+    jump = '<a href="#frameworks">NIST, ISO 42001, EU AI Act</a>' + "".join(f'<a href="#{g[0]}">{E(g[1])}</a>' for g in GROUPS) + '<a href="#automate">What can be automated</a><a href="#order">Order to build</a>'
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › Running AI you can trust</p>
 <p class="eyebrow" style="margin-top:22px">AI governance · safety · security · reliability · free guide · grows over time</p>
 <h1>Running AI you can trust</h1>
@@ -151,6 +176,8 @@ def page():
 <h2>Five words, one job</h2>
 <p>People use these terms loosely. They are five angles on the same job: AI that you can rely on and defend.</p>
 {words_html()}
+
+{frameworks_html()}
 
 <h2>Start with the full spread of AI use</h2>
 <p>A program built only for the AI you built yourself misses most of the exposure. Six kinds of use need covering, and they need different tools.</p>
