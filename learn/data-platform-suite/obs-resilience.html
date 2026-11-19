@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resilience · Data Platform Suite</title>
+<meta name="description" content="Three protections around every call to a source, so a passing failure is retried and a broken source is left alone.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Patrick+Hand&family=JetBrains+Mono:wght@500;700&display=swap">
+<link rel="stylesheet" href="style.css"></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<filter id="rough" filterUnits="userSpaceOnUse" x="-50" y="-50" width="2200" height="2600"><feTurbulence type="fractalNoise" baseFrequency="0.035" numOctaves="2" seed="4"/><feDisplacementMap in="SourceGraphic" scale="2.4"/></filter>
+<pattern id="hatch" width="7" height="7" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="7" style="stroke:#222;stroke-width:1.4"/></pattern>
+<marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" style="fill:#222"/></marker>
+</defs></svg>
+<header class="top"><div class="row"><button class="menu" aria-label="Show the page list">☰ Pages</button>
+<a class="home" href="https://cleandataengineering.ai/">cleandataengineering.ai</a><a class="brand" href="index.html">Data Platform Suite, from the big picture to the code</a><nav class="tabs" aria-label="Sections"><a class="" href="index.html">Start</a><a class="" href="flow.html">One day, end to end</a><a class="" href="meta.html">Metadata store</a><a class="" href="ingest.html">Ingestion</a><a class="" href="silver.html">Bronze to silver</a><a class="" href="gold.html">Silver to gold</a><a class="" href="semantic.html">Semantic</a><a class="on" href="obs.html">Operations</a><a class="" href="tests.html">Tests and proof</a></nav></div>
+<div class="crumbs">You are here: <a href="index.html">Start here</a> › <a href="obs.html">Operations</a> › <b>Resilience</b></div></header>
+<aside class="side" aria-label="All pages"><h4>Data Platform Suite</h4><ul><li class="d0"><a class="" href="index.html">Start here</a></li><li class="d1"><a class="" href="flow.html">One day, end to end</a></li><li class="d1"><a class="" href="meta.html">Metadata store</a></li><li class="d1"><a class="" href="ingest.html">Ingestion</a></li><li class="d1"><a class="" href="silver.html">Bronze to silver</a></li><li class="d1"><a class="" href="gold.html">Silver to gold</a></li><li class="d1"><a class="" href="semantic.html">Semantic layer</a></li><li class="d1"><a class="" href="obs.html">Operations</a></li><li class="d2"><a class="" href="obs-runlog.html">Run log</a></li><li class="d2"><a class="" href="obs-freshness.html">Freshness</a></li><li class="d2"><a class="" href="obs-alerts.html">Alerts</a></li><li class="d2"><a class="" href="obs-lineage.html">Lineage</a></li><li class="d2"><a class="" href="obs-page.html">Operations page and dashboards</a></li><li class="d2"><a class="" href="obs-reconcile.html">Reconciliation and profiling</a></li><li class="d2"><a class="" href="obs-recovery.html">Recovery and housekeeping</a></li><li class="d2"><a class="on" href="obs-resilience.html">Resilience</a></li><li class="d1"><a class="" href="tests.html">Tests and proof</a></li></ul></aside>
+<main><div class="wrap"><article class="page">
+<header><p class="kicker">Data Platform Suite<span class="zoom">Zoom level 2</span></p><h1>Resilience: retry, circuit breaker and connection limit</h1></header>
+<p class='lead'>Sources fail in passing ways. A database times out. An interface answers that it is busy. Resilience is the small part that decides what to do then: try again, wait, or stop asking.</p><p>Without it, one slow minute at a source fails a whole run. With too much of it, a broken source is hammered by retries. Three protections together handle both.</p><figure><div class="scroll"><svg viewBox="0 0 980 260" role="img" aria-label="The three protections around one call to a source" style="min-width:680px"><rect class="pf pf-bx" x="14" y="74" width="168" height="78" rx="12"/><rect class="bx ol" x="10" y="70" width="170" height="80" rx="12"/><text class="tt" x="95.0" y="106.5" text-anchor="middle">Pipeline</text><text class="sm" x="95.0" y="130.5" text-anchor="middle">wants to read a source</text><rect class="pf pf-bxs" x="264" y="24" width="188" height="58" rx="12"/><rect class="bxs ol" x="260" y="20" width="190" height="60" rx="12"/><text class="tt" x="355.0" y="46.5" text-anchor="middle">Circuit breaker</text><text class="sm" x="355.0" y="70.5" text-anchor="middle">open: refuse at once</text><rect class="pf pf-bxs" x="264" y="104" width="188" height="58" rx="12"/><rect class="bxs ol" x="260" y="100" width="190" height="60" rx="12"/><text class="tt" x="355.0" y="126.5" text-anchor="middle">Connection cap</text><text class="sm" x="355.0" y="150.5" text-anchor="middle">wait for a free slot</text><rect class="pf pf-bxs" x="264" y="184" width="188" height="58" rx="12"/><rect class="bxs ol" x="260" y="180" width="190" height="60" rx="12"/><text class="tt" x="355.0" y="206.5" text-anchor="middle">Retry</text><text class="sm" x="355.0" y="230.5" text-anchor="middle">wait, then try again</text><rect class="pf pf-solid" x="544" y="74" width="178" height="78" rx="12"/><rect class="solid ol" x="540" y="70" width="180" height="80" rx="12"/><text class="tt inv" x="630.0" y="106.5" text-anchor="middle">guard.call</text><text class="inv sm2" x="630.0" y="130.5" text-anchor="middle">all three together</text><rect class="bxm ol" x="800" y="70" width="170" height="80" rx="12"/><text class="tt" x="885.0" y="106.5" text-anchor="middle">Source</text><text class="sm" x="885.0" y="130.5" text-anchor="middle"></text><line class="ln" x1="180" y1="110" x2="258" y2="50" marker-end="url(#ar)"/><line class="ln" x1="180" y1="110" x2="258" y2="130" marker-end="url(#ar)"/><line class="ln" x1="180" y1="110" x2="258" y2="210" marker-end="url(#ar)"/><line class="ln" x1="450" y1="50" x2="538" y2="95" marker-end="url(#ar)"/><line class="ln" x1="450" y1="130" x2="538" y2="110" marker-end="url(#ar)"/><line class="ln" x1="450" y1="210" x2="538" y2="130" marker-end="url(#ar)"/><line class="ln" x1="720" y1="110" x2="798" y2="110" marker-end="url(#ar)"/></svg></div><figcaption>Every pull from a source goes through the guard. The three boxes before it are what it applies.</figcaption></figure><div class="tw"><table><tr><th>Protection</th><th>What it does</th><th>Numbers from the code</th></tr><tr><td>Retry with backoff</td><td>On an error declared temporary, waits and tries again. Each wait is longer than the last. Any other error is raised at once.</td><td>2 retries, first wait 60 seconds, each wait twice the last, no wait longer than 600 seconds</td></tr><tr><td>Circuit breaker</td><td>After several failed calls in a row, the source is not called at all for a while. Then one trial call is let through.</td><td>Opens after 3 failures, stays open 1800 seconds</td></tr><tr><td>Connection cap</td><td>At most a set number of calls to one source run at the same time.</td><td>No cap unless one is given for the source</td></tr></table></div><p>A <b>temporary error</b> is a timeout, a connection error, or the platform's own <code>TransientError</code>, which an adapter raises for failures it knows will pass. A wrong column name is a bug, and a bug is never retried.</p><h2>A worked example</h2><p>The dealer interface is read every six hours. On one read it fails twice with passing errors, then answers. With a first wait of 10 seconds, as in the test:</p><div class="tw"><table><tr><th>Try</th><th>Result</th><th>Wait before the next try</th></tr><tr><td>1</td><td>A temporary error</td><td>10 seconds</td></tr><tr><td>2</td><td>Connection error</td><td>20 seconds</td></tr><tr><td>3</td><td>The page of dealers</td><td>None</td></tr></table></div><p>The breaker counts this as one successful call. It counts calls that failed after all their retries, not each failed try.</p><h2>The settings that drive it</h2><div class="tw"><table><tr><th>Setting</th><th>Scope</th><th>Meaning</th><th>Default</th><th>Read by the code?</th></tr><tr><td><code>retry_count</code></td><td>Dataset</td><td>Tries after the first.</td><td>2</td><td>Yes</td></tr><tr><td><code>retry_interval_seconds</code></td><td>Dataset</td><td>Wait before the first retry.</td><td>60</td><td>Yes</td></tr><tr><td><code>max_concurrent_datasets</code></td><td>Source</td><td>The connection cap.</td><td>None</td><td>Named in the module's notes as the cap. The run scripts build the guard without caps.</td></tr><tr><td><code>circuit_failure_threshold</code></td><td>Dataset, proposed</td><td>Failures in a row before the circuit opens.</td><td>3</td><td>No. The guard uses its own default.</td></tr><tr><td><code>circuit_reset_seconds</code></td><td>Dataset, proposed</td><td>How long the circuit stays open.</td><td>1800</td><td>No. The guard uses its own default.</td></tr></table></div><h2>The code</h2><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/data-platform-suite/blob/a7c2d42b63828e9c28072f70c538ac3f30adbad6/src/dataplatform/resilience.py#L51"><code>src/dataplatform/resilience.py:51</code></a><span>The retry loop. Sleeping is a function passed in, so tests do not wait.</span></div><pre>def call_with_retry(fn: Callable[[], T], policy: RetryPolicy, sleep: Callable[[float], None],
+                    on_retry: Callable[[int, BaseException, float], None] | None = None) -&gt; T:
+    """Call fn; on a declared temporary error wait and try again, up to policy.retries times. The last error is raised
+    when every try failed; any other error is raised at once."""
+    waits = policy.waits()
+    for attempt in range(len(waits) + 1):
+        try:
+            return fn()
+        except policy.retry_on as exc:
+            if attempt == len(waits):
+                raise
+            if on_retry is not None:
+                on_retry(attempt + 1, exc, waits[attempt])
+            sleep(waits[attempt])
+    raise AssertionError("unreachable") <span class="c"> # pragma: no cover</span></pre></div><p>The waits are worked out once from the policy. The loop tries one more time than there are waits. Only the error types in the policy are caught. On the last try the error is raised as it is. Because <code>sleep</code> is an argument, a test passes a function that records the wait and returns at once.</p><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/data-platform-suite/blob/a7c2d42b63828e9c28072f70c538ac3f30adbad6/src/dataplatform/resilience.py#L68"><code>src/dataplatform/resilience.py:68</code></a><span>The breaker's three states, worked out from two numbers.</span></div><pre>@dataclass
+class CircuitBreaker:
+    """closed: calls go through. open: calls are refused until reset_s has passed since it opened. half-open: one trial
+    call; success closes it, failure opens it again."""
+
+    threshold: int = 3
+    reset_s: float = 1800.0
+    failures: int = 0
+    opened_at: float | None = None
+
+    def state(self, now: float) -&gt; str:
+        if self.opened_at is None:
+            return "closed"
+        return "half-open" if now - self.opened_at &gt;= self.reset_s else "open"
+
+    def before(self, now: float, source: str) -&gt; None:
+        if self.state(now) == "open":
+            raise CircuitOpen(f"{source}: {self.failures} failures in a row; not called again until "
+                              f"{self.reset_s:.0f}s after the last one")
+
+    def success(self) -&gt; None:
+        self.failures, self.opened_at = 0, None
+
+    def failure(self, now: float) -&gt; None:
+        self.failures += 1
+        if self.failures &gt;= self.threshold or self.opened_at is not None:
+            self.opened_at = now</pre></div><p>The breaker stores only a count of failures and the time it opened. Closed means it never opened or was reset by a success. Open means the reset time has not passed. Half-open means it has: one call is let through, a success closes the breaker, and a failure opens it again from now.</p><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/data-platform-suite/blob/a7c2d42b63828e9c28072f70c538ac3f30adbad6/src/dataplatform/resilience.py#L123"><code>src/dataplatform/resilience.py:123</code></a><span>The three together. This is what an ingestion pipeline calls.</span></div><pre>    def call(self, source: str, fn: Callable[[], T], policy: RetryPolicy | None = None) -&gt; T:
+        breaker = self.breaker(source)
+        breaker.before(self.clock(), source)
+        sem = self._sem(source)
+
+        def once() -&gt; T:
+            if sem is None:
+                return fn()
+            with sem:
+                return fn()
+
+        def noted(attempt: int, exc: BaseException, wait: float) -&gt; None:
+            self.retries_seen.append((source, attempt, type(exc).__name__))
+
+        try: <span class="c"> # the breaker counts calls that failed after their retries, not each failed try</span>
+            out = call_with_retry(once, policy or RetryPolicy(), self.sleep, noted)
+        except BaseException:
+            breaker.failure(self.clock())
+            raise
+        breaker.success()
+        return out</pre></div><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/data-platform-suite/blob/a7c2d42b63828e9c28072f70c538ac3f30adbad6/src/dataplatform/ingest/pipelines.py#L62"><code>src/dataplatform/ingest/pipelines.py:62</code></a><span>Where ingestion uses it: every read of a source goes through the run's guard.</span></div><pre>def _read(ctx: Ctx, src: Sources, fn: Callable[[], T]) -&gt; T:
+    """One call to a source through the run's guard: retried on temporary errors per the dataset's retry settings,
+    refused while the source's circuit is open, limited by the source's connection cap."""
+    if src.guard is None:
+        return fn()
+    return src.guard.call(ctx.spec.source, fn, RetryPolicy.from_settings(ctx.spec.settings))</pre></div><h2>How it is tested</h2><p><a href="https://github.com/dataagentsai/data-platform-suite/blob/a7c2d42b63828e9c28072f70c538ac3f30adbad6/tests/dataplatform/test_resilience.py"><code>tests/dataplatform/test_resilience.py</code></a> uses a fake clock and a recorded sleep. The retry table gives the errors a call raises in order, the policy, the expected result, the number of calls made and the waits.</p><div class="snip"><div class="snip-h"><a href="https://github.com/dataagentsai/data-platform-suite/blob/a7c2d42b63828e9c28072f70c538ac3f30adbad6/tests/dataplatform/test_resilience.py#L35"><code>tests/dataplatform/test_resilience.py:35</code></a><span>The retry cases.</span></div><pre>RETRY_CASES = [
+    ("works first time: no wait", [], RetryPolicy(2, 10), "ok", 1, []),
+    ("a timeout then success: one wait", [TimeoutError("slow")], RetryPolicy(2, 10), "ok", 2, [10]),
+    ("two temporary errors: backoff doubles", [TransientError("x"), ConnectionError("y")], RetryPolicy(2, 10), "ok", 3,
+     [10, 20]),
+    ("out of retries: the last error is raised", [TimeoutError("a"), TimeoutError("b"), TimeoutError("c")],
+     RetryPolicy(2, 10), TimeoutError, 3, [10, 20]),
+    ("a bug is never retried", [ValueError("bad column")], RetryPolicy(5, 10), ValueError, 1, []),
+    ("waits are capped", [TimeoutError()] * 3, RetryPolicy(3, 100, factor=10, max_wait_s=300), "ok", 4,
+     [100, 300, 300]),
+    ("no retries configured", [TimeoutError("a")], RetryPolicy(0, 10), TimeoutError, 1, []),
+]</pre></div><div class="box"><b>Not built yet, or known gaps</b><ul><li>The breaker's state lives in the guard for one run. A source that fails in every run is tried again in each new run. The module's notes say a breaker that must outlive runs belongs in the metadata store, and that is not built.</li><li>The two circuit settings are proposed in the registry and are not read from a dataset's settings.</li><li>The run scripts create the guard with no connection caps, so the cap is tested but not in effect in the runs this site describes.</li><li>Retries are kept in a list on the guard for the run log. I did not find the code that writes them to the run log.</li><li>Push sources, where a mover delivers files to landing, do not go through the guard. It protects pulls.</li></ul></div>
+
+</article><nav class="pn"><a class="pv" href="obs-recovery.html"><small>← Back</small>Recovery and housekeeping</a><a class="nx" href="tests.html"><small>Next →</small>Tests and proof</a></nav></div></main>
+<script src="nav.js"></script></body></html>

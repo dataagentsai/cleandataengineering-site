@@ -81,6 +81,7 @@ SECTIONS = [
             ("Real-time analytics", "/learn/real-time-analytics/"),
         ]),
         ("Data engineering", "/learn/data-systems/platform/#hops", [
+            ("Our platform, picture to code", "/learn/data-platform-suite/"),
             ("The hops", None),
             ("Hop 1: sources to bronze", "/learn/data-platform-architecture/ingestion/"),
             ("Hop 2: bronze to silver", "/learn/data-platform-architecture/bronze-to-silver/"),
