@@ -64,6 +64,7 @@ SECTIONS = [
             ("Where data engineering time goes", "/learn/where-data-engineering-time-goes/"),
             ("Upstreams", None),
             ("Know your sources", "/learn/data-systems/upstreams/"),
+            ("Upstreams, the big picture", "/learn/data-systems/upstreams/big-picture/"),
             ("API sources", "/learn/data-systems/upstreams/apis/"),
             ("File sources", "/learn/data-systems/upstreams/files/"),
             ("Learning the joins", "/learn/data-systems/upstreams/joins/"),

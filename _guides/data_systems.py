@@ -816,6 +816,7 @@ def rows_table(rows, marks=None):
 
 def upstreams():
     pp_svg, pp_cap = push_pull()
+    map_svg, map_cap = _bp().map_svg()
     types = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td></tr>" for a, b, c, d in SOURCE_TYPES)
     hand = "".join(f"<tr><td><b>{E(a)}</b></td><td>{E(b)}</td><td>{E(c)}</td><td>{E(d)}</td><td>{E(e)}</td><td>{E(f)}</td></tr>" for a, b, c, d, e, f in HANDOVER)
     q, n_q = q_table(QUESTIONS)
@@ -838,14 +839,19 @@ def upstreams():
 <div class="leaders"><h3>For leaders</h3><ul>{leaders}</ul>
 <p style="margin:10px 0 0"><a class="btn" href="{BASE}upstreams/questionnaire/">Printable questionnaire for your team</a></p></div>
 <nav class="toc"><b>On this page</b><ol>
-<li><a href="#plain">In plain words</a></li><li><a href="#types">Kinds of sources</a></li><li><a href="#handover">Push, pull or share</a></li>
-<li><a href="#trigger">Schedule or event</a></li><li><a href="#change">How a dataset changes</a></li><li><a href="#deeper">In depth: APIs, files, joins, where answers go</a></li><li><a href="#load">Full load or incremental</a></li><li><a href="#protect">Protecting the source</a></li><li><a href="#joins">Relationships and joins</a></li><li><a href="#keys">No key, or duplicates</a></li><li><a href="#history">Type 2, Type 1 or overwrite</a></li><li><a href="#missing">No modified or ordering column</a></li><li><a href="#questions">The question list ({n_q} questions)</a></li>
+<li><a href="#plain">In plain words</a></li><li><a href="#bigpicture">The big picture</a></li><li><a href="#types">Kinds of sources</a></li><li><a href="#handover">Push, pull or share</a></li>
+<li><a href="#trigger">Schedule or event</a></li><li><a href="#change">How a dataset changes</a></li><li><a href="#deeper">In depth: the big picture, APIs, files, joins, where answers go</a></li><li><a href="#load">Full load or incremental</a></li><li><a href="#protect">Protecting the source</a></li><li><a href="#joins">Relationships and joins</a></li><li><a href="#keys">No key, or duplicates</a></li><li><a href="#history">Type 2, Type 1 or overwrite</a></li><li><a href="#missing">No modified or ordering column</a></li><li><a href="#questions">The question list ({n_q} questions)</a></li>
 <li><a href="#fields">Fields we ask for in every dataset</a></li><li><a href="#profile">Why we ask to scan your data</a></li>
 <li><a href="#decisions">Design decisions</a></li><li><a href="#faq">Questions people ask</a></li><li><a href="#next">How we build it</a></li></ol></nav>
 
 <section id="plain"><p class="eyebrow">In plain words</p><h2>Ask about the well before laying the pipe</h2>
 <p>An engineer connecting a town to a new well asks a few things first. How much water does it give? When does it run low? Does it flood? Who owns it, and will they tell us before they dig a new one? Is the water clean, and can we take a sample to test? None of this is about the pipe. All of it decides whether the pipe works.</p>
 <p>Source systems are the wells. They were built to run a business, not to feed a data platform. Each one has habits: how it records changes, whether it really deletes rows, when its nightly jobs finish. The questions on this page find those habits early, while changing course is cheap.</p></section>
+
+<section id="bigpicture"><p class="eyebrow">The big picture</p><h2>Sources, the ways out, and what goes wrong</h2>
+<p>Before the detail, the whole map. A source is one of a few kinds, its data leaves by one or more of eight routes, and each route sees different changes: a scheduled query misses deletes, a log reader sees them. The problems in the bottom band are the ones to expect on every project.</p>
+<figure class="diagram">{map_svg}<figcaption>{E(map_cap)}</figcaption></figure>
+<p style="margin:10px 0 0"><a class="btn" href="{BASE}upstreams/big-picture/">Read the big picture</a> &nbsp; Query-based and log-based extraction, the SAP routes, APIs, file drops, streams and events; how to find deletes and missed updates; big first loads; half-written files and manifests; schedule or event.</p></section>
 
 <section id="types"><p class="eyebrow">Kinds of sources</p><h2>Seven kinds of sources</h2>
 <p>Most estates mix all seven. Each kind tends to offer some ways of handing data over and to fail in its own ways.</p>
@@ -869,6 +875,7 @@ def upstreams():
 
 <section id="deeper"><p class="eyebrow">In depth</p><h2>Go deeper by source type and problem</h2>
 <div class="cards">
+<div class="card" style="--w:var(--rose-wash)"><h3><a href="{BASE}upstreams/big-picture/">The big picture</a></h3><p class="one">Every route out of a source on one map, what each can and cannot see, and the problems to expect: deletes, missed updates, big loads, half-written files, schedules.</p></div>
 <div class="card" style="--w:var(--peri-wash)"><h3><a href="{BASE}upstreams/apis/">API sources</a></h3><p class="one">Bulk versus paged APIs, pagination that doesn't lose records, rate limits and shared quotas, cost per call, deletes and completeness.</p></div>
 <div class="card" style="--w:var(--butter-wash)"><h3><a href="{BASE}upstreams/files/">File sources</a></h3><p class="one">The file contract, done markers, corrections, order, encodings, column changes, and the common file problems.</p></div>
 <div class="card" style="--w:var(--mint-wash)"><h3><a href="{BASE}upstreams/joins/">Learning the joins</a></h3><p class="one">Declared keys, joins already in use, candidates measured on the data, owner sign-off, recorded in the data contract.</p></div>
@@ -927,6 +934,13 @@ def upstreams():
     desc = f"What a data platform team needs to know about every source system, and why: push, pull or share, schedule or event, how rows change, keys and dates, profiling with masked data, and {n_q} questions with what breaks in production if nobody asks."
     url = f"{SITE}{BASE}upstreams/"
     return wb.page(title, desc, url, body, CSS + ld(title, desc, url, [("Learn", "/learn/"), ("Data systems", BASE), ("Upstreams", f"{BASE}upstreams/")], FAQ_UP)), n_q
+
+
+def _bp():
+    sp = importlib.util.spec_from_file_location("upstream_big_picture", ROOT / "_guides" / "upstream_big_picture.py")
+    m = importlib.util.module_from_spec(sp)
+    sp.loader.exec_module(m)
+    return m
 
 
 def _deep():
@@ -994,6 +1008,7 @@ def main():
     (out / "upstreams" / "questionnaire" / "index.html").write_text(questionnaire())
     print(f"data systems -> {out} ({n_q} upstream questions)")
     _deep().main()
+    _bp().main()
     _down = importlib.util.spec_from_file_location("downstreams", ROOT / "_guides" / "downstreams.py")
     _m = importlib.util.module_from_spec(_down)
     _down.loader.exec_module(_m)
