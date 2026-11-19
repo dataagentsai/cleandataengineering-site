@@ -140,6 +140,7 @@ SECTIONS = [
             ("Eval Harness", "/learn/eval-harness/"),
             ("Agent guardrails", "/learn/agent-guardrails/"),
             ("AI governance: running AI you can trust", "/learn/ai-governance/"),
+            ("AI gateways: which one to use", "/learn/ai-gateways/"),
             ("Open spec: AI Assurance Catalog", "https://dataagentsai.github.io/ai-assurance-catalog/"),
             ("Open spec: AI Harness Catalog", "https://dataagentsai.github.io/ai-harness-catalog/"),
             ("Open spec: AgentTwin", "/learn/agenttwin/"),
