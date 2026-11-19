@@ -26,6 +26,9 @@ CSS = """<style>
   .st { display:inline-block; border:1.5px solid var(--ink); border-radius:999px; padding:0 9px; font-size:12.5px; white-space:nowrap; }
   .st.works { background:var(--mint-wash); } .st.planned { background:#fff; } .st.no { background:var(--rose-wash); }
   .qa b { display:block; font-family:var(--hand); font-weight:400; font-size:22px; margin-top:14px; }
+  .svc { border:1.5px solid var(--ink); border-radius:var(--wob); padding:12px 18px; margin:14px 0; background:#fff; }
+  .svc h4 { font-family:var(--hand); font-weight:400; font-size:24px; margin:0 0 2px; } .svc .one { margin:0 0 6px; color:var(--ink-soft); }
+  .svc dl { margin:0; } .svc dt { font-weight:700; font-size:13px; letter-spacing:.05em; text-transform:uppercase; color:var(--muted); margin-top:8px; } .svc dd { margin:0; } .svc code { font-size:13px; white-space:pre-wrap; }
   .box { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; margin:16px 0; }
 </style>"""
 
@@ -52,6 +55,101 @@ NOT = [
     ("Provisioned throughput", "Reserved model capacity.", "Pay-per-use is enough at this volume."),
     ("Lakehouse Monitoring", "Profiles data and tracks drift in tables.", "Optional here; the eval harness watches the agent, not the tables."),
     ("Delta Sharing, Clean Rooms, Marketplace", "Share data with other organisations.", "Nothing is shared."),
+]
+
+
+# Detailed cards: name, layer, one line, problem it solves, how it works, a small example, how this agent uses it, the usual confusion
+SERVICES = [
+    ("Unity Catalog", "1 · Governed data", "One place that names, secures and tracks everything: tables, files, functions and models.",
+     "Without it, every tool has its own login and nobody can say who touched what.",
+     "Every object has a three-part name, catalog.schema.object. Permissions are granted on those names, and lineage records what read or wrote what.",
+     "GRANT SELECT ON TABLE workspace.drugsafety.pair_counts TO `agent-service-principal`",
+     "Holds the schema, the tables, a volume for the raw files and the three tool functions. The agent's login is granted only those.",
+     "It is not a database. It is the permission and lineage layer over data stored elsewhere."),
+    ("Delta Lake tables", "1 · Governed data", "A table format that is safe to update and remembers its history.",
+     "Plain files cannot be updated safely by two writers, and cannot answer 'what did this look like last week?'.",
+     "Data files plus a transaction log. Every change is a new version; older versions stay readable.",
+     "SELECT * FROM pair_counts VERSION AS OF 3",
+     "Holds 80 drug-and-event count rows and 10 drug labels from public FDA data. Later: each draft assessment and each reviewer decision, so an audit can replay the past.",
+     "A Delta table is not a different database. It is files in cloud storage with a log beside them."),
+    ("SQL warehouse (serverless)", "1 · Governed data", "Compute that runs SQL and the registered functions.",
+     "Something has to run the queries and functions; you do not want to manage a cluster to do it.",
+     "A serverless warehouse starts on demand and stops when idle. The Statement Execution API runs one SQL statement and returns rows.",
+     "POST /api/2.0/sql/statements with a warehouse id and a statement",
+     "Runs the table loads, the function registration and every tool call.",
+     "A warehouse is for SQL. Notebooks and jobs use other compute."),
+    ("Foundation Model APIs", "2 · Models", "Ready-hosted models you call and pay for per use, with no servers to run.",
+     "Hosting a large model yourself is slow and costly.",
+     "Each hosted model is an endpoint with an OpenAI-style chat format, including tool calls. Open models (gpt-oss, Llama, Qwen, Gemma) and embedding models (bge, gte) are listed in the workspace.",
+     "POST /serving-endpoints/databricks-gpt-oss-120b/invocations with a list of chat messages",
+     "The reasoning model runs the loop: it chooses which tool to call, reads the results and drafts the assessment.",
+     "Pay-per-token and provisioned throughput are two ways of buying the same models: share a pool, or reserve capacity."),
+    ("Model Serving and AI Gateway", "2 · Models", "Host your own model or agent as a web service; put limits, guardrails and logging in front.",
+     "Without a control point, every team enforces its own rate limit, privacy rule and cost report.",
+     "Serving turns a registered model or agent into an endpoint that scales up and down. AI Gateway adds rate limits, guardrails, usage tracking and fallbacks in front of endpoints.",
+     "an endpoint with a rate limit of N calls per minute per user",
+     "Not used yet. Each investigation is reviewed by a person afterwards, so a job is enough. They come into play when the agent is used interactively.",
+     "Foundation Model APIs are hosted for you. Model Serving is where you host your own."),
+    ("Unity Catalog functions as tools", "3 · Tools and knowledge", "A small named SQL or Python function, registered in Unity Catalog, that an agent may call.",
+     "Letting a model write SQL is unsafe: it can read anything its login can, and text in the data can talk it into doing so.",
+     "A function has typed inputs, a comment the model reads as its description, a permission and an audit trail. The agent is shown only the functions registered for it.",
+     "CREATE FUNCTION workspace.drugsafety.report_counts(drug STRING, event STRING) RETURNS TABLE (...) RETURN SELECT ... WHERE t.drug = lower(report_counts.drug) AND t.event = upper(report_counts.event)",
+     "The three tools: report counts, signal statistics (PRR, ROR and the screen, computed in SQL) and label check. A test runs all 80 drug-and-event pairs through the functions and through the tested Python versions: every answer matches.",
+     "A tool is a contract. The model chooses a tool and its inputs, and the platform decides whether it may run."),
+    ("Vector Search", "3 · Tools and knowledge", "Finds text by meaning, with an index that stays in step with a Delta table.",
+     "Keyword search misses 'swelling of the face' when the label says 'angioedema'.",
+     "An embedding model turns text into a vector, a list of numbers where similar meanings sit close together. A query is embedded the same way and the nearest vectors win. A Delta Sync index re-embeds when the source table changes and inherits its permissions.",
+     "search the labels for 'swelling of the face' and get the angioedema passage",
+     "Planned for finding the label passage about an event. Today a synonym table does the job, and the guide's next step swaps it.",
+     "A vector index finds similar text, not true statements. A retrieved passage still has to be checked."),
+    ("AI Functions", "3 · Tools and knowledge", "SQL functions that call a model once per row: ai_query, ai_classify, ai_extract and others.",
+     "Tagging or extracting from thousands of rows should not need a loop in Python.",
+     "You call the function inside a SELECT, and the warehouse sends each row to a model endpoint.",
+     "SELECT ai_classify(narrative, ARRAY('serious', 'non-serious')) FROM reports",
+     "Not used. The agent chooses its steps per case; it is not a per-row batch job. They would fit tagging thousands of report narratives.",
+     "They are not an agent. They run the same model call on every row."),
+    ("Genie", "3 · Tools and knowledge", "Ask a governed table a question in plain English and get SQL and an answer.",
+     "Many people need an answer from a table and cannot write SQL.",
+     "A Genie space is configured with tables, instructions and example questions; it writes SQL, runs it and shows the result.",
+     "'How many reports of angioedema for lisinopril?' returns the count and the SQL behind it",
+     "A comparison, not part of the agent: what Genie answers about the counts alone, and where it stops. It cannot weigh evidence or draft an assessment.",
+     "Genie answers questions about data. It does not carry out a multi-step investigation with approval."),
+    ("Mosaic AI Agent Framework and Agent Bricks", "4 · The agent", "Agent Framework is Databricks' way to write, log, test, register and deploy an agent. Agent Bricks builds common agents for you, mostly without code.",
+     "Agents need a standard shape to be traced, evaluated and served consistently.",
+     "With Agent Framework you write the agent as a class with a standard interface (ResponsesAgent in current MLflow); MLflow logs it, Unity Catalog registers it, and a deploy step puts it behind an endpoint with a review app. Agent Bricks skips the code for document question-answering, information extraction and multi-agent supervision.",
+     "log the agent with MLflow, register it as workspace.drugsafety.signal_investigator, deploy it",
+     "Agent Framework is planned as a wrapper around our own loop, for tracing and registration. Agent Bricks is not used: this build exists to see and control the parts.",
+     "Agent Framework is not a loop engine like LangGraph. It standardises packaging, tracing and deployment."),
+    ("Databricks Apps", "4 · The agent", "Run a small web app (Streamlit, Dash, Gradio or FastAPI) inside the workspace, signed in as the user.",
+     "You need a screen for people to act on what the agent produced, without hosting a server elsewhere.",
+     "You deploy app code; the platform runs it, handles sign-in and lets it query governed data on the user's behalf.",
+     "a page listing drafts, with Approve, Edit and Reject buttons that write a row",
+     "Planned for the reviewer's screen: the decision is saved as a row in a Delta table.",
+     "An App is a front end. The agent still runs as a job."),
+    ("Lakeflow Jobs", "4 · The agent", "Scheduled and triggered runs with retries and a run history.",
+     "A long or repeated piece of work should run without someone keeping a laptop open.",
+     "A job is a set of tasks with a trigger and parameters. A wait for a person is modelled as a run that ends and a new run that starts on the decision.",
+     "run one investigation per request, with two retries",
+     "Planned for running investigations.",
+     "A job has no built-in way to wait for a human; design the wait."),
+    ("MLflow tracing", "5 · Watching and judging", "Records every step of an agent run: each model call and tool call, with inputs, outputs and timings.",
+     "A black-box agent cannot be debugged, audited or costed.",
+     "Decorate a function with @mlflow.trace, or turn on auto-logging for a model library, and each run appears as a tree of steps.",
+     "one trace: model call, three tool calls, final answer, 31 seconds",
+     "The raw material for the eval harness, which answers 62 everyday ops questions about any agent from its traces.",
+     "Tracing records what happened. Evaluation judges whether it was good."),
+    ("MLflow evaluation and judges", "5 · Watching and judging", "Scores agent answers against expectations, with code checks or a model acting as judge.",
+     "Without scores, you cannot tell whether a change made the agent better or worse.",
+     "You provide inputs, run the agent, and apply scorers: exact checks first, then judged qualities such as groundedness.",
+     "does every number in the draft equal what the tools returned?",
+     "Deterministic checks first (the output contract and the grounding check, 48 unit tests), then a 20-case set of known signals and controls. Judged qualities come later, checked against human labels.",
+     "A judge is a model and can be wrong. Calibrate it before trusting it."),
+    ("System tables", "5 · Watching and judging", "Databricks' own usage, billing and audit records, as tables you can query.",
+     "Cost and access questions need real records, not estimates.",
+     "Tables such as billing usage and audit events are maintained by the platform in a system catalog.",
+     "SELECT usage_date, sum(usage_quantity) FROM system.billing.usage GROUP BY usage_date",
+     "Planned: cost per assessment from real billing rows.",
+     "System tables are read-only records about the workspace."),
 ]
 
 PARTS = [
@@ -93,6 +191,19 @@ QA = [
 ]
 
 
+def service_cards():
+    out, layer = "", None
+    for name, lay, one, problem, how, example, here, confusion in SERVICES:
+        if lay != layer:
+            out += f"<h3>{E(lay)}</h3>"
+            layer = lay
+        out += (f'<div class="svc"><h4>{E(name)}</h4><p class="one">{E(one)}</p><dl>'
+                f"<dt>Problem it solves</dt><dd>{E(problem)}</dd><dt>How it works</dt><dd>{E(how)}</dd>"
+                f"<dt>Small example</dt><dd><code>{E(example)}</code></dd><dt>In this agent</dt><dd>{E(here)}</dd>"
+                f"<dt>Usual confusion</dt><dd>{E(confusion)}</dd></dl></div>")
+    return out
+
+
 def table(rows, head, status=False):
     out = '<div class="tw"><table class="t"><tr>' + "".join(f"<th>{E(h)}</th>" for h in head) + "</tr>"
     for r in rows:
@@ -124,10 +235,21 @@ def page():
 {nots}
 <div class="box"><b>Mosaic AI</b> is Databricks' brand for the AI products as a group. So "are we using Mosaic AI?" is answered service by service in the two tables above. Product names change often; check the current Databricks docs before you build.</div>
 {parts}
+<h2>Start here: the order to learn and build it</h2>
+<ol><li><b>Governed data.</b> Create a schema, load a few tables, grant access. Draw the 2x2 table for one drug and one event by hand.</li>
+<li><b>Tools.</b> Write one function that takes a drug and an event and returns the counts. Test it against a plain-Python answer.</li>
+<li><b>Model and loop.</b> Call a hosted model with the function listed as a tool. Read one run's steps from start to finish.</li>
+<li><b>Checks.</b> Add an output contract and a grounding check (every number equals a tool result). Break them on purpose with a scripted model.</li>
+<li><b>Tracing and evaluation.</b> Trace a run in MLflow, then score 20 cases with known answers.</li>
+<li><b>People and release.</b> Add the approval screen, run it as a job, and measure cost per investigation.</li></ol>
+<h2>Each service explained</h2>
+<p>The same services, one at a time, in the order a request meets them. Names and limits change often; check the current Databricks docs before you build.</p>
+{service_cards()}
 <h2>Questions this page answers</h2>
 {qa}
 <h2>Where to go next</h2>
-<ul><li><a href="/learn/agent-harness/">The agent harness, end to end</a>: the generic design this agent is built on.</li>
+<ul><li><a href="/learn/agent-harness-databricks/">The agent harness on Databricks</a>: the 22 concerns bound to Databricks services, and one request end to end.</li>
+<li><a href="/learn/agent-harness/">The agent harness, end to end</a>: the generic design this agent is built on.</li>
 <li><a href="/projects/claims-fnol-azure/">Claims FNOL assistant on Azure</a>: the first agent on the same harness.</li>
 <li><a href="/projects/drug-safety-agent-databricks/">The project page</a>: tasks, roles and how to join.</li>
 <li><a href="/platforms/databricks/">Databricks on this site</a>: the platform map.</li></ul>"""
