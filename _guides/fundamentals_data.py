@@ -32,7 +32,7 @@ PERFORMANCE = dict(
         ("7. Precompute", "Can the answer be ready before the question?", "Gold tables, aggregates, materialised views, caches, serving layers", "Same expensive question asked many times"),
     ],
     sections=[
-        ("physics", "The data physics", "Where a byte lives decides how long it takes",
+        ("ladder", "The ladder", "Where a byte lives decides how long it takes",
          "Pick any job and ask: where is each byte at the start, where does it need to be, and how many times does it travel? The ladder below is the whole story. The figures are rough orders of magnitude to build intuition.",
          ["Where the byte is", "Rough time to reach it", "Everyday example", "What to remember"],
          [("CPU cache / memory", "nanoseconds", "A column already loaded in an executor", "Keep hot data here: caches, broadcast tables"),

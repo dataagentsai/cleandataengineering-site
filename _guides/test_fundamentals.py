@@ -42,3 +42,21 @@ class Fundamentals(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class Figures(unittest.TestCase):
+    def test_figs_point_at_real_sections(self):
+        from fundamentals_diagrams import FIGS
+        pages = {p["slug"]: {s[0] for s in p["sections"]} for p in PAGES}
+        cases = [(slug, sid) for slug, d in FIGS.items() for sid in d]
+        for slug, sid in cases:
+            with self.subTest(page=slug, section=sid):
+                self.assertIn(sid, pages[slug])
+
+    def test_each_figure_renders(self):
+        from fundamentals_diagrams import FIGS
+        cases = [(slug, sid, f) for slug, d in FIGS.items() for sid, fs in d.items() for f in fs]
+        for slug, sid, f in cases:
+            with self.subTest(page=slug, section=sid, fig=f.__name__):
+                svg, cap = f()
+                self.assertTrue(svg.startswith("<svg") and svg.endswith("</svg>") and cap)

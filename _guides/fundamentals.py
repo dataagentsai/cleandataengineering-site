@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(ROOT / "_paths"))
 import components as C  # noqa: E402
 from fundamentals_data import PAGES  # noqa: E402
+from fundamentals_diagrams import FIGS  # noqa: E402
 
 wb = C.wb
 SITE = wb.SITE
@@ -29,11 +30,13 @@ CSS = """<style>
   .fx .mm { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:12px; margin:14px 0 20px; }
   .fx .mm .c { border:var(--line); border-radius:var(--wob); padding:10px 14px; background:#fff; }
   .fx .mm .c h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 2px; }
-  .fx .mm .c p { margin:3px 0; font-size:14.5px; } .fx .mm .c .q { color:var(--muted); }
+  .fx .mm .c p { margin:3px 0; font-size:14.5px; } .fx .mm .c .qq { color:var(--muted); }
   .fx .centre { display:inline-block; border:2px solid #111; border-radius:999px; padding:6px 22px; font-family:var(--hand); font-size:24px; background:#fff4d6; margin:6px 0 4px; }
   .fx .phys { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; margin:12px 0; }
   .fx .phys div { border:var(--line); border-radius:var(--wob); padding:10px 14px; background:#eef3fb; font-size:15px; }
   .fx .phys b { display:block; margin-bottom:2px; }
+  .fx .fig { margin:12px 0 16px; } .fx .fig svg { width:100%; height:auto; background:#fff; border:var(--line); border-radius:var(--wob); font-family:var(--hand), sans-serif; }
+  .fx .fig p { font-size:13.5px; color:#555; margin:4px 2px 0; }
   .fx code { font-size:12.5px; }
   .fx .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0; font-size:14px; }
   .fx .sib a, .fx .sib span { border:1.5px solid #111; border-radius:999px; padding:2px 12px; text-decoration:none; color:#111; background:#fff; }
@@ -48,7 +51,7 @@ def sib(cur):
 
 def mindmap(p):
     cards = "".join(
-        f'<div class="c"><h4>{E(b)}</h4><p class="q">{E(q)}</p><p>{E(what)}</p><p><b>First check:</b> {E(chk)}</p></div>'
+        f'<div class="c"><h4>{E(b)}</h4><p class="qq">{E(q)}</p><p>{E(what)}</p><p><b>First check:</b> {E(chk)}</p></div>'
         for b, q, what, chk in p["mindmap"])
     return f'<div style="text-align:center"><span class="centre">{E(p["short"])}</span></div><div class="mm">{cards}</div>'
 
@@ -67,7 +70,8 @@ def page_for(p):
     secs = ""
     toc = [("map", "The mind map")] + [(s[0], s[2]) for s in p["sections"]] + [("rules", "CostSherlock rules for this topic"), ("faq", "Questions people ask")]
     for sid, eyebrow, h2, intro, head, rows in p["sections"]:
-        secs += f'<section id="{sid}"><p class="eyebrow">{E(eyebrow)}</p><h2>{E(h2)}</h2><p>{E(intro)}</p>{C.table(head, rows)}</section>\n'
+        figs = "".join(f'<div class="fig">{sv}<p>{E(cap)}</p></div>' for sv, cap in (f() for f in FIGS.get(p["slug"], {}).get(sid, [])))
+        secs += f'<section id="{sid}"><p class="eyebrow">{E(eyebrow)}</p><h2>{E(h2)}</h2><p>{E(intro)}</p>{figs}{C.table(head, rows)}</section>\n'
     nav = "".join(f'<li><a href="#{i}">{E(t)}</a></li>' for i, t in toc)
     others = " · ".join(f'<a href="{BASE}{q["slug"]}/">{E(q["short"])} fundamentals</a>' if q["slug"] != "database-families" else f'<a href="{BASE}{q["slug"]}/">Database families</a>' for q in PAGES if q is not p)
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › <a href="{BASE}">Fundamentals</a> › {E(p['short'])}</p>
