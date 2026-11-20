@@ -62,6 +62,13 @@ SECTIONS = [
         ("Data systems", "/learn/data-systems/", [
             ("The whole system, end to end", "/learn/data-systems/"),
             ("Where data engineering time goes", "/learn/where-data-engineering-time-goes/"),
+            ("Fundamentals", None),
+            ("Performance", "/learn/fundamentals/performance/"),
+            ("Cost", "/learn/fundamentals/cost/"),
+            ("Processing", "/learn/fundamentals/processing/"),
+            ("Security", "/learn/fundamentals/security/"),
+            ("Storage", "/learn/fundamentals/storage/"),
+            ("Database families", "/learn/fundamentals/database-families/"),
             ("Upstreams", None),
             ("Know your sources", "/learn/data-systems/upstreams/"),
             ("Upstreams, the big picture", "/learn/data-systems/upstreams/big-picture/"),

@@ -28,6 +28,13 @@ STORY = [
     ("The data platform, whole", "/learn/data-systems/platform/", "silver", "Five hops along the medallion and 24 cross-cutting concerns, with layout, environments and cost pages."),
 ]
 GUIDES = [
+    ("Data engineering fundamentals", "/learn/fundamentals/", "Six plain-words mind-map guides: performance, cost, processing, security, storage and database families, with the CostSherlock rules that catch each mistake."),
+    ("Performance fundamentals", "/learn/fundamentals/performance/", "Where the time goes in a data job: disk vs memory vs network, tasks, shuffles, layout, compression, waiting, and why gold exists."),
+    ("Cost fundamentals", "/learn/fundamentals/cost/", "Where data platform money goes: idle and oversized compute, wasteful queries, storage growth, refresh frequency, egress, anomalies."),
+    ("Processing fundamentals", "/learn/fundamentals/processing/", "How data jobs run: lazy plans, partitions, shuffles, batch vs streaming, state, idempotency, and when one machine is enough."),
+    ("Security fundamentals", "/learn/fundamentals/security/", "Identity, secrets, encryption, classification, masking, audit and safe sharing, as a checklist you can walk."),
+    ("Storage fundamentals", "/learn/fundamentals/storage/", "Files plus a ledger: formats, compression, partitioning and clustering, table logs, updates, maintenance and tiers."),
+    ("Database families", "/learn/fundamentals/database-families/", "Relational, NoSQL, MPP, open table formats, object storage, graph and vector: what each is built for and how to choose."),
     ("Where data engineering time goes", "/learn/where-data-engineering-time-goes/", "Understanding what the source data means takes more hours than writing code. Two charts of where the time goes, and how to win the non-technical hours back."),
     ("Data platform architecture", "/learn/data-platform-architecture/", "How we build it: control plane, metadata, three services, streaming lane, agents that only suggest."),
     ("Delta Lake vs Iceberg on Databricks", "/learn/delta-vs-iceberg/", "Same Parquet, two contents pages; which Databricks features differ (change data feed, streaming, pipelines, lineage, masks) and which to pick on AWS."),
