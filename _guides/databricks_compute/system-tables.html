@@ -1,0 +1,108 @@
+<section id="s19"><p class="eyebrow">System tables</p><h2>System tables in detail</h2>
+<p><b>System tables</b> are read-only tables in a catalog called <code>system</code>, inside Unity Catalog. Databricks fills them with operational data about your account: what was used, what it cost, who did what, what ran. You read them with ordinary SQL.</p>
+<ul>
+<li>The account admin enables each schema, and you grant access like any other table.</li>
+<li>They are owned and maintained by Databricks. You cannot edit them, add columns or fix a wrong row.</li>
+<li>The billing tables cover the whole account. Many operational tables cover the workspaces of one region and metastore.</li>
+<li>Retention is limited, typically around a year, so copy anything you want to keep longer.</li>
+<li>Data arrives with a delay (minutes for some, hours for billing). Do not use them for real-time alerts.</li>
+</ul>
+<div class="tw"><table class="t">
+<tr><th>Schema</th><th>Key tables</th><th>What it answers</th></tr>
+<tr><td><code>system.billing</code></td><td><code>usage</code>, <code>list_prices</code></td><td>How many DBUs, by which SKU, workspace, cluster, warehouse, job, user tags. And the list price per DBU.</td></tr>
+<tr><td><code>system.compute</code></td><td><code>clusters</code>, <code>node_types</code>, <code>node_timeline</code>, <code>warehouses</code>, <code>warehouse_events</code></td><td>Cluster configuration history, per-minute node CPU and memory use, warehouse scale events.</td></tr>
+<tr><td><code>system.query</code></td><td><code>history</code></td><td>Every SQL query: who, how long, rows read, bytes, whether it came from the result cache, how much came from the disk cache.</td></tr>
+<tr><td><code>system.lakeflow</code></td><td><code>jobs</code>, <code>job_run_timeline</code>, <code>job_task_run_timeline</code>, <code>pipelines</code>, <code>pipeline_update_timeline</code></td><td>Job definitions, every run, task durations, pipeline updates. Join to billing for cost per job.</td></tr>
+<tr><td><code>system.access</code></td><td><code>audit</code>, <code>table_lineage</code>, <code>column_lineage</code>, <code>workspaces_latest</code></td><td>Who did what and when, lineage between tables, workspace list.</td></tr>
+<tr><td><code>system.serving</code>, <code>system.mlflow</code></td><td>endpoint usage, served entities, experiments</td><td>Model serving traffic and tracking.</td></tr>
+<tr><td><code>system.storage</code></td><td>predictive optimization history</td><td>Which tables were auto-optimized and at what cost.</td></tr>
+</table></div>
+<h3>The most useful query shape: cost per job</h3>
+<p>Join usage to list prices on SKU and date, then multiply:</p>
+<div class="callout g"><p><code>SELECT u.usage_metadata.job_id, SUM(u.usage_quantity * p.pricing.default) AS list_cost FROM system.billing.usage u JOIN system.billing.list_prices p ON u.sku_name = p.sku_name AND u.usage_start_time &gt;= p.price_start_time AND (p.price_end_time IS NULL OR u.usage_start_time &lt; p.price_end_time) WHERE u.usage_date &gt;= current_date() - 30 GROUP BY 1</code></p></div>
+<p>The result is a list-price estimate, not your invoice (see <a href="/learn/databricks-compute/system-tables/#s21">the hidden-information list</a>).</p>
+
+</section>
+<section id="s20"><p class="eyebrow">System tables</p><h2>Why querying system tables always costs money</h2>
+<p>Reading a system table is a query, and a query needs compute. There is no free metadata endpoint. So even the act of asking "what did I spend?" makes a small spend.</p>
+<ul>
+<li><b>It needs a running warehouse or cluster.</b> A serverless SQL warehouse burns DBUs while it is up. A dashboard on a schedule keeps it awake.</li>
+<li><b>The tables are large.</b> Audit logs, node timelines and query history can have billions of rows. An unfiltered scan reads a lot of data.</li>
+<li><b>They are managed by Databricks, and shared to you.</b> You cannot add your own indexes or physically reorganise them. You can only filter by date and columns.</li>
+<li><b>Every repeat costs again.</b> The same dashboard opened by ten people runs ten times, unless the result cache catches it.</li>
+</ul>
+<div class="callout"><p><b>It is a small cost if you design for it.</b> Done well, the whole cost-tracking system costs a few dollars a month. Done carelessly (a wide dashboard on a big warehouse refreshing every few minutes) it becomes a visible line item of its own.</p></div>
+<div class="tw"><table class="t">
+<tr><th>Mitigation</th><th>How</th><th>Verdict</th></tr>
+<tr><td>Roll up once, query the rollup</td><td>One scheduled job, on the smallest compute, reads only yesterday's rows (filter on <code>usage_date</code>) and appends to your own small table. Dashboards read that table.</td><td class="v pursue">Pursue. The single biggest saving.</td></tr>
+<tr><td>Always filter on date</td><td>Use <code>usage_date</code> or the time column, and select only the columns you need</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Use a tiny warehouse with short auto-stop</td><td>2X-Small serverless, 1 to 5 minute auto-stop for admin queries</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Use the free views</td><td>The account console usage page and budgets need no compute of yours. Billable usage log delivery can also write raw usage files to your own storage.</td><td class="v pursue">Pursue for finance's basic needs</td></tr>
+<tr><td>Dashboard that refreshes every few minutes</td><td>Billing data is hours old, so frequent refresh buys nothing</td><td class="v drop">Drop. Refresh daily.</td></tr>
+<tr><td>Copy before retention ends</td><td>Rollup table doubles as your long-term history</td><td class="v pursue">Pursue</td></tr>
+</table></div>
+
+</section>
+<section id="s22"><p class="eyebrow">System tables</p><h2>Copying system tables cheaply, and is Lakebase the answer?</h2>
+<p><b>Short answer.</b> Lakebase does not remove the cost of reading system tables. Reading them needs compute, and it still needs compute to copy them. Lakebase can only make <em>later</em> reads cheaper. For a cost dashboard, a small Delta table plus a tiny serverless warehouse is usually cheaper and simpler.</p>
+<p><b>Freshness has a ceiling you cannot beat.</b> Billing usage reaches the system table with a delay of hours. Copying it every minute only copies the same rows many times. Match the copy schedule to how fast each source table updates.</p>
+<div class="tw"><table class="t">
+<tr><th>Source table</th><th>Rough update speed</th><th>Sensible copy schedule</th></tr>
+<tr><td><code>billing.usage</code></td><td>Hours behind</td><td>Every 1 to 4 hours, or daily</td></tr>
+<tr><td><code>compute.warehouse_events</code>, <code>query.history</code></td><td>Minutes behind</td><td>Every 15 to 60 minutes, only if someone watches live</td></tr>
+<tr><td><code>access.audit</code></td><td>Minutes to an hour</td><td>Hourly</td></tr>
+<tr><td><code>compute.node_timeline</code></td><td>Large and detailed</td><td>Daily, and keep only what you analyse</td></tr>
+</table></div>
+<figure><div class="fig">
+<svg viewBox="0 0 900 230" role="img" aria-label="A small scheduled job reads only new rows from system tables, merges them into your own Delta table, and dashboards read that small table through a tiny warehouse. Optionally a synced table goes to Lakebase for an app.">
+<rect class="db" x="10" y="30" width="170" height="70" rx="6"/><text class="b" x="95" y="56" text-anchor="middle">system.* tables</text><text class="m" x="95" y="74" text-anchor="middle">big, managed by Databricks</text>
+<rect class="cu" x="230" y="30" width="190" height="70" rx="6"/><text class="b" x="325" y="52" text-anchor="middle">Small scheduled job</text><text class="m" x="325" y="70" text-anchor="middle">reads only rows newer than</text><text class="m" x="325" y="85" text-anchor="middle">the saved watermark</text>
+<rect class="ca" x="470" y="30" width="190" height="70" rx="6"/><text class="b" x="565" y="52" text-anchor="middle">Your Delta rollup tables</text><text class="m" x="565" y="70" text-anchor="middle">small, in your catalog,</text><text class="m" x="565" y="85" text-anchor="middle">kept past retention</text>
+<rect class="bx" x="710" y="30" width="180" height="70" rx="6"/><text class="b" x="800" y="52" text-anchor="middle">2X-Small warehouse</text><text class="m" x="800" y="70" text-anchor="middle">short auto-stop,</text><text class="m" x="800" y="85" text-anchor="middle">result cache on</text>
+<path class="ln" d="M180 65H230" marker-end="url(#ar)"/><path class="ln" d="M420 65H470" marker-end="url(#ar)"/><path class="ln" d="M660 65H710" marker-end="url(#ar)"/>
+<text class="m" x="190" y="58">MERGE</text>
+<rect class="bx ds" x="470" y="140" width="190" height="60" rx="6"/><text class="b" x="565" y="164" text-anchor="middle">Lakebase (optional)</text><text class="m" x="565" y="182" text-anchor="middle">synced table, Postgres reads</text>
+<path class="ln ds" d="M565 100V140" marker-end="url(#ar)"/>
+<rect class="bx ds" x="710" y="140" width="180" height="60" rx="6"/><text class="b" x="800" y="164" text-anchor="middle">App or API</text><text class="m" x="800" y="182" text-anchor="middle">needs millisecond reads</text>
+<path class="ln ds" d="M660 170H710" marker-end="url(#ar)"/>
+</svg></div>
+<figcaption>The cost you cannot avoid is the one small job that reads the big source tables. Everything after that reads small tables you own.</figcaption></figure>
+<div class="tw"><table class="t">
+<tr><th>Option</th><th>Cost to copy</th><th>Cost to query</th><th>Verdict</th></tr>
+<tr><td><b>Incremental job into your own Delta table</b>, read with a 2X-Small serverless warehouse</td><td>Minutes of tiny compute per run</td><td>Seconds of a tiny warehouse. Result cache helps.</td><td class="v pursue">Pursue. Cheapest and cleanest.</td></tr>
+<tr><td>Same, plus a synced table into <b>Lakebase</b></td><td>Same job, plus Lakebase sync and Lakebase storage</td><td>Postgres compute (can scale down), no warehouse needed</td><td class="v">Pursue only if an app needs very fast, frequent reads. Otherwise Drop.</td></tr>
+<tr><td>Copy everything every few minutes for "freshness"</td><td>High, many repeated scans</td><td>Same as above</td><td class="v drop">Drop. Source is not that fresh anyway.</td></tr>
+<tr><td>Query system tables directly from every dashboard</td><td>None</td><td>Big scans on every refresh</td><td class="v drop">Drop</td></tr>
+<tr><td>Use the account console usage page and billable usage log delivery for finance</td><td>No compute</td><td>No compute</td><td class="v pursue">Pursue for the basic monthly view</td></tr>
+</table></div>
+<div class="callout w"><p><b>One trap when copying billing data.</b> <code>system.billing.usage</code> can restate earlier rows. A row has a <code>record_type</code> of original, retraction or restatement, and a <code>record_id</code>. If you only append, corrections double count. Copy with a MERGE on <code>record_id</code>, or sum with the record types applied. Also, re-read the last day or two on each run to catch late rows.</p></div>
+
+</section>
+<section id="s23"><p class="eyebrow">System tables</p><h2>Why are system tables not Delta with UniForm, so reading is free?</h2>
+<p><b>Format is not what makes a query cost money. Compute is.</b> Even a perfectly open Delta or Iceberg table needs some engine to read it, and whichever engine you use burns CPU somewhere. UniForm makes one Delta table readable as Iceberg or Hudi too, so other engines can read it. That helps with <em>which</em> engine you use, not with whether you pay for one.</p>
+<p>Why Databricks delivers system tables as managed, read-only shared data (I am reasoning from how the product works, not quoting Databricks):</p>
+<ul>
+<li><b>The data lives in Databricks' storage, not yours.</b> That keeps storage cost, schema upgrades and access control in one place. If it were in your bucket, you would pay for storage, and they would need write access to every customer's storage.</li>
+<li><b>One central pipeline serves everyone.</b> Databricks can add columns and fix data for all customers without touching customer buckets.</li>
+<li><b>Governance.</b> Reads go through Unity Catalog and the sharing layer, so permission checks and audit are consistent.</li>
+<li><b>Read-only guarantee.</b> A customer cannot corrupt their own audit or billing history.</li>
+</ul>
+<p>What would actually make reading cost nothing is an engine you already pay for. Options that exist today: copy to your own Delta table and read it with something cheap, deliver usage logs to your own bucket and read them with DuckDB or Athena (Athena charges per scan, DuckDB on a laptop is free), or look at the account console.</p>
+
+</section>
+<section id="s21"><p class="eyebrow">System tables</p><h2>What Databricks does not show you (gaps worth knowing)</h2>
+<p>This list is my assessment of the real gaps people hit, not an official statement. Some may change, and a few have partial answers.</p>
+<div class="tw"><table class="t">
+<tr><th>What is missing</th><th>Why it hurts</th><th>Partial workaround</th></tr>
+<tr><td>Serverless machine details: node count, type, CPU and memory use, scale-up and scale-down decisions</td><td>You cannot prove or disprove over-scaling. You can only watch DBU per run.</td><td>Track DBU per run over time. Compare against an equivalent classic run once.</td></tr>
+<tr><td>The split inside a serverless DBU: Databricks charge versus the machine cost</td><td>You cannot judge if the premium is fair against classic</td><td>Run the same workload both ways and compare total invoices.</td></tr>
+<tr><td>Cost per query and per user</td><td>Billing stops at the warehouse or cluster. Shared compute cannot be split exactly.</td><td>Estimate using query history shares. Prefer one warehouse per BU.</td></tr>
+<tr><td>Actual contract prices in system tables</td><td><code>list_prices</code> shows list, not your negotiated rate, so computed dollars are approximate</td><td>Apply your discount factor in the rollup, and reconcile to the invoice monthly.</td></tr>
+<tr><td>Cloud-side costs (VMs, disks, network, storage)</td><td>Not in system tables at all</td><td>Export the cloud cost report and join on tags or cluster id.</td></tr>
+<tr><td>Fine time resolution in billing</td><td>Usage records are roughly hourly, so a scale-up inside the hour is blended</td><td>Join with node timeline or warehouse events for minute-level detail on classic.</td></tr>
+<tr><td>Why Photon fell back for a query</td><td>Hard to know why a query is slower than expected</td><td>Open the query profile or Spark UI and look at which operators are not Photon.</td></tr>
+<tr><td>Data freshness and retention limits</td><td>Not real-time, and old data disappears</td><td>Copy daily into your own table.</td></tr>
+</table></div>
+<p>What <em>is</em> available and often forgotten: whether a query hit the result cache and how much of its read came from the disk cache are both columns in <code>system.query.history</code>, so cache effectiveness can be measured.</p>
+
+</section>

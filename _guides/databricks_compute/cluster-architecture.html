@@ -1,0 +1,169 @@
+<section id="s1"><p class="eyebrow">Cluster architecture</p><h2>Two planes: where the machines live</h2>
+<p>Databricks splits itself into a <b>control plane</b> (the brain: web app, job scheduler, notebooks, cluster manager, Unity Catalog) and a <b>compute plane</b> (the muscle: the virtual machines that run Spark). Your data stays in your own cloud storage the whole time.</p>
+
+<figure><div class="fig">
+<svg viewBox="0 0 900 360" role="img" aria-label="Control plane in Databricks account; classic compute in your cloud account; serverless compute in Databricks cloud account; storage in your account.">
+<rect class="db" x="10" y="10" width="880" height="80" rx="8"/>
+<text class="h" x="24" y="32">CONTROL PLANE (Databricks account)</text>
+<rect class="bx" x="24" y="44" width="150" height="34" rx="5"/><text x="99" y="66" text-anchor="middle">Web app / notebooks</text>
+<rect class="bx" x="190" y="44" width="150" height="34" rx="5"/><text x="265" y="66" text-anchor="middle">Jobs scheduler</text>
+<rect class="bx" x="356" y="44" width="150" height="34" rx="5"/><text x="431" y="66" text-anchor="middle">Cluster manager</text>
+<rect class="bx" x="522" y="44" width="170" height="34" rx="5"/><text x="607" y="66" text-anchor="middle">Unity Catalog (rules)</text>
+<rect class="bx" x="708" y="44" width="170" height="34" rx="5"/><text x="793" y="66" text-anchor="middle">SQL gateway + queue</text>
+
+<rect class="cu" x="10" y="140" width="430" height="140" rx="8"/>
+<text class="h" x="24" y="162">CLASSIC COMPUTE PLANE (your account)</text>
+<rect class="bx" x="24" y="176" width="195" height="40" rx="5"/><text x="121" y="200" text-anchor="middle">All-purpose cluster (VMs)</text>
+<rect class="bx" x="231" y="176" width="195" height="40" rx="5"/><text x="328" y="200" text-anchor="middle">Job cluster (VMs)</text>
+<rect class="bx" x="24" y="226" width="195" height="40" rx="5"/><text x="121" y="250" text-anchor="middle">Classic SQL warehouse</text>
+<rect class="bx" x="231" y="226" width="195" height="40" rx="5"/><text x="328" y="250" text-anchor="middle">Pro SQL warehouse</text>
+
+<rect class="db" x="460" y="140" width="430" height="140" rx="8"/>
+<text class="h" x="474" y="162">SERVERLESS PLANE (Databricks' account)</text>
+<rect class="bx" x="474" y="176" width="195" height="40" rx="5"/><text x="571" y="200" text-anchor="middle">Serverless SQL warehouse</text>
+<rect class="bx" x="681" y="176" width="195" height="40" rx="5"/><text x="778" y="200" text-anchor="middle">Serverless notebook</text>
+<rect class="bx" x="474" y="226" width="195" height="40" rx="5"/><text x="571" y="250" text-anchor="middle">Serverless job</text>
+<rect class="bx" x="681" y="226" width="195" height="40" rx="5"/><text x="778" y="250" text-anchor="middle">Warm pool of ready VMs</text>
+
+<rect class="cu" x="230" y="312" width="440" height="40" rx="8"/>
+<text class="b" x="450" y="337" text-anchor="middle">YOUR storage: S3 / ADLS / GCS (Delta tables, Parquet files)</text>
+
+<path class="ln" d="M265 90V140" marker-end="url(#ar)"/><text class="m" x="272" y="122">"start me VMs"</text>
+<path class="ln" d="M793 90V140" marker-end="url(#ar)"/><text class="m" x="800" y="122">"run this query"</text>
+<path class="ln" d="M330 280V312" marker-end="url(#ar)"/><text class="m" x="190" y="302">read / write files</text>
+<path class="ln" d="M570 280V312" marker-end="url(#ar)"/><text class="m" x="578" y="302">read / write files</text>
+</svg></div>
+<figcaption>Orange is your account, blue is Databricks' account. In classic compute the VMs are created inside your cloud bill and your network. In serverless they come from a Databricks-managed pool that is already warm, which is why they start in seconds.</figcaption></figure>
+
+<div class="callout"><p><b>Rule of thumb.</b> Classic means you pick machine types, versions and network details, and you wait for VMs to boot. Serverless means you pick almost nothing, Databricks tunes it, and it starts fast. You trade control for convenience.</p></div>
+
+</section>
+<section id="s2"><p class="eyebrow">Cluster architecture</p><h2>Anatomy of one Spark cluster</h2>
+<p>Every cluster, whatever its name, is the same shape: one <b>driver</b> that plans and coordinates, and many <b>workers</b> that do the real work. A worker runs an <b>executor</b>, and an executor has one <b>slot</b> for each CPU core. A slot runs one <b>task</b> (one small piece of your query) at a time.</p>
+<figure><div class="fig">
+<svg viewBox="0 0 900 310" role="img" aria-label="Driver sends tasks to executors on workers, each with task slots and local disk. Workers exchange shuffle data with each other.">
+<rect class="db" x="10" y="20" width="250" height="260" rx="8"/>
+<text class="h" x="24" y="44">DRIVER node</text>
+<text x="24" y="70">Spark driver: reads your code,</text><text x="24" y="88">builds a plan, cuts it into tasks</text>
+<text x="24" y="116">Notebook session (REPL)</text><text x="24" y="140">Spark UI and logs</text>
+<text x="24" y="164">Delta log cache (table metadata)</text>
+<text class="m" x="24" y="200">Holds results of collect().</text><text class="m" x="24" y="216">Too small = out-of-memory.</text>
+<text class="m" x="24" y="240">Never runs the heavy data work.</text>
+
+<g>
+<rect class="cu" x="330" y="20" width="170" height="260" rx="8"/><text class="h" x="344" y="44">WORKER 1</text>
+<rect class="bx" x="344" y="56" width="142" height="22" rx="3"/><text x="415" y="72" text-anchor="middle">Executor (JVM)</text>
+<rect class="gr" x="344" y="88" width="64" height="24"/><text x="376" y="104" text-anchor="middle">slot</text><rect class="gr" x="422" y="88" width="64" height="24"/><text x="454" y="104" text-anchor="middle">slot</text>
+<rect class="gr" x="344" y="118" width="64" height="24"/><text x="376" y="134" text-anchor="middle">slot</text><rect class="gr" x="422" y="118" width="64" height="24"/><text x="454" y="134" text-anchor="middle">slot</text>
+<text class="m" x="344" y="164">4 cores = 4 slots</text>
+<rect class="ca" x="344" y="180" width="142" height="40" rx="3"/><text x="415" y="197" text-anchor="middle">Local SSD</text><text class="m" x="415" y="212" text-anchor="middle">disk cache + shuffle</text>
+<text class="m" x="344" y="248">RAM: heap + off-heap</text>
+</g>
+<g>
+<rect class="cu" x="520" y="20" width="170" height="260" rx="8"/><text class="h" x="534" y="44">WORKER 2</text>
+<rect class="bx" x="534" y="56" width="142" height="22" rx="3"/><text x="605" y="72" text-anchor="middle">Executor (JVM)</text>
+<rect class="gr" x="534" y="88" width="64" height="24"/><text x="566" y="104" text-anchor="middle">slot</text><rect class="gr" x="612" y="88" width="64" height="24"/><text x="644" y="104" text-anchor="middle">slot</text>
+<rect class="gr" x="534" y="118" width="64" height="24"/><text x="566" y="134" text-anchor="middle">slot</text><rect class="gr" x="612" y="118" width="64" height="24"/><text x="644" y="134" text-anchor="middle">slot</text>
+<rect class="ca" x="534" y="180" width="142" height="40" rx="3"/><text x="605" y="197" text-anchor="middle">Local SSD</text><text class="m" x="605" y="212" text-anchor="middle">disk cache + shuffle</text>
+</g>
+<g>
+<rect class="cu ds" x="710" y="20" width="170" height="260" rx="8"/><text class="h" x="724" y="44">WORKER 3</text>
+<text class="m" x="724" y="72">Added by autoscaling</text><text class="m" x="724" y="90">when tasks pile up,</text><text class="m" x="724" y="108">removed when idle.</text>
+</g>
+<path class="ln" d="M260 120H330" marker-end="url(#ar)"/><text class="m" x="264" y="112">tasks</text>
+<path class="ln" d="M500 190H520" marker-end="url(#ar)"/><path class="ln" d="M520 200H500" marker-end="url(#ar)"/>
+<text class="m" x="430" y="300">workers swap shuffle data with each other (joins, group-bys)</text>
+</svg></div>
+<figcaption>Databricks runs one executor per worker VM. A cluster of 4 workers with 8 cores each runs 32 tasks at the same time. More cores means more parallelism. More RAM per core means fewer spills. A fast local SSD means faster shuffles and cache hits.</figcaption></figure>
+
+</section>
+<section id="s3"><p class="eyebrow">Cluster architecture</p><h2>The whole family at a glance</h2>
+<div class="tw"><table class="t">
+<tr><th>Compute type</th><th>Machines owned by</th><th>What you run</th><th>Life span</th><th>Engine</th><th>Starts in (rough)</th></tr>
+<tr><td><b>All-purpose (interactive) cluster</b></td><td><span class="tag c">You</span></td><td>Notebooks, Python, Scala, R, SQL, ML</td><td>Until auto-terminate</td><td>Spark, Photon optional</td><td>3 to 8 min (seconds with a pool)</td></tr>
+<tr><td><b>Job cluster</b></td><td><span class="tag c">You</span></td><td>Scheduled jobs and pipelines</td><td>One run, then deleted</td><td>Spark, Photon optional</td><td>3 to 8 min (seconds with a pool)</td></tr>
+<tr><td><b>Pool</b></td><td><span class="tag c">You</span></td><td>Nothing itself. Holds idle VMs for clusters.</td><td>Always on, holds spare VMs</td><td>none</td><td>Makes clusters start fast</td></tr>
+<tr><td><b>Classic SQL warehouse</b></td><td><span class="tag c">You</span></td><td>SQL only</td><td>Until auto-stop</td><td>Photon always on</td><td>Several minutes</td></tr>
+<tr><td><b>Pro SQL warehouse</b></td><td><span class="tag c">You</span></td><td>SQL only</td><td>Until auto-stop</td><td>Photon + Predictive IO</td><td>A few minutes</td></tr>
+<tr><td><b>Serverless SQL warehouse</b></td><td><span class="tag d">Databricks</span></td><td>SQL only</td><td>Until auto-stop (short)</td><td>Photon + Predictive IO + smart scaling</td><td>Seconds</td></tr>
+<tr><td><b>Serverless notebook / job compute</b></td><td><span class="tag d">Databricks</span></td><td>Python and SQL notebooks, jobs (check docs for other languages)</td><td>Per session or run</td><td>Managed Spark, Photon</td><td>Seconds in performance mode</td></tr>
+</table></div>
+<p>Also in the family, but built from the same parts: <b>single-node clusters</b> (driver only, for small work), <b>GPU and ML runtime clusters</b> (for deep learning), and <b>pipeline compute</b> for Lakeflow / Delta Live Tables (a job-style cluster with smarter autoscaling, or serverless).</p>
+
+</section>
+<section id="s4"><p class="eyebrow">Cluster architecture</p><h2>Classic clusters in detail</h2>
+<h3>All-purpose (interactive) cluster</h3>
+<p>The one you create from the Compute page and attach notebooks to. Several people can share it. It stays on until it hits the auto-terminate timer, so it is the easiest compute to forget and overpay for. It costs more per hour than a job cluster for the same machines.</p>
+<ul>
+<li><b>Access mode</b> decides sharing and security: standard (shared by users, isolated) or dedicated (one user or group, full feature set).</li>
+<li><b>Runtime</b> is a version of Databricks Runtime (DBR). It bundles a Spark version, Delta, Python and libraries. You choose it and you must upgrade it.</li>
+<li><b>Autoscaling</b> adds workers between your minimum and maximum. Scaling up needs VM boot time, so it reacts in minutes.</li>
+<li><b>Spot instances</b> use cheap interruptible VMs for workers, with fallback to on-demand. The driver should stay on-demand.</li>
+<li><b>Init scripts, custom libraries, Spark configs</b> are all yours to change. This freedom is what serverless takes away.</li>
+</ul>
+<h3>Job cluster</h3>
+<p>The cluster is created when a job starts and deleted when it ends. Nobody shares it, nothing is left running, and the hourly rate is lower than all-purpose. This is the default choice for production pipelines on classic compute.</p>
+<h3>Pools</h3>
+<p>A pool keeps a set of already-booted idle VMs. A cluster that asks for machines from a pool skips the cloud's VM boot step, so it starts in seconds instead of minutes. You pay the cloud provider for idle pool VMs, but not Databricks DBUs for them.</p>
+
+<figure><div class="fig">
+<svg viewBox="0 0 900 200" role="img" aria-label="Start-up path without a pool versus with a pool.">
+<text class="h" x="10" y="22">Without a pool</text>
+<rect class="bx" x="10" y="34" width="150" height="40" rx="5"/><text x="85" y="58" text-anchor="middle">You press Start</text>
+<rect class="cu" x="200" y="34" width="190" height="40" rx="5"/><text x="295" y="52" text-anchor="middle">Cloud boots VMs</text><text class="m" x="295" y="67" text-anchor="middle">slowest step</text>
+<rect class="bx" x="430" y="34" width="190" height="40" rx="5"/><text x="525" y="58" text-anchor="middle">Install Spark + libraries</text>
+<rect class="bx" x="660" y="34" width="150" height="40" rx="5"/><text x="735" y="58" text-anchor="middle">Ready</text>
+<path class="ln" d="M160 54H200" marker-end="url(#ar)"/><path class="ln" d="M390 54H430" marker-end="url(#ar)"/><path class="ln" d="M620 54H660" marker-end="url(#ar)"/>
+<text class="h" x="10" y="122">With a pool</text>
+<rect class="bx" x="10" y="134" width="150" height="40" rx="5"/><text x="85" y="158" text-anchor="middle">You press Start</text>
+<rect class="ca" x="200" y="134" width="190" height="40" rx="5"/><text x="295" y="152" text-anchor="middle">Take idle VMs from pool</text><text class="m" x="295" y="167" text-anchor="middle">already booted</text>
+<rect class="bx" x="430" y="134" width="190" height="40" rx="5"/><text x="525" y="158" text-anchor="middle">Install Spark + libraries</text>
+<rect class="bx" x="660" y="134" width="150" height="40" rx="5"/><text x="735" y="158" text-anchor="middle">Ready, much sooner</text>
+<path class="ln" d="M160 154H200" marker-end="url(#ar)"/><path class="ln" d="M390 154H430" marker-end="url(#ar)"/><path class="ln" d="M620 154H660" marker-end="url(#ar)"/>
+</svg></div>
+<figcaption>A pool removes the VM boot step. Serverless goes further: it keeps the VMs warm and the software ready, so the whole path is a few seconds.</figcaption></figure>
+
+</section>
+<section id="s8"><p class="eyebrow">Cluster architecture</p><h2>Inside one worker: memory and disk</h2>
+<p>This is the picture that explains caches, spills and why machine type matters. Read it from the top (fastest, smallest) to the bottom (slowest, biggest).</p>
+<figure><div class="fig">
+<svg viewBox="0 0 900 400" role="img" aria-label="Layers inside a worker from RAM down to local SSD to cloud storage, with which feature uses each layer.">
+<rect class="cu" x="10" y="10" width="420" height="300" rx="8"/><text class="h" x="24" y="32">ONE WORKER VM</text>
+<rect class="bx" x="24" y="44" width="392" height="52" rx="4"/><text class="b" x="36" y="66">RAM: JVM heap</text><text class="m" x="36" y="84">Spark execution (sorts, joins) and storage memory</text>
+<rect class="ca" x="24" y="102" width="392" height="40" rx="4"/><text class="b" x="36" y="120">RAM: off-heap</text><text class="m" x="36" y="136">Photon's working memory, native buffers</text>
+<rect class="gr" x="24" y="148" width="392" height="32" rx="4"/><text class="b" x="36" y="169">RAM: OS and Databricks agents</text>
+<rect class="ca" x="24" y="186" width="392" height="34" rx="4"/><text class="b" x="36" y="208">RAM: OS page cache (all spare RAM)</text>
+<rect class="ca" x="24" y="230" width="190" height="66" rx="4"/><text class="b" x="36" y="252">Local SSD / NVMe</text><text class="m" x="36" y="270">Disk cache</text><text class="m" x="36" y="286">(copies of data files)</text>
+<rect class="gr" x="226" y="230" width="190" height="66" rx="4"/><text class="b" x="238" y="252">Local SSD / NVMe</text><text class="m" x="238" y="270">Shuffle files</text><text class="m" x="238" y="286">and spill to disk</text>
+<rect class="bx" x="10" y="340" width="420" height="44" rx="8"/><text class="b" x="220" y="366" text-anchor="middle">Cloud storage (S3/ADLS/GCS): big, cheap, slowest</text>
+<path class="ln" d="M220 310V340" marker-end="url(#ar)"/><text class="m" x="228" y="330">cache miss goes here</text>
+
+<text class="h" x="470" y="32">Who uses each layer</text>
+<text x="470" y="64"><tspan class="b">df.cache() / persist():</tspan> JVM heap (spills to disk if full)</text>
+<text x="470" y="84"><tspan class="b">Photon:</tspan> off-heap memory</text>
+<text x="470" y="104"><tspan class="b">Spark execution:</tspan> heap, spills to local SSD</text>
+<text x="470" y="124"><tspan class="b">Disk cache:</tspan> local SSD, faster than cloud reads</text>
+<text x="470" y="144"><tspan class="b">Shuffles:</tspan> written to local SSD, read by peers</text>
+<text x="470" y="164"><tspan class="b">OS page cache:</tspan> free, automatic, shared by all</text>
+<text class="b" x="470" y="204">What goes wrong</text>
+<text class="m" x="470" y="224">Not enough RAM per core: joins spill to SSD, slow.</text>
+<text class="m" x="470" y="242">Slow disk: shuffles and cache reads drag.</text>
+<text class="m" x="470" y="260">Cache too big for SSD: old entries are evicted.</text>
+<text class="m" x="470" y="278">Skew: one slot does all the work, others sit idle.</text>
+</svg></div>
+<figcaption>Every optimisation is a trade among these layers. More RAM per core avoids spills. A faster local SSD speeds up shuffles and the disk cache. Photon changes which RAM region does the work.</figcaption></figure>
+
+</section>
+<section id="s10"><p class="eyebrow">Cluster architecture</p><h2>Machine types: compute, memory, storage, general, GPU</h2>
+<p>On classic compute you pick the VM family. Serverless picks for you. The names differ by cloud, but the five families are the same idea everywhere.</p>
+<div class="tw"><table class="t">
+<tr><th>Family</th><th>Shape</th><th>Examples (AWS / Azure)</th><th>Pick it when</th><th>Verdict</th></tr>
+<tr><td><b>General purpose</b></td><td>Balanced CPU and RAM</td><td>m5 / D-series</td><td>You do not know yet, mixed workloads, dev and test</td><td class="v pursue">Pursue as the starting point</td></tr>
+<tr><td><b>Compute optimized</b></td><td>More CPU per GB of RAM</td><td>c5 / F-series</td><td>Streaming, light transforms, CPU-bound functions</td><td class="v pursue">Pursue for CPU-bound jobs only</td></tr>
+<tr><td><b>Memory optimized</b></td><td>More RAM per core</td><td>r5 / E-series</td><td>Big joins, wide aggregations, heavy Spark cache, skewed data, spill problems</td><td class="v pursue">Pursue when you see spill in the Spark UI</td></tr>
+<tr><td><b>Storage optimized</b></td><td>Large fast local NVMe disk</td><td>i3, i4i, m5d / L-series</td><td>Repeated reads of the same tables, big shuffles, disk cache benefit, interactive analysis</td><td class="v pursue">Pursue for read-heavy and interactive clusters</td></tr>
+<tr><td><b>GPU accelerated</b></td><td>GPU plus CPU</td><td>g5, p4 / NC, ND-series</td><td>Deep learning, model training, embeddings</td><td class="v pursue">Pursue for ML only. Drop for SQL and ETL.</td></tr>
+</table></div>
+<p>A useful sentence to remember: <b>compute optimized is about CPU, memory optimized is about RAM, storage optimized is about local disk.</b> Photon plus disk cache loves the storage optimized family because scans hit the local SSD instead of cloud storage.</p>
+
+</section>

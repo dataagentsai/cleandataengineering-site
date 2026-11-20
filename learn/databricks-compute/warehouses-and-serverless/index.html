@@ -1,0 +1,401 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Databricks SQL Warehouses and Serverless: Classic, Pro, Serverless Compared</title>
+<meta name="description" content="Classic, pro and serverless SQL warehouses compared, serverless notebooks and jobs, performance versus standard mode, who owns serverless (account, workspace, prod and dev, business units), and which to pick."><link rel="canonical" href="https://cleandataengineering.ai/learn/databricks-compute/warehouses-and-serverless/">
+<meta property="og:title" content="Databricks SQL Warehouses and Serverless: Classic, Pro, Serverless Compared"><meta property="og:description" content="Classic, pro and serverless SQL warehouses compared, serverless notebooks and jobs, performance versus standard mode, who owns serverless (account, workspace, prod and dev, business units), and which to pick."><meta property="og:url" content="https://cleandataengineering.ai/learn/databricks-compute/warehouses-and-serverless/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .tw { overflow-x:auto; margin:14px 0; } .tw table.t { min-width:620px; }
+  .fig { margin:16px 0; overflow-x:auto; } .fig svg { display:block; width:100%; height:auto; max-width:1000px; } @media (max-width:760px) { .fig svg { min-width:700px; } } .fig p { font-size:13px; color:var(--faint); margin:4px 0 0; }
+  .fig svg text { font-family:inherit; font-size:14.5px; fill:#1F1F1F; } .fig svg .b { font-weight:700; } .fig svg .h { font-weight:700; font-size:15.5px; } .fig svg .m { fill:#4a5565; font-size:13px; }
+  .fig svg .bx { fill:#fff; stroke:#1F1F1F; stroke-width:1.5; } .fig svg .cu { fill:#fff4d6; stroke:#1F1F1F; stroke-width:1.5; } .fig svg .db { fill:#eef3fb; stroke:#1F1F1F; stroke-width:1.5; }
+  .fig svg .ca { fill:#eaf6ef; stroke:#1F1F1F; stroke-width:1.5; } .fig svg .gr { fill:#f3f3f3; stroke:#777; stroke-width:1.3; } .fig svg .ds { stroke-dasharray:6 4; }
+  .fig svg .ln { stroke:#1F1F1F; stroke-width:1.5; fill:none; } .fig svg .lg { stroke:#2f7d4f; stroke-width:1.8; fill:none; }
+  .callout { border:var(--line); border-radius:var(--wob); padding:10px 16px; background:#eef3fb; margin:14px 0; } .callout.w { background:#fff4d6; } .callout.g { background:#eaf6ef; } .callout p, .callout code { color:#1F1F1F; } .callout p { margin:6px 0; }
+  td.v { font-weight:600; white-space:nowrap; } .pursue { color:#2f7d4f; } .drop { color:#b0372c; }
+  .tag { display:inline-block; font-size:12px; font-weight:600; padding:0 8px; border:1.5px solid #1F1F1F; border-radius:99px; } .tag.c { background:#fff4d6; } .tag.d { background:#eef3fb; }
+  .verify { font-size:13.5px; color:var(--faint); }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "SQL warehouses, serverless and who owns it: classic, pro, serverless, prod and dev, BU1 and BU2", "description": "Classic, pro and serverless SQL warehouses compared, serverless notebooks and jobs, performance versus standard mode, who owns serverless (account, workspace, prod and dev, business units), and which to pick.", "url": "https://cleandataengineering.ai/learn/databricks-compute/warehouses-and-serverless/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-20", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Will client A and client B get different serverless?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. They are different accounts and Databricks isolates each customer's serverless workloads from every other customer's. Nothing is shared at the VM level."}}, {"@type": "Question", "name": "Can one client have separate serverless for prod and dev, or BU1 and BU2?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Use separate workspaces for hard separation, and separate warehouses plus serverless budget policies per business unit for soft separation. Each workspace uses serverless independently."}}, {"@type": "Question", "name": "Bigger warehouse or more clusters?", "acceptedAnswer": {"@type": "Answer", "text": "A bigger size makes one query faster. More clusters let more queries run at once without queueing. They fix different problems."}}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Concepts</h4><ul><li><details><summary><a href="/leaders/">For leaders</a></summary><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/leaders/spec-driven/">Spec-driven development: agents</a></li><li><a href="/leaders/spec-driven/data-platform/">Spec-driven development: data platforms</a></li><li><a href="/papers/">Technical papers</a></li></ul></details></li><li><details><summary><a href="/learn/fundamentals/">Fundamentals</a></summary><ul><li><a href="/learn/fundamentals/">All fundamentals</a></li><li><a href="/learn/fundamentals/performance/">Performance</a></li><li><a href="/learn/fundamentals/cost/">Cost</a></li><li><a href="/learn/fundamentals/processing/">Processing</a></li><li><a href="/learn/fundamentals/security/">Security</a></li><li><a href="/learn/fundamentals/storage/">Storage</a></li><li><a href="/learn/fundamentals/database-families/">Database families</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/">Data systems</a></summary><ul><li><a href="/learn/data-systems/">The whole system, end to end</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li><li class="sub">Upstreams</li><li><a href="/learn/data-systems/upstreams/">Know your sources</a></li><li><a href="/learn/data-systems/upstreams/big-picture/">Upstreams, the big picture</a></li><li><a href="/learn/data-systems/upstreams/apis/">API sources</a></li><li><a href="/learn/data-systems/upstreams/files/">File sources</a></li><li><a href="/learn/data-systems/upstreams/joins/">Learning the joins</a></li><li><a href="/learn/data-systems/upstreams/answers/">Where the answers go</a></li><li><a href="/learn/data-systems/upstreams/questionnaire/">Source system questionnaire</a></li><li class="sub">Downstreams</li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/platform/">Data and AI platform</a></summary><ul><li class="sub">Conceptual architecture</li><li><a href="/learn/data-systems/platform/">The platform, whole</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#hops">Data engineering</a></summary><ul><li><a href="/learn/data-platform-suite/">Our platform, picture to code</a></li><li class="sub">The hops</li><li><a href="/learn/data-platform-architecture/ingestion/">Hop 1: sources to bronze</a></li><li><a href="/learn/data-platform-architecture/bronze-to-silver/">Hop 2: bronze to silver</a></li><li><a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a></li><li><a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a></li><li class="sub">Tables and formats</li><li><a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a></li><li><a href="/learn/table-maintenance/">Who maintains your tables</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse: who owns the catalog?</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li class="sub">Databricks compute and cost</li><li><a href="/learn/databricks-compute/">All compute and cost pages</a></li><li><a href="/learn/databricks-compute/cluster-architecture/">Cluster architecture, memory, machine types</a></li><li><a href="/learn/databricks-compute/warehouses-and-serverless/">SQL warehouses and serverless</a></li><li><a href="/learn/databricks-compute/photon-and-caches/">Photon and every cache</a></li><li><a href="/learn/databricks-compute/how-billing-works/">How billing works: DBUs, SKUs, autoscaling</a></li><li><a href="/learn/databricks-compute/dividing-the-bill/">Dividing the bill (chargeback)</a></li><li><a href="/learn/databricks-compute/system-tables/">System tables and what reading them costs</a></li><li><a href="/learn/databricks-compute/delta-sharing-and-regions/">Delta Sharing and cross-region cost</a></li><li><a href="/learn/databricks-compute/backup-and-recovery-architecture/">Backup and recovery architecture</a></li><li class="sub">Databricks interview prep</li><li><a href="/learn/databricks-interview/">All interview topics</a></li><li><a href="/learn/databricks-interview/delta-maintenance/">OPTIMIZE, VACUUM, compaction</a></li><li><a href="/learn/databricks-interview/table-maintenance-pictures/">Table maintenance in pictures (real runs)</a></li><li><a href="/learn/databricks-interview/clustering-and-compaction/">Compaction, partitioning, Z-order, liquid</a></li><li><a href="/learn/databricks-interview/maintenance-strategy/">Maintenance strategy: auto or scheduled</a></li><li><a href="/learn/databricks-interview/slow-writes/">Why writes are slow</a></li><li><a href="/learn/databricks-interview/backup-and-recovery-azure/">Backup and recovery on Azure</a></li><li><a href="/learn/databricks-interview/tagging-best-practices/">Tagging best practices</a></li><li><a href="/learn/databricks-interview/row-level-security/">Row-level security and masking</a></li><li><a href="/learn/databricks-interview/compute-choice/">Which compute for which job</a></li><li><a href="/learn/databricks-interview/joins/">Join types</a></li><li><a href="/learn/databricks-interview/skew-and-shuffle/">Skew, salting and shuffle</a></li><li><a href="/learn/databricks-interview/aqe-photon-po/">AQE, Photon, Predictive Optimization</a></li><li><a href="/learn/databricks-interview/cost-and-performance/">Biggest cost and performance levers</a></li><li><a href="/learn/databricks-interview/declarative-and-semantic/">What declarative means + semantic example</a></li><li><a href="/learn/databricks-interview/asset-bundles/">Asset Bundles</a></li><li><a href="/learn/databricks-interview/lakeflow-connect/">Lakeflow Connect</a></li><li><a href="/learn/databricks-interview/uniform/">UniForm</a></li><li><a href="/learn/databricks-interview/vector-search/">Vector Search</a></li><li><a href="/learn/databricks-interview/dbt-and-odcs/">dbt and ODCS</a></li><li><a href="/learn/databricks-interview/egress-and-ingress/">Egress and ingress cost</a></li><li><a href="/learn/databricks-interview/hard-problems-and-questions/">Hard problems and question bank</a></li><li class="sub">History, SCD and facts</li><li><a href="/learn/gold-data-modelling/">Gold data modelling</a></li><li><a href="/learn/silver-to-gold/">Silver to gold: the harness</a></li><li><a href="/learn/silver-to-gold/worked-example/">› Worked example (start here)</a></li><li><a href="/learn/silver-to-gold/kinds-of-fact/">› Six kinds of fact</a></li><li><a href="/learn/silver-to-gold/fact-examples/">› Fact examples in SQL</a></li><li><a href="/learn/silver-to-gold/dimension-examples/">› Dimension examples in SQL</a></li><li><a href="/learn/silver-to-gold/rulebook-harness/">› Rulebook: the harness</a></li><li><a href="/learn/spark-declarative-pipelines/">Declarative pipelines: open source vs Lakeflow</a></li><li><a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD2: AUTO CDC or own PySpark?</a></li><li><a href="/learn/gold-harness-spec/">Gold harness spec: facts and SCD2</a></li><li><a href="/learn/time-travel-vs-scd2/">Time travel as SCD Type 2?</a></li><li class="sub">Streaming and real time</li><li><a href="/learn/streaming/">Streaming on AWS and Databricks</a></li><li><a href="/learn/streaming/options/">Streaming: all options</a></li><li><a href="/learn/streaming/sim/">Streaming simulator</a></li><li><a href="/learn/streaming/real-time-mode/">Databricks real time: RTM and Lakehouse//RT</a></li><li class="sub">Quality and testing</li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/data-platform-sim/data-quality/">Data quality, metadata-driven</a></li><li class="sub">Hands-on simulators</li><li><a href="/learn/data-platform-sim/">One batch through Spark and Delta</a></li><li><a href="/learn/data-platform-sim/spark/">Spark internals</a></li><li><a href="/learn/data-platform-sim/delta/">Delta Lake internals</a></li><li><a href="/learn/data-platform-sim/performance/">Spark performance: 12 problems</a></li><li><a href="/learn/data-platform-sim/problems/">Problems solved: SCD2, late data, duplicates</a></li><li class="sub">On AWS</li><li><a href="/learn/data-platform-architecture/aws-databricks/">AWS + Databricks, ETL end to end</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse on AWS: A vs B</a></li><li><a href="/learn/aws-data-services/">AWS data services catalog</a></li><li class="sub">Open specs</li><li><a href="/learn/datatwin/">DataTwin</a></li><li><a href="/projects/data-eng-specs/">Clean Data Engineering specs</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/semantic-layer/">BI and analytics</a></summary><ul><li><a href="/concepts/semantic-layer/">Hop 4: the semantic layer</a></li><li><a href="/writing/genie-metric-views/">Genie and metric views</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/">Power BI vs Databricks AI/BI</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/power-bi/">Power BI and Fabric, in depth</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/ai-bi/">Databricks AI/BI, in depth</a></li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/#ml-engineering">ML</a></summary><ul><li><a href="/concepts/#ml-engineering">Key ML ideas (pages coming)</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/ai-universe/">AI</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness-intro/">Agent Harness, the big picture</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/agent-harness-stack-map/">Agent Harness: architecture map</a></li><li><a href="/learn/drug-safety-agent-databricks/">Drug-safety agent on Databricks: the tour</a></li><li><a href="/learn/agent-frameworks/">Agent frameworks: when to use which</a></li><li><a href="/learn/which-model/">Which AI model for which job</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li><li><a href="/learn/ai-governance/">AI governance: running AI you can trust</a></li><li><a href="/learn/ai-gateways/">AI gateways: which one to use</a></li><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">Open spec: AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">Open spec: AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">Open spec: AgentTwin</a></li><li><a href="/lab/">The AgentTwin Lab</a></li><li><a href="https://github.com/dataagentsai/reference-agent">Code: Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">Code: AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Code: Eval Harness Framework</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#concerns">Across all of them</a></summary><ul><li><a href="/learn/data-systems/platform/#concerns">All 24 concerns</a></li><li><a href="/learn/data-platform-mind-map/">Mind map: every concern, every cloud</a></li><li><a href="/learn/data-systems/platform/layout/">Layout: catalogs and schemas</a></li><li><a href="/learn/data-systems/platform/environments/">Environments and CI/CD</a></li><li><a href="/learn/data-systems/platform/cost/">Cost and FinOps</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li><li><a href="/learn/data-platform-architecture/test-strategy/">Test strategy in practice</a></li></ul></details></li><li><a href="/concepts/#a-z">Key concepts, A to Z</a></li></ul><h4>On your cloud</h4><ul><li><details><summary><a href="/platforms/databricks/">Databricks</a></summary><ul><li><a href="/platforms/databricks/#systems">Data systems</a></li><li><a href="/platforms/databricks/#de">Data engineering</a></li><li><a href="/platforms/databricks/#bi">BI and analytics</a></li><li><a href="/platforms/databricks/#ml">ML</a></li><li><a href="/platforms/databricks/#ai">AI</a></li><li><a href="/platforms/databricks/#across">Across all of them</a></li><li><a href="/platforms/databricks/#paths">Learning paths</a></li><li><a href="/platforms/databricks/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/aws/">AWS</a></summary><ul><li><a href="/platforms/aws/#systems">Data systems</a></li><li><a href="/platforms/aws/#de">Data engineering</a></li><li><a href="/platforms/aws/#bi">BI and analytics</a></li><li><a href="/platforms/aws/#ml">ML</a></li><li><a href="/platforms/aws/#ai">AI</a></li><li><a href="/platforms/aws/#across">Across all of them</a></li><li><a href="/platforms/aws/#paths">Learning paths</a></li><li><a href="/platforms/aws/#certs">Certifications</a></li><li><a href="/learn/aws-data-services/">AWS data services: all 66</a></li></ul></details></li><li><details><summary><a href="/platforms/azure/">Azure and Fabric</a></summary><ul><li><a href="/platforms/azure/#systems">Data systems</a></li><li><a href="/platforms/azure/#de">Data engineering</a></li><li><a href="/platforms/azure/#bi">BI and analytics</a></li><li><a href="/platforms/azure/#ml">ML</a></li><li><a href="/platforms/azure/#ai">AI</a></li><li><a href="/platforms/azure/#across">Across all of them</a></li><li><a href="/platforms/azure/#paths">Learning paths</a></li><li><a href="/platforms/azure/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/gcp/">Google Cloud</a></summary><ul><li><a href="/platforms/gcp/#systems">Data systems</a></li><li><a href="/platforms/gcp/#de">Data engineering</a></li><li><a href="/platforms/gcp/#bi">BI and analytics</a></li><li><a href="/platforms/gcp/#ml">ML</a></li><li><a href="/platforms/gcp/#ai">AI</a></li><li><a href="/platforms/gcp/#across">Across all of them</a></li><li><a href="/platforms/gcp/#paths">Learning paths</a></li><li><a href="/platforms/gcp/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/open/">Open source</a></summary><ul><li><a href="/platforms/open/#systems">Data systems</a></li><li><a href="/platforms/open/#de">Data engineering</a></li><li><a href="/platforms/open/#bi">BI and analytics</a></li><li><a href="/platforms/open/#ml">ML</a></li><li><a href="/platforms/open/#ai">AI</a></li><li><a href="/platforms/open/#across">Across all of them</a></li><li><a href="/platforms/open/#paths">Learning paths</a></li><li><a href="/platforms/open/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/anthropic/">Claude (Anthropic)</a></summary><ul><li><a href="/platforms/anthropic/#ai">AI</a></li><li><a href="/platforms/anthropic/#certs">Certifications</a></li></ul></details></li><li><a href="/certifications/">All certifications</a></li></ul><h4>Your role</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/data-engineering/">Data Engineering</a></summary><ul><li><a href="/data-engineering/">Start here</a></li><li><a href="/paths/data-engineering/">Learning path</a></li><li><a href="/data-engineering/#tools">Practice and simulators</a></li><li><a href="/projects/?subject=data">Projects to join</a></li><li><a href="/concepts/#data-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/">Learning path</a></li><li><a href="/learn/agent-harness-sim/">Simulator: Agent Harness</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li><li><a href="/projects/?subject=ai">Projects to join</a></li><li><a href="/concepts/#ai-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/">Learning path</a></li><li><a href="/learn/llm-api-sim/">Simulator: Claude API</a></li><li><a href="/projects/?subject=llm">Projects to join</a></li><li><a href="/concepts/#llm-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/">Learning path</a></li><li><a href="/concepts/#ml-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/">Learning path</a></li><li><a href="/concepts/#software-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/forward-deployed/">Start here: the roadmap</a></li><li><a href="/paths/forward-deployed/">Learning path</a></li><li><a href="/concepts/#forward-deployed">Key concepts</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li><li><a href="/projects/">All projects to join</a></li></ul><h4>How we work</h4><ul><li><details><summary><a href="/how-we-work/#thinking">Thinking principles</a></summary><ul><li><a href="/how-we-work/#thinking">All thinking principles</a></li><li><a href="/how-we-work/critical-thinking/">Critical thinking in data projects</a></li></ul></details></li><li><a href="/how-we-work/#ba">Business analysis</a></li><li><details><summary><a href="/how-we-work/#pm">Project management</a></summary><ul><li><a href="/how-we-work/#pm">All project management</a></li><li><a href="/how-we-work/estimation/">Estimation mistakes in data projects</a></li><li><a href="/how-we-work/project-management-mistakes/">Top project management mistakes</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li></ul></details></li><li><details><summary><a href="/learn/technical-anchor/">The technical anchor</a></summary><ul><li><a href="/learn/technical-anchor/">The role</a></li><li><a href="/learn/technical-anchor/discovery/">Discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li></ul></details></li></ul><h4>Causes and deep tech</h4><ul><li><details><summary><a href="/ai-for-cause/">AI for a cause</a></summary><ul><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul></details></li><li><details><summary><a href="/deep-tech/">Deep tech</a></summary><ul><li><a href="/problems/">Hard problems</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul></details></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li><li><a href="/about/#join">Write or teach</a></li><li><a href="/writing/">Blog</a></li><li><a href="/research/">All open specifications</a></li><li><a href="/assets/">All open-source code</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1F1F1F"/></marker><marker id="arg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2f7d4f"/></marker></defs></svg><p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/databricks-compute/">Databricks compute and cost</a> › Warehouses and serverless</p>
+<p class="eyebrow" style="margin-top:22px">Databricks compute and cost · data engineering</p>
+<h1>SQL warehouses, serverless and who owns it: classic, pro, serverless, prod and dev, BU1 and BU2</h1><p class="lede">Classic, pro and serverless SQL warehouses compared, serverless notebooks and jobs, performance versus standard mode, who owns serverless (account, workspace, prod and dev, business units), and which to pick.</p><div class="sib"><a href="/learn/databricks-compute/cluster-architecture/">Cluster anatomy</a><span>Warehouses and serverless</span><a href="/learn/databricks-compute/photon-and-caches/">Photon and caches</a><a href="/learn/databricks-compute/how-billing-works/">How billing works</a><a href="/learn/databricks-compute/dividing-the-bill/">Dividing the bill</a><a href="/learn/databricks-compute/system-tables/">System tables</a><a href="/learn/databricks-compute/delta-sharing-and-regions/">Sharing and regions</a><a href="/learn/databricks-compute/backup-and-recovery-architecture/">Backup architecture</a></div>
+<p class="verify">Prices, defaults, limits and preview status change often, and dollar figures here are illustrations. Check the current Databricks documentation and price list before quoting a number.</p>
+<section id="s5"><p class="eyebrow">Warehouses and serverless</p><h2>SQL warehouses in detail</h2>
+<p>A SQL warehouse is compute built only for SQL: BI dashboards, SQL editor, ad hoc queries, many users at once. It runs Spark underneath but hides it. You cannot run Python on it and you cannot tune most Spark settings. In return you get Photon on by default, a query queue, and concurrency scaling.</p>
+
+<figure><div class="fig">
+<svg viewBox="0 0 900 380" role="img" aria-label="Queries enter a gateway and queue, check the result cache, then run on one of several clusters inside the warehouse; each cluster has a driver, workers and a disk cache that reads cloud storage.">
+<rect class="bx" x="10" y="150" width="120" height="50" rx="6"/><text x="70" y="173" text-anchor="middle">BI tool, SQL</text><text x="70" y="189" text-anchor="middle">editor, API</text>
+<rect class="db" x="170" y="130" width="170" height="90" rx="6"/><text class="b" x="255" y="152" text-anchor="middle">Gateway + queue</text>
+<text class="m" x="255" y="172" text-anchor="middle">1. checks result cache</text><text class="m" x="255" y="188" text-anchor="middle">2. predicts query cost</text><text class="m" x="255" y="204" text-anchor="middle">3. picks a cluster</text>
+<path class="ln" d="M130 175H170" marker-end="url(#ar)"/>
+<rect class="ca" x="170" y="250" width="170" height="44" rx="6"/><text class="b" x="255" y="270" text-anchor="middle">Result cache</text><text class="m" x="255" y="286" text-anchor="middle">same query, same data: instant</text>
+<path class="lg" d="M255 220V250" marker-end="url(#arg)"/>
+
+<rect class="cu" x="390" y="10" width="500" height="360" rx="8"/>
+<text class="h" x="404" y="34">SQL WAREHOUSE (size = T-shirt size, e.g. Small)</text>
+<g>
+<rect class="bx" x="404" y="48" width="472" height="96" rx="6"/><text class="b" x="418" y="68">Cluster 1 (always on)</text>
+<rect class="db" x="418" y="78" width="80" height="54" rx="4"/><text x="458" y="102" text-anchor="middle">Driver</text><text class="m" x="458" y="118" text-anchor="middle">Photon</text>
+<rect class="gr" x="512" y="78" width="80" height="54" rx="4"/><text x="552" y="102" text-anchor="middle">Worker</text><text class="m" x="552" y="118" text-anchor="middle">+ SSD cache</text>
+<rect class="gr" x="602" y="78" width="80" height="54" rx="4"/><text x="642" y="102" text-anchor="middle">Worker</text><text class="m" x="642" y="118" text-anchor="middle">+ SSD cache</text>
+<rect class="gr" x="692" y="78" width="80" height="54" rx="4"/><text x="732" y="102" text-anchor="middle">Worker</text><text class="m" x="732" y="118" text-anchor="middle">+ SSD cache</text>
+<text class="m" x="782" y="108">more workers</text><text class="m" x="782" y="124">= bigger size</text>
+</g>
+<g>
+<rect class="bx ds" x="404" y="156" width="472" height="96" rx="6"/><text class="b" x="418" y="176">Cluster 2 (added when queue grows)</text>
+<text class="m" x="418" y="206">Identical copy. Handles more people at once,</text><text class="m" x="418" y="222">not a single faster query.</text>
+</g>
+<g>
+<rect class="bx ds" x="404" y="264" width="472" height="44" rx="6"/><text class="b" x="418" y="291">Cluster 3 ... up to your "max clusters"</text>
+</g>
+<text class="m" x="404" y="334">Size up = one query runs faster. Max clusters up = more queries at once.</text>
+<path class="ln" d="M340 160H404" marker-end="url(#ar)"/><text class="m" x="344" y="152">run</text>
+<text class="b" x="404" y="358">Workers read Delta/Parquet from cloud storage (below, not drawn)</text>
+</svg></div>
+<figcaption>Two dials, two different jobs. <b>Cluster size</b> (2X-Small up to 4X-Large, each step roughly double the machines) makes a single query faster. <b>Number of clusters</b> (min to max) lets more users run at the same time without queueing.</figcaption></figure>
+
+<h3>Classic vs Pro vs Serverless warehouse</h3>
+<div class="tw"><table class="t">
+<tr><th>Feature</th><th>Classic</th><th>Pro</th><th>Serverless</th></tr>
+<tr><td>Machines in</td><td>Your account</td><td>Your account</td><td>Databricks account</td></tr>
+<tr><td>Photon engine</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Disk (SSD) cache</td><td>Yes, automatic</td><td>Yes, automatic</td><td>Yes, managed for you</td></tr>
+<tr><td>Result cache</td><td>Local to the warehouse</td><td>Local to the warehouse</td><td>Local plus a remote one that survives restarts (up to 24 hours)</td></tr>
+<tr><td>Predictive IO (smarter file reads)</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Intelligent workload management (predicts query cost, scales faster)</td><td>No, simple queue-based scaling</td><td>Partial</td><td>Yes, most aggressive</td></tr>
+<tr><td>Start time</td><td>Minutes</td><td>A few minutes</td><td>Seconds</td></tr>
+<tr><td>Best for</td><td>Cheap, steady, low-demand SQL</td><td>Heavier SQL where you must stay in your network</td><td>Almost everything, especially bursty BI</td></tr>
+<tr><td class="v">Verdict</td><td class="v drop">Drop for new work. Use only if serverless is blocked.</td><td class="v">Pursue only when serverless is not allowed</td><td class="v pursue">Pursue as the default</td></tr>
+</table></div>
+<div class="callout"><p><b>Predictive IO in plain words.</b> Instead of reading a whole file and then filtering, the engine learns which parts of files a query will actually need and reads only those. It acts like an automatic index. It speeds up selective queries and MERGE/UPDATE/DELETE on Delta.</p>
+<p><b>Intelligent workload management in plain words.</b> Before a query runs, it is scored as cheap or heavy. Cheap queries slip through, heavy ones get capacity added early. This stops one huge query from blocking a dashboard.</p></div>
+
+</section>
+<section id="s6"><p class="eyebrow">Warehouses and serverless</p><h2>Serverless that is not a SQL warehouse</h2>
+<p>Serverless notebooks, serverless jobs and serverless pipelines give you Spark without a cluster. You never pick machines, runtime or autoscaling. You write code, and Databricks supplies compute from a warm pool.</p>
+
+<figure><div class="fig">
+<svg viewBox="0 0 900 290" role="img" aria-label="Classic notebook attaches directly to a driver on a cluster you configured; serverless notebook talks through Spark Connect to a Databricks-managed Spark session.">
+<text class="h" x="10" y="22">Classic notebook</text>
+<rect class="bx" x="10" y="34" width="150" height="60" rx="6"/><text x="85" y="62" text-anchor="middle">Notebook</text><text class="m" x="85" y="78" text-anchor="middle">attached to cluster</text>
+<rect class="cu" x="230" y="34" width="300" height="60" rx="6"/><text class="b" x="380" y="58" text-anchor="middle">Your cluster: driver + workers</text><text class="m" x="380" y="76" text-anchor="middle">you chose size, runtime, configs, libraries</text>
+<rect class="ca" x="600" y="34" width="150" height="60" rx="6"/><text x="675" y="62" text-anchor="middle">Spark cache</text><text class="m" x="675" y="78" text-anchor="middle">+ disk cache</text>
+<path class="ln" d="M160 64H230" marker-end="url(#ar)"/><text class="m" x="165" y="56">same JVM</text>
+<path class="ln" d="M530 64H600" marker-end="url(#ar)"/>
+
+<text class="h" x="10" y="150">Serverless notebook / job</text>
+<rect class="bx" x="10" y="162" width="150" height="60" rx="6"/><text x="85" y="190" text-anchor="middle">Notebook</text><text class="m" x="85" y="206" text-anchor="middle">thin client only</text>
+<rect class="db" x="230" y="162" width="130" height="60" rx="6"/><text class="b" x="295" y="188" text-anchor="middle">Spark Connect</text><text class="m" x="295" y="206" text-anchor="middle">remote protocol</text>
+<rect class="db" x="430" y="162" width="300" height="60" rx="6"/><text class="b" x="580" y="186" text-anchor="middle">Databricks-managed Spark + Photon</text><text class="m" x="580" y="204" text-anchor="middle">size and scaling chosen automatically</text>
+<rect class="bx" x="770" y="162" width="120" height="60" rx="6"/><text x="830" y="188" text-anchor="middle">Warm VM</text><text x="830" y="204" text-anchor="middle">pool</text>
+<path class="ln" d="M160 192H230" marker-end="url(#ar)"/><text class="m" x="164" y="184">plan only</text>
+<path class="ln" d="M360 192H430" marker-end="url(#ar)"/><path class="ln" d="M730 192H770" marker-end="url(#ar)"/>
+<text class="m" x="10" y="256">Because the client only sends a plan, the driver is not your notebook's process.</text><text class="m" x="10" y="274">That is why RDDs, some JVM tricks and df.cache() style features are restricted.</text>
+</svg></div>
+<figcaption>The big architectural change is Spark Connect. Your code builds a query plan and sends it over the network. Databricks owns everything on the other side, so it can resize, upgrade and swap machines under you.</figcaption></figure>
+
+<h3>Performance optimized vs standard mode</h3>
+<p>Serverless jobs and pipelines offer two modes. It is the same engine with a different promise about speed versus price.</p>
+<div class="tw"><table class="t">
+<tr><th></th><th>Performance optimized</th><th>Standard</th></tr>
+<tr><td>Start-up</td><td>Seconds, VMs held ready</td><td>Minutes, VMs allocated on demand</td></tr>
+<tr><td>Scaling</td><td>Aggressive, scales fast</td><td>More conservative</td></tr>
+<tr><td>Cost per hour</td><td>Higher</td><td>Lower</td></tr>
+<tr><td>Good for</td><td>Interactive work, jobs with tight deadlines, short jobs where start-up dominates</td><td>Nightly batch where nobody is waiting</td></tr>
+<tr><td class="v">Verdict</td><td class="v pursue">Pursue for notebooks and urgent jobs</td><td class="v pursue">Pursue for relaxed overnight jobs to save money</td></tr>
+</table></div>
+<p>Serverless notebooks always behave as performance optimized because a person is waiting.</p>
+
+<h3>What you give up on serverless</h3>
+<ul>
+<li>No choice of machine type, so no storage-optimized or memory-optimized picks.</li>
+<li>No init scripts or custom JARs on the machines. Libraries come through the environment settings.</li>
+<li>Most Spark settings are locked. Spark caching calls such as <code>cache()</code> and <code>persist()</code> are limited.</li>
+<li>Unity Catalog is required, so legacy Hive metastore and DBFS mounts do not work.</li>
+<li>You cannot SSH or inspect a worker.</li>
+</ul>
+<div class="callout g"><p><b>What you gain.</b> No capacity planning, instant start, nothing idle to forget, automatic upgrades, and the usual outcome that total cost goes down for bursty or short work.</p></div>
+
+</section>
+<section id="s12"><p class="eyebrow">Warehouses and serverless</p><h2>Who owns serverless: accounts, workspaces, prod and dev, BU1 and BU2</h2>
+<p>There is no single "serverless switch" that creates one serverless thing. Serverless is a <em>capability</em> that an account turns on, and the compute itself is created per workspace, on demand, and isolated per customer. These are the layers, from the top.</p>
+<figure><div class="fig">
+<svg viewBox="0 0 900 400" role="img" aria-label="Client A account contains a metastore and four workspaces for BU1 and BU2 in prod and dev, each with its own isolated serverless compute. Client B is a separate account with its own separate serverless.">
+<rect class="bx" x="10" y="10" width="640" height="380" rx="8"/>
+<text class="h" x="24" y="34">CLIENT A: one Databricks ACCOUNT</text>
+<text class="m" x="24" y="52">Billing, users, budgets, network connectivity configs (NCC), serverless terms are set here</text>
+<rect class="db" x="24" y="66" width="612" height="40" rx="5"/><text class="b" x="330" y="91" text-anchor="middle">Unity Catalog METASTORE (one per region): catalogs bu1_prod, bu1_dev, bu2_prod, bu2_dev</text>
+<g>
+<rect class="cu" x="24" y="124" width="296" height="120" rx="6"/><text class="b" x="36" y="146">Workspace BU1-Prod</text>
+<rect class="bx" x="36" y="156" width="272" height="32" rx="4"/><text x="172" y="177" text-anchor="middle">Serverless SQL warehouse(s), tagged bu1/prod</text>
+<rect class="bx" x="36" y="196" width="272" height="36" rx="4"/><text x="172" y="212" text-anchor="middle">Serverless jobs and notebooks</text><text class="m" x="172" y="226" text-anchor="middle">own isolated compute per run</text>
+<rect class="cu" x="340" y="124" width="296" height="120" rx="6"/><text class="b" x="352" y="146">Workspace BU1-Dev</text>
+<rect class="bx" x="352" y="156" width="272" height="32" rx="4"/><text x="488" y="177" text-anchor="middle">Smaller warehouses, short auto-stop</text>
+<rect class="bx" x="352" y="196" width="272" height="36" rx="4"/><text x="488" y="212" text-anchor="middle">Serverless jobs and notebooks</text><text class="m" x="488" y="226" text-anchor="middle">budget policy with a lower cap</text>
+<rect class="cu" x="24" y="258" width="296" height="120" rx="6"/><text class="b" x="36" y="280">Workspace BU2-Prod</text>
+<rect class="bx" x="36" y="290" width="272" height="32" rx="4"/><text x="172" y="311" text-anchor="middle">Serverless SQL warehouse(s), tagged bu2/prod</text>
+<rect class="bx" x="36" y="330" width="272" height="36" rx="4"/><text x="172" y="346" text-anchor="middle">Serverless jobs and notebooks</text><text class="m" x="172" y="360" text-anchor="middle">own isolated compute per run</text>
+<rect class="cu" x="340" y="258" width="296" height="120" rx="6"/><text class="b" x="352" y="280">Workspace BU2-Dev</text>
+<rect class="bx" x="352" y="290" width="272" height="32" rx="4"/><text x="488" y="311" text-anchor="middle">Smaller warehouses, short auto-stop</text>
+<rect class="bx" x="352" y="330" width="272" height="36" rx="4"/><text x="488" y="346" text-anchor="middle">Serverless jobs and notebooks</text><text class="m" x="488" y="360" text-anchor="middle">budget policy with a lower cap</text>
+</g>
+<rect class="db ds" x="680" y="10" width="210" height="380" rx="8"/>
+<text class="h" x="694" y="34">CLIENT B</text><text class="b" x="694" y="54">A different ACCOUNT</text>
+<text x="694" y="84">Own workspaces</text><text x="694" y="104">Own metastore</text><text x="694" y="124">Own serverless</text>
+<text class="m" x="694" y="160">Never shares a VM, a</text><text class="m" x="694" y="176">network or a cache with</text><text class="m" x="694" y="192">Client A. Each customer's</text><text class="m" x="694" y="208">serverless runs in its</text><text class="m" x="694" y="224">own isolated sandbox in</text><text class="m" x="694" y="240">a Databricks-owned</text><text class="m" x="694" y="256">cloud account.</text>
+</svg></div>
+<figcaption>Client A and Client B get completely separate serverless. Inside Client A, every workspace uses serverless independently, so prod and dev, or BU1 and BU2, are separated by workspace first and by warehouse, tag and budget policy second.</figcaption></figure>
+
+<div class="tw"><table class="t">
+<tr><th>Your question</th><th>Answer</th></tr>
+<tr><td><b>At what level does the client turn serverless on?</b></td><td>Two levels. The <b>account</b> admin accepts the serverless terms, creates network connectivity configs (NCC) and budget policies. Then each <b>workspace</b> admin allows serverless SQL warehouses, notebooks and jobs for that workspace. Serverless SQL warehouses are individual objects you create and size inside a workspace. Serverless notebooks and jobs have no object to create; compute appears when you run.</td></tr>
+<tr><td><b>Will client A and client B get different serverless?</b></td><td>Yes, always. They are different accounts, and Databricks isolates each customer's workloads from every other customer's. Nothing is shared at the VM level.</td></tr>
+<tr><td><b>Can one client have two serverless, prod and dev?</b></td><td>Yes. Use separate workspaces for prod and dev (strong boundary: access, networking, audit, catalog binding), and separate warehouses inside each. Each workspace's serverless is independent and has its own usage trail.</td></tr>
+<tr><td><b>One for BU1 and one for BU2?</b></td><td>Yes, in two ways. <b>Hard split:</b> a workspace per BU (or per BU and environment). <b>Soft split:</b> one workspace, one warehouse per BU, plus a serverless budget policy per BU that tags all of their serverless usage. Hard split gives clean isolation and simple bill reading. Soft split gives less sprawl but needs tag discipline.</td></tr>
+</table></div>
+
+</section>
+<section id="s11"><p class="eyebrow">Warehouses and serverless</p><h2>Which one should I pick?</h2>
+<div class="tw"><table class="t">
+<tr><th>Situation</th><th>Pick</th><th>Why</th><th>Verdict</th></tr>
+<tr><td>Dashboards and BI over Delta tables</td><td>Serverless SQL warehouse</td><td>Instant start, result cache, scales with users, Photon + Predictive IO</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Same BI, but your network rules forbid serverless</td><td>Pro SQL warehouse</td><td>Gets most features, stays inside your VPC</td><td class="v pursue">Pursue with a reason</td></tr>
+<tr><td>Same BI on a classic warehouse by habit</td><td>Classic SQL warehouse</td><td>Slowest start, fewer features</td><td class="v drop">Drop</td></tr>
+<tr><td>Nightly ETL, no one waiting</td><td>Serverless job (standard mode) or a job cluster with Photon</td><td>Lowest cost for scheduled work</td><td class="v pursue">Pursue</td></tr>
+<tr><td>ETL with a deadline or many short jobs</td><td>Serverless job (performance optimized)</td><td>Start-up time dominates short runs</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Data science notebooks, exploration</td><td>Serverless notebook, or all-purpose cluster if you need custom libs</td><td>Fast to open, nothing to forget running</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Need init scripts, custom JARs, Scala/RDD, special Spark configs</td><td>Classic job or all-purpose cluster</td><td>Only classic gives that control</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Heavy Python UDF pipeline</td><td>Classic cluster, general or compute optimized, Photon off or on (little gain)</td><td>Photon does not speed up UDFs. Rewrite as built-in SQL when possible.</td><td class="v pursue">Pursue, and plan the rewrite</td></tr>
+<tr><td>Model training on GPUs</td><td>GPU ML runtime cluster</td><td>Only these have GPUs</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Team shares one big cluster 24 hours a day</td><td>Anything above</td><td>Idle cost is the biggest hidden waste</td><td class="v drop">Drop. Use auto-terminate or serverless.</td></tr>
+</table></div>
+
+</section>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>Will client A and client B get different serverless?</summary><p>Yes. They are different accounts and Databricks isolates each customer&#x27;s serverless workloads from every other customer&#x27;s. Nothing is shared at the VM level.</p></details><details class="faq"><summary>Can one client have separate serverless for prod and dev, or BU1 and BU2?</summary><p>Yes. Use separate workspaces for hard separation, and separate warehouses plus serverless budget policies per business unit for soft separation. Each workspace uses serverless independently.</p></details><details class="faq"><summary>Bigger warehouse or more clusters?</summary><p>A bigger size makes one query faster. More clusters let more queries run at once without queueing. They fix different problems.</p></details></section>
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2><p>Related on this site: <a href="/learn/databricks-interview/compute-choice/">Which compute for which job</a> · <a href="/learn/databricks-interview/aqe-photon-po/">AQE, Photon, Predictive Optimization</a></p><p><a href="/learn/databricks-compute/">All Databricks compute and cost pages</a> · <a href="/data-engineering/">All data engineering</a> · <a href="/platforms/databricks/">Databricks on this site</a></p><div class="sib"><a href="/learn/databricks-compute/cluster-architecture/">Cluster anatomy</a><span>Warehouses and serverless</span><a href="/learn/databricks-compute/photon-and-caches/">Photon and caches</a><a href="/learn/databricks-compute/how-billing-works/">How billing works</a><a href="/learn/databricks-compute/dividing-the-bill/">Dividing the bill</a><a href="/learn/databricks-compute/system-tables/">System tables</a><a href="/learn/databricks-compute/delta-sharing-and-regions/">Sharing and regions</a><a href="/learn/databricks-compute/backup-and-recovery-architecture/">Backup architecture</a></div></section>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Concepts</b><a href="/leaders/">For leaders</a><a href="/learn/fundamentals/">Fundamentals</a><a href="/learn/data-systems/">Data systems</a><a href="/learn/data-systems/platform/">Data and AI platform</a><a href="/learn/data-systems/platform/#hops">Data engineering</a><a href="/concepts/semantic-layer/">BI and analytics</a><a href="/concepts/#ml-engineering">ML</a><a href="/learn/ai-universe/">AI</a><a href="/learn/data-systems/platform/#concerns">Across all of them</a><a href="/concepts/#a-z">Key concepts, A to Z</a></div><div><b>On your cloud</b><a href="/platforms/databricks/">Databricks</a><a href="/platforms/aws/">AWS</a><a href="/platforms/azure/">Azure and Fabric</a><a href="/platforms/gcp/">Google Cloud</a><a href="/platforms/open/">Open source</a><a href="/platforms/anthropic/">Claude (Anthropic)</a><a href="/certifications/">All certifications</a></div><div><b>Your role</b><a href="/paths/">Find your path</a><a href="/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/forward-deployed/">Forward Deployed Engineering</a><a href="/mindset/">Worried about AI?</a><a href="/projects/">All projects to join</a></div><div><b>How we work</b><a href="/how-we-work/#thinking">Thinking principles</a><a href="/how-we-work/#ba">Business analysis</a><a href="/how-we-work/#pm">Project management</a><a href="/learn/technical-anchor/">The technical anchor</a></div><div><b>Causes and deep tech</b><a href="/ai-for-cause/">AI for a cause</a><a href="/deep-tech/">Deep tech</a></div><div><b>About</b><a href="/about/">About this site</a><a href="/about/#join">Write or teach</a><a href="/writing/">Blog</a><a href="/research/">All open specifications</a><a href="/assets/">All open-source code</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

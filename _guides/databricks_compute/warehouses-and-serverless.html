@@ -1,0 +1,152 @@
+<section id="s5"><p class="eyebrow">Warehouses and serverless</p><h2>SQL warehouses in detail</h2>
+<p>A SQL warehouse is compute built only for SQL: BI dashboards, SQL editor, ad hoc queries, many users at once. It runs Spark underneath but hides it. You cannot run Python on it and you cannot tune most Spark settings. In return you get Photon on by default, a query queue, and concurrency scaling.</p>
+
+<figure><div class="fig">
+<svg viewBox="0 0 900 380" role="img" aria-label="Queries enter a gateway and queue, check the result cache, then run on one of several clusters inside the warehouse; each cluster has a driver, workers and a disk cache that reads cloud storage.">
+<rect class="bx" x="10" y="150" width="120" height="50" rx="6"/><text x="70" y="173" text-anchor="middle">BI tool, SQL</text><text x="70" y="189" text-anchor="middle">editor, API</text>
+<rect class="db" x="170" y="130" width="170" height="90" rx="6"/><text class="b" x="255" y="152" text-anchor="middle">Gateway + queue</text>
+<text class="m" x="255" y="172" text-anchor="middle">1. checks result cache</text><text class="m" x="255" y="188" text-anchor="middle">2. predicts query cost</text><text class="m" x="255" y="204" text-anchor="middle">3. picks a cluster</text>
+<path class="ln" d="M130 175H170" marker-end="url(#ar)"/>
+<rect class="ca" x="170" y="250" width="170" height="44" rx="6"/><text class="b" x="255" y="270" text-anchor="middle">Result cache</text><text class="m" x="255" y="286" text-anchor="middle">same query, same data: instant</text>
+<path class="lg" d="M255 220V250" marker-end="url(#arg)"/>
+
+<rect class="cu" x="390" y="10" width="500" height="360" rx="8"/>
+<text class="h" x="404" y="34">SQL WAREHOUSE (size = T-shirt size, e.g. Small)</text>
+<g>
+<rect class="bx" x="404" y="48" width="472" height="96" rx="6"/><text class="b" x="418" y="68">Cluster 1 (always on)</text>
+<rect class="db" x="418" y="78" width="80" height="54" rx="4"/><text x="458" y="102" text-anchor="middle">Driver</text><text class="m" x="458" y="118" text-anchor="middle">Photon</text>
+<rect class="gr" x="512" y="78" width="80" height="54" rx="4"/><text x="552" y="102" text-anchor="middle">Worker</text><text class="m" x="552" y="118" text-anchor="middle">+ SSD cache</text>
+<rect class="gr" x="602" y="78" width="80" height="54" rx="4"/><text x="642" y="102" text-anchor="middle">Worker</text><text class="m" x="642" y="118" text-anchor="middle">+ SSD cache</text>
+<rect class="gr" x="692" y="78" width="80" height="54" rx="4"/><text x="732" y="102" text-anchor="middle">Worker</text><text class="m" x="732" y="118" text-anchor="middle">+ SSD cache</text>
+<text class="m" x="782" y="108">more workers</text><text class="m" x="782" y="124">= bigger size</text>
+</g>
+<g>
+<rect class="bx ds" x="404" y="156" width="472" height="96" rx="6"/><text class="b" x="418" y="176">Cluster 2 (added when queue grows)</text>
+<text class="m" x="418" y="206">Identical copy. Handles more people at once,</text><text class="m" x="418" y="222">not a single faster query.</text>
+</g>
+<g>
+<rect class="bx ds" x="404" y="264" width="472" height="44" rx="6"/><text class="b" x="418" y="291">Cluster 3 ... up to your "max clusters"</text>
+</g>
+<text class="m" x="404" y="334">Size up = one query runs faster. Max clusters up = more queries at once.</text>
+<path class="ln" d="M340 160H404" marker-end="url(#ar)"/><text class="m" x="344" y="152">run</text>
+<text class="b" x="404" y="358">Workers read Delta/Parquet from cloud storage (below, not drawn)</text>
+</svg></div>
+<figcaption>Two dials, two different jobs. <b>Cluster size</b> (2X-Small up to 4X-Large, each step roughly double the machines) makes a single query faster. <b>Number of clusters</b> (min to max) lets more users run at the same time without queueing.</figcaption></figure>
+
+<h3>Classic vs Pro vs Serverless warehouse</h3>
+<div class="tw"><table class="t">
+<tr><th>Feature</th><th>Classic</th><th>Pro</th><th>Serverless</th></tr>
+<tr><td>Machines in</td><td>Your account</td><td>Your account</td><td>Databricks account</td></tr>
+<tr><td>Photon engine</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Disk (SSD) cache</td><td>Yes, automatic</td><td>Yes, automatic</td><td>Yes, managed for you</td></tr>
+<tr><td>Result cache</td><td>Local to the warehouse</td><td>Local to the warehouse</td><td>Local plus a remote one that survives restarts (up to 24 hours)</td></tr>
+<tr><td>Predictive IO (smarter file reads)</td><td>No</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Intelligent workload management (predicts query cost, scales faster)</td><td>No, simple queue-based scaling</td><td>Partial</td><td>Yes, most aggressive</td></tr>
+<tr><td>Start time</td><td>Minutes</td><td>A few minutes</td><td>Seconds</td></tr>
+<tr><td>Best for</td><td>Cheap, steady, low-demand SQL</td><td>Heavier SQL where you must stay in your network</td><td>Almost everything, especially bursty BI</td></tr>
+<tr><td class="v">Verdict</td><td class="v drop">Drop for new work. Use only if serverless is blocked.</td><td class="v">Pursue only when serverless is not allowed</td><td class="v pursue">Pursue as the default</td></tr>
+</table></div>
+<div class="callout"><p><b>Predictive IO in plain words.</b> Instead of reading a whole file and then filtering, the engine learns which parts of files a query will actually need and reads only those. It acts like an automatic index. It speeds up selective queries and MERGE/UPDATE/DELETE on Delta.</p>
+<p><b>Intelligent workload management in plain words.</b> Before a query runs, it is scored as cheap or heavy. Cheap queries slip through, heavy ones get capacity added early. This stops one huge query from blocking a dashboard.</p></div>
+
+</section>
+<section id="s6"><p class="eyebrow">Warehouses and serverless</p><h2>Serverless that is not a SQL warehouse</h2>
+<p>Serverless notebooks, serverless jobs and serverless pipelines give you Spark without a cluster. You never pick machines, runtime or autoscaling. You write code, and Databricks supplies compute from a warm pool.</p>
+
+<figure><div class="fig">
+<svg viewBox="0 0 900 290" role="img" aria-label="Classic notebook attaches directly to a driver on a cluster you configured; serverless notebook talks through Spark Connect to a Databricks-managed Spark session.">
+<text class="h" x="10" y="22">Classic notebook</text>
+<rect class="bx" x="10" y="34" width="150" height="60" rx="6"/><text x="85" y="62" text-anchor="middle">Notebook</text><text class="m" x="85" y="78" text-anchor="middle">attached to cluster</text>
+<rect class="cu" x="230" y="34" width="300" height="60" rx="6"/><text class="b" x="380" y="58" text-anchor="middle">Your cluster: driver + workers</text><text class="m" x="380" y="76" text-anchor="middle">you chose size, runtime, configs, libraries</text>
+<rect class="ca" x="600" y="34" width="150" height="60" rx="6"/><text x="675" y="62" text-anchor="middle">Spark cache</text><text class="m" x="675" y="78" text-anchor="middle">+ disk cache</text>
+<path class="ln" d="M160 64H230" marker-end="url(#ar)"/><text class="m" x="165" y="56">same JVM</text>
+<path class="ln" d="M530 64H600" marker-end="url(#ar)"/>
+
+<text class="h" x="10" y="150">Serverless notebook / job</text>
+<rect class="bx" x="10" y="162" width="150" height="60" rx="6"/><text x="85" y="190" text-anchor="middle">Notebook</text><text class="m" x="85" y="206" text-anchor="middle">thin client only</text>
+<rect class="db" x="230" y="162" width="130" height="60" rx="6"/><text class="b" x="295" y="188" text-anchor="middle">Spark Connect</text><text class="m" x="295" y="206" text-anchor="middle">remote protocol</text>
+<rect class="db" x="430" y="162" width="300" height="60" rx="6"/><text class="b" x="580" y="186" text-anchor="middle">Databricks-managed Spark + Photon</text><text class="m" x="580" y="204" text-anchor="middle">size and scaling chosen automatically</text>
+<rect class="bx" x="770" y="162" width="120" height="60" rx="6"/><text x="830" y="188" text-anchor="middle">Warm VM</text><text x="830" y="204" text-anchor="middle">pool</text>
+<path class="ln" d="M160 192H230" marker-end="url(#ar)"/><text class="m" x="164" y="184">plan only</text>
+<path class="ln" d="M360 192H430" marker-end="url(#ar)"/><path class="ln" d="M730 192H770" marker-end="url(#ar)"/>
+<text class="m" x="10" y="256">Because the client only sends a plan, the driver is not your notebook's process.</text><text class="m" x="10" y="274">That is why RDDs, some JVM tricks and df.cache() style features are restricted.</text>
+</svg></div>
+<figcaption>The big architectural change is Spark Connect. Your code builds a query plan and sends it over the network. Databricks owns everything on the other side, so it can resize, upgrade and swap machines under you.</figcaption></figure>
+
+<h3>Performance optimized vs standard mode</h3>
+<p>Serverless jobs and pipelines offer two modes. It is the same engine with a different promise about speed versus price.</p>
+<div class="tw"><table class="t">
+<tr><th></th><th>Performance optimized</th><th>Standard</th></tr>
+<tr><td>Start-up</td><td>Seconds, VMs held ready</td><td>Minutes, VMs allocated on demand</td></tr>
+<tr><td>Scaling</td><td>Aggressive, scales fast</td><td>More conservative</td></tr>
+<tr><td>Cost per hour</td><td>Higher</td><td>Lower</td></tr>
+<tr><td>Good for</td><td>Interactive work, jobs with tight deadlines, short jobs where start-up dominates</td><td>Nightly batch where nobody is waiting</td></tr>
+<tr><td class="v">Verdict</td><td class="v pursue">Pursue for notebooks and urgent jobs</td><td class="v pursue">Pursue for relaxed overnight jobs to save money</td></tr>
+</table></div>
+<p>Serverless notebooks always behave as performance optimized because a person is waiting.</p>
+
+<h3>What you give up on serverless</h3>
+<ul>
+<li>No choice of machine type, so no storage-optimized or memory-optimized picks.</li>
+<li>No init scripts or custom JARs on the machines. Libraries come through the environment settings.</li>
+<li>Most Spark settings are locked. Spark caching calls such as <code>cache()</code> and <code>persist()</code> are limited.</li>
+<li>Unity Catalog is required, so legacy Hive metastore and DBFS mounts do not work.</li>
+<li>You cannot SSH or inspect a worker.</li>
+</ul>
+<div class="callout g"><p><b>What you gain.</b> No capacity planning, instant start, nothing idle to forget, automatic upgrades, and the usual outcome that total cost goes down for bursty or short work.</p></div>
+
+</section>
+<section id="s12"><p class="eyebrow">Warehouses and serverless</p><h2>Who owns serverless: accounts, workspaces, prod and dev, BU1 and BU2</h2>
+<p>There is no single "serverless switch" that creates one serverless thing. Serverless is a <em>capability</em> that an account turns on, and the compute itself is created per workspace, on demand, and isolated per customer. These are the layers, from the top.</p>
+<figure><div class="fig">
+<svg viewBox="0 0 900 400" role="img" aria-label="Client A account contains a metastore and four workspaces for BU1 and BU2 in prod and dev, each with its own isolated serverless compute. Client B is a separate account with its own separate serverless.">
+<rect class="bx" x="10" y="10" width="640" height="380" rx="8"/>
+<text class="h" x="24" y="34">CLIENT A: one Databricks ACCOUNT</text>
+<text class="m" x="24" y="52">Billing, users, budgets, network connectivity configs (NCC), serverless terms are set here</text>
+<rect class="db" x="24" y="66" width="612" height="40" rx="5"/><text class="b" x="330" y="91" text-anchor="middle">Unity Catalog METASTORE (one per region): catalogs bu1_prod, bu1_dev, bu2_prod, bu2_dev</text>
+<g>
+<rect class="cu" x="24" y="124" width="296" height="120" rx="6"/><text class="b" x="36" y="146">Workspace BU1-Prod</text>
+<rect class="bx" x="36" y="156" width="272" height="32" rx="4"/><text x="172" y="177" text-anchor="middle">Serverless SQL warehouse(s), tagged bu1/prod</text>
+<rect class="bx" x="36" y="196" width="272" height="36" rx="4"/><text x="172" y="212" text-anchor="middle">Serverless jobs and notebooks</text><text class="m" x="172" y="226" text-anchor="middle">own isolated compute per run</text>
+<rect class="cu" x="340" y="124" width="296" height="120" rx="6"/><text class="b" x="352" y="146">Workspace BU1-Dev</text>
+<rect class="bx" x="352" y="156" width="272" height="32" rx="4"/><text x="488" y="177" text-anchor="middle">Smaller warehouses, short auto-stop</text>
+<rect class="bx" x="352" y="196" width="272" height="36" rx="4"/><text x="488" y="212" text-anchor="middle">Serverless jobs and notebooks</text><text class="m" x="488" y="226" text-anchor="middle">budget policy with a lower cap</text>
+<rect class="cu" x="24" y="258" width="296" height="120" rx="6"/><text class="b" x="36" y="280">Workspace BU2-Prod</text>
+<rect class="bx" x="36" y="290" width="272" height="32" rx="4"/><text x="172" y="311" text-anchor="middle">Serverless SQL warehouse(s), tagged bu2/prod</text>
+<rect class="bx" x="36" y="330" width="272" height="36" rx="4"/><text x="172" y="346" text-anchor="middle">Serverless jobs and notebooks</text><text class="m" x="172" y="360" text-anchor="middle">own isolated compute per run</text>
+<rect class="cu" x="340" y="258" width="296" height="120" rx="6"/><text class="b" x="352" y="280">Workspace BU2-Dev</text>
+<rect class="bx" x="352" y="290" width="272" height="32" rx="4"/><text x="488" y="311" text-anchor="middle">Smaller warehouses, short auto-stop</text>
+<rect class="bx" x="352" y="330" width="272" height="36" rx="4"/><text x="488" y="346" text-anchor="middle">Serverless jobs and notebooks</text><text class="m" x="488" y="360" text-anchor="middle">budget policy with a lower cap</text>
+</g>
+<rect class="db ds" x="680" y="10" width="210" height="380" rx="8"/>
+<text class="h" x="694" y="34">CLIENT B</text><text class="b" x="694" y="54">A different ACCOUNT</text>
+<text x="694" y="84">Own workspaces</text><text x="694" y="104">Own metastore</text><text x="694" y="124">Own serverless</text>
+<text class="m" x="694" y="160">Never shares a VM, a</text><text class="m" x="694" y="176">network or a cache with</text><text class="m" x="694" y="192">Client A. Each customer's</text><text class="m" x="694" y="208">serverless runs in its</text><text class="m" x="694" y="224">own isolated sandbox in</text><text class="m" x="694" y="240">a Databricks-owned</text><text class="m" x="694" y="256">cloud account.</text>
+</svg></div>
+<figcaption>Client A and Client B get completely separate serverless. Inside Client A, every workspace uses serverless independently, so prod and dev, or BU1 and BU2, are separated by workspace first and by warehouse, tag and budget policy second.</figcaption></figure>
+
+<div class="tw"><table class="t">
+<tr><th>Your question</th><th>Answer</th></tr>
+<tr><td><b>At what level does the client turn serverless on?</b></td><td>Two levels. The <b>account</b> admin accepts the serverless terms, creates network connectivity configs (NCC) and budget policies. Then each <b>workspace</b> admin allows serverless SQL warehouses, notebooks and jobs for that workspace. Serverless SQL warehouses are individual objects you create and size inside a workspace. Serverless notebooks and jobs have no object to create; compute appears when you run.</td></tr>
+<tr><td><b>Will client A and client B get different serverless?</b></td><td>Yes, always. They are different accounts, and Databricks isolates each customer's workloads from every other customer's. Nothing is shared at the VM level.</td></tr>
+<tr><td><b>Can one client have two serverless, prod and dev?</b></td><td>Yes. Use separate workspaces for prod and dev (strong boundary: access, networking, audit, catalog binding), and separate warehouses inside each. Each workspace's serverless is independent and has its own usage trail.</td></tr>
+<tr><td><b>One for BU1 and one for BU2?</b></td><td>Yes, in two ways. <b>Hard split:</b> a workspace per BU (or per BU and environment). <b>Soft split:</b> one workspace, one warehouse per BU, plus a serverless budget policy per BU that tags all of their serverless usage. Hard split gives clean isolation and simple bill reading. Soft split gives less sprawl but needs tag discipline.</td></tr>
+</table></div>
+
+</section>
+<section id="s11"><p class="eyebrow">Warehouses and serverless</p><h2>Which one should I pick?</h2>
+<div class="tw"><table class="t">
+<tr><th>Situation</th><th>Pick</th><th>Why</th><th>Verdict</th></tr>
+<tr><td>Dashboards and BI over Delta tables</td><td>Serverless SQL warehouse</td><td>Instant start, result cache, scales with users, Photon + Predictive IO</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Same BI, but your network rules forbid serverless</td><td>Pro SQL warehouse</td><td>Gets most features, stays inside your VPC</td><td class="v pursue">Pursue with a reason</td></tr>
+<tr><td>Same BI on a classic warehouse by habit</td><td>Classic SQL warehouse</td><td>Slowest start, fewer features</td><td class="v drop">Drop</td></tr>
+<tr><td>Nightly ETL, no one waiting</td><td>Serverless job (standard mode) or a job cluster with Photon</td><td>Lowest cost for scheduled work</td><td class="v pursue">Pursue</td></tr>
+<tr><td>ETL with a deadline or many short jobs</td><td>Serverless job (performance optimized)</td><td>Start-up time dominates short runs</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Data science notebooks, exploration</td><td>Serverless notebook, or all-purpose cluster if you need custom libs</td><td>Fast to open, nothing to forget running</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Need init scripts, custom JARs, Scala/RDD, special Spark configs</td><td>Classic job or all-purpose cluster</td><td>Only classic gives that control</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Heavy Python UDF pipeline</td><td>Classic cluster, general or compute optimized, Photon off or on (little gain)</td><td>Photon does not speed up UDFs. Rewrite as built-in SQL when possible.</td><td class="v pursue">Pursue, and plan the rewrite</td></tr>
+<tr><td>Model training on GPUs</td><td>GPU ML runtime cluster</td><td>Only these have GPUs</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Team shares one big cluster 24 hours a day</td><td>Anything above</td><td>Idle cost is the biggest hidden waste</td><td class="v drop">Drop. Use auto-terminate or serverless.</td></tr>
+</table></div>
+
+</section>

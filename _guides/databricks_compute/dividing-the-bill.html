@@ -1,0 +1,32 @@
+<section id="s18"><p class="eyebrow">Dividing the bill</p><h2>Best architecture for dividing the bill</h2>
+<p>Chargeback works when three things are true: every unit of compute is owned by exactly one BU and environment, that ownership is written down as a tag by a rule (not by hand), and one rollup table turns tags into money.</p>
+<figure><div class="fig">
+<svg viewBox="0 0 900 340" role="img" aria-label="Enforcement through cluster policies, budget policies and tagged warehouses writes tags into usage records, which are rolled up daily into a chargeback table with list prices and cloud cost exports, then shown by BU and environment.">
+<rect class="cu" x="10" y="20" width="250" height="200" rx="8"/><text class="h" x="24" y="44">1. FORCE the tags</text>
+<text x="24" y="72">Cluster policy: tags required</text><text x="24" y="94">Serverless budget policy</text><text x="24" y="116">  per BU, per environment</text><text x="24" y="138">Warehouse tags</text><text x="24" y="160">Job tags, run as service</text><text x="24" y="178">  principal per BU</text>
+<text class="m" x="24" y="206">Users cannot skip a tag.</text>
+<rect class="db" x="320" y="20" width="250" height="200" rx="8"/><text class="h" x="334" y="44">2. RECORD</text>
+<text x="334" y="72">system.billing.usage</text><text class="m" x="334" y="90">DBUs, tags, workspace,</text><text class="m" x="334" y="106">cluster, warehouse, job</text>
+<text x="334" y="134">system.billing.list_prices</text><text class="m" x="334" y="152">price per DBU per SKU</text>
+<text x="334" y="180">Cloud cost export</text><text class="m" x="334" y="198">VMs and storage, classic only</text>
+<rect class="ca" x="630" y="20" width="260" height="200" rx="8"/><text class="h" x="644" y="44">3. ROLL UP and SHOW</text>
+<text x="644" y="72">One small daily job</text><text class="m" x="644" y="90">usage × price, join cloud cost,</text><text class="m" x="644" y="106">write to a chargeback table</text>
+<text x="644" y="134">Dashboard by BU / env / product</text>
+<text x="644" y="162">Budgets and alerts per BU</text>
+<text class="m" x="644" y="190">Untagged spend gets its own</text><text class="m" x="644" y="206">line so it is visible.</text>
+<path class="ln" d="M260 120H320" marker-end="url(#ar)"/><path class="ln" d="M570 120H630" marker-end="url(#ar)"/>
+<rect class="bx" x="10" y="250" width="880" height="70" rx="6"/><text class="b" x="24" y="274">Shared costs (platform workspace, pools, admin warehouses, storage)</text><text class="m" x="24" y="294">Put them in their own tagged workspace and split them across BUs by a stated rule, for example proportional to each BU's own spend. Never hide them in one BU.</text>
+</svg></div>
+<figcaption>Prevention first (policies make tags mandatory), recording second (system tables), allocation third (a rollup you own). Fixing untagged spend after the fact is much harder.</figcaption></figure>
+
+<div class="tw"><table class="t">
+<tr><th>Layout</th><th>How the bill splits</th><th>Strength</th><th>Weakness</th><th>Verdict</th></tr>
+<tr><td>One workspace, tags only</td><td>By tag on clusters, warehouses, budget policies</td><td>Simplest to set up</td><td>One missed tag poisons the bill. Weak access isolation between BUs.</td><td class="v drop">Drop for more than one BU</td></tr>
+<tr><td>Workspace per environment (prod, dev), BU by tag</td><td>Workspace gives environment, tag gives BU</td><td>Prod is isolated from dev</td><td>BUs still share a workspace, so BU boundaries rest on tags</td><td class="v pursue">Pursue for small organisations</td></tr>
+<tr><td><b>Workspace per BU and environment</b> (BU1-Prod, BU1-Dev, BU2-Prod, BU2-Dev) + catalog per BU, tags as a second check</td><td>Workspace id is in every usage record, which makes the split almost automatic</td><td>Cleanest bill, cleanest access, simple budgets per workspace</td><td>More workspaces to manage and more idle warehouses. Needs automation (Terraform).</td><td class="v pursue">Pursue as the default for several BUs</td></tr>
+<tr><td>Separate account (and cloud account) per BU</td><td>Completely separate invoices</td><td>Hard financial and legal separation</td><td>No shared catalog or governance, duplicate admin, harder to see group-wide spend</td><td class="v drop">Drop unless regulation or a subsidiary demands it</td></tr>
+</table></div>
+<p><b>Rules that make any layout work:</b> a single naming standard for tags (<code>bu</code>, <code>env</code>, <code>cost_center</code>, <code>project</code>, <code>owner</code>); production jobs run as service principals named per BU, never as people; one SQL warehouse per BU, environment and workload class so usage is not mixed; set budget policies and alerts, not just reports; and review the untagged line every week.</p>
+<div class="callout w"><p><b>The per-user and per-query gap.</b> Billing is recorded per warehouse or cluster, not per query or per person. If five teams share a warehouse, you can only split its cost by estimating, using each team's share of query time from query history. That estimate is fair but is not an invoice figure. This is the strongest argument for separate warehouses per BU.</p></div>
+
+</section>

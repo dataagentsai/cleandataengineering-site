@@ -1,0 +1,371 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Databricks Billing Works: DBUs, SKUs, Autoscaling</title>
+<meta name="description" content="The DBU formula, classic versus serverless invoices, illustrative rates and worked examples, SKU families, what autoscaling does to cost and what you can see, and why people say they need classic for billing tracing."><link rel="canonical" href="https://cleandataengineering.ai/learn/databricks-compute/how-billing-works/">
+<meta property="og:title" content="How Databricks Billing Works: DBUs, SKUs, Autoscaling"><meta property="og:description" content="The DBU formula, classic versus serverless invoices, illustrative rates and worked examples, SKU families, what autoscaling does to cost and what you can see, and why people say they need classic for billing tracing."><meta property="og:url" content="https://cleandataengineering.ai/learn/databricks-compute/how-billing-works/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .tw { overflow-x:auto; margin:14px 0; } .tw table.t { min-width:620px; }
+  .fig { margin:16px 0; overflow-x:auto; } .fig svg { display:block; width:100%; height:auto; max-width:1000px; } @media (max-width:760px) { .fig svg { min-width:700px; } } .fig p { font-size:13px; color:var(--faint); margin:4px 0 0; }
+  .fig svg text { font-family:inherit; font-size:14.5px; fill:#1F1F1F; } .fig svg .b { font-weight:700; } .fig svg .h { font-weight:700; font-size:15.5px; } .fig svg .m { fill:#4a5565; font-size:13px; }
+  .fig svg .bx { fill:#fff; stroke:#1F1F1F; stroke-width:1.5; } .fig svg .cu { fill:#fff4d6; stroke:#1F1F1F; stroke-width:1.5; } .fig svg .db { fill:#eef3fb; stroke:#1F1F1F; stroke-width:1.5; }
+  .fig svg .ca { fill:#eaf6ef; stroke:#1F1F1F; stroke-width:1.5; } .fig svg .gr { fill:#f3f3f3; stroke:#777; stroke-width:1.3; } .fig svg .ds { stroke-dasharray:6 4; }
+  .fig svg .ln { stroke:#1F1F1F; stroke-width:1.5; fill:none; } .fig svg .lg { stroke:#2f7d4f; stroke-width:1.8; fill:none; }
+  .callout { border:var(--line); border-radius:var(--wob); padding:10px 16px; background:#eef3fb; margin:14px 0; } .callout.w { background:#fff4d6; } .callout.g { background:#eaf6ef; } .callout p, .callout code { color:#1F1F1F; } .callout p { margin:6px 0; }
+  td.v { font-weight:600; white-space:nowrap; } .pursue { color:#2f7d4f; } .drop { color:#b0372c; }
+  .tag { display:inline-block; font-size:12px; font-weight:600; padding:0 8px; border:1.5px solid #1F1F1F; border-radius:99px; } .tag.c { background:#fff4d6; } .tag.d { background:#eef3fb; }
+  .verify { font-size:13.5px; color:var(--faint); }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "How Databricks billing works: DBUs, two invoices, SKUs, autoscaling and billing tracing", "description": "The DBU formula, classic versus serverless invoices, illustrative rates and worked examples, SKU families, what autoscaling does to cost and what you can see, and why people say they need classic for billing tracing.", "url": "https://cleandataengineering.ai/learn/databricks-compute/how-billing-works/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-20", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "How is Databricks billed?", "acceptedAnswer": {"@type": "Answer", "text": "Databricks charge = DBUs used x price per DBU. On classic compute you also pay your cloud for VMs, disks and network. On serverless the machines are inside a higher DBU price."}}, {"@type": "Question", "name": "Why do people say they need classic for billing tracing?", "acceptedAnswer": {"@type": "Answer", "text": "Tags on a classic cluster reach both the Databricks usage records and the cloud's VM costs, so you can reconcile two bills at machine level. Serverless has no VMs of yours to tag, though budget policies now tag serverless usage in the usage table."}}, {"@type": "Question", "name": "Can I see autoscaling in the bill?", "acceptedAnswer": {"@type": "Answer", "text": "Partly. Classic gives event logs and per-minute node data but billing is hourly, so you stitch them. Warehouses have scale events. Serverless jobs and notebooks show no scaling detail, only DBUs."}}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Concepts</h4><ul><li><details><summary><a href="/leaders/">For leaders</a></summary><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/leaders/spec-driven/">Spec-driven development: agents</a></li><li><a href="/leaders/spec-driven/data-platform/">Spec-driven development: data platforms</a></li><li><a href="/papers/">Technical papers</a></li></ul></details></li><li><details><summary><a href="/learn/fundamentals/">Fundamentals</a></summary><ul><li><a href="/learn/fundamentals/">All fundamentals</a></li><li><a href="/learn/fundamentals/performance/">Performance</a></li><li><a href="/learn/fundamentals/cost/">Cost</a></li><li><a href="/learn/fundamentals/processing/">Processing</a></li><li><a href="/learn/fundamentals/security/">Security</a></li><li><a href="/learn/fundamentals/storage/">Storage</a></li><li><a href="/learn/fundamentals/database-families/">Database families</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/">Data systems</a></summary><ul><li><a href="/learn/data-systems/">The whole system, end to end</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li><li class="sub">Upstreams</li><li><a href="/learn/data-systems/upstreams/">Know your sources</a></li><li><a href="/learn/data-systems/upstreams/big-picture/">Upstreams, the big picture</a></li><li><a href="/learn/data-systems/upstreams/apis/">API sources</a></li><li><a href="/learn/data-systems/upstreams/files/">File sources</a></li><li><a href="/learn/data-systems/upstreams/joins/">Learning the joins</a></li><li><a href="/learn/data-systems/upstreams/answers/">Where the answers go</a></li><li><a href="/learn/data-systems/upstreams/questionnaire/">Source system questionnaire</a></li><li class="sub">Downstreams</li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/platform/">Data and AI platform</a></summary><ul><li class="sub">Conceptual architecture</li><li><a href="/learn/data-systems/platform/">The platform, whole</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#hops">Data engineering</a></summary><ul><li><a href="/learn/data-platform-suite/">Our platform, picture to code</a></li><li class="sub">The hops</li><li><a href="/learn/data-platform-architecture/ingestion/">Hop 1: sources to bronze</a></li><li><a href="/learn/data-platform-architecture/bronze-to-silver/">Hop 2: bronze to silver</a></li><li><a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a></li><li><a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a></li><li class="sub">Tables and formats</li><li><a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a></li><li><a href="/learn/table-maintenance/">Who maintains your tables</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse: who owns the catalog?</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li class="sub">Databricks compute and cost</li><li><a href="/learn/databricks-compute/">All compute and cost pages</a></li><li><a href="/learn/databricks-compute/cluster-architecture/">Cluster architecture, memory, machine types</a></li><li><a href="/learn/databricks-compute/warehouses-and-serverless/">SQL warehouses and serverless</a></li><li><a href="/learn/databricks-compute/photon-and-caches/">Photon and every cache</a></li><li><a href="/learn/databricks-compute/how-billing-works/">How billing works: DBUs, SKUs, autoscaling</a></li><li><a href="/learn/databricks-compute/dividing-the-bill/">Dividing the bill (chargeback)</a></li><li><a href="/learn/databricks-compute/system-tables/">System tables and what reading them costs</a></li><li><a href="/learn/databricks-compute/delta-sharing-and-regions/">Delta Sharing and cross-region cost</a></li><li><a href="/learn/databricks-compute/backup-and-recovery-architecture/">Backup and recovery architecture</a></li><li class="sub">Databricks interview prep</li><li><a href="/learn/databricks-interview/">All interview topics</a></li><li><a href="/learn/databricks-interview/delta-maintenance/">OPTIMIZE, VACUUM, compaction</a></li><li><a href="/learn/databricks-interview/table-maintenance-pictures/">Table maintenance in pictures (real runs)</a></li><li><a href="/learn/databricks-interview/clustering-and-compaction/">Compaction, partitioning, Z-order, liquid</a></li><li><a href="/learn/databricks-interview/maintenance-strategy/">Maintenance strategy: auto or scheduled</a></li><li><a href="/learn/databricks-interview/slow-writes/">Why writes are slow</a></li><li><a href="/learn/databricks-interview/backup-and-recovery-azure/">Backup and recovery on Azure</a></li><li><a href="/learn/databricks-interview/tagging-best-practices/">Tagging best practices</a></li><li><a href="/learn/databricks-interview/row-level-security/">Row-level security and masking</a></li><li><a href="/learn/databricks-interview/compute-choice/">Which compute for which job</a></li><li><a href="/learn/databricks-interview/joins/">Join types</a></li><li><a href="/learn/databricks-interview/skew-and-shuffle/">Skew, salting and shuffle</a></li><li><a href="/learn/databricks-interview/aqe-photon-po/">AQE, Photon, Predictive Optimization</a></li><li><a href="/learn/databricks-interview/cost-and-performance/">Biggest cost and performance levers</a></li><li><a href="/learn/databricks-interview/declarative-and-semantic/">What declarative means + semantic example</a></li><li><a href="/learn/databricks-interview/asset-bundles/">Asset Bundles</a></li><li><a href="/learn/databricks-interview/lakeflow-connect/">Lakeflow Connect</a></li><li><a href="/learn/databricks-interview/uniform/">UniForm</a></li><li><a href="/learn/databricks-interview/vector-search/">Vector Search</a></li><li><a href="/learn/databricks-interview/dbt-and-odcs/">dbt and ODCS</a></li><li><a href="/learn/databricks-interview/egress-and-ingress/">Egress and ingress cost</a></li><li><a href="/learn/databricks-interview/hard-problems-and-questions/">Hard problems and question bank</a></li><li class="sub">History, SCD and facts</li><li><a href="/learn/gold-data-modelling/">Gold data modelling</a></li><li><a href="/learn/silver-to-gold/">Silver to gold: the harness</a></li><li><a href="/learn/silver-to-gold/worked-example/">› Worked example (start here)</a></li><li><a href="/learn/silver-to-gold/kinds-of-fact/">› Six kinds of fact</a></li><li><a href="/learn/silver-to-gold/fact-examples/">› Fact examples in SQL</a></li><li><a href="/learn/silver-to-gold/dimension-examples/">› Dimension examples in SQL</a></li><li><a href="/learn/silver-to-gold/rulebook-harness/">› Rulebook: the harness</a></li><li><a href="/learn/spark-declarative-pipelines/">Declarative pipelines: open source vs Lakeflow</a></li><li><a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD2: AUTO CDC or own PySpark?</a></li><li><a href="/learn/gold-harness-spec/">Gold harness spec: facts and SCD2</a></li><li><a href="/learn/time-travel-vs-scd2/">Time travel as SCD Type 2?</a></li><li class="sub">Streaming and real time</li><li><a href="/learn/streaming/">Streaming on AWS and Databricks</a></li><li><a href="/learn/streaming/options/">Streaming: all options</a></li><li><a href="/learn/streaming/sim/">Streaming simulator</a></li><li><a href="/learn/streaming/real-time-mode/">Databricks real time: RTM and Lakehouse//RT</a></li><li class="sub">Quality and testing</li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/data-platform-sim/data-quality/">Data quality, metadata-driven</a></li><li class="sub">Hands-on simulators</li><li><a href="/learn/data-platform-sim/">One batch through Spark and Delta</a></li><li><a href="/learn/data-platform-sim/spark/">Spark internals</a></li><li><a href="/learn/data-platform-sim/delta/">Delta Lake internals</a></li><li><a href="/learn/data-platform-sim/performance/">Spark performance: 12 problems</a></li><li><a href="/learn/data-platform-sim/problems/">Problems solved: SCD2, late data, duplicates</a></li><li class="sub">On AWS</li><li><a href="/learn/data-platform-architecture/aws-databricks/">AWS + Databricks, ETL end to end</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse on AWS: A vs B</a></li><li><a href="/learn/aws-data-services/">AWS data services catalog</a></li><li class="sub">Open specs</li><li><a href="/learn/datatwin/">DataTwin</a></li><li><a href="/projects/data-eng-specs/">Clean Data Engineering specs</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/semantic-layer/">BI and analytics</a></summary><ul><li><a href="/concepts/semantic-layer/">Hop 4: the semantic layer</a></li><li><a href="/writing/genie-metric-views/">Genie and metric views</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/">Power BI vs Databricks AI/BI</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/power-bi/">Power BI and Fabric, in depth</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/ai-bi/">Databricks AI/BI, in depth</a></li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/#ml-engineering">ML</a></summary><ul><li><a href="/concepts/#ml-engineering">Key ML ideas (pages coming)</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/ai-universe/">AI</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness-intro/">Agent Harness, the big picture</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/agent-harness-stack-map/">Agent Harness: architecture map</a></li><li><a href="/learn/drug-safety-agent-databricks/">Drug-safety agent on Databricks: the tour</a></li><li><a href="/learn/agent-frameworks/">Agent frameworks: when to use which</a></li><li><a href="/learn/which-model/">Which AI model for which job</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li><li><a href="/learn/ai-governance/">AI governance: running AI you can trust</a></li><li><a href="/learn/ai-gateways/">AI gateways: which one to use</a></li><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">Open spec: AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">Open spec: AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">Open spec: AgentTwin</a></li><li><a href="/lab/">The AgentTwin Lab</a></li><li><a href="https://github.com/dataagentsai/reference-agent">Code: Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">Code: AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Code: Eval Harness Framework</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#concerns">Across all of them</a></summary><ul><li><a href="/learn/data-systems/platform/#concerns">All 24 concerns</a></li><li><a href="/learn/data-platform-mind-map/">Mind map: every concern, every cloud</a></li><li><a href="/learn/data-systems/platform/layout/">Layout: catalogs and schemas</a></li><li><a href="/learn/data-systems/platform/environments/">Environments and CI/CD</a></li><li><a href="/learn/data-systems/platform/cost/">Cost and FinOps</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li><li><a href="/learn/data-platform-architecture/test-strategy/">Test strategy in practice</a></li></ul></details></li><li><a href="/concepts/#a-z">Key concepts, A to Z</a></li></ul><h4>On your cloud</h4><ul><li><details><summary><a href="/platforms/databricks/">Databricks</a></summary><ul><li><a href="/platforms/databricks/#systems">Data systems</a></li><li><a href="/platforms/databricks/#de">Data engineering</a></li><li><a href="/platforms/databricks/#bi">BI and analytics</a></li><li><a href="/platforms/databricks/#ml">ML</a></li><li><a href="/platforms/databricks/#ai">AI</a></li><li><a href="/platforms/databricks/#across">Across all of them</a></li><li><a href="/platforms/databricks/#paths">Learning paths</a></li><li><a href="/platforms/databricks/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/aws/">AWS</a></summary><ul><li><a href="/platforms/aws/#systems">Data systems</a></li><li><a href="/platforms/aws/#de">Data engineering</a></li><li><a href="/platforms/aws/#bi">BI and analytics</a></li><li><a href="/platforms/aws/#ml">ML</a></li><li><a href="/platforms/aws/#ai">AI</a></li><li><a href="/platforms/aws/#across">Across all of them</a></li><li><a href="/platforms/aws/#paths">Learning paths</a></li><li><a href="/platforms/aws/#certs">Certifications</a></li><li><a href="/learn/aws-data-services/">AWS data services: all 66</a></li></ul></details></li><li><details><summary><a href="/platforms/azure/">Azure and Fabric</a></summary><ul><li><a href="/platforms/azure/#systems">Data systems</a></li><li><a href="/platforms/azure/#de">Data engineering</a></li><li><a href="/platforms/azure/#bi">BI and analytics</a></li><li><a href="/platforms/azure/#ml">ML</a></li><li><a href="/platforms/azure/#ai">AI</a></li><li><a href="/platforms/azure/#across">Across all of them</a></li><li><a href="/platforms/azure/#paths">Learning paths</a></li><li><a href="/platforms/azure/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/gcp/">Google Cloud</a></summary><ul><li><a href="/platforms/gcp/#systems">Data systems</a></li><li><a href="/platforms/gcp/#de">Data engineering</a></li><li><a href="/platforms/gcp/#bi">BI and analytics</a></li><li><a href="/platforms/gcp/#ml">ML</a></li><li><a href="/platforms/gcp/#ai">AI</a></li><li><a href="/platforms/gcp/#across">Across all of them</a></li><li><a href="/platforms/gcp/#paths">Learning paths</a></li><li><a href="/platforms/gcp/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/open/">Open source</a></summary><ul><li><a href="/platforms/open/#systems">Data systems</a></li><li><a href="/platforms/open/#de">Data engineering</a></li><li><a href="/platforms/open/#bi">BI and analytics</a></li><li><a href="/platforms/open/#ml">ML</a></li><li><a href="/platforms/open/#ai">AI</a></li><li><a href="/platforms/open/#across">Across all of them</a></li><li><a href="/platforms/open/#paths">Learning paths</a></li><li><a href="/platforms/open/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/anthropic/">Claude (Anthropic)</a></summary><ul><li><a href="/platforms/anthropic/#ai">AI</a></li><li><a href="/platforms/anthropic/#certs">Certifications</a></li></ul></details></li><li><a href="/certifications/">All certifications</a></li></ul><h4>Your role</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/data-engineering/">Data Engineering</a></summary><ul><li><a href="/data-engineering/">Start here</a></li><li><a href="/paths/data-engineering/">Learning path</a></li><li><a href="/data-engineering/#tools">Practice and simulators</a></li><li><a href="/projects/?subject=data">Projects to join</a></li><li><a href="/concepts/#data-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/">Learning path</a></li><li><a href="/learn/agent-harness-sim/">Simulator: Agent Harness</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li><li><a href="/projects/?subject=ai">Projects to join</a></li><li><a href="/concepts/#ai-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/">Learning path</a></li><li><a href="/learn/llm-api-sim/">Simulator: Claude API</a></li><li><a href="/projects/?subject=llm">Projects to join</a></li><li><a href="/concepts/#llm-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/">Learning path</a></li><li><a href="/concepts/#ml-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/">Learning path</a></li><li><a href="/concepts/#software-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/forward-deployed/">Start here: the roadmap</a></li><li><a href="/paths/forward-deployed/">Learning path</a></li><li><a href="/concepts/#forward-deployed">Key concepts</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li><li><a href="/projects/">All projects to join</a></li></ul><h4>How we work</h4><ul><li><details><summary><a href="/how-we-work/#thinking">Thinking principles</a></summary><ul><li><a href="/how-we-work/#thinking">All thinking principles</a></li><li><a href="/how-we-work/critical-thinking/">Critical thinking in data projects</a></li></ul></details></li><li><a href="/how-we-work/#ba">Business analysis</a></li><li><details><summary><a href="/how-we-work/#pm">Project management</a></summary><ul><li><a href="/how-we-work/#pm">All project management</a></li><li><a href="/how-we-work/estimation/">Estimation mistakes in data projects</a></li><li><a href="/how-we-work/project-management-mistakes/">Top project management mistakes</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li></ul></details></li><li><details><summary><a href="/learn/technical-anchor/">The technical anchor</a></summary><ul><li><a href="/learn/technical-anchor/">The role</a></li><li><a href="/learn/technical-anchor/discovery/">Discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li></ul></details></li></ul><h4>Causes and deep tech</h4><ul><li><details><summary><a href="/ai-for-cause/">AI for a cause</a></summary><ul><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul></details></li><li><details><summary><a href="/deep-tech/">Deep tech</a></summary><ul><li><a href="/problems/">Hard problems</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul></details></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li><li><a href="/about/#join">Write or teach</a></li><li><a href="/writing/">Blog</a></li><li><a href="/research/">All open specifications</a></li><li><a href="/assets/">All open-source code</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#1F1F1F"/></marker><marker id="arg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#2f7d4f"/></marker></defs></svg><p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › <a href="/learn/databricks-compute/">Databricks compute and cost</a> › How billing works</p>
+<p class="eyebrow" style="margin-top:22px">Databricks compute and cost · data engineering</p>
+<h1>How Databricks billing works: DBUs, two invoices, SKUs, autoscaling and billing tracing</h1><p class="lede">The DBU formula, classic versus serverless invoices, illustrative rates and worked examples, SKU families, what autoscaling does to cost and what you can see, and why people say they need classic for billing tracing.</p><div class="sib"><a href="/learn/databricks-compute/cluster-architecture/">Cluster anatomy</a><a href="/learn/databricks-compute/warehouses-and-serverless/">Warehouses and serverless</a><a href="/learn/databricks-compute/photon-and-caches/">Photon and caches</a><span>How billing works</span><a href="/learn/databricks-compute/dividing-the-bill/">Dividing the bill</a><a href="/learn/databricks-compute/system-tables/">System tables</a><a href="/learn/databricks-compute/delta-sharing-and-regions/">Sharing and regions</a><a href="/learn/databricks-compute/backup-and-recovery-architecture/">Backup architecture</a></div>
+<p class="verify">Prices, defaults, limits and preview status change often, and dollar figures here are illustrations. Check the current Databricks documentation and price list before quoting a number.</p>
+<section id="s13"><p class="eyebrow">Billing</p><h2>How Databricks charges you: the formula and the two invoices</h2>
+<p>Everything on Databricks compute is priced by one formula:</p>
+<div class="callout"><p><b>Databricks charge = DBUs used × price per DBU.</b></p>
+<p>A <b>DBU</b> (Databricks Unit) is a unit of processing per hour. A machine or warehouse "burns" a fixed number of DBUs per hour depending on its type and size. The <b>price per DBU</b> depends on the product (SKU), your plan tier (Premium or Enterprise), the cloud, the region and your contract.</p></div>
+<p>What changes between classic and serverless is <em>what else you pay for separately</em>.</p>
+<figure><div class="fig">
+<svg viewBox="0 0 900 300" role="img" aria-label="Classic compute produces a Databricks invoice for DBUs plus a cloud invoice for VMs, disks and network. Serverless produces a single Databricks invoice for DBUs with machines included. Storage is always the customer's cloud bill.">
+<text class="h" x="10" y="22">CLASSIC (cluster, classic SQL warehouse, pro SQL warehouse)</text>
+<rect class="db" x="10" y="34" width="270" height="70" rx="6"/><text class="b" x="145" y="58" text-anchor="middle">Databricks invoice</text><text x="145" y="78" text-anchor="middle">DBUs × rate per DBU</text><text class="m" x="145" y="94" text-anchor="middle">for the software</text>
+<text class="b" x="300" y="76" text-anchor="middle" font-size="22">+</text>
+<rect class="cu" x="320" y="34" width="330" height="70" rx="6"/><text class="b" x="485" y="58" text-anchor="middle">Your cloud invoice (AWS / Azure / GCP)</text><text x="485" y="78" text-anchor="middle">VMs + disks + public IPs + network</text><text class="m" x="485" y="94" text-anchor="middle">per second while VMs exist, including idle</text>
+<text class="b" x="670" y="76" text-anchor="middle" font-size="22">=</text>
+<rect class="bx" x="690" y="34" width="200" height="70" rx="6"/><text class="b" x="790" y="64" text-anchor="middle">Real cost</text><text class="m" x="790" y="84" text-anchor="middle">you must add two bills</text>
+
+<text class="h" x="10" y="150">SERVERLESS (SQL warehouse, notebooks, jobs, pipelines)</text>
+<rect class="db" x="10" y="162" width="640" height="70" rx="6"/><text class="b" x="330" y="186" text-anchor="middle">Databricks invoice only</text><text x="330" y="206" text-anchor="middle">DBUs × a higher rate per DBU. The VMs, disks, networking inside are included in that rate.</text><text class="m" x="330" y="222" text-anchor="middle">No VM line in your cloud bill</text>
+<text class="b" x="670" y="204" text-anchor="middle" font-size="22">=</text>
+<rect class="bx" x="690" y="162" width="200" height="70" rx="6"/><text class="b" x="790" y="192" text-anchor="middle">Real cost</text><text class="m" x="790" y="212" text-anchor="middle">one bill</text>
+<text class="m" x="10" y="268">Both ways, you still pay your own cloud for storage (the Delta files), data egress and anything you run outside Databricks.</text>
+</svg></div>
+<figcaption>This single difference explains most billing arguments. Classic spreads cost over two vendors, and idle VMs cost you on the cloud side. Serverless has one price per DBU, higher on paper, but with no idle machines and no boot time to pay for.</figcaption></figure>
+
+<h3>What else is billed</h3>
+<ul>
+<li><b>Per-second billing.</b> Classic VMs and DBUs are billed per second while the cluster is up. Starting, running, idle and waiting-to-terminate all count.</li>
+<li><b>Pool VMs.</b> Idle VMs in a pool cost you cloud money but no DBUs.</li>
+<li><b>Photon.</b> On classic clusters Photon raises the DBU rate for those machines. Serverless and SQL warehouses already include it.</li>
+<li><b>Other products with their own units.</b> Model serving (per hour or per token), Vector Search, Lakebase databases, pipelines, predictive optimization, and so on. Each is its own SKU family (see <a href="/learn/databricks-compute/how-billing-works/#s15">SKU families</a>).</li>
+<li><b>Commit discounts.</b> Large customers buy a committed spend with a negotiated discount. The invoice reflects it. Some system tables only show list prices (see <a href="/learn/databricks-compute/system-tables/#s21">what is hidden</a>).</li>
+</ul>
+
+</section>
+<section id="s14"><p class="eyebrow">Billing</p><h2>Rates and worked examples</h2>
+<div class="callout w"><p><b>Treat every dollar figure below as an illustration.</b> Databricks list prices change, and differ by cloud, region, tier (Premium or Enterprise) and contract. I wrote these from memory of typical AWS Premium US list prices. Check the official pricing page before quoting any of them to anyone.</p></div>
+<div class="tw"><table class="t">
+<tr><th>Product (SKU family)</th><th>Illustrative list rate per DBU</th><th>Includes VMs?</th></tr>
+<tr><td>Jobs compute (classic job cluster)</td><td>about $0.15</td><td>No, plus your cloud VMs</td></tr>
+<tr><td>All-purpose compute (classic interactive cluster)</td><td>about $0.55</td><td>No, plus your cloud VMs</td></tr>
+<tr><td>Classic SQL warehouse</td><td>about $0.22</td><td>No, plus your cloud VMs</td></tr>
+<tr><td>Pro SQL warehouse</td><td>about $0.55</td><td>No, plus your cloud VMs</td></tr>
+<tr><td>Serverless SQL warehouse</td><td>about $0.70</td><td>Yes</td></tr>
+<tr><td>Serverless jobs / notebooks</td><td>roughly $0.35 to $0.95 depending on product and mode</td><td>Yes</td></tr>
+<tr><td>Pipelines (Lakeflow / DLT) Core, Pro, Advanced</td><td>about $0.20, $0.25, $0.36 on classic</td><td>No on classic, yes on serverless</td></tr>
+</table></div>
+<p>SQL warehouse size decides DBUs per hour. Typical figures, each step about double:</p>
+<div class="tw"><table class="t">
+<tr><th>Size</th><th>2X-Small</th><th>X-Small</th><th>Small</th><th>Medium</th><th>Large</th><th>X-Large</th><th>2X-Large</th><th>3X-Large</th><th>4X-Large</th></tr>
+<tr><td>DBU per hour (per cluster)</td><td>4</td><td>6</td><td>12</td><td>24</td><td>40</td><td>80</td><td>144</td><td>272</td><td>528</td></tr>
+</table></div>
+<p>A classic cluster's DBUs per hour come from the machine types: each VM type has a fixed DBU rating per hour (for example, a mid-size general-purpose VM is roughly 1 to 2 DBU per hour). The cluster rate is the sum over the driver and all workers.</p>
+
+<h3>Three worked examples (illustrative numbers)</h3>
+<p>Assumptions: each node is a VM rated 2 DBU/hour that costs $0.384/hour on the cloud. Jobs rate $0.15, all-purpose $0.55, serverless SQL $0.70.</p>
+<div class="tw"><table class="t">
+<tr><th>Case</th><th>Databricks part</th><th>Cloud VM part</th><th>Total for 2 hours</th></tr>
+<tr><td><b>A.</b> Nightly job cluster: 1 driver + 4 workers = 5 nodes, 2 hours</td><td>5 × 2 DBU × 2 h = 20 DBU × $0.15 = $3.00</td><td>5 × $0.384 × 2 h = $3.84</td><td><b>$6.84</b></td></tr>
+<tr><td><b>B.</b> Same machines, but on an all-purpose cluster</td><td>20 DBU × $0.55 = $11.00</td><td>$3.84</td><td><b>$14.84</b></td></tr>
+<tr><td><b>C.</b> Serverless SQL warehouse, Medium (24 DBU/h), 2 hours</td><td>48 DBU × $0.70 = $33.60</td><td>included</td><td><b>$33.60</b></td></tr>
+</table></div>
+<p>Do not read C as "serverless is five times worse". The comparison that matters is cost <em>per finished task</em>. Case A also pays for several minutes of boot time before it does any work, idle time waiting to terminate, and VMs that sit half used. A serverless warehouse starts in seconds, stops after a short idle time, and Photon plus Predictive IO often cuts the run time. The honest method is to run the same real workload on both and compare the invoices.</p>
+
+</section>
+<section id="s15"><p class="eyebrow">Billing</p><h2>How many SKUs?</h2>
+<p>There is no honest single number. A SKU is a billing line, and Databricks creates separate SKUs for each product, plan tier (Premium, Enterprise), cloud, and for many serverless products, each region. On one cloud it is in the order of a hundred or more, and across all clouds, regions and tiers the price list holds several hundred rows. You can count your own exactly:</p>
+<div class="callout g"><p><code>SELECT COUNT(DISTINCT sku_name) FROM system.billing.list_prices;</code></p><p>And to see only what you actually used: <code>SELECT DISTINCT sku_name FROM system.billing.usage;</code></p></div>
+<p>Learn them as <b>families</b>, which is how they are named:</p>
+<div class="tw"><table class="t">
+<tr><th>Family</th><th>Example SKU name pattern</th><th>Meaning</th></tr>
+<tr><td>Classic jobs</td><td><code>PREMIUM_JOBS_COMPUTE</code>, <code>..._(PHOTON)</code></td><td>Job clusters, with or without Photon</td></tr>
+<tr><td>Classic all-purpose</td><td><code>PREMIUM_ALL_PURPOSE_COMPUTE</code>, <code>..._(PHOTON)</code></td><td>Interactive clusters</td></tr>
+<tr><td>SQL</td><td><code>PREMIUM_SQL_COMPUTE</code>, pro and classic variants</td><td>Classic and Pro SQL warehouses</td></tr>
+<tr><td>Serverless SQL</td><td><code>PREMIUM_SERVERLESS_SQL_COMPUTE_&lt;REGION&gt;</code></td><td>Serverless warehouses. Rate depends on region.</td></tr>
+<tr><td>Serverless jobs / notebooks</td><td><code>JOBS_SERVERLESS_COMPUTE_&lt;REGION&gt;</code> and similar</td><td>Serverless workflows and notebooks</td></tr>
+<tr><td>Pipelines</td><td><code>DLT_CORE/PRO/ADVANCED_COMPUTE</code>, serverless variants</td><td>Lakeflow / Delta Live Tables</td></tr>
+<tr><td>AI and serving</td><td>model serving, foundation model, vector search, AI gateway SKUs</td><td>Billed by hour, token or request</td></tr>
+<tr><td>Databases and platform</td><td>Lakebase, predictive optimization, data sharing, networking SKUs</td><td>Each its own meter</td></tr>
+</table></div>
+<p>The names above show the patterns. Exact strings change, so always read them from <code>system.billing.list_prices</code> rather than trusting a doc.</p>
+
+</section>
+<section id="s16"><p class="eyebrow">Billing</p><h2>Autoscaling and what it does to cost</h2>
+<p>Autoscaling means the cluster grows and shrinks between a minimum and a maximum. Cost follows the number of nodes at each moment. A cluster with min 2 and max 10 workers that sits at 8 workers most of the day costs four times a fixed 2-worker cluster, even though your "cluster size" setting looks small.</p>
+<div class="tw"><table class="t">
+<tr><th>Compute</th><th>How it scales</th><th>Is the scaling visible to you?</th></tr>
+<tr><td>Classic cluster</td><td>Workers added or removed within min and max</td><td><b>Yes, with work.</b> The cluster event log shows RESIZING events with the target worker count. <code>system.compute.node_timeline</code> gives per-minute utilisation per node. <code>system.compute.clusters</code> shows config changes. But <code>system.billing.usage</code> is hourly per cluster, so you must stitch events and billing together to see which minutes cost what.</td></tr>
+<tr><td>Classic / Pro / Serverless SQL warehouse</td><td>Adds or removes whole clusters between min and max</td><td><b>Yes.</b> <code>system.compute.warehouse_events</code> records starting, running, scaled up, scaled down and stopping with the cluster count.</td></tr>
+<tr><td>Serverless jobs, notebooks, pipelines</td><td>Databricks decides, you cannot see it</td><td><b>No.</b> You see DBUs consumed and run duration. You do not see node counts, node types or scale decisions. This is a real visibility gap.</td></tr>
+</table></div>
+<div class="callout"><p><b>So your point is right for serverless, and half right for classic.</b> Classic gives you the raw events but not a ready-made "cost of this scale-up" number. Serverless gives you the DBU total but no scaling history at all.</p></div>
+<p>Practical consequences: on classic, check "peak workers" and "average workers" per job and compare with min and max. On serverless, compare DBU per run over time and treat a rising trend as the only signal of over-scaling.</p>
+
+</section>
+<section id="s17"><p class="eyebrow">Billing</p><h2>Why people insist on classic "for billing tracing"</h2>
+<p>The claim has a true core and an outdated shell. The true core: on classic compute, cost can be traced in <em>two places that agree with each other</em>, and at machine level.</p>
+<figure><div class="fig">
+<svg viewBox="0 0 900 270" role="img" aria-label="On classic, tags on the cluster flow to Databricks usage records and to the cloud VMs, so both bills can be tied to a team. On serverless there are no customer VMs, so only Databricks usage records carry the tags.">
+<text class="h" x="10" y="22">Classic: a tag follows the cluster into both bills</text>
+<rect class="cu" x="10" y="34" width="200" height="60" rx="6"/><text class="b" x="110" y="58" text-anchor="middle">Cluster with tags</text><text class="m" x="110" y="76" text-anchor="middle">team=bu1, env=prod</text>
+<rect class="db" x="330" y="34" width="220" height="26" rx="4"/><text x="440" y="52" text-anchor="middle">system.billing.usage (DBUs + tags)</text>
+<rect class="cu" x="330" y="68" width="220" height="26" rx="4"/><text x="440" y="86" text-anchor="middle">Cloud cost report: VMs carry the tags</text>
+<rect class="ca" x="660" y="34" width="230" height="60" rx="6"/><text class="b" x="775" y="58" text-anchor="middle">Join both = full cost</text><text class="m" x="775" y="76" text-anchor="middle">per tag, per cluster, per VM</text>
+<path class="ln" d="M210 54L330 47" marker-end="url(#ar)"/><path class="ln" d="M210 74L330 81" marker-end="url(#ar)"/><path class="ln" d="M550 47L660 55" marker-end="url(#ar)"/><path class="ln" d="M550 81L660 75" marker-end="url(#ar)"/>
+
+<text class="h" x="10" y="150">Serverless: one record, no VMs of yours to tag</text>
+<rect class="db" x="10" y="162" width="200" height="60" rx="6"/><text class="b" x="110" y="186" text-anchor="middle">Warehouse, job or</text><text class="b" x="110" y="202" text-anchor="middle">budget policy tags</text>
+<rect class="db" x="330" y="168" width="220" height="48" rx="4"/><text x="440" y="188" text-anchor="middle">system.billing.usage</text><text class="m" x="440" y="206" text-anchor="middle">DBUs, tags, job id, warehouse id</text>
+<rect class="bx" x="660" y="162" width="230" height="60" rx="6"/><text class="b" x="775" y="186" text-anchor="middle">Cost per tag</text><text class="m" x="775" y="204" text-anchor="middle">but nothing below the DBU line</text>
+<path class="ln" d="M210 192H330" marker-end="url(#ar)"/><path class="ln" d="M550 192H660" marker-end="url(#ar)"/>
+</svg></div>
+<figcaption>Classic: you can answer "which VM, which disk, which network cost belongs to this team" from the cloud bill. Serverless: you can answer "which DBUs belong to this team" and nothing deeper.</figcaption></figure>
+
+<div class="tw"><table class="t">
+<tr><th>Reason people give</th><th>Still true today?</th></tr>
+<tr><td>Cloud bill (AWS Cost Explorer, Azure Cost Management) shows VMs tagged per cluster, so finance can reconcile against Databricks.</td><td>True. Serverless has no VMs in your account to tag.</td></tr>
+<tr><td>Per-cluster granularity: one cluster per team makes cost obvious.</td><td>True, and a cluster is a natural unit. Serverless jobs and notebooks have no such object.</td></tr>
+<tr><td>You can see machine utilisation and prove whether you are wasting money.</td><td>True on classic. Not available on serverless.</td></tr>
+<tr><td>Serverless notebooks could not be tagged per team.</td><td><b>Largely outdated.</b> Serverless budget policies now let an admin attach tags to all serverless usage of a user, group or service principal, and those tags appear in <code>system.billing.usage</code>. Warehouses and jobs can also carry tags.</td></tr>
+<tr><td>Show a Databricks cost and a cloud cost side by side to justify a commit.</td><td>True. With serverless you only have the Databricks number, so you cannot see the split between Databricks margin and the machine cost inside it.</td></tr>
+</table></div>
+<p>My reading: classic is the better choice when finance demands a machine-level, two-bill audit trail. For most teams, serverless with budget policies and tagged warehouses is enough, and the tracing gap is smaller than the idle and boot waste classic carries.</p>
+
+</section>
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>How is Databricks billed?</summary><p>Databricks charge = DBUs used x price per DBU. On classic compute you also pay your cloud for VMs, disks and network. On serverless the machines are inside a higher DBU price.</p></details><details class="faq"><summary>Why do people say they need classic for billing tracing?</summary><p>Tags on a classic cluster reach both the Databricks usage records and the cloud&#x27;s VM costs, so you can reconcile two bills at machine level. Serverless has no VMs of yours to tag, though budget policies now tag serverless usage in the usage table.</p></details><details class="faq"><summary>Can I see autoscaling in the bill?</summary><p>Partly. Classic gives event logs and per-minute node data but billing is hourly, so you stitch them. Warehouses have scale events. Serverless jobs and notebooks show no scaling detail, only DBUs.</p></details></section>
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2><p>Related on this site: <a href="/learn/databricks-interview/tagging-best-practices/">Tagging best practices</a> · <a href="/learn/databricks-interview/cost-and-performance/">Biggest cost and performance levers</a> · <a href="/learn/data-systems/platform/cost/calculator/">Databricks cost calculator</a> · <a href="/learn/data-systems/platform/cost/">Cost and FinOps for the platform</a></p><p><a href="/learn/databricks-compute/">All Databricks compute and cost pages</a> · <a href="/data-engineering/">All data engineering</a> · <a href="/platforms/databricks/">Databricks on this site</a></p><div class="sib"><a href="/learn/databricks-compute/cluster-architecture/">Cluster anatomy</a><a href="/learn/databricks-compute/warehouses-and-serverless/">Warehouses and serverless</a><a href="/learn/databricks-compute/photon-and-caches/">Photon and caches</a><span>How billing works</span><a href="/learn/databricks-compute/dividing-the-bill/">Dividing the bill</a><a href="/learn/databricks-compute/system-tables/">System tables</a><a href="/learn/databricks-compute/delta-sharing-and-regions/">Sharing and regions</a><a href="/learn/databricks-compute/backup-and-recovery-architecture/">Backup architecture</a></div></section>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Concepts</b><a href="/leaders/">For leaders</a><a href="/learn/fundamentals/">Fundamentals</a><a href="/learn/data-systems/">Data systems</a><a href="/learn/data-systems/platform/">Data and AI platform</a><a href="/learn/data-systems/platform/#hops">Data engineering</a><a href="/concepts/semantic-layer/">BI and analytics</a><a href="/concepts/#ml-engineering">ML</a><a href="/learn/ai-universe/">AI</a><a href="/learn/data-systems/platform/#concerns">Across all of them</a><a href="/concepts/#a-z">Key concepts, A to Z</a></div><div><b>On your cloud</b><a href="/platforms/databricks/">Databricks</a><a href="/platforms/aws/">AWS</a><a href="/platforms/azure/">Azure and Fabric</a><a href="/platforms/gcp/">Google Cloud</a><a href="/platforms/open/">Open source</a><a href="/platforms/anthropic/">Claude (Anthropic)</a><a href="/certifications/">All certifications</a></div><div><b>Your role</b><a href="/paths/">Find your path</a><a href="/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/forward-deployed/">Forward Deployed Engineering</a><a href="/mindset/">Worried about AI?</a><a href="/projects/">All projects to join</a></div><div><b>How we work</b><a href="/how-we-work/#thinking">Thinking principles</a><a href="/how-we-work/#ba">Business analysis</a><a href="/how-we-work/#pm">Project management</a><a href="/learn/technical-anchor/">The technical anchor</a></div><div><b>Causes and deep tech</b><a href="/ai-for-cause/">AI for a cause</a><a href="/deep-tech/">Deep tech</a></div><div><b>About</b><a href="/about/">About this site</a><a href="/about/#join">Write or teach</a><a href="/writing/">Blog</a><a href="/research/">All open specifications</a><a href="/assets/">All open-source code</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

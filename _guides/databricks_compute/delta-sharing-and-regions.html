@@ -1,0 +1,46 @@
+<section id="s24"><p class="eyebrow">Sharing and regions</p><h2>Delta Sharing: does it help, and how it works inside</h2>
+<h3>How it works</h3>
+<p><b>Delta Sharing</b> is an open protocol. The data owner (provider) publishes a <i>share</i> that lists tables. A reader (recipient) gets a credential, or for Databricks to Databricks, a trust link inside Unity Catalog. The key idea: the sharing server hands out <b>short-lived signed links to the Parquet files</b>, and the reader downloads straight from cloud storage. The server never carries the data.</p>
+<figure><div class="fig">
+<svg viewBox="0 0 900 290" role="img" aria-label="Recipient asks the sharing server, which checks permission and returns signed file links; the recipient reads files directly from the provider's cloud storage.">
+<rect class="db" x="10" y="90" width="190" height="90" rx="6"/><text class="b" x="105" y="116" text-anchor="middle">RECIPIENT compute</text><text class="m" x="105" y="136" text-anchor="middle">Databricks, Spark, pandas,</text><text class="m" x="105" y="152" text-anchor="middle">Power BI, DuckDB, ...</text><text class="m" x="105" y="168" text-anchor="middle">pays for its own compute</text>
+<rect class="bx" x="360" y="20" width="220" height="80" rx="6"/><text class="b" x="470" y="46" text-anchor="middle">SHARING SERVER (provider)</text><text class="m" x="470" y="66" text-anchor="middle">checks the credential and share</text><text class="m" x="470" y="82" text-anchor="middle">picks files using table stats</text>
+<rect class="cu" x="360" y="170" width="220" height="100" rx="6"/><text class="b" x="470" y="196" text-anchor="middle">PROVIDER cloud storage</text><text class="m" x="470" y="216" text-anchor="middle">Delta table: Parquet files</text><text class="m" x="470" y="232" text-anchor="middle">+ _delta_log</text><text class="m" x="470" y="248" text-anchor="middle">files never leave this bucket</text>
+<rect class="ca" x="690" y="90" width="200" height="90" rx="6"/><text class="b" x="790" y="116" text-anchor="middle">Result</text><text class="m" x="790" y="136" text-anchor="middle">recipient has rows,</text><text class="m" x="790" y="152" text-anchor="middle">not a copy of the table</text>
+<path class="ln" d="M200 110L360 70" marker-end="url(#ar)"/><text class="m" x="220" y="78">1. query table T, filters</text>
+<path class="ln" d="M360 90L200 130" marker-end="url(#ar)"/><text class="m" x="212" y="150">2. list of signed file URLs</text>
+<path class="ln" d="M200 160L360 200" marker-end="url(#ar)"/><text class="m" x="225" y="196">3. download files directly</text>
+<path class="ln" d="M580 220L690 150" marker-end="url(#ar)"/>
+<path class="ln ds" d="M470 100V170"/><text class="m" x="478" y="140">reads metadata</text>
+</svg></div>
+<figcaption>Three steps. Ask, receive signed links, download from the provider's storage. Permissions are checked in step 1, and links expire in minutes.</figcaption></figure>
+<ul>
+<li><b>Table versions.</b> The server reads the Delta log to know which files make up the current version, or a past version, and which files can be skipped using min/max stats.</li>
+<li><b>Two flavours.</b> Databricks to Databricks uses Unity Catalog trust and needs no token. Open sharing gives other tools a token or federated identity.</li>
+<li><b>Limits you set.</b> You can share a table, a view or a partition slice, and use dynamic views for row and column filtering.</li>
+</ul>
+<h3>Does it help with system table cost?</h3>
+<p><b>It helps indirectly, and only in one pattern.</b> It does not make the original system tables cheaper to read. It helps when you build one central FinOps workspace, create the small rollup table there, and <em>share the rollup</em> to other workspaces, regions or accounts. Each BU then reads the small shared table instead of running its own heavy system table queries.</p>
+<div class="tw"><table class="t">
+<tr><th>Use of Delta Sharing</th><th>Helps with cost?</th><th>Verdict</th></tr>
+<tr><td>Share your small rollup table with BU workspaces or other accounts</td><td>Yes. One heavy read, many small reads.</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Share the raw system tables onward</td><td>No. Reads are still big, and the cross-region data transfer may cost more.</td><td class="v drop">Drop</td></tr>
+<tr><td>Share a table across regions or clouds repeatedly</td><td>Costs egress. See next section.</td><td class="v">Pursue with a replica, not repeated reads</td></tr>
+</table></div>
+
+</section>
+<section id="s25"><p class="eyebrow">Sharing and regions</p><h2>Cross-region cost, and how to avoid it on Databricks</h2>
+<p>You are right that moving data between regions costs money. The cloud providers charge for data leaving a region (and sometimes between availability zones), while data moving inside a region between compute and storage is normally free. Databricks does not add this fee. It is a cloud provider charge that appears on a cloud invoice (or on the Databricks one for serverless networking). Check your provider's current rates, but the order of magnitude is a few cents per gigabyte.</p>
+<div class="tw"><table class="t">
+<tr><th>Where it appears in Databricks</th><th>Why</th><th>How to avoid</th></tr>
+<tr><td>A cluster or warehouse in region A reads storage in region B</td><td>Every read crosses the region boundary</td><td>Keep compute and the data it reads in the same region. Create the workspace where the data is.</td></tr>
+<tr><td>Delta Sharing to a recipient in another region or cloud</td><td>The provider's storage sends files out of the region</td><td>Share small aggregates, not raw tables. Replicate once to the recipient's region and read the replica. Use a zero-egress replica location such as Cloudflare R2 if your setup allows.</td></tr>
+<tr><td>Disaster recovery copy in another region</td><td>One-time and ongoing transfer</td><td>Replicate only what matters, use incremental deep clone, compress, and test the cost before turning it on.</td></tr>
+<tr><td>Metastore is regional</td><td>A workspace in another region needs its own metastore, so people copy or share data across</td><td>Plan one metastore per region from the start. Put catalogs where their data lives.</td></tr>
+<tr><td>Multiple availability zones in one region</td><td>Shuffle traffic between nodes in different zones can be charged</td><td>Where supported, keep a cluster in one zone for shuffle-heavy work.</td></tr>
+<tr><td>Repeated reads of the same remote data</td><td>You pay every time</td><td>Copy once to local storage, or rely on the worker SSD disk cache so a second read stays local.</td></tr>
+<tr><td>Serverless compute reading from a different region</td><td>Serverless runs in the workspace's region. Storage elsewhere means crossing regions.</td><td>Put the storage in the workspace's region.</td></tr>
+</table></div>
+<p><b>The rule:</b> move compute to data, or move a small summary of the data, never the raw bulk, and never repeatedly.</p>
+
+</section>

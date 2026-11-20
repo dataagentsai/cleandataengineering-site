@@ -1,0 +1,74 @@
+<section id="s7"><p class="eyebrow">Photon and caches</p><h2>Photon: the faster engine</h2>
+<p>Normal Spark executes your query inside the Java JVM, one row or one generated code block at a time. <b>Photon</b> is a replacement execution engine written in C++. It processes data in columns, in batches, using the CPU's vector (SIMD) instructions. Same Spark, same APIs, same driver and plan, just a faster engine at the bottom.</p>
+
+<figure><div class="fig">
+<svg viewBox="0 0 900 330" role="img" aria-label="A query plan with scan, filter, join, aggregate, Python UDF and write; Photon runs the supported operators and Spark JVM runs the UDF.">
+<text class="h" x="10" y="22">Your query plan (the same either way)</text>
+<g>
+<rect class="bx" x="10" y="36" width="110" height="36" rx="4"/><text x="65" y="59" text-anchor="middle">Scan Delta</text>
+<rect class="bx" x="140" y="36" width="110" height="36" rx="4"/><text x="195" y="59" text-anchor="middle">Filter</text>
+<rect class="bx" x="270" y="36" width="110" height="36" rx="4"/><text x="325" y="59" text-anchor="middle">Join</text>
+<rect class="bx" x="400" y="36" width="110" height="36" rx="4"/><text x="455" y="59" text-anchor="middle">Aggregate</text>
+<rect class="bx" x="530" y="36" width="140" height="36" rx="4"/><text x="600" y="59" text-anchor="middle">Python UDF</text>
+<rect class="bx" x="690" y="36" width="110" height="36" rx="4"/><text x="745" y="59" text-anchor="middle">Write</text>
+</g>
+<path class="ln" d="M120 54H140" marker-end="url(#ar)"/><path class="ln" d="M250 54H270" marker-end="url(#ar)"/><path class="ln" d="M380 54H400" marker-end="url(#ar)"/><path class="ln" d="M510 54H530" marker-end="url(#ar)"/><path class="ln" d="M670 54H690" marker-end="url(#ar)"/>
+
+<text class="h" x="10" y="118">Without Photon: every step in the Spark JVM</text>
+<g>
+<rect class="gr" x="10" y="130" width="110" height="36" rx="4"/><text x="65" y="153" text-anchor="middle">JVM</text>
+<rect class="gr" x="140" y="130" width="110" height="36" rx="4"/><text x="195" y="153" text-anchor="middle">JVM</text>
+<rect class="gr" x="270" y="130" width="110" height="36" rx="4"/><text x="325" y="153" text-anchor="middle">JVM</text>
+<rect class="gr" x="400" y="130" width="110" height="36" rx="4"/><text x="455" y="153" text-anchor="middle">JVM</text>
+<rect class="gr" x="530" y="130" width="140" height="36" rx="4"/><text x="600" y="153" text-anchor="middle">JVM + Python</text>
+<rect class="gr" x="690" y="130" width="110" height="36" rx="4"/><text x="745" y="153" text-anchor="middle">JVM</text>
+</g>
+
+<text class="h" x="10" y="214">With Photon: supported steps run in C++, the rest stay in the JVM</text>
+<g>
+<rect class="ca" x="10" y="226" width="110" height="36" rx="4"/><text x="65" y="249" text-anchor="middle">Photon</text>
+<rect class="ca" x="140" y="226" width="110" height="36" rx="4"/><text x="195" y="249" text-anchor="middle">Photon</text>
+<rect class="ca" x="270" y="226" width="110" height="36" rx="4"/><text x="325" y="249" text-anchor="middle">Photon</text>
+<rect class="ca" x="400" y="226" width="110" height="36" rx="4"/><text x="455" y="249" text-anchor="middle">Photon</text>
+<rect class="gr" x="530" y="226" width="140" height="36" rx="4"/><text x="600" y="249" text-anchor="middle">JVM + Python</text>
+<rect class="ca" x="690" y="226" width="110" height="36" rx="4"/><text x="745" y="249" text-anchor="middle">Photon</text>
+</g>
+<text class="m" x="10" y="292">Where the plan switches between Photon and the JVM, data is converted, which costs a little. A plan with many unsupported steps in the middle gains less.</text>
+<text class="m" x="10" y="312">Photon works on off-heap memory, so it needs RAM outside the Java heap. Databricks handles the split for you.</text>
+</svg></div>
+<figcaption>Photon does not change what your query means. It only swaps the engine for each operator it supports. Anything it does not support, such as Python UDFs, runs on normal Spark.</figcaption></figure>
+
+<div class="tw"><table class="t">
+<tr><th>Photon helps a lot</th><th>Photon helps little or not at all</th></tr>
+<tr><td>Large scans of Delta and Parquet<br>Joins and aggregations<br>MERGE, UPDATE, DELETE, big writes<br>Wide tables with many columns<br>SQL warehouses (it is always on)</td><td>Python UDFs and pandas UDFs<br>RDD code and low-level Spark<br>Very small queries that finish in a second or two<br>Machine learning training<br>Work limited by slow external systems, not CPU</td></tr>
+</table></div>
+<p>On classic clusters you tick a Photon box and the machine rate in DBUs goes up. It usually still saves money because jobs finish sooner. On SQL warehouses and serverless it is simply included.</p>
+
+</section>
+<section id="s9"><p class="eyebrow">Photon and caches</p><h2>Every cache, and who supports it</h2>
+<p>Databricks has several different things people call "cache". They live in different places and solve different problems.</p>
+<figure><div class="fig">
+<svg viewBox="0 0 900 190" role="img" aria-label="A query first checks result cache, then Spark cache, then disk cache, then cloud storage.">
+<rect class="bx" x="10" y="60" width="110" height="60" rx="6"/><text class="b" x="65" y="86" text-anchor="middle">Your query</text><text class="m" x="65" y="104" text-anchor="middle">arrives</text>
+<rect class="ca" x="170" y="40" width="150" height="100" rx="6"/><text class="b" x="245" y="66" text-anchor="middle">1. Result cache</text><text class="m" x="245" y="86" text-anchor="middle">whole answer saved</text><text class="m" x="245" y="102" text-anchor="middle">SQL warehouses</text><text class="m" x="245" y="124" text-anchor="middle">hit = done instantly</text>
+<rect class="ca" x="370" y="40" width="150" height="100" rx="6"/><text class="b" x="445" y="66" text-anchor="middle">2. Spark cache</text><text class="m" x="445" y="86" text-anchor="middle">DataFrame in RAM</text><text class="m" x="445" y="102" text-anchor="middle">classic clusters, you ask</text><text class="m" x="445" y="124" text-anchor="middle">hit = skip the scan</text>
+<rect class="ca" x="570" y="40" width="150" height="100" rx="6"/><text class="b" x="645" y="66" text-anchor="middle">3. Disk cache</text><text class="m" x="645" y="86" text-anchor="middle">file copies on SSD</text><text class="m" x="645" y="102" text-anchor="middle">automatic, most compute</text><text class="m" x="645" y="124" text-anchor="middle">hit = skip cloud read</text>
+<rect class="bx" x="770" y="60" width="120" height="60" rx="6"/><text class="b" x="830" y="86" text-anchor="middle">4. Cloud</text><text class="b" x="830" y="102" text-anchor="middle">storage</text>
+<path class="ln" d="M120 90H170" marker-end="url(#ar)"/><path class="ln" d="M320 90H370" marker-end="url(#ar)"/><path class="ln" d="M520 90H570" marker-end="url(#ar)"/><path class="ln" d="M720 90H770" marker-end="url(#ar)"/>
+<text class="m" x="322" y="160">miss</text><text class="m" x="522" y="160">miss</text><text class="m" x="722" y="160">miss</text>
+<text class="m" x="10" y="182">The OS page cache sits quietly under all of these and needs no setup.</text>
+</svg></div>
+<figcaption>Checks go from cheapest and most complete (whole answer) to most expensive (reading from cloud). The further left a hit happens, the more work is skipped.</figcaption></figure>
+
+<div class="tw"><table class="t">
+<tr><th>Cache</th><th>Stores</th><th>Lives in</th><th>All-purpose / job cluster</th><th>Classic / Pro SQL warehouse</th><th>Serverless SQL warehouse</th><th>Serverless notebook / job</th></tr>
+<tr><td><b>Result cache</b></td><td>Final query results</td><td>Warehouse memory, remote store for serverless</td><td>No</td><td>Yes, local</td><td>Yes, local and remote (up to 24 h)</td><td>No</td></tr>
+<tr><td><b>Spark cache</b> (<code>cache()</code>, <code>persist()</code>)</td><td>DataFrame partitions</td><td>Executor RAM, can spill to disk</td><td>Yes, you manage it</td><td>Not something you control</td><td>Not something you control</td><td>Restricted</td></tr>
+<tr><td><b>Disk cache</b> (old name: Delta cache)</td><td>Copies of Parquet / Delta files</td><td>Worker local SSD</td><td>Yes. Automatic on storage-optimized types, opt-in on others.</td><td>Yes, automatic</td><td>Yes, managed</td><td>Yes, managed</td></tr>
+<tr><td><b>OS page cache</b></td><td>Recently read file blocks</td><td>Spare RAM</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td><b>Delta log / metadata cache</b></td><td>Table snapshot, file stats</td><td>Driver memory</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td><b>Predictive IO</b> (a read optimizer, not a cache)</td><td>n/a</td><td>n/a</td><td>No</td><td>Pro only</td><td>Yes</td><td>Not a documented feature</td></tr>
+</table></div>
+<div class="callout w"><p><b>Disk cache versus Spark cache, the part everyone mixes up.</b> The disk cache keeps raw data files on local SSD and is invalidated automatically when files change. It costs no RAM and needs no code. The Spark cache keeps a specific DataFrame in memory after your transformations, uses your RAM, and you must unpersist it. For most workloads, rely on the disk cache and use Spark cache only for a DataFrame you reuse many times in one session.</p></div>
+
+</section>

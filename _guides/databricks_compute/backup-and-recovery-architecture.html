@@ -1,0 +1,46 @@
+<section id="s26"><p class="eyebrow">Backup and recovery</p><h2>Best architecture for backup and recovery</h2>
+<p>Start with the surprise: <b>Delta time travel is not a backup.</b> It lives in the same storage as the table, and <code>VACUUM</code> deletes old files by design (history is kept for a limited time, often a week). Time travel is a fast undo. A backup is a separate copy that an attacker or a bad script cannot touch.</p>
+<figure><div class="fig">
+<svg viewBox="0 0 900 400" role="img" aria-label="Production region with workspace and storage; deep clone to an isolated, immutable backup account; replication to a DR region with its own workspace and metastore; Git and Terraform rebuild the control plane.">
+<rect class="cu" x="10" y="10" width="400" height="230" rx="8"/><text class="h" x="24" y="34">PRODUCTION (region A, prod cloud account)</text>
+<rect class="db" x="24" y="46" width="372" height="44" rx="5"/><text class="b" x="210" y="66" text-anchor="middle">Workspace + Unity Catalog metastore</text><text class="m" x="210" y="82" text-anchor="middle">jobs, warehouses, permissions</text>
+<rect class="bx" x="24" y="102" width="372" height="64" rx="5"/><text class="b" x="210" y="124" text-anchor="middle">Storage with versioning and soft delete</text><text class="m" x="210" y="142" text-anchor="middle">Delta tables. Time travel and RESTORE for quick undo.</text><text class="m" x="210" y="156" text-anchor="middle">UNDROP for dropped managed tables (short window)</text>
+<rect class="bx" x="24" y="178" width="372" height="48" rx="5"/><text class="b" x="210" y="198" text-anchor="middle">Git repos + Terraform / Asset Bundles</text><text class="m" x="210" y="214" text-anchor="middle">code, jobs, workspaces, grants as text</text>
+
+<rect class="ca" x="470" y="10" width="420" height="110" rx="8"/><text class="h" x="484" y="34">BACKUP ACCOUNT (separate credentials)</text>
+<text x="484" y="60">Write-only role from production</text><text x="484" y="80">Object lock / immutability (cannot delete)</text><text x="484" y="100">Incremental DEEP CLONE of critical tables</text>
+<rect class="db" x="470" y="140" width="420" height="100" rx="8"/><text class="h" x="484" y="164">DR REGION B (secondary)</text>
+<text x="484" y="188">Second workspace and metastore, built from Terraform</text><text x="484" y="208">Data copied by deep clone, tested restore</text><text x="484" y="228">Compute off until a disaster, then started</text>
+
+<path class="ln" d="M410 70L470 70" marker-end="url(#ar)"/><text class="m" x="414" y="62">clone</text>
+<path class="ln" d="M410 170L470 190" marker-end="url(#ar)"/><text class="m" x="414" y="162">clone</text>
+<rect class="bx" x="10" y="262" width="880" height="128" rx="8"/><text class="h" x="24" y="286">What protects against what</text>
+<text x="24" y="310">Bad write or bad merge: RESTORE to a past version. Minutes.</text>
+<text x="24" y="330">Table dropped: UNDROP, or restore from storage versioning.</text>
+<text x="24" y="350">Files deleted or VACUUM too early: restore from backup account.</text>
+<text x="24" y="370">Ransomware, stolen admin key: immutable backup account.   Region outage: DR region.</text>
+</svg></div>
+<figcaption>Three separate protections for three separate disasters: fast undo in place, an immutable copy in another account, and a rebuildable second region. Code and configuration live as text in Git, so the control side can be recreated.</figcaption></figure>
+
+<div class="tw"><table class="t">
+<tr><th>Failure</th><th>Tool</th><th>Typical recovery speed</th><th>Verdict</th></tr>
+<tr><td>Bad write, bad MERGE, wrong job run</td><td>Delta time travel and <code>RESTORE TABLE</code></td><td>Minutes</td><td class="v pursue">Pursue as first line</td></tr>
+<tr><td>Table dropped by mistake</td><td><code>UNDROP TABLE</code> (managed tables, limited window) or object versioning</td><td>Minutes to hours</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Files lost, vacuumed early or corrupted</td><td>Incremental deep clone in a separate location</td><td>Hours</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Malicious delete, ransomware, compromised admin</td><td>Backup in a separate account with immutability and no delete rights for production</td><td>Hours</td><td class="v pursue">Pursue for critical data</td></tr>
+<tr><td>Region outage</td><td>Secondary region with replicated data and Terraform-built workspace</td><td>Hours (warm) to a day (cold)</td><td class="v pursue">Pursue only for what the business needs. It is expensive.</td></tr>
+<tr><td>Workspace or job configuration lost</td><td>Terraform, Asset Bundles, Git</td><td>Hours</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Copying the raw bucket between regions with plain storage replication, for Delta tables</td><td>Raw replication can arrive out of order, so a table may point at files that have not arrived yet</td><td>Risk of a broken table</td><td class="v drop">Drop for Delta. Use deep clone, or validate after replication.</td></tr>
+</table></div>
+<h3>The design rules</h3>
+<ol style="max-width:68ch;padding-left:1.2rem">
+<li><b>Decide RPO and RTO per data set.</b> RPO is how much data you can afford to lose, RTO is how long you can be down. Most tables do not need DR. A few do.</li>
+<li><b>Everything that can be code is code.</b> Workspaces, catalogs, grants, jobs, warehouses and policies in Terraform or Asset Bundles, kept in Git.</li>
+<li><b>Backups live in a different account with different credentials.</b> Production may write, but never delete. Turn on immutability.</li>
+<li><b>Use Delta-aware copies.</b> Deep clone is incremental, copies data and log together, and is consistent.</li>
+<li><b>Unity Catalog metadata is in the control plane.</b> Back up its definitions (catalogs, schemas, grants, external locations) through Terraform or API exports, because the data copy alone does not recreate permissions.</li>
+<li><b>Practise the restore.</b> A backup you have never restored is a hope. Schedule a restore drill and time it.</li>
+<li><b>Mind the bill.</b> Cross-region copies cost transfer fees (see <a href="/learn/databricks-compute/delta-sharing-and-regions/#s25">cross-region cost</a>) and storage. Back up gold and critical tables, not every scratch table.</li>
+</ol>
+
+</section>
