@@ -26,6 +26,14 @@ REQUIRED = [
     ("vector-search", ["HNSW", "Delta Sync", "embedding model", "multi-tenancy"]),
     ("dbt-and-odcs", ["ref(", "ODCS", "Bitol"]),
     ("egress-and-ingress", ["egress", "ingress", "NAT gateway"]),
+    ("table-maintenance-pictures", ["REORG", "deletion vector", "VERSION AS OF", "200 tiny files"]),
+    ("clustering-and-compaction", ["snappy", "Hilbert", "minNumFiles", "partitioning"]),
+    ("maintenance-strategy", ["Predictive Optimization", "external table", "691,000", "availableNow"]),
+    ("slow-writes", ["8,000", "repartition", "optimized writes"]),
+    ("backup-and-recovery-azure", ["deep clone", "UNDROP", "Terraform", "geo-redundant"]),
+    ("tagging-best-practices", ["system.billing.usage", "budget", "governed tags", "chargeback"]),
+    ("row-level-security", ["Photon", "SQL function", "entitlements"]),
+    ("compute-choice", ["performance mode", "Premium"]),
     ("hard-problems-and-questions", ["Question bank", "Major challenges", "exactly-once"]),
 ]
 

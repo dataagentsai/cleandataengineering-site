@@ -21,7 +21,15 @@ wb = C.wb
 SITE = wb.SITE
 BASE = "/learn/databricks-interview/"
 DATE = "2026-11-20"
-T = C.table
+
+
+def T(head, rows):
+    """Like components.table but cells may contain inline HTML (<code>, <b>); content is written in this file."""
+    h = "".join(f"<th>{x}</th>" for x in head)
+    r = "".join("<tr>" + "".join(f"<td>{'<b>' + c + '</b>' if i == 0 and c else c}</td>" for i, c in enumerate(row)) + "</tr>" for row in rows)
+    return f'<div class="tw"><table class="t"><tr>{h}</tr>{r}</table></div>'
+
+
 CODE = C.code
 CSS = C.CSS + """<style>
   .tw { overflow-x:auto; } .fig { margin:16px 0; } .fig svg { width:100%; height:auto; max-width:1000px; } .fig p { font-size:13px; color:var(--faint); margin:4px 0 0; }
@@ -145,6 +153,16 @@ ALTER TABLE hr.people ALTER COLUMN ssn SET MASK sec.mask_ssn;
             "<b>Dedicated compute.</b> Fine-grained policies there are enforced through serverless filtering behind the scenes, which can add cost and delay. Standard access mode enforces them natively.",
             "<b>Sharing.</b> Tables with row filters have limits when shared through Delta Sharing. Check before promising a design.",
             "<b>The function.</b> Keep it cheap and predictable. Do not call outside services from it."]))
+        + sec("fast", "Performance", "Is the filter a UDF? Does Photon still run? How to make it fast", "<p>A row filter is a <b>SQL function</b>, not a Python UDF. The engine treats a SQL scalar function as an expression it can fold into the query plan, so built-in functions inside it (comparisons, CASE, IN, group-membership checks) are ordinary expressions that Photon can run. It is not called once per row like a Python function. Photon stops helping only if the function calls something Photon cannot run, such as a Python UDF. Confirm on your runtime by looking for Photon operators around the filter in the query profile; I have not measured this on Azure here.</p>"
+              + T(["How to make it faster", "Why"], [
+                  ["Use built-in expressions only", "Keeps the filter inside Photon; no Python UDFs, no calls to outside services"],
+                  ["Use group checks such as is_account_group_member", "They are constant for the whole query, so the engine evaluates them once, not per row"],
+                  ["Keep any lookup table small", "A subquery against an entitlements table becomes a semi-join; a small table is broadcast and cheap, a huge one is a shuffle on every query"],
+                  ["Filter on a plain column compared to a constant or a short list", "Simple predicates can also help data skipping"],
+                  ["Cluster the table on the filter column", "Skipping then removes whole files for each user's slice"],
+                  ["Avoid non-deterministic functions", "They block optimizations"],
+                  ["Precompute for hot dashboards", "A gold table or materialized view per audience avoids the filter on the heaviest queries (the security rule must still hold for the source)"],
+                  ["Measure", "Compare the query profile with and without the filter, and read EXPLAIN"]]))
         + sec("see", "Related", "More on this site", '<p><a href="/learn/metric-views/">Metric views, taught from zero</a> includes row-level security on a semantic layer.</p>')
         + sec("ask", "Practice", "Questions to rehearse", qlist(["Implement row-level security and column masking. What are the performance and bypass risks?", "Dynamic views versus row filters: which would you choose and why?", "How would you give each tenant only their rows in a shared table?", "Why is a client-supplied tenant filter not safe?"]))
         + say("Row filters and masks are SQL functions attached to the table and enforced inside the plan. The risks are the lookup cost and any path that reaches the files without going through the engine."),
@@ -176,6 +194,12 @@ def p_compute():
         + sec("serverless", "Serverless", "What you can and cannot set", ul([
             "<b>Can:</b> performance mode for jobs (fast start versus lower cost; check current names), the environment version and libraries, budget policies and tags, warehouse size and auto-stop, network connectivity configuration.",
             "<b>Cannot (generally):</b> choose the node type, run init scripts, set most Spark configs, SSH in. This list shrinks over time, so verify."]))
+        + sec("tier", "A setting people ask about", "Performance mode (the “tier” setting)", "<p class=\"verify\">I am not sure which screen you saw, so these are the settings I know of. Tell me where it appears and I will be specific.</p>"
+              + T(["Where", "What it does"], [
+                  ["Serverless jobs and pipelines: performance mode (performance optimized or standard)", "Performance optimized starts quickly and costs more; standard accepts slower startup for a lower price. Use standard for overnight batch where start time does not matter, and performance optimized for jobs people wait for. Check current names and start times."],
+                  ["Azure workspace tier (Standard or Premium)", "A workspace feature level, not a compute setting. Unity Catalog, row filters and many governance features need Premium. Standard has been phased out for new workspaces; check."],
+                  ["SQL warehouse type (serverless, pro, classic) and size", "Type decides features and startup time; size decides power for one query; cluster count decides concurrency."],
+                  ["Classic clusters", "No tier; you choose runtime, node type, Photon and autoscaling."]]))
         + sec("classic", "Classic knobs", "Settings that matter", T(["Knob", "Guidance"], [
             ["Autoscaling", "Good for variable load. For streaming and predictable jobs, fixed size is often steadier."],
             ["Spot instances", "Workers on fault-tolerant batch; keep the driver on-demand."],
@@ -519,7 +543,7 @@ resources:
         - job_cluster_key: main
           new_cluster: { spark_version: 15.4.x-scala2.12, node_type_id: i3.xlarge, num_workers: 2 }
 """))
-        + sec("cmds", "Commands", "What to know", T(["Command", "What it does"], [["databricks bundle init", "New project from a template"], ["bundle validate", "Check config and show the resolved result"], ["bundle deploy -t prod", "Upload files and create or update resources"], ["bundle run <job> -t dev", "Trigger a job or pipeline"], ["bundle destroy -t dev", "Delete everything the bundle deployed"], ["bundle generate job", "Turn an existing UI job into YAML"], ["bundle deployment bind", "Link an existing resource so deploy updates it instead of duplicating"]]))
+        + sec("cmds", "Commands", "What to know", T(["Command", "What it does"], [["databricks bundle init", "New project from a template"], ["bundle validate", "Check config and show the resolved result"], ["bundle deploy -t prod", "Upload files and create or update resources"], ["bundle run JOB_NAME -t dev", "Trigger a job or pipeline"], ["bundle destroy -t dev", "Delete everything the bundle deployed"], ["bundle generate job", "Turn an existing UI job into YAML"], ["bundle deployment bind", "Link an existing resource so deploy updates it instead of duplicating"]]))
         + sec("concepts", "Concepts", "Targets, modes, variables, identity", T(["Concept", "Meaning"], [["Targets", "Environments (dev, staging, prod), each overriding workspace, variables, permissions and run identity"], ["Development mode", "Prefixes resource names with your user and pauses schedules, so people can deploy the same bundle without colliding"], ["Production mode", "Enforces safer rules, such as an explicit run_as and a non-personal root path"], ["Variables", "${var.name}, set per target or with --var"], ["Deployment state", "Stored in the workspace; the CLI compares it with your config. Historically Terraform underneath, with a newer direct engine; check which is the default"], ["run_as", "Production jobs run as a service principal, not a person"], ["Artifacts", "Build and upload Python wheels and libraries"]]))
         + sec("cicd", "CI/CD", "A pipeline for bundles", "<ol><li>Pull request: validate, unit tests, deploy to a dev or staging target and run an integration job.</li><li>Merge to main: deploy to staging, run smoke tests.</li><li>Release tag: deploy to prod with a service principal using OIDC or a CI secret, never a personal token.</li><li>Nobody edits prod in the UI; the next deploy overwrites it.</li></ol>")
         + sec("hard", "Hard problems", "Problems and answers", T(["Problem", "Answer"], [
@@ -723,6 +747,379 @@ page_def("egress-and-ingress", "Cheapest way to move data in and out", "Egress a
          "The cheapest way to egress and ingress data on Databricks: avoid, shrink, then pick the path, with hidden network costs and a way to find them.", p_movement)
 
 
+# ====================================================================== table maintenance in pictures
+import json as _json
+
+RES = _json.loads((Path(__file__).parent / "code" / "table_maintenance" / "results.json").read_text())
+GREY = "#9aa0a6"
+
+
+def _cells(x, y, w, kinds, size=13, gap=4):
+    out, cx, cy = [], x, y
+    for k in kinds:
+        cw = size * 3 if k == "b" else size
+        if cx + cw > x + w:
+            cx, cy = x, cy + size + gap
+        if k == "s":
+            out.append(f'<rect x="{cx}" y="{cy}" width="{cw}" height="{size}" rx="2" fill="{BLUE}" stroke="{INK}" stroke-width="1"/>')
+        elif k == "b":
+            out.append(f'<rect x="{cx}" y="{cy}" width="{cw}" height="{size}" rx="3" fill="{MINT}" stroke="{INK}" stroke-width="1.4"/>')
+        elif k == "d":
+            out.append(f'<rect x="{cx}" y="{cy}" width="{cw}" height="{size}" rx="2" fill="#fff" stroke="{GREY}" stroke-width="1" stroke-dasharray="3 2"/>')
+        cx += cw + gap
+    return "".join(out)
+
+
+def _panel(x, w, title, kinds, lines, h=190):
+    s = f'<rect x="{x}" y="8" width="{w}" height="{h}" rx="12" fill="#fff" stroke="{INK}" stroke-width="1.5"/>'
+    s += f'<text x="{x + 12}" y="32" font-size="15.5" fill="{INK}">{E(title)}</text>'
+    s += _cells(x + 12, 46, w - 24, kinds)
+    for i, ln in enumerate(lines):
+        s += f'<text x="{x + 12}" y="{h - 8 - (len(lines) - 1 - i) * 17}" font-size="13.5" fill="{INK}">{E(ln)}</text>'
+    return s
+
+
+def _arrow(x1, x2, y=100):
+    return f'<line x1="{x1}" y1="{y}" x2="{x2}" y2="{y}" stroke="{INK}" stroke-width="1.5" marker-end="url(#a)"/>'
+
+
+def _svg(inner, h, label):
+    return (f'<svg viewBox="0 0 1000 {h}" role="img" aria-label="{E(label)}"><defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="{INK}"/></marker></defs>{inner}</svg>')
+
+
+def fig(svg, cap):
+    return f'<div class="fig">{svg}<p>{E(cap)}</p></div>'
+
+
+def pic_lifecycle():
+    sf, op, zo, va = RES["small_files"], RES["optimize"], RES["zorder"], RES["vacuum"]
+    w = 228
+    xs = [10, 262, 514, 766]
+    inner = _panel(xs[0], w, "1. Streaming-style writes", ["s"] * 40, [f"{sf['files_in_table']} tiny files, avg {sf['avg_file_kb']} KB", f"{sf['rows']:,} rows, {sf['size_kb']:,} KB"], 200)
+    inner += _panel(xs[1], w, "2. OPTIMIZE", ["b"] * 9 + ["d"] * 20, [f"{op['after']['files_in_table']} new files in the table", f"{op['after']['files_on_disk']} files on disk (old ones dashed)"], 200)
+    inner += _panel(xs[2], w, "3. OPTIMIZE ZORDER BY", ["b"] * 7 + ["d"] * 20, [f"{zo['after']['files_in_table']} files in the table", f"{zo['after']['files_on_disk']} files on disk"], 200)
+    inner += _panel(xs[3], w, "4. VACUUM RETAIN 0", ["b"] * 7, [f"{va['after']['files_on_disk']} files on disk", "old files really deleted"], 200)
+    for a, b in ((238, 262), (490, 514), (742, 766)):
+        inner += _arrow(a, b)
+    return fig(_svg(inner, 214, "Four panels: 200 tiny files, then OPTIMIZE leaves new big files plus old dashed ones, then Z-order, then VACUUM deletes the dashed ones"),
+               "Real run on a local Delta table. Dashed squares are files the log no longer lists but that still sit on disk until VACUUM. The panels show a sample of the squares, not all of them.")
+
+
+def pic_skipping():
+    op, zo = RES["optimize"], RES["zorder"]
+    n1, n2 = op["after"]["files_in_table"], zo["after"]["files_in_table"]
+    inner = f'<text x="14" y="28" font-size="15.5" fill="{INK}">After plain OPTIMIZE: every file holds customers from the whole range 0–999</text>'
+    w1 = 960 / n1
+    for i in range(n1):
+        inner += f'<rect x="{14 + i * w1}" y="40" width="{w1 - 4}" height="44" rx="4" fill="{ROSE}" stroke="{INK}" stroke-width="1.2"/><text x="{14 + i * w1 + (w1 - 4) / 2}" y="67" text-anchor="middle" font-size="9.5" fill="{INK}">0–999</text>'
+    inner += f'<text x="14" y="108" font-size="14.5" fill="{INK}">WHERE customer_id = 42 reads {op["files_read_customer_42"]} of {n1} files (measured)</text>'
+    inner += f'<text x="14" y="150" font-size="15.5" fill="{INK}">After OPTIMIZE … ZORDER BY (customer_id): each file covers a narrow slice</text>'
+    w2 = 960 / n2
+    for i in range(n2):
+        lo, hi = round(i * 1000 / n2), round((i + 1) * 1000 / n2) - 1
+        hit = lo <= 42 <= hi
+        inner += f'<rect x="{14 + i * w2}" y="162" width="{w2 - 4}" height="44" rx="4" fill="{MINT if hit else "#fff"}" stroke="{INK}" stroke-width="{2.2 if hit else 1}"/><text x="{14 + i * w2 + (w2 - 4) / 2}" y="189" text-anchor="middle" font-size="10" fill="{INK}">{lo}–{hi}</text>'
+    inner += f'<text x="14" y="230" font-size="14.5" fill="{INK}">WHERE customer_id = 42 reads {zo["files_read_customer_42"]} of {n2} file (measured)</text>'
+    return fig(_svg(inner, 244, "Two rows of file boxes showing customer id ranges; the query reads every file before Z-order and one file after"),
+               "Compaction alone does not help skipping when each file still spans every customer. Z-order (or liquid clustering) groups similar values so most files can be skipped.")
+
+
+def pic_dv():
+    d = RES["deletion_vectors"]
+    inner = f'<text x="14" y="26" font-size="15.5" fill="{INK}">One data file, twelve rows. DELETE removes three of them.</text>'
+    dead = {2, 3, 8}
+    for i in range(12):
+        inner += f'<rect x="{14 + i * 56}" y="38" width="52" height="38" rx="4" fill="{ROSE if i in dead else BLUE}" stroke="{INK}" stroke-width="1.2"/><text x="{14 + i * 56 + 26}" y="62" text-anchor="middle" font-size="13" fill="{INK}">row {i + 1}</text>'
+        if i in dead:
+            inner += f'<line x1="{14 + i * 56 + 6}" y1="42" x2="{14 + i * 56 + 46}" y2="72" stroke="{INK}" stroke-width="1.6"/>'
+    inner += f'<text x="14" y="104" font-size="14.5" fill="{INK}">Without deletion vectors: rewrite the whole file without those rows (cost grows with file size).</text>'
+    inner += f'<text x="14" y="136" font-size="15.5" fill="{INK}">With deletion vectors: leave the file alone, write a tiny bitmap next to it:</text>'
+    for i in range(12):
+        v = 1 if i in dead else 0
+        inner += f'<rect x="{14 + i * 56}" y="148" width="52" height="30" rx="4" fill="{BUTTER if v else "#fff"}" stroke="{INK}" stroke-width="1.2"/><text x="{14 + i * 56 + 26}" y="169" text-anchor="middle" font-size="14" fill="{INK}">{v}</text>'
+    inner += f'<text x="14" y="204" font-size="14.5" fill="{INK}">Readers load the bitmap and skip rows marked 1. REORG … APPLY (PURGE) later rewrites the file for real.</text>'
+    return fig(_svg(inner, 218, "A row of twelve cells with three crossed out, and a bitmap of zeros and ones beneath marking the deleted rows"),
+               f"Measured: deleting {d['delete_metrics']['numDeletedRows']} rows from a {d['rows_start']:,}-row table added {d['delete_metrics']['numDeletionVectorsAdded']} bitmaps and rewrote {d['delete_metrics']['numAddedFiles']} data files.")
+
+
+def pic_layouts():
+    w = 316
+    xs = [10, 342, 674]
+    a = _panel(xs[0], w, "Partitioning: a folder per value", [], ["country=IN/  country=US/  country=UK/", "Fixed at creation. High-cardinality", "columns make millions of tiny files."], 250)
+    for i, (lab, fill) in enumerate([("IN", BLUE), ("US", MINT), ("UK", BUTTER), ("DE", ROSE)]):
+        a += f'<rect x="{xs[0] + 14 + i * 74}" y="52" width="66" height="50" rx="6" fill="{fill}" stroke="{INK}" stroke-width="1.3"/><text x="{xs[0] + 47 + i * 74}" y="82" text-anchor="middle" font-size="14" fill="{INK}">{lab}</text>'
+        a += _cells(xs[0] + 18 + i * 74, 110, 60, ["s", "s", "s"], 11, 3)
+    b = _panel(xs[1], w, "Z-order: one curve through the data", [], ["Orders rows by interleaving the bits", "of the chosen columns. Re-run to", "cluster new data; keys chosen each run."], 250)
+    pts = [(0, 0), (1, 0), (0, 1), (1, 1), (2, 0), (3, 0), (2, 1), (3, 1), (0, 2), (1, 2), (0, 3), (1, 3), (2, 2), (3, 2), (2, 3), (3, 3)]
+    path = " ".join(f"{xs[1] + 60 + px * 38 + 10},{58 + py * 24 + 8}" for px, py in pts)
+    b += f'<polyline points="{path}" fill="none" stroke="{INK}" stroke-width="1.4"/>'
+    for px, py in pts:
+        b += f'<circle cx="{xs[1] + 60 + px * 38 + 10}" cy="{58 + py * 24 + 8}" r="4" fill="{BLUE}" stroke="{INK}" stroke-width="1"/>'
+    c = _panel(xs[2], w, "Liquid clustering: groups that evolve", [], ["Keys live in table metadata. OPTIMIZE", "clusters only what is not yet clustered;", "keys can change without a full rewrite."], 250)
+    for i, (cx, cy, r, f) in enumerate([(60, 82, 24, BLUE), (130, 100, 20, MINT), (200, 78, 26, BUTTER), (262, 104, 18, ROSE)]):
+        c += f'<circle cx="{xs[2] + cx}" cy="{cy}" r="{r}" fill="{f}" stroke="{INK}" stroke-width="1.3"/>'
+    c += f'<circle cx="{xs[2] + 160}" cy="140" r="5" fill="#fff" stroke="{INK}" stroke-width="1.3" stroke-dasharray="2 2"/><line x1="{xs[2] + 160}" y1="136" x2="{xs[2] + 200}" y2="104" stroke="{INK}" stroke-width="1.2" marker-end="url(#a)"/>'
+    return fig(_svg(a + b + c, 266, "Three panels: folders per value for partitioning, a Z-shaped curve for Z-order, and groups of points for liquid clustering"),
+               "Three ways to lay data out so a filter can skip files. Only partitioning is a physical folder structure.")
+
+
+def pic_bars(items, unit, label):
+    mx = max(v for _, v, _ in items)
+    inner = ""
+    for i, (name, v, note) in enumerate(items):
+        y = 14 + i * 56
+        wv = max(4, 450 * v / mx)
+        inner += f'<text x="10" y="{y + 20}" font-size="14.5" fill="{INK}">{E(name)}</text><rect x="330" y="{y}" width="{wv}" height="30" rx="5" fill="{FILLS[i % 4]}" stroke="{INK}" stroke-width="1.3"/><text x="{338 + wv}" y="{y + 20}" font-size="14" fill="{INK}">{v} {unit}  {E(note)}</text>'
+    return _svg(inner, 14 + 56 * len(items), label)
+
+
+def _bt(label):
+    return f"<b>{E(label)}</b>"
+
+
+def p_pictures():
+    sf, op, zo, va, dv, rc, ow, ac = (RES[k] for k in ("small_files", "optimize", "zorder", "vacuum", "deletion_vectors", "restore_clone", "optimized_write", "auto_compact"))
+    code1 = CODE(f"""
+-- 1. the problem: {sf['appends']} small appends = {sf['files_in_table']} files
+SELECT count(*) FROM orders;                    -- {sf['rows']:,} rows
+DESCRIBE DETAIL orders;                         -- numFiles = {sf['files_in_table']}, avg {sf['avg_file_kb']} KB
+
+-- 2. compaction
+OPTIMIZE orders;                                -- {op['metrics']['removed']} files removed from the log, {op['metrics']['added']} added
+
+-- 3. compaction + clustering by a filter column
+OPTIMIZE orders ZORDER BY (customer_id);        -- {zo['metrics']['removed']} removed, {zo['metrics']['added']} added
+
+-- 4. delete the files the log no longer lists
+VACUUM orders RETAIN 168 HOURS;                 -- default; dry run found {va['dry_run_default_7d_files']} files to delete (all too new)
+""")
+    return (
+        '<p class="verify">Every number on this page was measured by running the commands on a local open-source Delta table (Spark 3.5.1, Delta 3.2.0). Databricks has Photon, Predictive Optimization and different default file sizes, so your counts will differ, but the behaviour is the same. The script is <code>_guides/code/table_maintenance/run.py</code>.</p>'
+        + sec("idea", "Start here", "One idea explains every command", "<p>A Delta table is a folder of Parquet files plus a log that says which files are <i>in</i> the table right now. A write never edits a file: it adds new files and records \"add these, stop using those\". So three kinds of mess pile up, and each command cleans one of them.</p>"
+              + T(["The mess", "Why it happens", "The command"], [["Too many tiny files", "Every small write makes at least one file", "OPTIMIZE (compaction)"], ["Files that are not grouped by what you filter on", "Rows land in arrival order", "Z-order or liquid clustering"], ["Old files nobody uses any more", "Rewrites leave the previous files behind", "VACUUM"], ["Deleted rows still inside files", "DELETE with deletion vectors only marks them", "REORG … APPLY (PURGE)"]]))
+        + sec("life", "The whole story", "From 200 tiny files to a clean table", pic_lifecycle() + code1
+              + "<p><b>Read the picture carefully.</b> After OPTIMIZE the table is faster, but disk usage went <i>up</i>: " + f"{op['after']['files_on_disk']} files on disk, though only {op['after']['files_in_table']} belong to the table. Only VACUUM brings it back down, to {va['after']['files_on_disk']}. The default 7-day retention is why a dry run right after OPTIMIZE finds nothing to delete.</p>")
+        + sec("optimize", "OPTIMIZE", "What compaction does, step by step", "<ol><li>Look at the current files and find small ones (under the minimum file size).</li><li>Group them into bins up to the target size (about 1 GB by default; I lowered it to 250 KB so this tiny table makes several files).</li><li>Read each bin, write one bigger Parquet file, then commit \"remove these N, add this one\".</li><li>Old files stay on disk. Queries now open far fewer files.</li></ol>"
+              + f"<p>Result here: {op['metrics']['removed']} files became {op['metrics']['added']}. Readers running during OPTIMIZE keep working, because they read the older version of the log. It does not change data, so it rarely conflicts with appends.</p>")
+        + sec("skip", "Data skipping", "Why compaction alone is not enough", pic_skipping()
+              + f"<p>Plain OPTIMIZE merged files in arrival order, so each of the {op['after']['files_in_table']} files still held customers from every part of the range and the query read all of them. After Z-order, the same query read {zo['files_read_customer_42']} file. The log stores the minimum and maximum of each column per file, and a filter skips every file whose range cannot match.</p>")
+        + sec("vacuum", "VACUUM", "What it deletes, and what it breaks", flow(["Version 100 needs file A", "OPTIMIZE rewrites A into B", "VACUUM RETAIN 0 deletes A", "Reading version 100 fails"], "Time travel needs the old files.", "Why time travel breaks after VACUUM")
+              + T(["What I ran", "Result (measured)"], [["VACUUM … DRY RUN with the default 7 days", f"{va['dry_run_default_7d_files']} files to delete: everything was too new"], ["VACUUM RETAIN 0 HOURS", f"files on disk {va['before']['files_on_disk']} → {va['after']['files_on_disk']}"], ["Read an old version afterwards (VERSION AS OF 100)", va["time_travel_after_vacuum"]], ["RESTORE to version 0 after VACUUM", rc["restore_after_vacuum"]], ["Read a shallow clone after its source was vacuumed", rc["shallow_clone_after_source_vacuum"]]])
+              + "<p>The retention check normally refuses less than 7 days; I switched that safety off to show the damage. Keep the retention longer than your slowest reader or stream, and longer than the time travel you promise.</p>")
+        + sec("dv", "Deletion vectors", "How they work and how they help", pic_dv()
+              + T(["Step", "What happens inside"], [["DELETE", "The engine finds the matching row positions in each file and writes a small compressed bitmap (a roaring bitmap), either inline in the log or in a <code>.bin</code> file beside the data. The log entry for the data file now points at that bitmap."], ["UPDATE / MERGE", "Old row versions are marked in the bitmap; the new versions are written to a new file."], ["Read", "The scan loads the bitmap for each file and drops the marked rows."], ["REORG … APPLY (PURGE)", "Rewrites only files that carry bitmaps, so the deleted rows are physically gone."]])
+              + f"<p><b>Measured:</b> deleting {dv['delete_metrics']['numDeletedRows']} of {dv['rows_start']:,} rows touched {dv['delete_metrics']['numDeletionVectorsAdded']} files, added {dv['delete_metrics']['numDeletionVectorsAdded']} bitmaps and rewrote {dv['delete_metrics']['numAddedFiles']} files; the row count went {dv['rows_start']:,} → {dv['rows_after_delete']:,} while the file count stayed {dv['after_delete']['files_in_table']}. PURGE then rewrote {dv['purge_metrics']['numRemovedFiles']} files and removed {dv['purge_metrics']['numDeletionVectorsRemoved']} bitmaps (size {dv['after_delete']['size_kb']} → {dv['after_purge']['size_kb']} KB); files on disk went {dv['after_purge']['files_on_disk']} → {dv['after_vacuum']['files_on_disk']} after VACUUM.</p>"
+              + ul(["<b>Helps:</b> a small DELETE or MERGE costs in proportion to the rows changed, not the file size; writers collide less because they touch rows, not whole files.", "<b>Costs:</b> every read applies the bitmaps; deleted data stays on disk until PURGE and VACUUM; readers must support deletion vectors, so some engines and UniForm cannot read such tables (check the current rules)."]))
+        + sec("restore", "RESTORE and CLONE", "Undo a mistake, copy a table", T(["Command", "Measured result"], [["Bad DELETE then RESTORE to version 0", f"rows {rc['rows_after_bad_delete']:,} → {rc['rows_after_restore']:,}"], ["SHALLOW CLONE", f"{rc['shallow_clone']['files_in_table']} files in the clone, {rc['shallow_clone']['parquet_files_in_clone_folder']} Parquet files copied; it points at the source's {rc['shallow_clone']['parquet_files_in_source_folder']}"]])
+              + "<p>RESTORE is a new commit that makes an old version current again. It works only while the old files exist. A shallow clone is a pointer, not a backup; a deep clone copies the data and can be a backup.</p>")
+        + sec("write", "On the write path", "Optimized writes and auto compaction", T(["Setting", "What it does", "Measured"], [["Optimized writes", "Shuffles before writing so each task writes fewer, bigger files", f"{ow['files_without']} files → {ow['files_with_optimized_writes']}"], ["Auto compaction", "After a write commits, compacts small files if enough pile up in a partition", f"{ac['appends']} small appends → {ac['files_without']} files without, {ac['files_with_auto_compaction']} with (threshold lowered to {ac['min_files_set']} files)"]])
+              + "<p>Both add work to the writing job. The section on streaming tiny files below explains when that is a bad trade.</p>")
+        + sec("liq", "Not measured", "Liquid clustering on this page is from documentation", f"<p>In this local open-source setup, <code>CREATE TABLE … CLUSTER BY (customer_id)</code> worked, but OPTIMIZE on the clustered table failed ({E(RES['liquid']['optimize'])}), so I have no measured numbers for it. The explanation of how it works is on the clustering page and should be read with that in mind.</p>")
+        + sec("ask", "Practice", "Questions to rehearse", qlist(["Why does disk usage go up after OPTIMIZE?", "Why did the dry run delete nothing?", "Compaction reduced the file count but the query still read every file. Why?", "What does a deletion vector actually contain and where is it stored?", "Why did RESTORE fail after VACUUM?"]))
+        + say("OPTIMIZE adds new files, VACUUM removes old ones, Z-order or liquid clustering makes skipping work, deletion vectors make small deletes cheap, and PURGE makes them real."),
+        [("Does OPTIMIZE free storage?", "No. It adds files. VACUUM frees storage after the retention period."), ("Is a shallow clone a backup?", "No. It points at the source's files, so it breaks if the source is vacuumed.")])
+
+
+page_def("table-maintenance-pictures", "Table maintenance in pictures, with real runs", "Maintenance in pictures",
+         "OPTIMIZE, Z-order, VACUUM, deletion vectors, RESTORE, CLONE, optimized writes and auto compaction, drawn and measured on a real Delta table.", p_pictures)
+
+
+# ====================================================================== compaction + clustering internals
+def p_clustering():
+    return (
+        pic_layouts()
+        + sec("compaction", "Compaction", "Is it the cloud or Databricks? What about snappy?", T(["Question", "Answer"], [
+            ["Who compacts: the cloud or Databricks?", "Delta's engine does it, not the cloud. ADLS Gen2, S3 and GCS store objects and never merge them. Only some cloud-managed Iceberg services (AWS Glue, S3 Tables) compact for you; Azure has no managed equivalent for Delta."],
+            ["Is snappy a compaction?", "No. Snappy and zstd are compression codecs that shrink the data inside one Parquet file. Compaction merges many files into fewer. They are independent: OPTIMIZE rewrites files using whatever codec the table writes with (snappy has long been the default; newer runtimes may default to zstd, so check)."],
+            ["What percentage of compaction does each mechanism do?", "There is no such split. Each mechanism is a rule with thresholds, not a share. Measure your own table: compare files per partition and average file size before and after."]])
+              + '<p class="verify">Defaults below are from documentation and memory. Check your runtime.</p>'
+              + T(["Mechanism", "When it kicks in", "What it produces"], [
+                  ["Optimized writes", "On every write that has the setting on", "Files of roughly 128 MB, by shuffling before the write"],
+                  ["Auto compaction", "After a write commits, when a partition has at least 50 small files (the default for <code>minNumFiles</code>)", "Files up to about 128 MB; runs inside the writing job"],
+                  ["OPTIMIZE", "When you or a job run it; bins files below the minimum size", "Files toward about 1 GB (Databricks auto-tunes the target by table size)"],
+                  ["Predictive Optimization", "When its cost model judges it worth it; managed tables only", "The same as OPTIMIZE, scheduled for you"],
+                  ["Cloud-managed Iceberg compaction", "Service-defined; Iceberg tables only", "Service-defined"]]))
+        + sec("pvz", "Layouts", "Partitioning, Z-order and liquid clustering compared", T(["", "Partitioning", "Z-order", "Liquid clustering"], [
+            ["What it is", "One folder per value", "Rows ordered along a space-filling curve (interleaved bits)", "Rows ordered along a curve (documented as a Hilbert curve) with keys held in table metadata"],
+            ["Where the layout lives", "Folder structure", "In the files, after each OPTIMIZE ZORDER", "In the files and the log; the log knows which files are clustered"],
+            ["Change the keys", "Rewrite the whole table", "Name different columns next run, rewrites data", "ALTER TABLE … CLUSTER BY; new data follows the new keys, OPTIMIZE re-clusters old files over time"],
+            ["Incremental", "n/a", "Limited: costs grow as you re-run", "Yes: OPTIMIZE only touches files not yet clustered"],
+            ["High-cardinality column", "Disaster: millions of folders", "Works, up to about four columns", "Works"],
+            ["Skew", "One huge partition", "Partly", "Handled better, files are sized by data not by value"],
+            ["Concurrent writes", "Conflicts within a partition", "Normal", "Row-level concurrency possible"],
+            ["Can combine", "With Z-order inside a partition", "With partitioning", "Not with partitioning or Z-order on the same table"],
+            ["Use when", "Low-cardinality column, tables over about 1 TB, time-based retention by folder", "Existing tables", "New tables; the default choice"]])
+              + "<p><b>How liquid clustering works inside</b> (from documentation; I could not measure it, see the other page): the clustering columns are stored in the table metadata. When data is written, or when OPTIMIZE runs, rows are ordered along the curve and cut into files so that each file covers a compact region of the clustering columns. The log records per-file minimum and maximum values for those columns, and each file carries a mark saying it is clustered. OPTIMIZE reads those marks and rewrites only unmarked files, which is why it is incremental. Changing the keys only changes the metadata; old files are re-clustered later or all at once with a full OPTIMIZE.</p>"
+              + "<p><b>Why Z-order is weaker:</b> the keys are not remembered by the table, so every run must name them, and the cost of keeping data clustered grows with the table because earlier work is not tracked as precisely.</p>")
+        + sec("ask", "Practice", "Questions to rehearse", qlist(["Is compaction a cloud feature or a Databricks feature?", "Snappy versus compaction: what is the difference?", "When does auto compaction start?", "Why can liquid clustering change keys without a rewrite?", "Why is partitioning on a high-cardinality column harmful?", "Z-order versus liquid clustering: three differences."]))
+        + say("Compaction merges files, a codec compresses inside a file. Liquid clustering keeps its keys in the table and clusters incrementally, which is why it replaces partitioning and Z-order for new tables."),
+        [("Can I use liquid clustering with partitioning?", "No."), ("Does snappy reduce the number of files?", "No. It only compresses the contents of each file.")])
+
+
+page_def("clustering-and-compaction", "Compaction mechanics, and partitioning vs Z-order vs liquid clustering", "Clustering and compaction",
+         "Who really compacts (cloud or Databricks), snappy versus compaction, when each mechanism triggers, and how liquid clustering differs inside from Z-order and partitioning.", p_clustering)
+
+
+# ====================================================================== strategy
+def p_strategy():
+    return (
+        flow(["How often does the table change?", "Which layer is it?", "Managed or external?", "Pick: automatic, scheduled, or both"], "Four questions pick the strategy.", "How to pick a maintenance strategy")
+        + sec("rule", "The short answer", "Automatic where you can, scheduled where you must, and never nothing", "<p>Use <b>Predictive Optimization</b> for Unity Catalog managed tables: it runs OPTIMIZE, VACUUM and ANALYZE only when they pay off, so it is the default. Add <b>scheduled jobs</b> for what it cannot cover: external tables, tables that need maintenance at a specific time, hot partitions that need compacting hourly, and anything you need to guarantee before a deadline. Add <b>write-time settings</b> (optimized writes, auto compaction) only where the trade-off below is acceptable. Check availability and cost of Predictive Optimization on your account.</p>")
+        + sec("matrix", "Decide", "By layer, table type and how often it changes", T(["Table", "Changes", "Strategy"], [
+            ["Bronze, batch files (Auto Loader, daily)", "Daily, large appends", "Optimized writes on; Predictive Optimization (or weekly OPTIMIZE); VACUUM weekly"],
+            ["Bronze, streaming (seconds)", "Constant tiny commits", "Do not rely on auto compaction. Bigger triggers; separate scheduled OPTIMIZE of recent data (see below)"],
+            ["Silver with MERGE or CDC", "Frequent updates", "Deletion vectors on; liquid clustering on the merge key; Predictive Optimization; PURGE only for erasure"],
+            ["Gold facts and dimensions", "Rebuilt or merged on a schedule", "OPTIMIZE right after the build in the same job; liquid clustering on the filter columns; ANALYZE"],
+            ["Streaming tables and materialized views in pipelines", "Pipeline-managed", "Pipelines run maintenance themselves (documented as at least daily; check) — do not add your own jobs unless you must"],
+            ["Small dimension (thousands of rows)", "Rare", "Nothing special; one file is fine"],
+            ["External tables", "Any", "Scheduled jobs you own (see below)"],
+            ["Hot table, many readers, strict latency", "Constant", "Compact recent partitions often; keep clustered; watch commit conflicts"],
+            ["Cold archive", "Never", "VACUUM once; consider cheaper storage tier; no OPTIMIZE"]])
+              + "<p>Topology matters too: if several teams or engines write to one table, agree one owner for maintenance, and make VACUUM retention longer than the slowest reader.</p>")
+        + sec("stream", "Streaming tiny files", "Auto optimize is not good for streams: what to do instead", "<p>Why it disappoints: optimized writes add a shuffle to every micro-batch, and auto compaction runs inside the stream after commits, which adds latency and can collide with other writers. A stream that commits every second with 8 tasks makes about 691,000 files a day (86,400 × 8) before any compaction.</p>"
+              + T(["Fix", "How it helps"], [
+                  ["Fewer, bigger micro-batches", "Use a longer <code>trigger(processingTime=…)</code>, or <code>availableNow</code> on a schedule; set <code>maxFilesPerTrigger</code> or <code>maxBytesPerTrigger</code> so each batch carries more data"],
+                  ["Fewer writer tasks", "Each task writes a file per batch. Match shuffle partitions to the data volume, not the cluster default"],
+                  ["Scheduled compaction on recent data", "A separate job runs OPTIMIZE on today's data every hour: <code>OPTIMIZE t WHERE event_date = current_date()</code>. OPTIMIZE does not rewrite data, so it rarely conflicts with the appending stream"],
+                  ["Predictive Optimization", "On managed tables it does this for you"],
+                  ["Liquid clustering, not partitioning", "No files-per-partition explosion"],
+                  ["Accept small files in bronze", "Compact downstream; read bronze as a stream so silver is built from larger batches"],
+                  ["Fix the source", "If upstream lands tiny files or one-record Kafka batches, batch them there. Auto Loader with file notification mode avoids listing millions of small files"]])
+              + "<p>Measured on a local table: 60 small appends made 60 files; with auto compaction (threshold lowered to 10 files) they became 6. That is useful, but it only works because the writer waits for the compaction.</p>")
+        + sec("ext", "External tables", "How to maintain them", "<p>An external table keeps its files in a path you control. Unity Catalog governs access but does not own the data lifecycle. Predictive Optimization covers managed tables; for external tables plan to run maintenance yourself (check the current documentation, because coverage changes).</p>"
+              + T(["Task", "Approach"], [
+                  ["OPTIMIZE", "A scheduled job driven by a list of tables. Check <code>DESCRIBE DETAIL</code> first and run only where files are many or average size is small"],
+                  ["VACUUM", "Weekly; retention at least 7 days and longer than your slowest reader, stream or external engine"],
+                  ["ANALYZE", "After big loads, for tables used in large joins"],
+                  ["Write-time settings", "Table properties for optimized writes and auto compaction still apply"],
+                  ["Ownership", "One team owns the job. If other engines also write, agree who compacts"],
+                  ["Tagging", "Tag tables with their maintenance tier (hot, warm, cold) so the job can read the schedule from metadata"],
+                  ["DROP", "Dropping the table does not delete the files; clean up separately"]]))
+        + sec("when", "Choose", "When to use external tables, and does it save money or keep data open?", T(["Question", "Answer"], [
+            ["Use external when…", "Another engine or team writes to the same path; you are migrating an existing lake; the location must stay under separate ownership or retention rules; DROP must never delete data."],
+            ["Does it save cost?", "Not by itself. The bytes cost the same. You trade Predictive Optimization (and its automatic tuning) for jobs you run and maintain. Managed tables are usually cheaper to operate; external tables are cheaper only when the control or sharing they give you has value."],
+            ["Is it more open?", "Both are open formats (Parquet files with a Delta or Iceberg log) in your own cloud account. External tables give you a plain path other tools can use directly. For managed tables, outside engines should go through open interfaces (such as UniForm or the Iceberg REST catalog) instead of reading storage directly."],
+            ["Databricks' view", "Managed is the recommended default (check current guidance)."]]))
+        + sec("ask", "Practice", "Questions to rehearse", qlist(["Auto, scheduled or both: how do you decide?", "Why is auto compaction a poor fit for a one-second stream?", "How do you compact a table that is being streamed into?", "What is your maintenance plan for external tables?", "Does an external table save money?"]))
+        + say("Automatic by default on managed tables; scheduled jobs for external tables, hot partitions and deadlines; and for streams, bigger batches plus a separate compaction job."),
+        [("Can OPTIMIZE run while a stream writes?", "Yes. OPTIMIZE does not change data, so it rarely conflicts with appends."), ("Do external tables get Predictive Optimization?", "Check the current docs; treat it as your job to maintain them.")])
+
+
+page_def("maintenance-strategy", "Maintenance strategy: automatic, scheduled or both", "Maintenance strategy",
+         "How to choose between automatic and scheduled table maintenance by layer, table type and change rate, fixing tiny streaming files, and external table care.", p_strategy)
+
+
+# ====================================================================== slow writes
+def p_slow_writes():
+    ws = RES["write_speed"]
+    cases = [("a_partition_by_high_cardinality", "A. partitionBy(customer_id), 8 tasks"), ("b_repartition_by_key_then_partition", "B. repartition by key, then partitionBy"), ("c_partition_by_low_cardinality", "C. partitionBy(country), 8 tasks"), ("d_no_partition_right_sized", "D. no partition, 2 tasks")]
+    bars = pic_bars([(label, ws[k]["seconds"], f"{ws[k]['files']:,} files") for k, label in cases], "s", "Bars: write time in seconds for four ways of writing the same rows")
+    rows = [[label, f"{ws[k]['seconds']} s", f"{ws[k]['files']:,}", f"{ws[k]['avg_file_kb']} KB", f"{ws[k]['read_seconds']} s"] for k, label in cases]
+    return (
+        sec("ex", "Example", "The same 300,000 rows, four ways to write them", fig(bars, "Measured on a local machine; the ratio matters, not the seconds.")
+            + T(["How it was written", "Write time", "Files", "Avg file size", "Time to read it back"], rows)
+            + f"<p>Case A is the classic mistake. With 8 tasks and {ws['partitions_of_customer_id']:,} customers, each task holds rows for most customers and writes a file for each one, so 8 × 1,000 ≈ 8,000 files of {ws['a_partition_by_high_cardinality']['avg_file_kb']} KB. It wrote about {round(ws['a_partition_by_high_cardinality']['seconds'] / ws['d_no_partition_right_sized']['seconds'])} times slower than case D, and reading it back was slower too, because the cost is paid again on every read.</p>")
+        + sec("why", "Why writes get slow", "The usual causes", T(["Cause", "Sign", "Fix"], [
+            ["Partitioning on a high-cardinality column", "Files = tasks × partitions; writes stall on file creation", "Repartition by the partition key before writing, or use liquid clustering instead"],
+            ["Too many tiny commits", "Thousands of log entries, each with fixed overhead", "Bigger batches; fewer, larger writes"],
+            ["Skew in the data written", "One task writes far more than the others", "Fix the key, or repartition to spread rows"],
+            ["Wrong number of tasks", "Too few: one slow task; too many: tiny files", "Aim for files near the target size; use optimized writes"],
+            ["coalesce(1) or one giant file", "All data through one task", "Write in parallel and let OPTIMIZE tidy up"],
+            ["Overwriting a whole table to change a little", "Rewrites everything", "MERGE with deletion vectors, or <code>replaceWhere</code> / dynamic partition overwrite"],
+            ["MERGE that rewrites most files", "Huge rewrite for few changed rows", "Cluster on the merge key, put it in the ON clause, enable deletion vectors"],
+            ["Statistics on too many columns", "Slow commits on very wide tables", "Limit <code>delta.dataSkippingNumIndexedCols</code>"],
+            ["Python UDFs or heavy transforms before the write", "The write stage is not the slow stage", "Replace with built-ins; look at the whole job, not only the sink"],
+            ["Storage far from compute, or throttled", "Slow uploads, throttling errors", "Same region; spread files over more paths; check storage limits"],
+            ["Small cluster, spilling", "Spill in the write stage", "Larger memory nodes, fewer columns, filter earlier"]]))
+        + sec("best", "Best approaches", "A checklist, in order", "<ol><li>Look at the write stage in the Spark UI: task time spread, output rows per task, number of output files.</li><li>Count the files you create per write (tasks × partitions) and aim for fewer, larger ones.</li><li>Pick the layout first: liquid clustering for new tables; partition only low-cardinality columns on big tables.</li><li>Turn on optimized writes when you write partitioned data from many tasks.</li><li>Use append for logs and events; use MERGE with deletion vectors for changes; avoid rewriting whole tables.</li><li>Batch small commits.</li><li>Compact afterwards with OPTIMIZE, scheduled or automatic.</li></ol>")
+        + sec("ask", "Practice", "Questions to rehearse", qlist(["A job writing 2 TB a day to a partitioned table is slow. Where do you look?", "Why does partitioning by user id make writes slow?", "How do optimized writes help, and what do they cost?", "How would you speed up a MERGE that rewrites 90 percent of the files?"]))
+        + say("I count files created per write, check the layout, and fix skew and task counts before touching the cluster."),
+        [("Is more cluster the answer to slow writes?", "Rarely. The usual cause is too many files or a rewrite of too much data."), ("Do optimized writes always help?", "They cut file counts but add a shuffle, so they cost time on the write itself.")])
+
+
+page_def("slow-writes", "Why writing lots of data is slow, and how to fix it", "Slow writes",
+         "A measured example of a slow write (8,000 files against 2) and the causes and fixes: layout, task counts, commits, MERGE, statistics and storage.", p_slow_writes)
+
+
+# ====================================================================== backup
+def p_backup():
+    return (
+        flow(["Data in storage", "Table copies (Delta)", "Code and config in Git or Terraform", "A tested recovery plan"], "Four layers; Databricks gives you tools for the first two, you build the rest.", "Backup and recovery layers")
+        + '<p class="verify">Based on documentation and experience, not tested on an Azure workspace here. Storage features change; check Azure and Databricks documentation, especially for ADLS Gen2 with hierarchical namespace.</p>'
+        + sec("short", "Short answer", "What comes out of the box, and what you build", T(["Need", "Out of the box", "You build"], [
+            ["Undo a bad write to a table", "Delta time travel and RESTORE (limited by retention and VACUUM)", "Nothing"],
+            ["Recover a dropped managed table", "UNDROP for Unity Catalog managed tables within a window (documented as seven days; check)", "Nothing"],
+            ["Protect against deleted files or a lost folder", "ADLS soft delete for blobs and containers; locks; immutable storage", "Policy and testing"],
+            ["Survive a region outage (data)", "Geo-redundant storage (GRS/GZRS) copies data to the paired region, asynchronously", "Validation: the copy is not guaranteed to be consistent across a table's log and files"],
+            ["A real, consistent copy of a table", "Deep clone (copies data and log; can be re-run incrementally)", "A scheduled job per table or schema, in another account, subscription or region"],
+            ["Recover notebooks and code", "Git folders", "Discipline: everything in Git"],
+            ["Recover jobs, pipelines, clusters, permissions", "Nothing automatic", "Asset Bundles or Terraform as the source of truth"],
+            ["Recover Unity Catalog objects (catalogs, schemas, grants, external locations)", "No backup button", "Terraform or scripts as the source of truth"],
+            ["Secrets", "Key Vault-backed scopes keep secrets in Key Vault", "Key Vault backup policy"],
+            ["Full workspace failover", "Nothing one-click", "A secondary workspace, replicated data, config redeployed from code, a runbook, and drills"]]))
+        + sec("pattern", "Recommended", "A practical pattern", "<ol><li><b>Make everything reproducible from code:</b> notebooks in Git, jobs and pipelines in Asset Bundles or Terraform, Unity Catalog objects in Terraform.</li><li><b>Keep Delta time travel for mistakes:</b> choose a retention period you can afford and do not VACUUM below it.</li><li><b>Protect storage:</b> soft delete, resource locks, and immutable or write-once storage for the backup account.</li><li><b>Copy important tables with deep clone</b> on a schedule to a separate storage account (ideally another subscription and region). Shallow clones are not backups.</li><li><b>For disaster recovery:</b> a secondary workspace, with the same bundles deployed, reading the replicated data. Decide RPO and RTO per data product, not for everything.</li><li><b>Test restores</b> regularly. An untested backup is a guess.</li></ol>")
+        + sec("traps", "Traps", "Things that surprise people", ul(["Geo-replication copies mistakes and deletes too, and is not a point-in-time backup.", "Asynchronous replication can leave a Delta log pointing at files that have not arrived yet; test failover on real tables.", "Time travel is not a backup: VACUUM and retention limits remove it, and deleting storage removes everything.", f"Measured: after VACUUM, RESTORE to an old version failed with “{RES['restore_clone']['restore_after_vacuum'].replace('failed: ', '')}”, and a shallow clone of the vacuumed table could not be read.", "Managed tables live in Unity Catalog-managed storage; protect that storage account like production.", "Dashboards, Genie spaces, alerts and MLflow assets may not be covered by your table backups; export or define them as code."]))
+        + sec("ask", "Practice", "Questions to rehearse", qlist(["Time travel, clone and geo-redundancy: which protects against what?", "Why is a shallow clone not a backup?", "What would you build for a region failure?", "How do you recover jobs and Unity Catalog objects?", "How often do you test restores, and how?"]))
+        + say("Delta handles table mistakes, storage features handle lost files, and everything else is rebuilt from code. Disaster recovery for a whole workspace is something I design and test, not something I switch on."),
+        [("Is there a built-in Databricks backup?", "For tables, time travel and clones. For workspace objects there is no automatic backup, so use Git and infrastructure as code."), ("Is geo-redundant storage a backup?", "No. It replicates, including deletes and corruption.")])
+
+
+page_def("backup-and-recovery-azure", "Backup and recovery on Azure Databricks", "Backup and recovery",
+         "What Azure Databricks gives you for backup and recovery (time travel, RESTORE, UNDROP, clones, storage features) and what you must build, with a practical pattern.", p_backup)
+
+
+# ====================================================================== tagging
+def p_tags():
+    return (
+        flow(["Policy forces tags at creation", "Compute, jobs, warehouses and serverless carry them", "Tags flow to Azure cost data and system tables", "Dashboards, alerts and chargeback"], "Tag once at creation, and the rest follows.", "How tags flow to cost reports")
+        + '<p class="verify">Tag limits and propagation details vary by cloud; check the current Databricks and Azure documentation.</p>'
+        + sec("kinds", "Kinds of tag", "Four different things called tags", T(["Kind", "Where", "Used for"], [
+            ["Compute tags", "Clusters, pools, jobs, SQL warehouses, pipelines", "Cost attribution; they propagate to cloud resources and appear in billing records (<code>system.billing.usage</code>)"],
+            ["Budget or usage policy tags", "Serverless compute", "The only way to attribute serverless spend"],
+            ["Cloud resource tags", "Azure workspace, resource groups, storage accounts", "Azure Cost Management, ownership, environment"],
+            ["Unity Catalog tags (including governed tags)", "Catalogs, schemas, tables, columns", "Classification (PII, sensitivity), domain, certification; can drive access policies and discovery"]])
+              + "<p>Keep the two worlds apart: cost tags answer “who pays”, governance tags answer “what is this data and who may see it”.</p>")
+        + sec("use", "How organizations use them", "The common uses", T(["Use", "Example tags", "Enforced by"], [
+            ["Chargeback and showback", "cost_center, team, project", "Cluster policy, budget policy, Azure Policy"],
+            ["Environment separation", "environment = dev / test / prod", "Bundles set it per target"],
+            ["Ownership and on-call", "owner, contact, data_product", "Policy requires it; alerts route by it"],
+            ["Budgets and anomaly alerts", "cost_center, project", "Budget alerts on tag totals"],
+            ["Workload type", "workload = etl / bi / ml / adhoc", "Jobs and warehouses set it"],
+            ["Automation", "maintenance_tier = hot / warm / cold", "Maintenance job reads the tag"],
+            ["Data classification", "classification = pii / confidential", "Governed tags, masks and policies"],
+            ["Lifecycle and cleanup", "expires_on, created_by", "A cleanup job finds stale resources"],
+            ["Compliance and audit", "regulated = true, retention", "Reports from system tables"]]))
+        + sec("best", "Best practices", "What works", T(["Practice", "Why"], [
+            ["A small mandatory set (about five keys)", "Teams will fill in five tags and ignore fifteen"],
+            ["Fixed keys and controlled values", "Free text produces cost-center, CostCenter and costcenter"],
+            ["Enforce at creation, not afterwards", "Cluster policies set or require tags; budget policies for serverless; Azure Policy for resources"],
+            ["Set them in code", "Bundles and Terraform fill tags so nobody types them"],
+            ["Tag the job, not just the cluster", "Shared and pooled compute otherwise hides who used it"],
+            ["Plan for shared compute", "Decide how to split shared all-purpose clusters and pools (by user, by usage)"],
+            ["Tags are not retroactive", "Past usage stays untagged; start early"],
+            ["Watch untagged spend", "A dashboard and alert on usage with missing tags"],
+            ["No secrets or personal data in tags", "Tags are visible in billing and APIs"],
+            ["Showback before chargeback", "Show teams their cost for a quarter before charging it"],
+            ["Document the taxonomy and review it", "Keys and values drift as the organization changes"],
+            ["Respect limits", "Cloud resources have a maximum number and length of tags"]])
+              + CODE("""
+-- spend by team and environment, last 30 days
+SELECT custom_tags['team'] AS team, custom_tags['environment'] AS env,
+       SUM(usage_quantity) AS dbus
+FROM system.billing.usage
+WHERE usage_date >= date_sub(current_date(), 30)
+GROUP BY 1, 2
+ORDER BY dbus DESC;
+""", "Multiply by list prices from system.billing.list_prices for money. Rows with a null team are your untagged spend."))
+        + sec("ask", "Practice", "Questions to rehearse", qlist(["How do you attribute serverless cost to teams?", "How do you make sure every cluster is tagged?", "Cost tags versus governed tags: what is the difference?", "How would you charge back shared clusters?", "What would you do about the untagged spend you find on day one?"]))
+        + say("A small mandatory taxonomy, enforced by policy at creation, set by code, and watched through system tables."),
+        [("Can I tag after the fact?", "Yes, but past usage stays untagged."), ("Do tags work for serverless?", "Use budget or usage policies to attach tags to serverless usage.")])
+
+
+page_def("tagging-best-practices", "Tagging: best practices and how organizations use tags", "Tagging",
+         "The four kinds of tags, how organizations use them for cost, ownership, classification and automation, and the practices that keep them useful.", p_tags)
+
+
 # ---------------------------------------------------------------- 9. question bank
 def p_questions():
     return (
@@ -799,7 +1196,7 @@ def head(p, url, qa):
 def hub():
     url = f"{SITE}{BASE}"
     title = "Databricks interview prep for data engineers"
-    desc = "Advanced Databricks for data engineering interviews: table maintenance, security, compute, joins, skew, engines, cost, platform features and the hardest questions."
+    desc = "Advanced Databricks for data engineering interviews: table maintenance in pictures, strategy, security, compute, joins, skew, cost, backup, tagging, platform features and the hardest questions."
     cards = "".join(f'<div class="card"><h3><a href="{BASE}{p["slug"]}/">{E(p["title"])}</a></h3><p class="one">{E(p["desc"])}</p></div>' for p in PAGES)
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › Databricks interview prep</p>
 <p class="eyebrow" style="margin-top:22px">Interview prep · data engineering</p><h1>{E(title)}</h1>
