@@ -147,6 +147,7 @@ SECTIONS = [
             ("Agent Harness, the big picture", "/learn/agent-harness-intro/"),
             ("Agent Harness", "/learn/agent-harness/"),
             ("Agent Harness: architecture map", "/learn/agent-harness-stack-map/"),
+            ("Drug-safety agent on Databricks: the tour", "/learn/drug-safety-agent-databricks/"),
             ("Agent frameworks: when to use which", "/learn/agent-frameworks/"),
             ("Which AI model for which job", "/learn/which-model/"),
             ("Eval Harness", "/learn/eval-harness/"),
