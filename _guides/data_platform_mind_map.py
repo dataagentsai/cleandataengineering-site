@@ -179,7 +179,56 @@ FAMILIES = [
          "A mover per platform to land the world's files. Azure Databricks: ran. AWS: a realm exists. GCP: none."),
     ]),
 ]
+
+# The percentages behind the chart: (X platform gives, Y we write once, Z still to implement per platform), summing to 100.
+# OUR JUDGEMENT, not a measurement: how the work of having the concern running is shared, for a typical platform of the five.
+SPLIT = {
+    "X1": (30, 55, 15), "X2": (50, 30, 20), "X15": (30, 55, 15), "X16": (50, 25, 25), "X17": (15, 65, 20),
+    "X18": (50, 35, 15), "X23": (25, 60, 15), "X24": (50, 30, 20),
+    "X3": (30, 60, 10), "X4": (25, 60, 15), "X5": (35, 55, 10), "X6": (0, 85, 15), "X9": (30, 55, 15),
+    "X7": (60, 25, 15), "X8": (45, 40, 15), "X10": (50, 20, 30), "X19": (50, 30, 20),
+    "X11": (45, 35, 20), "X12": (30, 50, 20), "X13": (40, 40, 20), "X14": (50, 35, 15),
+    "X20": (10, 15, 75), "X21": (20, 10, 70), "X22": (5, 80, 15),
+}
+GREY, BLUE, PINK = "#D9D9D6", "#A3B5DF", "#E6BFD2"
+
+
+def split_figure():
+    """Stacked bars per concern, in table order: grey = platform gives, blue = we write once, pink = still to implement."""
+    X0, BW, RH = 270, 620, 25
+    rows = [(fam, r) for fam, _, rs in FAMILIES for r in rs]
+    leg = (f'<rect x="{X0}" y="8" width="16" height="14" fill="{GREY}" stroke="#1a1a1a" stroke-width="1.2"/><text x="{X0 + 22}" y="20" font-size="13">X · the platform gives</text>'
+           f'<rect x="{X0 + 190}" y="8" width="16" height="14" fill="{BLUE}" stroke="#1a1a1a" stroke-width="1.2"/><text x="{X0 + 212}" y="20" font-size="13">Y · we write once (horizontal)</text>'
+           f'<rect x="{X0 + 430}" y="8" width="16" height="14" fill="{PINK}" stroke="#1a1a1a" stroke-width="1.2"/><text x="{X0 + 452}" y="20" font-size="13">Z · each platform still implements</text>')
+    b, last = "", None
+    for k, (fam, r) in enumerate(rows):
+        cid = r[0]
+        y = 36 + k * RH + (6 * [f for f, _, _ in FAMILIES].index(fam))
+        if fam != last:
+            b += f'<text x="8" y="{y + 14}" font-size="14" font-weight="700">{E(fam)}</text>'
+            last = fam
+        b += f'<text x="{X0 - 10}" y="{y + 15}" text-anchor="end" font-size="12.5">{E(cid)} · {E(r[1])}</text>'
+        cur = X0
+        for v, fill in zip(SPLIT[cid], (GREY, BLUE, PINK)):
+            w = BW * v / 100
+            if w:
+                b += f'<rect x="{cur:.0f}" y="{y}" width="{w:.0f}" height="19" fill="{fill}" stroke="#1a1a1a" stroke-width="1.1"/>'
+                if v >= 10:
+                    b += f'<text x="{cur + w / 2:.0f}" y="{y + 14}" text-anchor="middle" font-size="11">{v}</text>'
+            cur += w
+    H = 36 + len(rows) * RH + 6 * len(FAMILIES) + 6
+    return (f'<svg class="mm" viewBox="0 0 920 {H}" role="img" aria-label="Stacked bars per concern: grey is what the platform gives, blue is what we write once, '
+            f'pink is what each platform still has to implement">{leg}{b}</svg>')
+
+
+def split_averages():
+    n = len(SPLIT)
+    return [round(sum(v[i] for v in SPLIT.values()) / n) for i in range(3)]
+
 FAM_FILL = ["var(--peri-wash)", "var(--butter-wash)", "var(--rose-wash)", "var(--mint-wash)", "var(--lilac-wash)"]
+
+
+assert all(sum(v) == 100 for v in SPLIT.values()) and set(SPLIT) == {r[0] for _, _, rs in FAMILIES for r in rs}
 
 
 def table():
@@ -226,6 +275,12 @@ def mindmap():
 
 def page():
     n = sum(len(r) for _, _, r in FAMILIES)
+    ax, ay, az = split_averages()
+    SECTION = f'''<h2>How much of each concern comes from where</h2>
+<p>For each concern, how much of the work does the platform give you (X), how much do we write once for every platform (Y), and how much does each platform still have to implement (Z)? On average, by our judgement, about {ax}% comes from the platform, {ay}% is the horizontal asset we write once, and {az}% is what each platform still has to implement.</p>
+{split_figure()}
+<p class="note">Our judgement, not a measurement: a typical platform of the five, the work of having the concern running, each bar summing to 100. The platforms differ (Databricks hands over more lineage and access than an open stack does), so read the bars as the usual case, not as one platform's score.</p>
+'''
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/learn/data-platform-architecture/">Data platform architecture</a> › Mind map</p>
 <p class="eyebrow" style="margin-top:22px">Data engineering · Data platform</p>
 <h1>Data platform architecture mind map: every concern, on every platform</h1>
@@ -238,6 +293,7 @@ def page():
 <div><b>Y · The horizontal asset</b>What we write once and reuse unchanged on every platform: the manifest, the rules, the stages, the checks, the simulated world. It is the same code on Azure as on AWS.</div>
 <div><b>Z · Still to implement</b>The thin layer that each platform still needs before the asset can run there: an adapter, a job definition, a renderer. This is the real work of moving platform.</div></div>
 {table()}
+{SECTION}
 <div class="box"><b>What this shows.</b> Read down column Y: most of the platform is horizontal, written once. Read column Z: the work per platform is small and concrete (adapters and definitions), not a rewrite. The expensive rows are the ones where X says "nothing": reconciliation (X6), self-healing (X20) and simulation (X22). No cloud sells them, so the horizontal asset is the whole answer, or, for X20 and X21, there is no answer yet.</div>
 <h2>What to check before relying on this</h2>
 <ul><li><b>GCP.</b> No cloud-layer file exists for it. Treat the whole column as a proposal and confirm each service against Google's current documentation and region availability.</li>
