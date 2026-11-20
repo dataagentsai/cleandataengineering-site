@@ -44,10 +44,17 @@ SOURCES = [
         "folders": ["."],
         "pages": "https://basantchoudhary.github.io/DatabricksGenAIEngineer/",
     },
+    {
+        "slug": "databricks-data-engineer-professional",
+        "repo": HOME / "DatabricksDataEngineerProfessional",
+        "folders": ["."],
+        # no GitHub Pages copy yet: every built page is copied, so nothing should need this; point it at the site itself
+        "pages": "https://cleandataengineering.ai/certifications/databricks-data-engineer-professional/",
+    },
 ]
 
 SKIP_FILES = {"publish_traps.sh", "link_plain.py", "build_plain_mocks.py"}
-SKIP_DIRS = {".git", "node_modules", "__pycache__", "parts", "src", "source", ".claude"}
+SKIP_DIRS = {".git", "node_modules", "__pycache__", "parts", "src", "source", ".claude", "walk"}
 SKIP_SUFFIXES = {".md", ".pyc"}
 SKIP_LINKS = ("http", "mailto:", "data:", "javascript:", "//", "/", "${")
 LINK = re.compile(r'((?:href|src)\s*=\s*["\'])([^"\'#?]+)')
