@@ -137,6 +137,7 @@ SECTIONS = [
             ("The AI Universe", "/learn/ai-universe/"),
             ("Agent Harness, the big picture", "/learn/agent-harness-intro/"),
             ("Agent Harness", "/learn/agent-harness/"),
+            ("Agent Harness: architecture map", "/learn/agent-harness-stack-map/"),
             ("Eval Harness", "/learn/eval-harness/"),
             ("Agent guardrails", "/learn/agent-guardrails/"),
             ("AI governance: running AI you can trust", "/learn/ai-governance/"),
@@ -151,6 +152,7 @@ SECTIONS = [
         ], "cap"),
         ("Across all of them", "/learn/data-systems/platform/#concerns", [
             ("All 24 concerns", "/learn/data-systems/platform/#concerns"),
+            ("Mind map: every concern, every cloud", "/learn/data-platform-mind-map/"),
             ("Layout: catalogs and schemas", "/learn/data-systems/platform/layout/"),
             ("Environments and CI/CD", "/learn/data-systems/platform/environments/"),
             ("Cost and FinOps", "/learn/data-systems/platform/cost/"),
