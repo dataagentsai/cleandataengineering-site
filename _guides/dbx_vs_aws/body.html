@@ -1,0 +1,180 @@
+<section id="s1"><p class="eyebrow">The setup</p><h2>Two stacks, compared like for like</h2>
+<p>Both stacks keep data as Parquet files in S3 and add a table layer on top. The question is who supplies the table format, the catalog, the engine, the upkeep and the governance, and what each choice costs you in money and in people.</p>
+<div class="tw"><table class="t">
+<tr><th></th><th>Stack A: AWS-native</th><th>Stack B: Databricks</th></tr>
+<tr><td>Table format</td><td>Iceberg, in S3 Tables (AWS-managed table buckets)</td><td>Delta, with UniForm so other engines can read it as Iceberg</td></tr>
+<tr><td>Catalog</td><td>AWS Glue Data Catalog and Lake Formation</td><td>Unity Catalog (UC)</td></tr>
+<tr><td>ETL compute</td><td>EMR (EC2, Serverless or EKS) or Glue Spark</td><td>Jobs compute, serverless jobs, Lakeflow declarative pipelines</td></tr>
+<tr><td>Table upkeep</td><td>S3 Tables built-in maintenance</td><td>Predictive Optimization (PO)</td></tr>
+<tr><td>BI path to Power BI</td><td>Athena, Redshift or a Trino service</td><td>Databricks SQL warehouse</td></tr>
+</table></div>
+<div class="callout w"><p><b>Read this first.</b> Features, prices and limits on both sides move quickly. The comparison is from the author's knowledge, not a live price check. Use it to decide <em>what to measure</em>, then run the same pipeline, the same SQL and the same Power BI report on both and compare monthly cost.</p></div>
+<p>This page is the wide comparison. For the narrower question of who owns the catalog, see <a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse on AWS and Databricks: who owns the catalog?</a></p>
+</section>
+
+<section id="s2"><p class="eyebrow">Format</p><h2>Format and openness</h2>
+<ul>
+<li><b>A</b> is native Iceberg. Spark, Trino, Flink, Athena, Snowflake and DuckDB can read and write it, so no single product owns the table.</li>
+<li><b>B</b> is Delta. UniForm writes Iceberg metadata after each commit, so outside engines can read but not write. The metadata can lag a little, and some Delta features do not carry across. Databricks also offers managed Iceberg tables in UC; check how mature that is before you rely on it.</li>
+</ul>
+<div class="tw"><table class="t"><tr><th>Question</th><th>Winner</th><th>Why</th></tr>
+<tr><td>Several engines must write the same table</td><td class="v pursue">A</td><td>Iceberg is writable by every engine. UniForm is read-only for outsiders.</td></tr>
+<tr><td>Readers are mostly Databricks and BI</td><td class="v pursue">B</td><td>Delta is native there, with the most features.</td></tr></table></div>
+<p>More: <a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a>, <a href="/learn/databricks-interview/uniform/">UniForm</a>.</p></section>
+
+<section id="s3"><p class="eyebrow">Compute</p><h2>Compute, serverless and performance</h2>
+<ul>
+<li><b>A:</b> EMR on spot instances and Graviton is the cheapest per hour. EMR on EC2 starts in minutes. EMR Serverless and Glue start faster. You tune memory, versions and libraries yourself.</li>
+<li><b>B:</b> Photon (a vectorised engine) usually speeds up scans, joins and MERGE. Serverless starts in seconds. You pay a DBU premium on top of the machines.</li>
+<li>Each vendor publishes benchmarks that favour itself. Measure your own pipeline.</li></ul>
+<div class="tw"><table class="t"><tr><th>Need</th><th>Databricks</th><th>AWS-native</th></tr>
+<tr><td>Fewest decisions</td><td>Serverless jobs and SQL warehouses</td><td>EMR Serverless, Glue</td></tr>
+<tr><td>Cheapest large batch</td><td>Jobs compute on spot, with Photon</td><td>EMR on EC2 with spot, Graviton, instance fleets</td></tr>
+<tr><td>Low-priority batch</td><td>Spot with fallback</td><td>Glue Flex execution</td></tr>
+<tr><td>Control</td><td>Policies, pools, access modes</td><td>Full control of instances, networking, versions</td></tr></table></div>
+<p><b>Winner:</b> A for price per hour and control, B for start-up time and effort. Raw performance is a tie until you measure. See <a href="/learn/databricks-compute/">Databricks compute and cost</a>.</p></section>
+
+<section id="s4"><p class="eyebrow">Upkeep</p><h2>Table upkeep, layout and compression</h2>
+<div class="tw"><table class="t"><tr><th>Topic</th><th>A: S3 Tables</th><th>B: UC and PO</th></tr>
+<tr><td>Compaction</td><td>Automatic binpack, newer sort and z-order options. Billed per GB and per object processed.</td><td>PO runs OPTIMIZE automatically. Billed in serverless DBUs.</td></tr>
+<tr><td>Snapshot and file cleanup</td><td>Snapshot expiry and orphan-file removal</td><td>VACUUM by PO</td></tr>
+<tr><td>Layout</td><td>Partition evolution, hidden partitioning, sort order</td><td>Liquid clustering, which can choose its own keys. No Iceberg equivalent.</td></tr>
+<tr><td>Statistics</td><td>Iceberg column metrics</td><td>First 32 columns by default, tunable. PO runs ANALYZE.</td></tr>
+<tr><td>Scope</td><td>S3 Tables only</td><td>UC managed tables only</td></tr></table></div>
+<p><b>Compression is not a differentiator.</b> Both write Parquet and you can choose the same codec. File size and layout decide real speed and storage cost. Without S3 Tables, plain Iceberg on EMR means you schedule <code>rewrite_data_files</code>, <code>expire_snapshots</code> and <code>remove_orphan_files</code> yourself.</p>
+<p><b>Winner:</b> B for breadth (layout and automatic keys). A is simpler to predict. More: <a href="/learn/table-maintenance/">who maintains your tables</a>, <a href="/learn/databricks-interview/maintenance-strategy/">maintenance strategy</a>, <a href="/learn/databricks-interview/slow-writes/">slow writes</a>.</p></section>
+
+<section id="s5"><p class="eyebrow">Write path</p><h2>Optimized write and AQE</h2>
+<ul>
+<li><b>Optimized write</b> is an extra shuffle before the write so files come out a good size. Iceberg has the same idea as a setting, the write distribution mode (hash or range). Same mechanism, different switch. <b>Winner: tie.</b></li>
+<li><b>AQE</b> (adaptive query execution) is open-source Spark, on by default in recent versions, so EMR and Glue have it too. It merges small shuffle partitions, switches join strategy at run time and splits skewed partitions. Databricks adds some tuning on top. <b>Winner: tie.</b></li>
+<li>Neither fixes a bad partition count before a write or a bad table layout.</li></ul></section>
+
+<section id="s6"><p class="eyebrow">Pipelines</p><h2>Declarative pipelines, Auto CDC and SCD Type 2</h2>
+<div class="tw"><table class="t"><tr><th>Topic</th><th>Databricks (Lakeflow declarative pipelines)</th><th>AWS-native</th><th>Winner</th></tr>
+<tr><td>Declarative pipelines</td><td>You define tables in SQL or Python. The engine orders them, retries, tracks lineage and refreshes incrementally. Expectations for quality.</td><td>Glue jobs or EMR steps wired by Step Functions or MWAA. dbt is the closest declarative tool. Newer Glue catalog materialized views for Iceberg; check maturity.</td><td class="v pursue">Databricks</td></tr>
+<tr><td>Auto CDC</td><td>Give a key and a sequence column. Late and out-of-order changes are resolved, deletes flagged, snapshots diffed.</td><td>Write <code>MERGE INTO</code> yourself, including dedupe by sequence. DMS or Flink CDC delivers the changes.</td><td class="v pursue">Databricks</td></tr>
+<tr><td>SCD Type 2</td><td><code>STORED AS SCD TYPE 2</code> closes the old row and opens the new one, with optional column-limited history.</td><td>Two-step MERGE, or dbt snapshots. Correct, but you own the edge cases.</td><td class="v pursue">Databricks (less code)</td></tr></table></div>
+<p>Your own PySpark gives full control. See <a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD2: AUTO CDC or your own PySpark?</a>, <a href="/learn/spark-declarative-pipelines/">declarative pipelines</a> and <a href="/learn/medallion-architecture/">medallion architecture</a>. AWS wins one thing here: zero-ETL integrations from Aurora, RDS and DynamoDB.</p></section>
+
+<section id="s7"><p class="eyebrow">BI</p><h2>Power BI, metric views and the semantic layer</h2>
+<ul>
+<li><b>B:</b> Power BI has a native Databricks connector with Import and DirectQuery on a SQL warehouse. It passes the user's identity to UC and respects row and column rules. Photon and result caching handle concurrency well. UC metric views define measures once for SQL, dashboards and Genie (and mean more lock-in).</li>
+<li><b>A:</b> Power BI has no good direct Iceberg connector. You go through Athena (billed per TB scanned, awkward for DirectQuery), Redshift or a Trino service, usually with a gateway. You can also shortcut S3 into Fabric OneLake, which adds a second platform. There is no catalog-level metric layer.</li></ul>
+<p><b>Winner: B, clearly.</b> More: <a href="/learn/power-bi-vs-databricks-ai-bi/">Power BI vs Databricks AI/BI</a>, <a href="/learn/metric-views/">metric views</a>.</p></section>
+
+<section id="s8"><p class="eyebrow">Security and governance</p><h2>Security, lineage, governance and tagging</h2>
+<div class="tw"><table class="t"><tr><th>Topic</th><th>Databricks</th><th>AWS-native</th><th>Winner</th></tr>
+<tr><td>Data-level security</td><td>One layer: UC grants, row filters, column masks, tag-based policies. Short-lived credentials per table.</td><td>Two layers: IAM and Lake Formation (table, column, row, cell filters, LF-tags). Fine-grained control from EMR needs a specific setup.</td><td class="v">Databricks for consistency</td></tr>
+<tr><td>Infrastructure security</td><td>Private Link, IP rules, serverless egress policies, customer-managed keys</td><td>VPC endpoints, KMS, GuardDuty, Macie, Config, CloudTrail, SCPs</td><td class="v">AWS for breadth</td></tr>
+<tr><td>Lineage</td><td>Automatic table and column lineage from notebooks, jobs, pipelines, SQL and dashboards, queryable in system tables. Only for work on UC-governed compute.</td><td>No built-in column lineage for Glue or EMR. Add OpenLineage listeners and send events to SageMaker Catalog or another tool.</td><td class="v pursue">Databricks</td></tr>
+<tr><td>Governance</td><td>One catalog: search, tags, certification, quality monitoring, access requests, Delta Sharing, clean rooms, audit tables</td><td>SageMaker Catalog, Glue Data Quality, Macie, Lake Formation cross-account, CloudTrail: several services</td><td class="v pursue">Databricks for one place</td></tr>
+<tr><td>Tagging</td><td>UC tags usable in access policies. Cost tags on clusters and jobs. Budget policies tag serverless usage.</td><td>LF-tags for data. Resource tags for cost, which must be activated before they appear. Organizations tag policies enforce them.</td><td class="v">Tie</td></tr></table></div>
+<p>More: <a href="/learn/databricks-interview/tagging-best-practices/">tagging best practices</a>, <a href="/learn/databricks-interview/row-level-security/">row-level security and masking</a>.</p></section>
+
+<section id="s9"><p class="eyebrow">Catalog</p><h2>Unity Catalog features and what stands in for them on AWS</h2>
+<div class="tw"><table class="t"><tr><th>UC feature</th><th>Closest AWS-native piece</th><th>Gap</th></tr>
+<tr><td>Catalogs, schemas, tables, views</td><td>Glue Data Catalog</td><td>None</td></tr>
+<tr><td>Volumes (governed files)</td><td>S3 plus Lake Formation</td><td>Files are less governed</td></tr>
+<tr><td>Row filters and column masks</td><td>Lake Formation filters</td><td>Fine-grained on EMR needs setup</td></tr>
+<tr><td>Tag-based access policies</td><td>LF-tags</td><td>Roughly equal</td></tr>
+<tr><td>Lineage</td><td>OpenLineage into SageMaker Catalog</td><td>You assemble it</td></tr>
+<tr><td>System tables (audit, billing, usage)</td><td>CloudTrail, cost and usage reports</td><td>Not SQL-first</td></tr>
+<tr><td>Metric views</td><td>None at catalog level</td><td>No semantic layer in the catalog</td></tr>
+<tr><td>Materialized views</td><td>Newer Glue catalog materialized views</td><td>Less mature</td></tr>
+<tr><td>Federation to other databases</td><td>Athena federated queries, Redshift</td><td>Different tools</td></tr>
+<tr><td>Delta Sharing and clean rooms</td><td>Data Exchange, Clean Rooms</td><td>Different products</td></tr>
+<tr><td>Iceberg REST endpoint</td><td>Glue Iceberg REST</td><td>Equal</td></tr>
+<tr><td>Model and function registry</td><td>SageMaker Model Registry</td><td>Separate products</td></tr></table></div>
+<p>UC is one product. The AWS equivalent is four to six services that you integrate. <b>Winner:</b> Databricks on cohesion, AWS on how many other AWS services plug in natively.</p></section>
+
+<section id="s10"><p class="eyebrow">Running it</p><h2>Orchestration and Spark version</h2>
+<div class="tw"><table class="t"><tr><th>Topic</th><th>Databricks</th><th>AWS-native</th></tr>
+<tr><td>Orchestration</td><td>Lakeflow Jobs: task DAGs, for-each, if/else, repair run, file-arrival and table-update triggers, cron, continuous, run-as service principal, Asset Bundles for code</td><td>Step Functions, MWAA (managed Airflow, billed hourly even when idle), Glue Workflows, EventBridge Scheduler. Big Airflow operator library for cross-system flows.</td></tr>
+<tr><td>Spark version</td><td>Databricks Runtime number, with LTS releases. Contains Spark plus Databricks patches, Photon and Delta features. Serverless is versionless, with environment versions you can pin.</td><td>EMR release label or Glue version. Contains Spark plus the AWS runtime and bundled Iceberg libraries. You pin it.</td></tr></table></div>
+<p><b>Orchestration winner:</b> Databricks inside the platform, Airflow or AWS across many systems. <b>Spark version:</b> a tie. AWS gives control, Databricks gives less upgrade work. Runtime numbers are not Spark numbers, so compare the Spark version inside each. Newer Spark can change error behaviour and defaults, so test before upgrading either side. See <a href="/learn/databricks-interview/asset-bundles/">Asset Bundles</a>.</p></section>
+
+<section id="s11"><p class="eyebrow">Cost</p><h2>Cost, system tables and cost transparency</h2>
+<div class="tw"><table class="t"><tr><th></th><th>Databricks</th><th>AWS-native</th></tr>
+<tr><td>Classic compute</td><td>DBUs × rate, plus VMs billed by AWS</td><td>EC2 plus an EMR fee, or Glue DPU-hours</td></tr>
+<tr><td>Serverless</td><td>One DBU price, VMs included</td><td>EMR Serverless per vCPU-hour and GB-hour</td></tr>
+<tr><td>Discounts</td><td>Commit-based contract discounts</td><td>Savings Plans, spot, enterprise agreements</td></tr>
+<tr><td>Maintenance</td><td>PO serverless DBUs</td><td>S3 Tables processing fees</td></tr>
+<tr><td>Cost data</td><td>System tables: usage, list prices, compute, job runs, query history, audit. SQL-first. Attribution by job, cluster, warehouse, query and tag. Shows DBUs at <b>list</b> price, not your discounted price.</td><td>Cost and usage reports to S3, queried with Athena, plus Cost Explorer. Real billed dollars for EC2, S3 and NAT. Tags must be activated first. No native per-job Spark cost.</td></tr>
+<tr><td>Blind spots</td><td>Cloud VM and storage cost sit in the AWS bill. Serverless internals are hidden.</td><td>No per-query or per-job split for Spark</td></tr></table></div>
+<p><b>Observability winner:</b> a tie, with the combination best. Databricks tells you <em>who and what</em> spent it. AWS tells you the <em>whole bill</em>. Tag everything and join Databricks usage to the AWS export from day one; that join is hidden work in the Databricks cost story.</p>
+<h3>Hidden costs on both sides</h3>
+<div class="tw"><table class="t"><tr><th>Cost</th><th>A</th><th>B</th></tr>
+<tr><td>Compute premium</td><td>EMR fee on EC2, or Glue DPU-hours</td><td>DBU premium, plus the Photon multiplier</td></tr>
+<tr><td>Storage</td><td>S3 Tables rate is above standard S3, plus old snapshots and a per-object monitoring fee</td><td>Standard S3 in your account, plus old versions until VACUUM</td></tr>
+<tr><td>Requests</td><td>Many small files mean many calls</td><td>Same</td></tr>
+<tr><td>Network</td><td>NAT gateway fees without an S3 gateway endpoint, cross-AZ shuffle, cross-region reads</td><td>Same on classic compute, plus serverless network charges and Delta Sharing or cross-cloud egress</td></tr>
+<tr><td>Idle time</td><td>Long-lived EMR clusters, always-on MWAA</td><td>Warehouses or clusters without auto-stop</td></tr>
+<tr><td>BI</td><td>Athena scan fees, Redshift, gateways</td><td>SQL warehouse DBUs</td></tr>
+<tr><td>People</td><td>Cluster tuning, library versions, wiring services together</td><td>Platform skills and DBU forecasting</td></tr></table></div>
+<p>Same-region traffic between S3 and compute is free on both sides. Moving data out of the region or cloud is where bills grow. More: <a href="/learn/databricks-compute/how-billing-works/">how billing works</a>, <a href="/learn/databricks-compute/system-tables/">system tables and what reading them costs</a>, <a href="/learn/databricks-interview/egress-and-ingress/">egress and ingress</a>.</p></section>
+
+<section id="s12"><p class="eyebrow">Hero features</p><h2>What you miss if you leave Databricks out</h2>
+<ul>
+<li>Photon, Predictive I/O and liquid clustering</li>
+<li>Lakeflow declarative pipelines, Auto Loader and Lakeflow Connect managed connectors</li>
+<li>UC lineage, tag-based rules and system tables for cost and audit</li>
+<li>Delta Sharing and clean rooms</li>
+<li>Genie, AI/BI dashboards and metric views</li>
+<li>Model serving, Vector Search and agent tools inside the same governed place</li>
+<li>Databricks Apps and Lakebase (Postgres)</li>
+<li>Serverless that starts in seconds, and repair run for failed jobs</li></ul>
+<h3>Where AWS-native wins</h3>
+<ul>
+<li>Lower compute cost for large steady ETL on spot and Graviton</li>
+<li>Real multi-engine Iceberg with several writers</li>
+<li>One vendor, one bill, existing AWS commitments, IAM everywhere</li>
+<li>Athena for occasional ad-hoc queries without a warehouse</li>
+<li>Zero-ETL from AWS databases and Managed Flink for streaming</li>
+<li>Less lock-in, with S3 Tables maintenance that needs no extra product</li></ul></section>
+
+<section id="s13"><p class="eyebrow">Limitations</p><h2>Limitations to know before you decide</h2>
+<p>Checked against vendor documentation on 21 November 2026. Where two documents disagreed, the table says so. Treat each row as "confirm this on your runtime and region before relying on it".</p>
+<h3>Databricks side</h3>
+<div class="tw"><table class="t"><tr><th>Area</th><th>Limitation</th><th>Source</th></tr>
+<tr><td>UniForm (Iceberg reads of Delta)</td><td>Iceberg clients are read-only. Column mapping is required. Iceberg v2 reads do not work on tables with deletion vectors (Iceberg v3 supports them). Iceberg reads cannot be enabled on materialized views or streaming tables. Parquet files use Zstandard instead of Snappy. Delta Sharing recipients read the table as Delta only.</td><td><a href="https://docs.databricks.com/aws/en/delta/uniform">Databricks: read Delta tables with Iceberg clients</a></td></tr>
+<tr><td>Managed Iceberg tables in UC</td><td>Reports of general availability in 2026 conflict with pages that still say preview, so check your cloud. Listed limits: needs runtime 16.4 LTS or later, no primary or foreign keys, no partitioning by expressions such as <code>bucket()</code> or <code>days()</code>, partition evolution only through external engines on the Iceberg REST catalog, external engines cannot read UC views, Parquet only, some nested and special types unsupported, no credential vending on default storage. The documentation also says creating them needs Predictive Optimization enabled.</td><td><a href="https://docs.databricks.com/aws/iceberg">Databricks: Apache Iceberg</a></td></tr>
+<tr><td>Predictive Optimization</td><td>UC managed tables only. It does not run on streaming tables, materialized views, external tables or tables shared in by Delta Sharing. Needs the Premium plan and a supported region. Billed as a serverless jobs SKU. Older pages say it skips tables using Z-order or liquid clustering, newer ones describe automatic liquid clustering, so the docs differ by version.</td><td><a href="https://docs.databricks.com/aws/optimizations/predictive-optimization">Databricks: predictive optimization</a></td></tr>
+<tr><td>Liquid clustering</td><td>At most four clustering keys. Cannot be combined with partitioning or Z-order. Clustering on write only happens above a size threshold (for example 64 MB with one key, 1 GB with four). Automatic key selection needs runtime 15.4 LTS or later and UC managed tables.</td><td><a href="https://docs.databricks.com/aws/en/tables/clustering">Databricks: liquid clustering</a></td></tr>
+<tr><td>Serverless compute</td><td>Only Spark Connect APIs: no RDD APIs, no <code>sparkContext</code>, no global temporary views, no compute policies. Maximum run time 7 days. Streaming triggers such as continuous and processing-time are not supported, so use available-now. Sources differ on Scala and R support, so check the current page.</td><td><a href="https://docs.databricks.com/aws/en/compute/serverless/limitations">Databricks: serverless limitations</a></td></tr>
+<tr><td>Declarative pipelines and Auto CDC</td><td>Identity columns are not supported on Auto CDC targets. A dataset can be defined only once across pipelines (append flows into a streaming table are the exception). <code>pivot()</code> is not supported. A workspace allows 1,000 concurrent pipeline updates.</td><td><a href="https://docs.databricks.com/aws/en/ldp/limitations">Databricks: pipeline limitations</a></td></tr>
+<tr><td>Lineage</td><td>The lineage system tables keep a rolling one-year window and hold only a subset of events, recorded when lineage can be inferred. Column lineage needs both source and target referenced by table name. Only events from UC-governed work (pipelines, notebooks, jobs, SQL, dashboards) appear, so mixing governed and ungoverned compute leaves gaps.</td><td><a href="https://docs.databricks.com/aws/en/admin/system-tables/lineage">Databricks: lineage system tables</a></td></tr>
+<tr><td>Metric views</td><td>The main docs say metric views do not support lineage, Delta Sharing or Lakehouse Monitoring. In Power BI, the BI compatibility mode needs DirectQuery, a recent Desktop build, and cannot join a metric view to other tables. One Microsoft page says that mode was removed from the connector while a Databricks page calls it Beta, so confirm the status.</td><td><a href="https://docs.databricks.com/aws/en/partners/bi/power-bi-metric-views">Databricks: Power BI and metric views</a>, <a href="https://learn.microsoft.com/en-ie/azure/databricks/partners/bi/bi-metric-view">Microsoft: BI metric view</a></td></tr></table></div>
+
+<h3>AWS side</h3>
+<div class="tw"><table class="t"><tr><th>Area</th><th>Limitation</th><th>Source</th></tr>
+<tr><td>S3 Tables cost</td><td>You pay for storage, requests, an object monitoring fee and optional compaction (per object and per GB processed). Compaction prices were cut by up to 90 percent from July 2025. Sort and z-order compaction can cost more than binpack. Search results disagreed by tenfold on the monitoring rate, so read the pricing page.</td><td><a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-maintenance.html">AWS: maintenance for tables</a>, <a href="https://aws.amazon.com/about-aws/whats-new/2025/07/amazon-s3-tables-reduce-compaction-costs">AWS: compaction cost cut</a></td></tr>
+<tr><td>S3 Tables compaction</td><td>Target file size must be between 64 MB and 512 MB. Snapshot management is configured per table.</td><td><a href="https://docs.aws.amazon.com/AmazonS3/latest/userguide/s3-tables-maintenance.html">AWS: maintenance for tables</a></td></tr>
+<tr><td>S3 Tables with Glue and Lake Formation</td><td>Column names are converted to lowercase. The <code>SearchTables</code> API cannot search S3 tables. Access errors in Athena are usually fixed with Lake Formation grants on the table-bucket catalog and database.</td><td><a href="https://docs.aws.amazon.com/lake-formation/latest/dg/notes-s3-catalog.html">AWS: S3 tables catalog integration limitations</a></td></tr>
+<tr><td>Lake Formation with EMR (fine-grained access)</td><td>Spark jobs only, and Hive or Iceberg tables only. A single Spark session per job. Dynamic resource allocation cannot be turned off. No custom images on EMR Serverless. Iceberg works only with the session catalog. Registered Iceberg tables expose only some metadata tables and hide sensitive columns. Write support differs by release: older pages say data-changing statements are limited, a newer page says EMR 7.12 and later supports DML and DDL through Lake Formation credentials. RDD and nested-column access control are unsupported in the version I found.</td><td><a href="https://docs.aws.amazon.com/emr/latest/EMR-Serverless-UserGuide/emr-serverless-lf-enable-considerations.html">AWS: EMR Serverless and Lake Formation</a>, <a href="https://docs.aws.amazon.com/emr/latest/ManagementGuide/emr-lf-limitations-cont.html">AWS: EMR and Lake Formation considerations</a></td></tr>
+<tr><td>Glue materialized views for Iceberg</td><td>Need Glue 5.1 or later and Spark 3.5.6 or later. Source tables must be Iceberg tables in the Glue Data Catalog. Results are Iceberg tables in S3 Tables or general-purpose buckets. I did not find the full limits list, so read the Glue page.</td><td><a href="https://docs.aws.amazon.com/glue/latest/dg/materialized-views.html">AWS Glue: materialized views</a></td></tr>
+<tr><td>Power BI</td><td>One community answer says Power BI has no native Iceberg connector, with OneLake virtualization as the workaround (the thread's date is unclear). The Athena connector lists DirectQuery as supported, and users report failures after publishing or with native queries. Those are user reports, not official limits.</td><td><a href="https://learn.microsoft.com/power-query/connectors/amazon-athena">Microsoft: Athena connector</a></td></tr></table></div>
+
+<div class="callout w"><p><b>What this changes in the comparison.</b> Four things matter most for the decision. (1) Managed Iceberg tables in UC are tied to Predictive Optimization, so "Iceberg on Databricks" is not independent of the managed stack. (2) UniForm stays read-only, so a multi-writer design must be Iceberg-native. (3) Fine-grained Lake Formation on EMR works but with a long list of conditions, so test your exact EMR release and mode. (4) Power BI on metric views is the least settled part of the Databricks story, so pilot it before promising it.</p></div>
+<div class="callout"><p><b>What this list cannot show.</b> Support tickets and escalations raised by real customers are private to those customers, so neither vendor publishes them. The limits above come from public documentation and a few public user reports. Before you commit, ask each vendor's account team for known issues on your exact runtime and region, and pilot on your own data.</p></div>
+</section>
+
+<section id="s14"><p class="eyebrow">Verdict</p><h2>Scorecard</h2>
+<div class="tw"><table class="t"><tr><th>Dimension</th><th>Winner</th><th>Why</th></tr>
+<tr><td>Openness</td><td class="v">A</td><td>Native Iceberg, multi-writer</td></tr>
+<tr><td>Governance depth</td><td class="v">B</td><td>Lineage, tag-based policies, system tables</td></tr>
+<tr><td>Cost per compute hour</td><td class="v">A</td><td>Spot, no DBU premium</td></tr>
+<tr><td>Engineering effort</td><td class="v">B</td><td>Serverless, declarative, fewer parts</td></tr>
+<tr><td>Table layout</td><td class="v">B</td><td>Liquid clustering</td></tr>
+<tr><td>Upkeep simplicity</td><td class="v">Tie</td><td>S3 Tables and PO are both automatic</td></tr>
+<tr><td>Power BI</td><td class="v">B</td><td>Native connector, passes user identity</td></tr>
+<tr><td>Semantic layer</td><td class="v">B</td><td>Metric views</td></tr>
+<tr><td>Declarative pipelines, Auto CDC, SCD2</td><td class="v">B</td><td>Less code</td></tr>
+<tr><td>AWS integration</td><td class="v">A</td><td>IAM, Athena, Redshift, zero-ETL</td></tr>
+<tr><td>Lock-in risk</td><td class="v">A</td><td>Open format and catalog</td></tr>
+<tr><td>Cost visibility</td><td class="v">Tie</td><td>Databricks per job, AWS for the whole bill</td></tr></table></div>
+<div class="callout g"><p><b>The pattern.</b> Databricks wins where the value is <em>one connected product</em>: lineage, governance, declarative pipelines, Power BI, metric views. AWS-native wins where the value is <em>cost, control and openness</em>: compute price, multi-engine Iceberg, AWS integrations, no second vendor. The decision depends less on features and more on whether you have a platform team to do the assembly work.</p></div>
+<div class="tw"><table class="t"><tr><th>If this describes you</th><th>Choose</th></tr>
+<tr><td>Power BI is the main consumer, the team is small, you want fast governed delivery</td><td class="v pursue">B: Databricks</td></tr>
+<tr><td>Big steady ETL, a strong AWS platform team, several engines reading and writing</td><td class="v pursue">A: AWS-native</td></tr>
+<tr><td>Both needs</td><td class="v pursue">Hybrid: Databricks reads S3 Tables through catalog federation, and UniForm or managed Iceberg lets Athena or Redshift read Databricks tables</td></tr></table></div></section>
