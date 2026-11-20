@@ -28,6 +28,7 @@ STORY = [
     ("The data platform, whole", "/learn/data-systems/platform/", "silver", "Five hops along the medallion and 24 cross-cutting concerns, with layout, environments and cost pages."),
 ]
 GUIDES = [
+    ("Forward deployed engineer roadmap", "/forward-deployed/", "One starting page for the data and AI forward deployed engineer: the role on one picture, four phases, eight tracks, and links into every guide."),
     ("Data engineering fundamentals", "/learn/fundamentals/", "Six plain-words mind-map guides: performance, cost, processing, security, storage and database families, with the CostSherlock rules that catch each mistake."),
     ("Performance fundamentals", "/learn/fundamentals/performance/", "Where the time goes in a data job: disk vs memory vs network, tasks, shuffles, layout, compression, waiting, and why gold exists."),
     ("Cost fundamentals", "/learn/fundamentals/cost/", "Where data platform money goes: idle and oversized compute, wasteful queries, storage growth, refresh frequency, egress, anomalies."),

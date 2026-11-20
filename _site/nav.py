@@ -43,10 +43,11 @@ ROLE_KIDS = {
                          ("Practice and simulators", "/data-engineering/#tools"), ("Projects to join", "/projects/?subject=data")],
     "ai-engineering": [("Learning path", "/paths/ai-engineering/"), ("Simulator: Agent Harness", "/learn/agent-harness-sim/"),
                        ("Vertical agents", "/ai-engineering/vertical-agents/"), ("Projects to join", "/projects/?subject=ai")],
+    "forward-deployed": [("Start here: the roadmap", "/forward-deployed/"), ("Learning path", "/paths/forward-deployed/")],
     "llm-engineering": [("Learning path", "/paths/llm-engineering/"), ("Simulator: Claude API", "/learn/llm-api-sim/"),
                         ("Projects to join", "/projects/?subject=llm")],
 }
-ROLES = [(d["name"], "/data-engineering/" if d["id"] == "data-engineering" else f"/paths/{d['id']}/",
+ROLES = [(d["name"], "/data-engineering/" if d["id"] == "data-engineering" else "/forward-deployed/" if d["id"] == "forward-deployed" else f"/paths/{d['id']}/",
           ROLE_KIDS.get(d["id"], [("Learning path", f"/paths/{d['id']}/")]) + [("Key concepts", f"/concepts/#{d['id']}")])
          for d in DISCIPLINES]
 
