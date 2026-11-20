@@ -24,13 +24,13 @@ URL = f"{SITE}/learn/data-platform-mind-map/"
 OUT = ROOT / "learn" / "data-platform-mind-map" / "index.html"
 
 CSS = """<style>
-  .tw { overflow-x:auto; }
-  table.map { border-collapse:collapse; width:100%; min-width:1500px; font-size:13px; margin:10px 0 18px; }
+  .tw { overflow-x:auto; width:100vw; position:relative; left:50%; margin-left:-50vw; padding:0 20px; box-sizing:border-box; }
+  table.map { border-collapse:collapse; width:100%; min-width:1100px; font-size:13px; margin:10px 0 18px; }
   table.map td, table.map th { border:1.5px solid var(--ink); padding:6px 8px; text-align:left; vertical-align:top; }
   table.map th { background:var(--peri-wash); }
   table.map th.xyz { background:var(--rose-wash); }
   table.map th.band { text-align:center; font-family:var(--hand); font-weight:400; font-size:17px; letter-spacing:0; text-transform:none; background:#fff; }
-  table.map td.fam { background:var(--butter-wash); font-weight:700; width:104px; }
+  table.map td.fam { background:var(--butter-wash); font-weight:700; width:110px; }
   table.map td.fam span { display:block; font-weight:400; font-size:11.5px; color:#555; margin-top:3px; }
   table.map td.con { width:128px; font-weight:700; }
   table.map td.con span { display:block; font-weight:400; font-size:11.5px; color:#555; margin-top:2px; }
