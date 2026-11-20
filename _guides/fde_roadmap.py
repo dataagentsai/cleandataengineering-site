@@ -246,6 +246,33 @@ def drawing_loop():
     return _svg(940, 160, b, "An engagement loop of nine steps from discover to reuse, each linking to a concept page.")
 
 
+SELF_SEC = '''
+<section id="check"><p class="eyebrow">Where are you now</p><h2>Rate yourself on each track</h2>
+<p>Be honest: pick the highest level where you could do <b>all</b> of it, with no help. The page shows your weakest track and links to it. Your choices stay in this browser only.</p>
+<div class="tw selfcheck"><table class="t"><tr><th>Track</th><th>Your level</th><th>Open</th></tr>{selfrows}</table></div>
+<div class="verdict" id="verdict">Pick a level for each track to see where to focus next.</div></section>
+<script>
+(function(){{
+  var sels=document.querySelectorAll('.selfcheck select'), out=document.getElementById('verdict'), KEY='fde-roadmap-levels';
+  var names={{}}, ids=[];
+  sels.forEach(function(s){{ names[s.dataset.id]=s.dataset.name; ids.push(s.dataset.id); }});
+  try {{ var saved=JSON.parse(localStorage.getItem(KEY)||'{{}}'); sels.forEach(function(s){{ if(saved[s.dataset.id]!==undefined) s.value=saved[s.dataset.id]; }}); }} catch(e) {{}}
+  function show(){{
+    var vals={{}}, picked=0, low=null;
+    sels.forEach(function(s){{ vals[s.dataset.id]=s.value; if(s.value!=='') {{ picked++; }} }});
+    try {{ localStorage.setItem(KEY, JSON.stringify(vals)); }} catch(e) {{}}
+    if(picked<ids.length){{ out.textContent='Pick a level for each track to see where to focus next ('+picked+' of '+ids.length+' done).'; return; }}
+    ids.forEach(function(i){{ if(low===null || Number(vals[i])<Number(vals[low])) low=i; }});
+    var lab=['not started','crawl','walk','run'], bar='';
+    ids.forEach(function(i){{ bar+=names[i]+': '+lab[Number(vals[i])]+'. '; }});
+    out.innerHTML='<b>Focus next on '+names[low]+'</b> ('+lab[Number(vals[low])]+'). <a href="#track-'+low+'">Open its card</a>. <br><span style="font-size:14px;color:#555">'+bar+'</span>';
+  }}
+  sels.forEach(function(s){{ s.addEventListener('change', show); }}); show();
+}})();
+</script>
+'''
+
+
 # ------------------------------------------------------------------ page
 CSS = """<style>
   .fd .chip { display:inline-block; border:1.5px solid #1F1F1F; border-radius:999px; padding:2px 12px; margin:3px 4px 3px 0; font-size:14px; text-decoration:none; color:#1F1F1F; background:#fff; }
@@ -259,6 +286,9 @@ CSS = """<style>
   .fd .track { border:var(--line); border-radius:var(--wob); padding:14px 18px 10px; margin:16px 0; background:#fff; scroll-margin-top:60px; }
   .fd .track h3 { font-size:26px; margin:0 0 2px; } .fd .track .what { margin:0 0 8px; font-size:15.5px; }
   .fd .lv { display:grid; grid-template-columns:90px 1fr; gap:4px 12px; font-size:15px; margin:6px 0 10px; } .fd .lv b { font-family:var(--hand); font-weight:400; font-size:19px; }
+  .fd .selfcheck select { font:inherit; font-size:15px; border:1.5px solid #1F1F1F; border-radius:10px; padding:4px 8px; background:#fff; }
+  .fd .selfcheck td, .fd .selfcheck th { vertical-align:middle; }
+  .fd .verdict { border:var(--line); border-radius:var(--wob); padding:10px 16px; background:#fff4d6; margin:10px 0; font-size:15.5px; }
   .fd .tag { display:inline-block; width:12px; height:12px; border:1.2px solid #1F1F1F; border-radius:3px; margin-right:8px; vertical-align:-1px; }
 </style>"""
 
@@ -276,6 +306,9 @@ def page():
     for tid, short, name, cl, what, lv, links in TRACKS:
         tracks += (f'<div class="track" id="track-{tid}"><h3><span class="tag" style="background:{CLUSTER_FILL[cl]}"></span>{E(name)}</h3><p class="what">{E(what)}</p>'
                    f'<div class="lv"><b>Crawl</b><span>{E(lv[0])}</span><b>Walk</b><span>{E(lv[1])}</span><b>Run</b><span>{E(lv[2])}</span></div>{chips(links)}</div>')
+    opts = '<option value="">Choose</option><option value="0">Not started</option><option value="1">Crawl</option><option value="2">Walk</option><option value="3">Run</option>'
+    selfrows = "".join(f'<tr><td><b>{E(t[2])}</b></td><td><select data-id="{t[0]}" data-name="{E(t[1])}" aria-label="Level for {E(t[2])}">{opts}</select></td><td><a href="#track-{t[0]}">card</a></td></tr>' for t in TRACKS)
+    selfcheck = SELF_SEC.format(selfrows=selfrows)
     loop = '<div class="tw"><table class="t"><tr><th>Step</th><th>What happens</th><th>Mostly uses</th></tr>' + "".join(
         f'<tr><td><a href="{L(LOOP[i][2])}"><b>{E(a)}</b></a></td><td>{E(b)}</td><td><a href="#track-{tid}">{E(c)}</a></td></tr>' for i, (a, b, c, tid) in enumerate(LOOP_TEXT)) + "</table></div>"
     caps = '<div class="tw"><table class="t"><tr><th>Capstone</th><th>What it teaches</th></tr>' + "".join(
@@ -302,6 +335,7 @@ def page():
 <div class="phases">{phases}</div>
 <p style="font-size:14px;color:#555">Months are a guide for someone working on this steadily. If you already work in data engineering, Foundation compresses a lot. The checkpoints matter more than the calendar.</p></section>
 
+{selfcheck}
 <section id="tracks"><p class="eyebrow">The eight tracks</p><h2>What good looks like, and where to go next</h2>
 <p>Each card says what you should be able to do at <b>crawl</b>, <b>walk</b> and <b>run</b> level, and links to the guides, simulators and learning paths for it. Find your level on each card, then open the next link.</p>{tracks}</section>
 
