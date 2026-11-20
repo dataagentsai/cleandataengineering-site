@@ -59,16 +59,18 @@ SECTIONS = [
             ("Spec-driven development: data platforms", "/leaders/spec-driven/data-platform/"),
             ("Technical papers", "/papers/"),
         ]),
-        ("Data systems", "/learn/data-systems/", [
-            ("The whole system, end to end", "/learn/data-systems/"),
-            ("Where data engineering time goes", "/learn/where-data-engineering-time-goes/"),
-            ("Fundamentals", None),
+        ("Fundamentals", "/learn/fundamentals/", [
+            ("All fundamentals", "/learn/fundamentals/"),
             ("Performance", "/learn/fundamentals/performance/"),
             ("Cost", "/learn/fundamentals/cost/"),
             ("Processing", "/learn/fundamentals/processing/"),
             ("Security", "/learn/fundamentals/security/"),
             ("Storage", "/learn/fundamentals/storage/"),
             ("Database families", "/learn/fundamentals/database-families/"),
+        ]),
+        ("Data systems", "/learn/data-systems/", [
+            ("The whole system, end to end", "/learn/data-systems/"),
+            ("Where data engineering time goes", "/learn/where-data-engineering-time-goes/"),
             ("Upstreams", None),
             ("Know your sources", "/learn/data-systems/upstreams/"),
             ("Upstreams, the big picture", "/learn/data-systems/upstreams/big-picture/"),
