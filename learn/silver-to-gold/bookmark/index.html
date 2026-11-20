@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Can Incremental Loading Miss a Change? Bookmarks Tested</title>
+<meta name="description" content="Seven ways of writing silver and four ways of reading it, tested: which bookmarks miss updates, deletes and out-of-order commits, what a full overwrite of silver does to the change feed, and why the table&#x27;s own change log is the safe bookmark."><link rel="canonical" href="https://cleandataengineering.ai/learn/silver-to-gold/bookmark/">
+<meta property="og:title" content="Can Incremental Loading Miss a Change? Bookmarks Tested"><meta property="og:description" content="Seven ways of writing silver and four ways of reading it, tested: which bookmarks miss updates, deletes and out-of-order commits, what a full overwrite of silver does to the change feed, and why the table&#x27;s own change log is the safe bookmark."><meta property="og:url" content="https://cleandataengineering.ai/learn/silver-to-gold/bookmark/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .gh .fig { border:var(--line); border-radius:var(--wob); padding:12px 14px; margin:16px 0; background:#fff; overflow-x:auto; }
+  .gh .fig svg { width:100%; min-width:700px; height:auto; display:block; } .gh .fig text { font-family:var(--hand); fill:#111; }
+  .gh .fig p { font-size:13.5px; color:var(--muted); margin:6px 0 0; }
+  .gh .box { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--butter-wash); }
+  .gh .warn { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--rose-wash); }
+  .gh table.t td { font-size:14px; } .gh td.v { font-weight:700; }
+  .gh .toc { columns:2; } @media (max-width:700px){ .gh .toc { columns:1; } }
+  .gh ol.steps li { margin-bottom:6px; }
+</style><style>
+  .gh tr.hl td { background:#fff6dc; } .gh tr.dim td { color:#8a8a8a; }
+  .gh .part { border-top:3px solid var(--ink); margin-top:44px; padding-top:8px; }
+  .gh .kind { border:var(--line); border-radius:var(--wob); padding:4px 18px 10px; margin:22px 0; background:#fff; }
+  .gh .rpw { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:10px 0; }
+  .gh .rpw div { border:1.5px solid var(--ink); border-radius:10px; padding:8px 12px; font-size:14.5px; }
+  .gh .rpw b { display:block; margin-bottom:4px; }
+  .gh .rpw .r { background:#eef3fb; } .gh .rpw .p { background:#eaf6ef; } .gh .rpw .w { background:#fff6dc; }
+  @media (max-width:760px){ .gh .rpw { grid-template-columns:1fr; } }
+  .gh .start { border:var(--line); border-radius:var(--wob); padding:10px 18px; margin:16px 0; background:#eaf6ef; }
+  .gh details.code summary { cursor:pointer; font-weight:700; margin:10px 0; }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Who makes the bookmark, and can gold miss a change?", "description": "Seven ways of writing silver and four ways of reading it, tested: which bookmarks miss updates, deletes and out-of-order commits, what a full overwrite of silver does to the change feed, and why the table's own change log is the safe bookmark.", "url": "https://cleandataengineering.ai/learn/silver-to-gold/bookmark/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-20", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Data engineering", "item": "https://cleandataengineering.ai/data-engineering/"}, {"@type": "ListItem", "position": 2, "name": "Gold data modelling", "item": "https://cleandataengineering.ai/learn/gold-data-modelling/"}, {"@type": "ListItem", "position": 3, "name": "Silver to gold", "item": "https://cleandataengineering.ai/learn/silver-to-gold/"}, {"@type": "ListItem", "position": 4, "name": "Who makes the bookmark?", "item": "https://cleandataengineering.ai/learn/silver-to-gold/bookmark/"}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Concepts</h4><ul><li><details><summary><a href="/leaders/">For leaders</a></summary><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/leaders/spec-driven/">Spec-driven development: agents</a></li><li><a href="/leaders/spec-driven/data-platform/">Spec-driven development: data platforms</a></li><li><a href="/papers/">Technical papers</a></li></ul></details></li><li><details><summary><a href="/learn/fundamentals/">Fundamentals</a></summary><ul><li><a href="/learn/fundamentals/">All fundamentals</a></li><li><a href="/learn/fundamentals/performance/">Performance</a></li><li><a href="/learn/fundamentals/cost/">Cost</a></li><li><a href="/learn/fundamentals/processing/">Processing</a></li><li><a href="/learn/fundamentals/security/">Security</a></li><li><a href="/learn/fundamentals/storage/">Storage</a></li><li><a href="/learn/fundamentals/database-families/">Database families</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/">Data systems</a></summary><ul><li><a href="/learn/data-systems/">The whole system, end to end</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li><li class="sub">Upstreams</li><li><a href="/learn/data-systems/upstreams/">Know your sources</a></li><li><a href="/learn/data-systems/upstreams/big-picture/">Upstreams, the big picture</a></li><li><a href="/learn/data-systems/upstreams/apis/">API sources</a></li><li><a href="/learn/data-systems/upstreams/files/">File sources</a></li><li><a href="/learn/data-systems/upstreams/joins/">Learning the joins</a></li><li><a href="/learn/data-systems/upstreams/answers/">Where the answers go</a></li><li><a href="/learn/data-systems/upstreams/questionnaire/">Source system questionnaire</a></li><li class="sub">Downstreams</li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/platform/">Data and AI platform</a></summary><ul><li class="sub">Conceptual architecture</li><li><a href="/learn/data-systems/platform/">The platform, whole</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#hops">Data engineering</a></summary><ul><li><a href="/learn/data-platform-suite/">Our platform, picture to code</a></li><li class="sub">The hops</li><li><a href="/learn/data-platform-architecture/ingestion/">Hop 1: sources to bronze</a></li><li><a href="/learn/data-platform-architecture/bronze-to-silver/">Hop 2: bronze to silver</a></li><li><a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a></li><li><a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a></li><li class="sub">Tables and formats</li><li><a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a></li><li><a href="/learn/table-maintenance/">Who maintains your tables</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse: who owns the catalog?</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li class="sub">Databricks interview prep</li><li><a href="/learn/databricks-interview/">All interview topics</a></li><li><a href="/learn/databricks-interview/delta-maintenance/">OPTIMIZE, VACUUM, compaction</a></li><li><a href="/learn/databricks-interview/table-maintenance-pictures/">Table maintenance in pictures (real runs)</a></li><li><a href="/learn/databricks-interview/clustering-and-compaction/">Compaction, partitioning, Z-order, liquid</a></li><li><a href="/learn/databricks-interview/maintenance-strategy/">Maintenance strategy: auto or scheduled</a></li><li><a href="/learn/databricks-interview/slow-writes/">Why writes are slow</a></li><li><a href="/learn/databricks-interview/backup-and-recovery-azure/">Backup and recovery on Azure</a></li><li><a href="/learn/databricks-interview/tagging-best-practices/">Tagging best practices</a></li><li><a href="/learn/databricks-interview/row-level-security/">Row-level security and masking</a></li><li><a href="/learn/databricks-interview/compute-choice/">Which compute for which job</a></li><li><a href="/learn/databricks-interview/joins/">Join types</a></li><li><a href="/learn/databricks-interview/skew-and-shuffle/">Skew, salting and shuffle</a></li><li><a href="/learn/databricks-interview/aqe-photon-po/">AQE, Photon, Predictive Optimization</a></li><li><a href="/learn/databricks-interview/cost-and-performance/">Biggest cost and performance levers</a></li><li><a href="/learn/databricks-interview/declarative-and-semantic/">What declarative means + semantic example</a></li><li><a href="/learn/databricks-interview/asset-bundles/">Asset Bundles</a></li><li><a href="/learn/databricks-interview/lakeflow-connect/">Lakeflow Connect</a></li><li><a href="/learn/databricks-interview/uniform/">UniForm</a></li><li><a href="/learn/databricks-interview/vector-search/">Vector Search</a></li><li><a href="/learn/databricks-interview/dbt-and-odcs/">dbt and ODCS</a></li><li><a href="/learn/databricks-interview/egress-and-ingress/">Egress and ingress cost</a></li><li><a href="/learn/databricks-interview/hard-problems-and-questions/">Hard problems and question bank</a></li><li class="sub">History, SCD and facts</li><li><a href="/learn/gold-data-modelling/">Gold data modelling</a></li><li><a href="/learn/silver-to-gold/">Silver to gold: the harness</a></li><li><a href="/learn/silver-to-gold/worked-example/">› Worked example (start here)</a></li><li><a href="/learn/silver-to-gold/kinds-of-fact/">› Six kinds of fact</a></li><li><a href="/learn/silver-to-gold/fact-examples/">› Fact examples in SQL</a></li><li><a href="/learn/silver-to-gold/dimension-examples/">› Dimension examples in SQL</a></li><li><a href="/learn/silver-to-gold/rulebook-harness/">› Rulebook: the harness</a></li><li><a href="/learn/spark-declarative-pipelines/">Declarative pipelines: open source vs Lakeflow</a></li><li><a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD2: AUTO CDC or own PySpark?</a></li><li><a href="/learn/gold-harness-spec/">Gold harness spec: facts and SCD2</a></li><li><a href="/learn/time-travel-vs-scd2/">Time travel as SCD Type 2?</a></li><li class="sub">Streaming and real time</li><li><a href="/learn/streaming/">Streaming on AWS and Databricks</a></li><li><a href="/learn/streaming/options/">Streaming: all options</a></li><li><a href="/learn/streaming/sim/">Streaming simulator</a></li><li><a href="/learn/streaming/real-time-mode/">Databricks real time: RTM and Lakehouse//RT</a></li><li class="sub">Quality and testing</li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/data-platform-sim/data-quality/">Data quality, metadata-driven</a></li><li class="sub">Hands-on simulators</li><li><a href="/learn/data-platform-sim/">One batch through Spark and Delta</a></li><li><a href="/learn/data-platform-sim/spark/">Spark internals</a></li><li><a href="/learn/data-platform-sim/delta/">Delta Lake internals</a></li><li><a href="/learn/data-platform-sim/performance/">Spark performance: 12 problems</a></li><li><a href="/learn/data-platform-sim/problems/">Problems solved: SCD2, late data, duplicates</a></li><li class="sub">On AWS</li><li><a href="/learn/data-platform-architecture/aws-databricks/">AWS + Databricks, ETL end to end</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse on AWS: A vs B</a></li><li><a href="/learn/aws-data-services/">AWS data services catalog</a></li><li class="sub">Open specs</li><li><a href="/learn/datatwin/">DataTwin</a></li><li><a href="/projects/data-eng-specs/">Clean Data Engineering specs</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/semantic-layer/">BI and analytics</a></summary><ul><li><a href="/concepts/semantic-layer/">Hop 4: the semantic layer</a></li><li><a href="/writing/genie-metric-views/">Genie and metric views</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/">Power BI vs Databricks AI/BI</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/power-bi/">Power BI and Fabric, in depth</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/ai-bi/">Databricks AI/BI, in depth</a></li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/#ml-engineering">ML</a></summary><ul><li><a href="/concepts/#ml-engineering">Key ML ideas (pages coming)</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/ai-universe/">AI</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness-intro/">Agent Harness, the big picture</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/agent-harness-stack-map/">Agent Harness: architecture map</a></li><li><a href="/learn/drug-safety-agent-databricks/">Drug-safety agent on Databricks: the tour</a></li><li><a href="/learn/agent-frameworks/">Agent frameworks: when to use which</a></li><li><a href="/learn/which-model/">Which AI model for which job</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li><li><a href="/learn/ai-governance/">AI governance: running AI you can trust</a></li><li><a href="/learn/ai-gateways/">AI gateways: which one to use</a></li><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">Open spec: AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">Open spec: AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">Open spec: AgentTwin</a></li><li><a href="/lab/">The AgentTwin Lab</a></li><li><a href="https://github.com/dataagentsai/reference-agent">Code: Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">Code: AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Code: Eval Harness Framework</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#concerns">Across all of them</a></summary><ul><li><a href="/learn/data-systems/platform/#concerns">All 24 concerns</a></li><li><a href="/learn/data-platform-mind-map/">Mind map: every concern, every cloud</a></li><li><a href="/learn/data-systems/platform/layout/">Layout: catalogs and schemas</a></li><li><a href="/learn/data-systems/platform/environments/">Environments and CI/CD</a></li><li><a href="/learn/data-systems/platform/cost/">Cost and FinOps</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li><li><a href="/learn/data-platform-architecture/test-strategy/">Test strategy in practice</a></li></ul></details></li><li><a href="/concepts/#a-z">Key concepts, A to Z</a></li></ul><h4>On your cloud</h4><ul><li><details><summary><a href="/platforms/databricks/">Databricks</a></summary><ul><li><a href="/platforms/databricks/#systems">Data systems</a></li><li><a href="/platforms/databricks/#de">Data engineering</a></li><li><a href="/platforms/databricks/#bi">BI and analytics</a></li><li><a href="/platforms/databricks/#ml">ML</a></li><li><a href="/platforms/databricks/#ai">AI</a></li><li><a href="/platforms/databricks/#across">Across all of them</a></li><li><a href="/platforms/databricks/#paths">Learning paths</a></li><li><a href="/platforms/databricks/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/aws/">AWS</a></summary><ul><li><a href="/platforms/aws/#systems">Data systems</a></li><li><a href="/platforms/aws/#de">Data engineering</a></li><li><a href="/platforms/aws/#bi">BI and analytics</a></li><li><a href="/platforms/aws/#ml">ML</a></li><li><a href="/platforms/aws/#ai">AI</a></li><li><a href="/platforms/aws/#across">Across all of them</a></li><li><a href="/platforms/aws/#paths">Learning paths</a></li><li><a href="/platforms/aws/#certs">Certifications</a></li><li><a href="/learn/aws-data-services/">AWS data services: all 66</a></li></ul></details></li><li><details><summary><a href="/platforms/azure/">Azure and Fabric</a></summary><ul><li><a href="/platforms/azure/#systems">Data systems</a></li><li><a href="/platforms/azure/#de">Data engineering</a></li><li><a href="/platforms/azure/#bi">BI and analytics</a></li><li><a href="/platforms/azure/#ml">ML</a></li><li><a href="/platforms/azure/#ai">AI</a></li><li><a href="/platforms/azure/#across">Across all of them</a></li><li><a href="/platforms/azure/#paths">Learning paths</a></li><li><a href="/platforms/azure/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/gcp/">Google Cloud</a></summary><ul><li><a href="/platforms/gcp/#systems">Data systems</a></li><li><a href="/platforms/gcp/#de">Data engineering</a></li><li><a href="/platforms/gcp/#bi">BI and analytics</a></li><li><a href="/platforms/gcp/#ml">ML</a></li><li><a href="/platforms/gcp/#ai">AI</a></li><li><a href="/platforms/gcp/#across">Across all of them</a></li><li><a href="/platforms/gcp/#paths">Learning paths</a></li><li><a href="/platforms/gcp/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/open/">Open source</a></summary><ul><li><a href="/platforms/open/#systems">Data systems</a></li><li><a href="/platforms/open/#de">Data engineering</a></li><li><a href="/platforms/open/#bi">BI and analytics</a></li><li><a href="/platforms/open/#ml">ML</a></li><li><a href="/platforms/open/#ai">AI</a></li><li><a href="/platforms/open/#across">Across all of them</a></li><li><a href="/platforms/open/#paths">Learning paths</a></li><li><a href="/platforms/open/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/anthropic/">Claude (Anthropic)</a></summary><ul><li><a href="/platforms/anthropic/#ai">AI</a></li><li><a href="/platforms/anthropic/#certs">Certifications</a></li></ul></details></li><li><a href="/certifications/">All certifications</a></li></ul><h4>Your role</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/data-engineering/">Data Engineering</a></summary><ul><li><a href="/data-engineering/">Start here</a></li><li><a href="/paths/data-engineering/">Learning path</a></li><li><a href="/data-engineering/#tools">Practice and simulators</a></li><li><a href="/projects/?subject=data">Projects to join</a></li><li><a href="/concepts/#data-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/">Learning path</a></li><li><a href="/learn/agent-harness-sim/">Simulator: Agent Harness</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li><li><a href="/projects/?subject=ai">Projects to join</a></li><li><a href="/concepts/#ai-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/">Learning path</a></li><li><a href="/learn/llm-api-sim/">Simulator: Claude API</a></li><li><a href="/projects/?subject=llm">Projects to join</a></li><li><a href="/concepts/#llm-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/">Learning path</a></li><li><a href="/concepts/#ml-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/">Learning path</a></li><li><a href="/concepts/#software-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/forward-deployed/">Start here: the roadmap</a></li><li><a href="/paths/forward-deployed/">Learning path</a></li><li><a href="/concepts/#forward-deployed">Key concepts</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li><li><a href="/projects/">All projects to join</a></li></ul><h4>How we work</h4><ul><li><details><summary><a href="/how-we-work/#thinking">Thinking principles</a></summary><ul><li><a href="/how-we-work/#thinking">All thinking principles</a></li><li><a href="/how-we-work/critical-thinking/">Critical thinking in data projects</a></li></ul></details></li><li><a href="/how-we-work/#ba">Business analysis</a></li><li><details><summary><a href="/how-we-work/#pm">Project management</a></summary><ul><li><a href="/how-we-work/#pm">All project management</a></li><li><a href="/how-we-work/estimation/">Estimation mistakes in data projects</a></li><li><a href="/how-we-work/project-management-mistakes/">Top project management mistakes</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li></ul></details></li><li><details><summary><a href="/learn/technical-anchor/">The technical anchor</a></summary><ul><li><a href="/learn/technical-anchor/">The role</a></li><li><a href="/learn/technical-anchor/discovery/">Discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li></ul></details></li></ul><h4>Causes and deep tech</h4><ul><li><details><summary><a href="/ai-for-cause/">AI for a cause</a></summary><ul><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul></details></li><li><details><summary><a href="/deep-tech/">Deep tech</a></summary><ul><li><a href="/problems/">Hard problems</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul></details></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li><li><a href="/about/#join">Write or teach</a></li><li><a href="/writing/">Blog</a></li><li><a href="/research/">All open specifications</a></li><li><a href="/assets/">All open-source code</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › <a href="/learn/gold-data-modelling/">Gold data modelling</a> › <a href="/learn/silver-to-gold/">Silver to gold</a> › Who makes the bookmark?</p>
+<p class="eyebrow" style="margin-top:22px">Silver to gold · Learn it · 8 min read</p>
+<h1>Who makes the bookmark, and can gold miss a change?</h1>
+<p class="lede">Incremental loading is only as safe as its bookmark. This page tests seven ways silver can be written against four ways gold can read it, and shows which misses what. <span class="note">This is one page of <a href="/learn/silver-to-gold/">Silver to gold</a>.</span></p>
+<div class="gh">
+
+<section id="a-bookmark" class="part"><p class="eyebrow">Part A · 8</p><h2>Who makes the bookmark, and can gold miss a change?</h2>
+<p>In the story, each silver row had a <code>_seq</code> column and gold read "rows with _seq after my bookmark". That was a simplification, and it hides a real danger. Silver is written in many ways: new rows appended, Type 1 updates, Type 2 close-and-insert, deletes, full overwrites, sometimes two writers at once. A column that every writer must remember to set correctly will, one day, be set wrong, and gold will silently miss a change.</p>
+<p><b>The rule: how gold reads silver must not depend on how silver was written.</b> So the bookmark should not be a column the writers fill in. It should be the table's own change log, which the table format keeps for every write, numbered when the write commits.</p>
+<div class="fig"><svg viewBox="0 0 1000 296" role="img" aria-label="Many ways to write silver (append, Type 1 MERGE, Type 2 close and insert, deletes, full overwrite, two writers at once) all land in the table&#x27;s own change log, numbered at commit time in order. The gold reader asks only for all changes after version N up to M, whatever the writer did."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><text x="110" y="20" font-size="14" text-anchor="middle">many ways to write silver</text><text x="500" y="20" font-size="14" text-anchor="middle">silver table</text><text x="860" y="20" font-size="14" text-anchor="middle">one way to read it</text><rect x="10" y="34" width="200" height="32" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="110.0" y="54.333333333333336" font-size="13" text-anchor="middle">append new rows</text><path d="M210,50 L378,140" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="10" y="74" width="200" height="32" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="110.0" y="94.33333333333333" font-size="13" text-anchor="middle">MERGE: Type 1 update</text><path d="M210,90 L378,140" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="10" y="114" width="200" height="32" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="110.0" y="134.33333333333334" font-size="13" text-anchor="middle">MERGE: Type 2 close + new</text><path d="M210,130 L378,140" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="10" y="154" width="200" height="32" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="110.0" y="174.33333333333334" font-size="13" text-anchor="middle">delete rows</text><path d="M210,170 L378,140" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="10" y="194" width="200" height="32" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="110.0" y="214.33333333333334" font-size="13" text-anchor="middle">full overwrite</text><path d="M210,210 L378,140" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="10" y="234" width="200" height="32" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="110.0" y="254.33333333333334" font-size="13" text-anchor="middle">two writers at once</text><path d="M210,250 L378,140" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="380" y="60" width="240" height="170" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="500.0" y="109.33333333333333" font-size="13" text-anchor="middle">the table&#x27;s own change log</text><text x="500.0" y="125.33333333333333" font-size="11" text-anchor="middle">v0 WRITE</text><text x="500.0" y="141.33333333333331" font-size="11" text-anchor="middle">v1 WRITE</text><text x="500.0" y="157.33333333333331" font-size="11" text-anchor="middle">v2 UPDATE</text><text x="500.0" y="173.33333333333331" font-size="11" text-anchor="middle">v3 MERGE  ...</text><text x="500.0" y="189.33333333333331" font-size="11" text-anchor="middle">numbered at commit, in order</text><path d="M620,145 L738,145" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="740" y="95" width="250" height="100" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="865.0" y="132.66666666666666" font-size="14" text-anchor="middle">gold reader</text><text x="865.0" y="149.66666666666666" font-size="12" text-anchor="middle">&#x27;all changes after</text><text x="865.0" y="166.66666666666666" font-size="12" text-anchor="middle">version N, up to M&#x27;</text><text x="500" y="284" font-size="14" text-anchor="middle">Writers can work any way they like. The reader only asks the table what changed since its bookmark.</text></svg><p>Writers vary; the reader asks the table for changes since a version.</p></div>
+<h3>The test: seven ways of writing silver, four ways of reading it</h3>
+<p>We wrote one silver dealer table in each of these ways and, after each write, ran four gold readers from their own bookmarks. "caught" means the reader saw the changed dealer. "caught+" means it saw it, plus unchanged rows (safe, but extra work). "MISSED" means gold would never pick the change up. Delta 3.2 on Spark 3.5.1; the expected results are a table in the test, and the run fails on any difference. The Iceberg column is a separate run on Iceberg 1.9.2 (Type 2 and two-writer cases not run there).</p>
+<div class="tw"><table class="t"><tr><th>How silver was written</th><th>source number, set on insert only</th><th>source number, updated on change</th><th>silver batch number on every touched row</th><th>Delta change data feed (table version)</th><th>Iceberg changelog view</th></tr><tr><td>1. first load (insert)</td><td>caught</td><td>caught</td><td>caught</td><td>caught</td><td>caught</td></tr><tr><td>2. new row (append)</td><td>caught</td><td>caught</td><td>caught</td><td>caught</td><td>caught</td></tr><tr><td>3. Type 1 update (MERGE)</td><td>MISSED</td><td>caught</td><td>caught</td><td>caught</td><td>caught</td></tr><tr><td>4. Type 2 change (close + insert)</td><td>caught</td><td>caught</td><td>caught</td><td>caught</td><td>not run</td></tr><tr><td>5. hard delete</td><td>MISSED</td><td>MISSED</td><td>MISSED</td><td>caught</td><td>caught</td></tr><tr><td>6. full overwrite (D1 changed)</td><td>MISSED</td><td>MISSED</td><td>caught+</td><td>caught+</td><td>caught</td></tr><tr><td>7a. batch 9 commits first</td><td>MISSED</td><td>caught</td><td>caught</td><td>caught</td><td>not run</td></tr><tr><td>7b. batch 8 commits later</td><td>MISSED</td><td>MISSED</td><td>MISSED</td><td>caught</td><td>not run</td></tr></table></div>
+<h3>What each miss means, in plain words</h3>
+<ul><li><b>A number set on insert and never updated</b> misses every update. Your worry was right: if <code>_seq</code> only goes up for new records, an updated record is never picked up again.</li>
+<li><b>The source's change number, updated on each change</b>, catches updates but misses three things. A hard delete leaves no row to read. A full overwrite from a full copy brings no new change numbers. And when two loads commit out of order, a lower number commits after gold has passed it.</li>
+<li><b>A silver batch number stamped on every row a write touches</b> is better: it catches updates and overwrites. But it only works if every writer follows the rule, it still misses hard deletes, and it still misses out-of-order commits, because the number is taken when a batch starts, not when it commits.</li>
+<li><b>The table's change log</b> (Delta change data feed, Iceberg changelog view) caught every case. The table numbers each commit itself, in commit order, and records inserts, updates, deletes and overwrites, whoever wrote them and however.</li></ul>
+<div class="fig"><svg viewBox="0 0 1000 204" role="img" aria-label="Two writers. Batch 8 starts and takes number 8; batch 9 starts and takes number 9; batch 9 commits first as table version 7; gold runs and bookmarks number 9 or version 7; batch 8 commits as version 8. Reading by number, 8 is not after 9, so it is missed. Reading by table version, 8 is after 7, so it is caught."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><path d="M30,120 L970,120" stroke="#111" stroke-width="1.5" marker-end="url(#bia)"/><text x="965" y="144" font-size="13" text-anchor="end">time</text><rect x="10" y="40" width="140" height="56" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="80.0" y="64.33333333333333" font-size="13" text-anchor="middle">batch 8 starts</text><text x="80.0" y="80.33333333333333" font-size="11" text-anchor="middle">gets number 8</text><circle cx="80" cy="120" r="5" fill="#111"/><rect x="170" y="40" width="140" height="56" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="240.0" y="64.33333333333333" font-size="13" text-anchor="middle">batch 9 starts</text><text x="240.0" y="80.33333333333333" font-size="11" text-anchor="middle">gets number 9</text><circle cx="240" cy="120" r="5" fill="#111"/><rect x="330" y="40" width="140" height="56" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="400.0" y="64.33333333333333" font-size="13" text-anchor="middle">batch 9 commits</text><text x="400.0" y="80.33333333333333" font-size="11" text-anchor="middle">table version 7</text><circle cx="400" cy="120" r="5" fill="#111"/><rect x="490" y="40" width="140" height="56" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="560.0" y="64.33333333333333" font-size="13" text-anchor="middle">gold runs</text><text x="560.0" y="80.33333333333333" font-size="11" text-anchor="middle">bookmark: 9 / v7</text><circle cx="560" cy="120" r="5" fill="#111"/><rect x="650" y="40" width="140" height="56" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="720.0" y="64.33333333333333" font-size="13" text-anchor="middle">batch 8 commits</text><text x="720.0" y="80.33333333333333" font-size="11" text-anchor="middle">table version 8</text><circle cx="720" cy="120" r="5" fill="#111"/><rect x="810" y="40" width="140" height="56" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="880.0" y="72.33333333333333" font-size="13" text-anchor="middle">gold runs</text><circle cx="880" cy="120" r="5" fill="#111"/><text x="880" y="170" font-size="13" text-anchor="middle">by number: 8 is not after 9, so MISSED</text><text x="880" y="190" font-size="13" text-anchor="middle">by table version: v8 is after v7, caught</text></svg><p>A number taken at the start of a batch can arrive late. A table version is given at commit.</p></div>
+<h3>Your question about a full overwrite of silver</h3>
+<p>A full overwrite replaces every row. In our run, Delta's change log recorded it as <b>3 deletes and 2 inserts</b>: every row looks changed, so gold rebuilds the windows of every row. That is correct (nothing is missed), but it costs a full rebuild. Iceberg's changelog view removed the rows that did not really change and reported only D1. Either way, the better habit is <b>not to overwrite silver</b>: compare the full copy with silver's current rows and write only the differences (a MERGE on a row hash). Then the change log stays small and gold rebuilds only what changed. This is what the rulebook means by "silver turns the copy into changes".</p>
+<h3>So who generates the bookmark?</h3>
+<div class="box"><b>The table does.</b> Gold keeps, per silver input, the last table version (Delta) or snapshot id (Iceberg) it has read. A run fixes the high mark as the latest version at its start, reads all changes between the two, and moves the bookmark last. No writer has to set anything, so any number of writing styles can feed the same gold.</div>
+<p>There are still two different numbers, with two different jobs. Do not mix them up:</p>
+<div class="tw"><table class="t"><tr><th>Number</th><th>Job</th><th>Who makes it</th></tr><tr><td><b>The source&#x27;s change sequence (CDC log position, source timestamp)</b></td><td>Orders changes going INTO silver: which update came last, out-of-order arrivals, SCD Type 2 ordering</td><td>The source system; carried through bronze into silver</td></tr><tr><td><b>The table&#x27;s commit version or snapshot id</b></td><td>Bookmarks reads coming OUT of silver: what has gold already seen</td><td>The table format, at commit</td></tr></table></div>
+<h3>What this needs, and the catches</h3>
+<div class="tw"><table class="t"><tr><th>Need</th><th>Why</th></tr><tr><td><b>Turn the change log on when the table is created</b></td><td>Delta: delta.enableChangeDataFeed = true. Iceberg keeps snapshots anyway; the changelog view reads them.</td></tr><tr><td><b>Keep history longer than gold can fall behind</b></td><td>VACUUM (Delta) or snapshot expiry (Iceberg) deletes old versions. If gold&#x27;s bookmark is older than the oldest version left, the harness must notice and do a logged full rebuild instead.</td></tr><tr><td><b>Write SCD Type 2 as one MERGE</b></td><td>Our test wrote close and insert as two commits (UPDATE, then WRITE). A reader between them would see a closed version with no new one. One MERGE is one commit.</td></tr><tr><td><b>Turn full copies into differences</b></td><td>Overwrites are correct but make every row look changed.</td></tr><tr><td><b>A column bookmark only where there is no change log</b></td><td>Files dropped in folders or API pages: then every writer must follow the contract, and deletes must be soft deletes.</td></tr></table></div>
+<div class="warn"><b>What our build does today (checked in the framework code, 14 Nov):</b> the real harness does not read "rows changed since a bookmark" at all. Every run, it recomputes <b>every window in the lookback range</b> from silver's current rows, compares each window's numbers with what is published, and replaces only the windows that differ. Its watermarks only say how far each input has loaded, for completeness. So no way of writing silver can make it miss a change <b>inside</b> the lookback: deletes, overwrites and out-of-order commits are all simply recomputed. The price is a rebuild of the whole lookback range every night, and a change <b>older</b> than the lookback is only picked up through a correction plan, or the owed gold rerun after a silver rebuild. The table change log is therefore owed as an <b>addition</b>, not a fix: to skip a run when silver did not change, to shrink the work to the changed windows, and to spot changes older than the lookback and raise them instead of missing them. The story in Part A shows the change-driven variant because it is easier to follow.</div>
+<details class="code"><summary>The writers and readers used in this test (topologies.py)</summary><pre class="code">&quot;&quot;&quot;Silver written seven ways; gold reading changes three ways. Shown on /learn/silver-to-gold/#bookmark.
+
+Silver row columns:
+  _src_seq        the source&#x27;s change number, carried through (updated when the source sends a change)
+  _src_seq_first  the same number, but set on insert and never updated (a common mistake)
+  _batch          a silver batch number stamped on every row a write touches (a writer contract)
+The third reader uses no column at all: the table&#x27;s own change log (Delta change data feed, _commit_version).
+&quot;&quot;&quot;
+from delta.tables import DeltaTable
+from pyspark.sql import functions as F
+
+SCHEMA = (&quot;dealer_id string, region string, name string, is_current boolean, valid_to string, is_deleted boolean, &quot;
+          &quot;_src_seq long, _src_seq_first long, _batch long&quot;)
+
+
+def create(spark, path, rows, batch):
+    df = spark.createDataFrame([(d, r, n, True, &quot;open&quot;, False, s, s, batch) for d, r, n, s in rows], SCHEMA)
+    df.write.format(&quot;delta&quot;).option(&quot;delta.enableChangeDataFeed&quot;, &quot;true&quot;).save(path)
+
+
+def insert(spark, path, rows, batch):
+    spark.createDataFrame([(d, r, n, True, &quot;open&quot;, False, s, s, batch) for d, r, n, s in rows], SCHEMA) \
+        .write.format(&quot;delta&quot;).mode(&quot;append&quot;).save(path)
+
+
+def upsert_type1(spark, path, dealer, col, value, src_seq, batch):
+    &quot;&quot;&quot;Overwrite a value in place. _src_seq follows the source; _src_seq_first is left alone; _batch is stamped.&quot;&quot;&quot;
+    DeltaTable.forPath(spark, path).update(f&quot;dealer_id = &#x27;{dealer}&#x27; AND is_current&quot;,
+                                           {col: F.lit(value), &quot;_src_seq&quot;: F.lit(src_seq), &quot;_batch&quot;: F.lit(batch)})
+
+
+def scd2_change(spark, path, dealer, region, src_seq, batch):
+    &quot;&quot;&quot;Close the current version, insert a new one.&quot;&quot;&quot;
+    t = DeltaTable.forPath(spark, path)
+    cur = t.toDF().where(f&quot;dealer_id = &#x27;{dealer}&#x27; AND is_current&quot;).first()
+    t.update(f&quot;dealer_id = &#x27;{dealer}&#x27; AND is_current&quot;,
+             {&quot;is_current&quot;: F.lit(False), &quot;valid_to&quot;: F.lit(&quot;12 Nov&quot;), &quot;_src_seq&quot;: F.lit(src_seq), &quot;_batch&quot;: F.lit(batch)})
+    insert(spark, path, [(dealer, region, cur.name, src_seq)], batch)
+
+
+def hard_delete(spark, path, dealer):
+    DeltaTable.forPath(spark, path).delete(f&quot;dealer_id = &#x27;{dealer}&#x27;&quot;)
+
+
+def full_overwrite(spark, path, rows, batch):
+    &quot;&quot;&quot;Replace the whole table with a full copy from the source. A full copy usually brings no change numbers,
+    so each row keeps the number it had (or 0 if new); the batch stamp goes on every row.&quot;&quot;&quot;
+    old = {r.dealer_id: r for r in spark.read.format(&quot;delta&quot;).load(path).where(&quot;is_current&quot;).collect()}
+    out = [(d, reg, n, True, &quot;open&quot;, False, old[d]._src_seq if d in old else 0, old[d]._src_seq_first if d in old else 0, batch)
+           for d, reg, n in rows]
+    spark.createDataFrame(out, SCHEMA).write.format(&quot;delta&quot;).mode(&quot;overwrite&quot;).save(path)
+
+
+# ------------------------------------------------------------------ the gold readers
+def read_by_column(spark, path, col, watermark):
+    df = spark.read.format(&quot;delta&quot;).load(path)
+    seen = sorted({r.dealer_id for r in df.where(F.col(col) &gt; watermark).select(&quot;dealer_id&quot;).collect()})
+    high = df.agg(F.max(col)).first()[0] or 0
+    return seen, max(high, watermark)
+
+
+def latest_version(spark, path):
+    return DeltaTable.forPath(spark, path).history(1).first()[&quot;version&quot;]
+
+
+def read_change_feed(spark, path, watermark):
+    latest = latest_version(spark, path)
+    if latest &lt;= watermark:
+        return [], watermark
+    ch = (spark.read.format(&quot;delta&quot;).option(&quot;readChangeFeed&quot;, &quot;true&quot;).option(&quot;startingVersion&quot;, watermark + 1)
+          .option(&quot;endingVersion&quot;, latest).load(path).where(&quot;_change_type != &#x27;update_preimage&#x27;&quot;))
+    return sorted({r.dealer_id for r in ch.select(&quot;dealer_id&quot;).collect()}), latest</pre></details>
+</section>
+<div class="sib" style="margin-top:34px"><a href="/learn/silver-to-gold/building-each-kind/">← Building each kind of fact</a><a href="/learn/silver-to-gold/">All the pages</a><a href="/learn/silver-to-gold/declarative-pipeline/">Databricks declarative pipeline? →</a></div>
+</div>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Concepts</b><a href="/leaders/">For leaders</a><a href="/learn/fundamentals/">Fundamentals</a><a href="/learn/data-systems/">Data systems</a><a href="/learn/data-systems/platform/">Data and AI platform</a><a href="/learn/data-systems/platform/#hops">Data engineering</a><a href="/concepts/semantic-layer/">BI and analytics</a><a href="/concepts/#ml-engineering">ML</a><a href="/learn/ai-universe/">AI</a><a href="/learn/data-systems/platform/#concerns">Across all of them</a><a href="/concepts/#a-z">Key concepts, A to Z</a></div><div><b>On your cloud</b><a href="/platforms/databricks/">Databricks</a><a href="/platforms/aws/">AWS</a><a href="/platforms/azure/">Azure and Fabric</a><a href="/platforms/gcp/">Google Cloud</a><a href="/platforms/open/">Open source</a><a href="/platforms/anthropic/">Claude (Anthropic)</a><a href="/certifications/">All certifications</a></div><div><b>Your role</b><a href="/paths/">Find your path</a><a href="/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/forward-deployed/">Forward Deployed Engineering</a><a href="/mindset/">Worried about AI?</a><a href="/projects/">All projects to join</a></div><div><b>How we work</b><a href="/how-we-work/#thinking">Thinking principles</a><a href="/how-we-work/#ba">Business analysis</a><a href="/how-we-work/#pm">Project management</a><a href="/learn/technical-anchor/">The technical anchor</a></div><div><b>Causes and deep tech</b><a href="/ai-for-cause/">AI for a cause</a><a href="/deep-tech/">Deep tech</a></div><div><b>About</b><a href="/about/">About this site</a><a href="/about/#join">Write or teach</a><a href="/writing/">Blog</a><a href="/research/">All open specifications</a><a href="/assets/">All open-source code</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

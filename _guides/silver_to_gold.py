@@ -351,33 +351,9 @@ QA = [
 ]
 
 
-def page():
-    url = f"{SITE}{URL_PATH}"
-    toc = "".join(f'<li><a href="#{a}">{E(b)}</a></li>' for a, b in [
-        ("start", "Start here: how to read this page"),
-        ("a-story", "A1. The story: a tyre company"), ("a-night", "A2. One nightly run in seven steps"),
-        ("a-night1", "A3. Night 1, step by step"), ("a-night2", "A4. Night 2: late data, late dealer"),
-        ("a-crash", "A5. A crash halfway"), ("a-careless", "A6. A careless join"), ("a-tests", "A7. Tests and the code"), ("a-bookmark", "A8. Who makes the bookmark? Can gold miss a change?"),
-        ("b-feel", "B0. The six kinds from zero"), ("b-why", "B1. Why so many kinds of fact?"), ("b-rpw", "B2. Reader, processor, writer"), ("b-kinds", "B3. The six kinds with examples"),
-        ("b-bank", "B4. One bank, all six"), ("b-domains", "B5. Six kinds in nine businesses"), ("b-pick", "B6. Which kind is it?"),
-        ("b-add", "B7. What you may add up"), ("b-confuse", "B8. Questions people get stuck on"),
-        ("c-short", "C1. Declarative pipeline: can it?"), ("c-sketch", "C2. The example on Lakeflow"), ("c-pros", "C3. Pros, cons, verdicts"),
-        ("e-matrix", "D1. Settings × reader, processor, writer"), ("e-sql", "D2. The fact in SQL"), ("e-dbt", "D3. The fact in dbt"),
-        ("e-vs", "D4. Our harness vs dbt"), ("f-what", "E1. Delivery: fact or dimension?"), ("f-versions", "E2. Versioned facts"),
-        ("plain", "F. The rulebook: in plain words"), ("harness", "1. The harness, step by step"), ("one", "1b. One harness for every fact; SQL or PySpark"),
-        ("debug", "1c. Troubleshooting, record drops, many-to-many"), ("incr", "2. How incremental loading works"),
-        ("watermark", "3. Watermarks"), ("windows", "4. Grain and windows"), ("complete", "5. Completeness and restatements"),
-        ("late", "6. Late facts and late dimensions"), ("history", "6b. History load, reloads, bad batches"), ("pure", "7. Pure functions, local tests, regression"),
-        ("solves", "8. How the harness answers each problem"), ("reliable", "9. Reliability practices"),
-        ("cost", "10. Cost practices"), ("industry", "10b. Has the industry solved this?"), ("status", "11. What is built"), ("decide", "12. Decisions"), ("faq", "FAQ")])
-    body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › <a href="/learn/gold-data-modelling/">Gold data modelling</a> › Silver to gold</p>
-<p class="eyebrow" style="margin-top:22px">Data engineering · guide</p>
-<h1>{E(TITLE)}</h1>
-<p class="lede"><a href="/learn/gold-data-modelling/">Gold data modelling</a> said what to build: facts and dimensions. This page is how to build them from silver every night, without losing, doubling or silently changing a number, and without the cost growing with history. It starts from zero with one small worked example, then covers the six kinds of fact and whether this layer can be a Databricks declarative pipeline, and ends with the full rulebook.</p>
-<div class="gh">
-<div class="box"><b>In one paragraph.</b> One harness builds every gold table the same way. It reads only what changed in silver since its watermark, works out which windows of the fact (days, months, hours) those changes touch, rebuilds just those windows with a small pure build per fact, looks up keys as of each event, checks everything before writing, replaces the windows, logs any number that changed after it was published, and moves the watermark last. Because the build is pure, it is tested on a laptop with small tables and with a whole synthetic company that plants problems on purpose.</div>
-<ul class="toc">{toc}</ul>
-{LEARN.part_a()}
+def sections_html():
+    """All sections of the old single page, in order, as one string (silver_to_gold_split.py cuts it into pages)."""
+    return f"""{LEARN.part_a()}
 {LEARN.part_a8()}
 {LEARN.part_b()}
 {LEARN.part_c()}
@@ -468,25 +444,21 @@ def page():
 <section id="status"><p class="eyebrow">11. Status</p><h2>What is built, and what is owed</h2>{C.table(["Part", "State", "Evidence"], STATUS)}</section>
 <section id="decide"><p class="eyebrow">12. Decisions</p><h2>Decisions with verdicts</h2>{vtable(["Decision", "Choice", "Verdict"], DECISIONS)}</section>
 <section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(QA + LEARN.QA_EXTRA)}</section>
-<section id="next"><p class="eyebrow">Related</p><h2>Where it connects</h2>
-<p><a href="/learn/gold-data-modelling/">← Gold data modelling</a> · <a href="/learn/gold-harness-spec/">Gold harness spec</a> · <a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD Type 2 on Databricks</a> · <a href="/learn/metric-views/">Metric views</a> · <a href="/learn/table-maintenance/">Table maintenance</a> · <a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a> · <a href="/data-engineering/">All data engineering</a></p></section>
-</div>"""
-    crumbs = [("Data engineering", f"{SITE}/data-engineering/"), ("Gold data modelling", f"{SITE}/learn/gold-data-modelling/"), ("Silver to gold", url)]
-    items = [{"@type": "ListItem", "position": i + 1, "name": n, "item": u} for i, (n, u) in enumerate(crumbs)]
-    ld = [{"@context": "https://schema.org", "@type": "TechArticle", "headline": TITLE, "description": DESC, "url": url, "inLanguage": "en",
-           "isAccessibleForFree": True, "dateModified": DATE, "author": {"@type": "Person", "name": "Basant Choudhary", "url": f"{SITE}/#about"},
-           "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": SITE}},
-          {"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": items},
-          {"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": q, "acceptedAnswer": {"@type": "Answer", "text": a}} for q, a in QA + LEARN.QA_EXTRA]}]
-    head = CSS + LEARN.EXTRA_CSS + "".join(f'<script type="application/ld+json">{json.dumps(x, ensure_ascii=False)}</script>' for x in ld)
-    return wb.page(TITLE, DESC, url, body, head)
+"""
 
+
+def faq_items():
+    return QA + LEARN.QA_EXTRA
+
+
+def next_html():
+    return f"""<section id="next"><p class="eyebrow">Related</p><h2>Where it connects</h2>
+<p><a href="/learn/gold-data-modelling/">← Gold data modelling</a> · <a href="/learn/gold-harness-spec/">Gold harness spec</a> · <a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD Type 2 on Databricks</a> · <a href="/learn/metric-views/">Metric views</a> · <a href="/learn/table-maintenance/">Table maintenance</a> · <a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a> · <a href="/data-engineering/">All data engineering</a></p></section>
+"""
 
 def main():
-    out = ROOT / "learn" / "silver-to-gold"
-    out.mkdir(parents=True, exist_ok=True)
-    (out / "index.html").write_text(page())
-    print("silver to gold ->", out / "index.html")
+    import silver_to_gold_split as SPLIT
+    SPLIT.main()
 
 
 if __name__ == "__main__":

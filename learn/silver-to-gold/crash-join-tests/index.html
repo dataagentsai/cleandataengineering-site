@@ -1,0 +1,422 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Silver to Gold: Crashes, Careless Joins and Tests</title>
+<meta name="description" content="What happens when the machine dies halfway through a run, what stops a careless join from doubling a number, and how each build is tested with small tables in and expected rows out."><link rel="canonical" href="https://cleandataengineering.ai/learn/silver-to-gold/crash-join-tests/">
+<meta property="og:title" content="Silver to Gold: Crashes, Careless Joins and Tests"><meta property="og:description" content="What happens when the machine dies halfway through a run, what stops a careless join from doubling a number, and how each build is tested with small tables in and expected rows out."><meta property="og:url" content="https://cleandataengineering.ai/learn/silver-to-gold/crash-join-tests/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .gh .fig { border:var(--line); border-radius:var(--wob); padding:12px 14px; margin:16px 0; background:#fff; overflow-x:auto; }
+  .gh .fig svg { width:100%; min-width:700px; height:auto; display:block; } .gh .fig text { font-family:var(--hand); fill:#111; }
+  .gh .fig p { font-size:13.5px; color:var(--muted); margin:6px 0 0; }
+  .gh .box { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--butter-wash); }
+  .gh .warn { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--rose-wash); }
+  .gh table.t td { font-size:14px; } .gh td.v { font-weight:700; }
+  .gh .toc { columns:2; } @media (max-width:700px){ .gh .toc { columns:1; } }
+  .gh ol.steps li { margin-bottom:6px; }
+</style><style>
+  .gh tr.hl td { background:#fff6dc; } .gh tr.dim td { color:#8a8a8a; }
+  .gh .part { border-top:3px solid var(--ink); margin-top:44px; padding-top:8px; }
+  .gh .kind { border:var(--line); border-radius:var(--wob); padding:4px 18px 10px; margin:22px 0; background:#fff; }
+  .gh .rpw { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:10px 0; }
+  .gh .rpw div { border:1.5px solid var(--ink); border-radius:10px; padding:8px 12px; font-size:14.5px; }
+  .gh .rpw b { display:block; margin-bottom:4px; }
+  .gh .rpw .r { background:#eef3fb; } .gh .rpw .p { background:#eaf6ef; } .gh .rpw .w { background:#fff6dc; }
+  @media (max-width:760px){ .gh .rpw { grid-template-columns:1fr; } }
+  .gh .start { border:var(--line); border-radius:var(--wob); padding:10px 18px; margin:16px 0; background:#eaf6ef; }
+  .gh details.code summary { cursor:pointer; font-weight:700; margin:10px 0; }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Silver to gold: a crash, a careless join, and how the build is tested", "description": "What happens when the machine dies halfway through a run, what stops a careless join from doubling a number, and how each build is tested with small tables in and expected rows out.", "url": "https://cleandataengineering.ai/learn/silver-to-gold/crash-join-tests/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-20", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Data engineering", "item": "https://cleandataengineering.ai/data-engineering/"}, {"@type": "ListItem", "position": 2, "name": "Gold data modelling", "item": "https://cleandataengineering.ai/learn/gold-data-modelling/"}, {"@type": "ListItem", "position": 3, "name": "Silver to gold", "item": "https://cleandataengineering.ai/learn/silver-to-gold/"}, {"@type": "ListItem", "position": 4, "name": "When it goes wrong, and the tests", "item": "https://cleandataengineering.ai/learn/silver-to-gold/crash-join-tests/"}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Concepts</h4><ul><li><details><summary><a href="/leaders/">For leaders</a></summary><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/leaders/spec-driven/">Spec-driven development: agents</a></li><li><a href="/leaders/spec-driven/data-platform/">Spec-driven development: data platforms</a></li><li><a href="/papers/">Technical papers</a></li></ul></details></li><li><details><summary><a href="/learn/fundamentals/">Fundamentals</a></summary><ul><li><a href="/learn/fundamentals/">All fundamentals</a></li><li><a href="/learn/fundamentals/performance/">Performance</a></li><li><a href="/learn/fundamentals/cost/">Cost</a></li><li><a href="/learn/fundamentals/processing/">Processing</a></li><li><a href="/learn/fundamentals/security/">Security</a></li><li><a href="/learn/fundamentals/storage/">Storage</a></li><li><a href="/learn/fundamentals/database-families/">Database families</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/">Data systems</a></summary><ul><li><a href="/learn/data-systems/">The whole system, end to end</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li><li class="sub">Upstreams</li><li><a href="/learn/data-systems/upstreams/">Know your sources</a></li><li><a href="/learn/data-systems/upstreams/big-picture/">Upstreams, the big picture</a></li><li><a href="/learn/data-systems/upstreams/apis/">API sources</a></li><li><a href="/learn/data-systems/upstreams/files/">File sources</a></li><li><a href="/learn/data-systems/upstreams/joins/">Learning the joins</a></li><li><a href="/learn/data-systems/upstreams/answers/">Where the answers go</a></li><li><a href="/learn/data-systems/upstreams/questionnaire/">Source system questionnaire</a></li><li class="sub">Downstreams</li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/platform/">Data and AI platform</a></summary><ul><li class="sub">Conceptual architecture</li><li><a href="/learn/data-systems/platform/">The platform, whole</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#hops">Data engineering</a></summary><ul><li><a href="/learn/data-platform-suite/">Our platform, picture to code</a></li><li class="sub">The hops</li><li><a href="/learn/data-platform-architecture/ingestion/">Hop 1: sources to bronze</a></li><li><a href="/learn/data-platform-architecture/bronze-to-silver/">Hop 2: bronze to silver</a></li><li><a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a></li><li><a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a></li><li class="sub">Tables and formats</li><li><a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a></li><li><a href="/learn/table-maintenance/">Who maintains your tables</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse: who owns the catalog?</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li class="sub">Databricks interview prep</li><li><a href="/learn/databricks-interview/">All interview topics</a></li><li><a href="/learn/databricks-interview/delta-maintenance/">OPTIMIZE, VACUUM, compaction</a></li><li><a href="/learn/databricks-interview/table-maintenance-pictures/">Table maintenance in pictures (real runs)</a></li><li><a href="/learn/databricks-interview/clustering-and-compaction/">Compaction, partitioning, Z-order, liquid</a></li><li><a href="/learn/databricks-interview/maintenance-strategy/">Maintenance strategy: auto or scheduled</a></li><li><a href="/learn/databricks-interview/slow-writes/">Why writes are slow</a></li><li><a href="/learn/databricks-interview/backup-and-recovery-azure/">Backup and recovery on Azure</a></li><li><a href="/learn/databricks-interview/tagging-best-practices/">Tagging best practices</a></li><li><a href="/learn/databricks-interview/row-level-security/">Row-level security and masking</a></li><li><a href="/learn/databricks-interview/compute-choice/">Which compute for which job</a></li><li><a href="/learn/databricks-interview/joins/">Join types</a></li><li><a href="/learn/databricks-interview/skew-and-shuffle/">Skew, salting and shuffle</a></li><li><a href="/learn/databricks-interview/aqe-photon-po/">AQE, Photon, Predictive Optimization</a></li><li><a href="/learn/databricks-interview/cost-and-performance/">Biggest cost and performance levers</a></li><li><a href="/learn/databricks-interview/declarative-and-semantic/">What declarative means + semantic example</a></li><li><a href="/learn/databricks-interview/asset-bundles/">Asset Bundles</a></li><li><a href="/learn/databricks-interview/lakeflow-connect/">Lakeflow Connect</a></li><li><a href="/learn/databricks-interview/uniform/">UniForm</a></li><li><a href="/learn/databricks-interview/vector-search/">Vector Search</a></li><li><a href="/learn/databricks-interview/dbt-and-odcs/">dbt and ODCS</a></li><li><a href="/learn/databricks-interview/egress-and-ingress/">Egress and ingress cost</a></li><li><a href="/learn/databricks-interview/hard-problems-and-questions/">Hard problems and question bank</a></li><li class="sub">History, SCD and facts</li><li><a href="/learn/gold-data-modelling/">Gold data modelling</a></li><li><a href="/learn/silver-to-gold/">Silver to gold: the harness</a></li><li><a href="/learn/silver-to-gold/worked-example/">› Worked example (start here)</a></li><li><a href="/learn/silver-to-gold/kinds-of-fact/">› Six kinds of fact</a></li><li><a href="/learn/silver-to-gold/fact-examples/">› Fact examples in SQL</a></li><li><a href="/learn/silver-to-gold/dimension-examples/">› Dimension examples in SQL</a></li><li><a href="/learn/silver-to-gold/rulebook-harness/">› Rulebook: the harness</a></li><li><a href="/learn/spark-declarative-pipelines/">Declarative pipelines: open source vs Lakeflow</a></li><li><a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD2: AUTO CDC or own PySpark?</a></li><li><a href="/learn/gold-harness-spec/">Gold harness spec: facts and SCD2</a></li><li><a href="/learn/time-travel-vs-scd2/">Time travel as SCD Type 2?</a></li><li class="sub">Streaming and real time</li><li><a href="/learn/streaming/">Streaming on AWS and Databricks</a></li><li><a href="/learn/streaming/options/">Streaming: all options</a></li><li><a href="/learn/streaming/sim/">Streaming simulator</a></li><li><a href="/learn/streaming/real-time-mode/">Databricks real time: RTM and Lakehouse//RT</a></li><li class="sub">Quality and testing</li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/data-platform-sim/data-quality/">Data quality, metadata-driven</a></li><li class="sub">Hands-on simulators</li><li><a href="/learn/data-platform-sim/">One batch through Spark and Delta</a></li><li><a href="/learn/data-platform-sim/spark/">Spark internals</a></li><li><a href="/learn/data-platform-sim/delta/">Delta Lake internals</a></li><li><a href="/learn/data-platform-sim/performance/">Spark performance: 12 problems</a></li><li><a href="/learn/data-platform-sim/problems/">Problems solved: SCD2, late data, duplicates</a></li><li class="sub">On AWS</li><li><a href="/learn/data-platform-architecture/aws-databricks/">AWS + Databricks, ETL end to end</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse on AWS: A vs B</a></li><li><a href="/learn/aws-data-services/">AWS data services catalog</a></li><li class="sub">Open specs</li><li><a href="/learn/datatwin/">DataTwin</a></li><li><a href="/projects/data-eng-specs/">Clean Data Engineering specs</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/semantic-layer/">BI and analytics</a></summary><ul><li><a href="/concepts/semantic-layer/">Hop 4: the semantic layer</a></li><li><a href="/writing/genie-metric-views/">Genie and metric views</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/">Power BI vs Databricks AI/BI</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/power-bi/">Power BI and Fabric, in depth</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/ai-bi/">Databricks AI/BI, in depth</a></li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/#ml-engineering">ML</a></summary><ul><li><a href="/concepts/#ml-engineering">Key ML ideas (pages coming)</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/ai-universe/">AI</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness-intro/">Agent Harness, the big picture</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/agent-harness-stack-map/">Agent Harness: architecture map</a></li><li><a href="/learn/drug-safety-agent-databricks/">Drug-safety agent on Databricks: the tour</a></li><li><a href="/learn/agent-frameworks/">Agent frameworks: when to use which</a></li><li><a href="/learn/which-model/">Which AI model for which job</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li><li><a href="/learn/ai-governance/">AI governance: running AI you can trust</a></li><li><a href="/learn/ai-gateways/">AI gateways: which one to use</a></li><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">Open spec: AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">Open spec: AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">Open spec: AgentTwin</a></li><li><a href="/lab/">The AgentTwin Lab</a></li><li><a href="https://github.com/dataagentsai/reference-agent">Code: Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">Code: AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Code: Eval Harness Framework</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#concerns">Across all of them</a></summary><ul><li><a href="/learn/data-systems/platform/#concerns">All 24 concerns</a></li><li><a href="/learn/data-platform-mind-map/">Mind map: every concern, every cloud</a></li><li><a href="/learn/data-systems/platform/layout/">Layout: catalogs and schemas</a></li><li><a href="/learn/data-systems/platform/environments/">Environments and CI/CD</a></li><li><a href="/learn/data-systems/platform/cost/">Cost and FinOps</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li><li><a href="/learn/data-platform-architecture/test-strategy/">Test strategy in practice</a></li></ul></details></li><li><a href="/concepts/#a-z">Key concepts, A to Z</a></li></ul><h4>On your cloud</h4><ul><li><details><summary><a href="/platforms/databricks/">Databricks</a></summary><ul><li><a href="/platforms/databricks/#systems">Data systems</a></li><li><a href="/platforms/databricks/#de">Data engineering</a></li><li><a href="/platforms/databricks/#bi">BI and analytics</a></li><li><a href="/platforms/databricks/#ml">ML</a></li><li><a href="/platforms/databricks/#ai">AI</a></li><li><a href="/platforms/databricks/#across">Across all of them</a></li><li><a href="/platforms/databricks/#paths">Learning paths</a></li><li><a href="/platforms/databricks/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/aws/">AWS</a></summary><ul><li><a href="/platforms/aws/#systems">Data systems</a></li><li><a href="/platforms/aws/#de">Data engineering</a></li><li><a href="/platforms/aws/#bi">BI and analytics</a></li><li><a href="/platforms/aws/#ml">ML</a></li><li><a href="/platforms/aws/#ai">AI</a></li><li><a href="/platforms/aws/#across">Across all of them</a></li><li><a href="/platforms/aws/#paths">Learning paths</a></li><li><a href="/platforms/aws/#certs">Certifications</a></li><li><a href="/learn/aws-data-services/">AWS data services: all 66</a></li></ul></details></li><li><details><summary><a href="/platforms/azure/">Azure and Fabric</a></summary><ul><li><a href="/platforms/azure/#systems">Data systems</a></li><li><a href="/platforms/azure/#de">Data engineering</a></li><li><a href="/platforms/azure/#bi">BI and analytics</a></li><li><a href="/platforms/azure/#ml">ML</a></li><li><a href="/platforms/azure/#ai">AI</a></li><li><a href="/platforms/azure/#across">Across all of them</a></li><li><a href="/platforms/azure/#paths">Learning paths</a></li><li><a href="/platforms/azure/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/gcp/">Google Cloud</a></summary><ul><li><a href="/platforms/gcp/#systems">Data systems</a></li><li><a href="/platforms/gcp/#de">Data engineering</a></li><li><a href="/platforms/gcp/#bi">BI and analytics</a></li><li><a href="/platforms/gcp/#ml">ML</a></li><li><a href="/platforms/gcp/#ai">AI</a></li><li><a href="/platforms/gcp/#across">Across all of them</a></li><li><a href="/platforms/gcp/#paths">Learning paths</a></li><li><a href="/platforms/gcp/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/open/">Open source</a></summary><ul><li><a href="/platforms/open/#systems">Data systems</a></li><li><a href="/platforms/open/#de">Data engineering</a></li><li><a href="/platforms/open/#bi">BI and analytics</a></li><li><a href="/platforms/open/#ml">ML</a></li><li><a href="/platforms/open/#ai">AI</a></li><li><a href="/platforms/open/#across">Across all of them</a></li><li><a href="/platforms/open/#paths">Learning paths</a></li><li><a href="/platforms/open/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/anthropic/">Claude (Anthropic)</a></summary><ul><li><a href="/platforms/anthropic/#ai">AI</a></li><li><a href="/platforms/anthropic/#certs">Certifications</a></li></ul></details></li><li><a href="/certifications/">All certifications</a></li></ul><h4>Your role</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/data-engineering/">Data Engineering</a></summary><ul><li><a href="/data-engineering/">Start here</a></li><li><a href="/paths/data-engineering/">Learning path</a></li><li><a href="/data-engineering/#tools">Practice and simulators</a></li><li><a href="/projects/?subject=data">Projects to join</a></li><li><a href="/concepts/#data-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/">Learning path</a></li><li><a href="/learn/agent-harness-sim/">Simulator: Agent Harness</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li><li><a href="/projects/?subject=ai">Projects to join</a></li><li><a href="/concepts/#ai-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/">Learning path</a></li><li><a href="/learn/llm-api-sim/">Simulator: Claude API</a></li><li><a href="/projects/?subject=llm">Projects to join</a></li><li><a href="/concepts/#llm-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/">Learning path</a></li><li><a href="/concepts/#ml-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/">Learning path</a></li><li><a href="/concepts/#software-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/forward-deployed/">Start here: the roadmap</a></li><li><a href="/paths/forward-deployed/">Learning path</a></li><li><a href="/concepts/#forward-deployed">Key concepts</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li><li><a href="/projects/">All projects to join</a></li></ul><h4>How we work</h4><ul><li><details><summary><a href="/how-we-work/#thinking">Thinking principles</a></summary><ul><li><a href="/how-we-work/#thinking">All thinking principles</a></li><li><a href="/how-we-work/critical-thinking/">Critical thinking in data projects</a></li></ul></details></li><li><a href="/how-we-work/#ba">Business analysis</a></li><li><details><summary><a href="/how-we-work/#pm">Project management</a></summary><ul><li><a href="/how-we-work/#pm">All project management</a></li><li><a href="/how-we-work/estimation/">Estimation mistakes in data projects</a></li><li><a href="/how-we-work/project-management-mistakes/">Top project management mistakes</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li></ul></details></li><li><details><summary><a href="/learn/technical-anchor/">The technical anchor</a></summary><ul><li><a href="/learn/technical-anchor/">The role</a></li><li><a href="/learn/technical-anchor/discovery/">Discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li></ul></details></li></ul><h4>Causes and deep tech</h4><ul><li><details><summary><a href="/ai-for-cause/">AI for a cause</a></summary><ul><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul></details></li><li><details><summary><a href="/deep-tech/">Deep tech</a></summary><ul><li><a href="/problems/">Hard problems</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul></details></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li><li><a href="/about/#join">Write or teach</a></li><li><a href="/writing/">Blog</a></li><li><a href="/research/">All open specifications</a></li><li><a href="/assets/">All open-source code</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › <a href="/learn/gold-data-modelling/">Gold data modelling</a> › <a href="/learn/silver-to-gold/">Silver to gold</a> › When it goes wrong, and the tests</p>
+<p class="eyebrow" style="margin-top:22px">Silver to gold · Learn it · 7 min read</p>
+<h1>Silver to gold: a crash, a careless join, and how the build is tested</h1>
+<p class="lede">The worked example continued: a crash halfway, a careless join that the checks stop, and the small-tables-in, expected-rows-out tests behind every build. <span class="note">This is one page of <a href="/learn/silver-to-gold/">Silver to gold</a>.</span></p>
+<div class="gh">
+<ul class="toc"><li><a href="#a-crash">What if the machine dies halfway?</a></li><li><a href="#a-careless">What if someone writes a careless join?</a></li><li><a href="#a-tests">How the build is tested: small tables in, expected rows out</a></li></ul>
+<section id="a-crash" class="part"><p class="eyebrow">Part A · 5</p><h2>What if the machine dies halfway?</h2>
+<p>We made run r2 crash on purpose, after it had written gold but before it moved the bookmark ("machine lost"). Then we ran it again.</p>
+<div class="fig"><svg viewBox="0 0 1000 146" role="img" aria-label="A crash in run r2. It starts at bookmark 2205, writes windows 11 and 13 November, then crashes before moving the bookmark. The rerun reads change 2206 again, plans from the last committed version of gold, and ends with the same table and two restatements. A crash repeats work; it never skips or doubles it."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><rect x="10" y="30" width="150" height="66" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="85.0" y="59.333333333333336" font-size="13" text-anchor="middle">r2 starts</text><text x="85.0" y="75.33333333333334" font-size="11" text-anchor="middle">bookmark 2205</text><rect x="175" y="30" width="150" height="66" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="250.0" y="59.333333333333336" font-size="13" text-anchor="middle">writes windows</text><text x="250.0" y="75.33333333333334" font-size="11" text-anchor="middle">11 and 13 Nov</text><path d="M161,63 L174,63" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="340" y="30" width="150" height="66" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="415.0" y="59.333333333333336" font-size="13" text-anchor="middle">crash!</text><text x="415.0" y="75.33333333333334" font-size="11" text-anchor="middle">before the bookmark</text><path d="M326,63 L339,63" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="505" y="30" width="150" height="66" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="580.0" y="59.333333333333336" font-size="13" text-anchor="middle">rerun reads</text><text x="580.0" y="75.33333333333334" font-size="11" text-anchor="middle">2206 again</text><path d="M491,63 L504,63" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="670" y="30" width="150" height="66" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="745.0" y="59.333333333333336" font-size="13" text-anchor="middle">plans from the last</text><text x="745.0" y="75.33333333333334" font-size="11" text-anchor="middle">committed version</text><path d="M656,63 L669,63" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="835" y="30" width="150" height="66" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="910.0" y="59.333333333333336" font-size="13" text-anchor="middle">same table,</text><text x="910.0" y="75.33333333333334" font-size="11" text-anchor="middle">2 restatements</text><path d="M821,63 L834,63" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="500" y="130" font-size="14" text-anchor="middle">Because the bookmark moves last and windows are replaced whole, a crash repeats work. It never skips or doubles it.</text></svg><p>Bookmark last, windows replaced whole: a crash means repeated work, never lost or doubled numbers.</p></div>
+<p>Result: the table after the rerun is identical to the table the crashed run wrote: <b>yes</b>. Both restatements are logged once. Final watermarks: order_lines 1046, deliveries 2206.</p>
+<div class="warn"><b>A real lesson from writing this example:</b> our first version planned the rerun by looking at gold as the crashed run had left it. The crashed run had already fixed L5's key and the 13 Nov flag, so the rerun thought 13 Nov needed nothing. It rebuilt only 11 Nov and lost the 13 Nov restatement. The fix: a run always plans and compares against the <b>last committed version</b> of gold (the version recorded when the bookmark last moved), never against whatever is in the table now. Delta and Iceberg keep old versions, which makes this one line.</div>
+</section>
+<section id="a-careless" class="part"><p class="eyebrow">Part A · 6</p><h2>What if someone writes a careless join?</h2>
+<p>We swapped the build for a careless one that joins every delivery row straight onto the order lines. L3 has two deliveries now, so it became two rows.</p>
+<div class="fig"><svg viewBox="0 0 1000 240" role="img" aria-label="Why joins double numbers. Careless: order line L3 (8 ordered) is joined to both of its deliveries, X3 with 6 tyres and X6 with 2, giving two rows for one line and 16 tyres ordered; the grain and ledger checks stop it. Right: add the deliveries up per line first (8 tyres), then join, so the line stays one row."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><rect x="10" y="10" width="480" height="220" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="250.0" y="125.0" font-size="15" text-anchor="middle"></text><text x="250" y="34" font-size="15" text-anchor="middle">careless: join every delivery row</text><rect x="30" y="60" width="130" height="50" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="95.0" y="81.16666666666667" font-size="14" text-anchor="middle">L3</text><text x="95.0" y="98.16666666666667" font-size="12" text-anchor="middle">8 ordered</text><path d="M160,85 L198,70" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M160,85 L198,120" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="200" y="48" width="130" height="40" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="265.0" y="72.33333333333333" font-size="13" text-anchor="middle">X3: 6 tyres</text><rect x="200" y="100" width="130" height="40" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="265.0" y="124.33333333333333" font-size="13" text-anchor="middle">X6: 2 tyres</text><path d="M330,68 L358,68" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M330,120 L358,120" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="360" y="48" width="120" height="40" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="420.0" y="72.33333333333333" font-size="13" text-anchor="middle">L3, 8 ordered</text><rect x="360" y="100" width="120" height="40" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="420.0" y="124.33333333333333" font-size="13" text-anchor="middle">L3, 8 ordered</text><text x="250" y="180" font-size="14" text-anchor="middle">two rows for one line: 16 tyres &#x27;ordered&#x27;</text><text x="250" y="202" font-size="13" text-anchor="middle">stopped by the grain and ledger checks</text><rect x="510" y="10" width="480" height="220" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="750.0" y="125.0" font-size="15" text-anchor="middle"></text><text x="750" y="34" font-size="15" text-anchor="middle">right: one row per line first</text><rect x="530" y="60" width="130" height="50" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="595.0" y="81.16666666666667" font-size="14" text-anchor="middle">X3 + X6</text><text x="595.0" y="98.16666666666667" font-size="12" text-anchor="middle">sum = 8 tyres</text><path d="M660,85 L698,85" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="700" y="60" width="130" height="50" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="765.0" y="81.16666666666667" font-size="14" text-anchor="middle">L3</text><text x="765.0" y="98.16666666666667" font-size="12" text-anchor="middle">8 ordered</text><path d="M830,85 L858,85" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="860" y="60" width="120" height="50" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="920.0" y="81.33333333333333" font-size="13" text-anchor="middle">L3, 8 and 8</text><text x="920.0" y="97.33333333333333" font-size="11" text-anchor="middle">one row</text><text x="750" y="180" font-size="14" text-anchor="middle">add deliveries up per line, then join</text><text x="750" y="202" font-size="13" text-anchor="middle">a lookup join can never add rows</text></svg><p>One line with two deliveries becomes two rows unless deliveries are added up first.</p></div>
+<p>The harness refused to write. The exact message from the run:</p>
+<pre class="code">[&#x27;grain not unique: 1 keys appear more than once&#x27;, &quot;ledger does not balance: {&#x27;read&#x27;: 7, &#x27;filtered&#x27;: 1, &#x27;after_join&#x27;: 7, &#x27;rejected&#x27;: 0, &#x27;unknown_keys&#x27;: 0, &#x27;written&#x27;: 7}&quot;, &#x27;a lookup join changed the row count: 6 in, 7 out&#x27;]</pre>
+<p>Wrote anything? <b>No</b>. Three separate checks caught it: the grain (L3 twice), the ledger balance, and the join row count. In a notebook without these checks, the dashboard would have shown 8 extra tyres ordered, and nobody would have known why.</p>
+</section>
+<section id="a-tests" class="part"><p class="eyebrow">Part A · 7</p><h2>How the build is tested: small tables in, expected rows out</h2>
+<p>Because the build is pure, a test is just a few rows in and the expected flags out, written as a table. These run in about ten seconds on a laptop:</p>
+<pre class="code">OTIF_CASES = [
+    (&quot;on time and in full&quot;, (10, 10), [(10, 10)], (10, 1, 1, 1)),
+    (&quot;delivered a day late&quot;, (5, 10), [(5, 11)], (5, 0, 1, 0)),
+    (&quot;on time but short&quot;, (8, 11), [(6, 11)], (6, 1, 0, 0)),
+    (&quot;two deliveries: no double counting&quot;, (8, 11), [(6, 11), (2, 14)], (8, 0, 1, 0)),
+    (&quot;nothing delivered yet&quot;, (4, 13), [], (0, 0, 0, 0)),
+    (&quot;early delivery counts as on time&quot;, (4, 13), [(4, 12)], (4, 1, 1, 1)),
+]
+
+
+def test_otif(spark, name, line, dels, expected):
+    lines = spark.createDataFrame([(&quot;L1&quot;, &quot;O1&quot;, &quot;D1&quot;, &quot;R15&quot;, line[0], D(2026, 11, line[1]), 1)], LINES_S)
+    d = spark.createDataFrame([(f&quot;X{i}&quot;, &quot;L1&quot;, &quot;WH-A&quot;, q, D(2026, 11, day), i) for i, (q, day) in enumerate(dels)], DELS_S)
+    rows = B.build_otif(lines, d, {}).collect()
+    assert len(rows) == 1, &quot;one row per order line, always&quot;
+    r = rows[0]
+    assert (r.qty_ordered, r.qty_delivered, r.on_time, r.in_full, r.otif) == (line[0],) + expected</pre>
+<p>Writing this page, one of these table tests caught a real bug in the stock build (Part B): days before the first stock movement were dropped instead of showing zero.</p>
+<details class="code"><summary>The whole run, as tested (harness.py, run_fact)</summary><pre class="code">def run_fact(spark, meta: dict, store: Meta, silver: dict, gold_path: str, build, run_id: str, run_date, files: DataFrame):
+    name, wcol, dm = meta[&quot;name&quot;], meta[&quot;window_col&quot;], meta[&quot;dimension&quot;]
+    driver = silver[meta[&quot;driver&quot;]]
+
+    # 1-2 READER: watermarks, fixed high marks, changed rows only
+    marks = {i: store.watermark(name, i) for i in meta[&quot;inputs&quot;]}
+    highs = {i: high_mark(silver[i], c[&quot;bookmark&quot;]) for i, c in meta[&quot;inputs&quot;].items()}
+    changed = {i: read_changes(silver[i], c[&quot;bookmark&quot;], marks[i], highs[i]) for i, c in meta[&quot;inputs&quot;].items()}
+
+    # 3 changed rows -&gt; windows (a child row, like a delivery, belongs to the window of its driver row)
+    w = changed[meta[&quot;driver&quot;]].select(wcol)
+    for i, c in meta[&quot;inputs&quot;].items():
+        if &quot;window_via&quot; in c:
+            w = w.union(changed[i].join(driver, c[&quot;window_via&quot;]).select(wcol))
+    v = store.data.get(&quot;versions&quot;, {}).get(name)          # plan from the last COMMITTED version, never from a
+    if v is not None:                                       # crashed run&#x27;s half-done write
+        g = spark.read.format(&quot;delta&quot;).option(&quot;versionAsOf&quot;, v).load(gold_path)
+        # also: windows holding unknown members who have now arrived, and windows not yet complete
+        w = w.union(g.where(f&quot;{dm[&#x27;key&#x27;]} = -1&quot;).join(silver[dm[&quot;table&quot;]], dm[&quot;business_key&quot;], &quot;left_semi&quot;).select(wcol))
+        w = w.union(g.where(&quot;NOT _is_complete&quot;).select(wcol))
+    windows = sorted({r[0] for r in w.distinct().collect()})
+    too_old = [d for d in windows if (run_date - d).days &gt; meta[&quot;lookback_days&quot;]]
+    windows = [d for d in windows if d not in too_old]          # older changes need a correction plan
+    if not windows:
+        return {&quot;run&quot;: run_id, &quot;windows&quot;: [], &quot;note&quot;: &quot;nothing changed&quot;}
+
+    # 4 read ALL current silver rows for those windows (not just the changed ones), then the declared filters
+    inputs = {meta[&quot;driver&quot;]: driver.where(F.col(wcol).isin(windows))}
+    for i, c in meta[&quot;inputs&quot;].items():
+        if &quot;window_via&quot; in c:
+            inputs[i] = silver[i].join(inputs[meta[&quot;driver&quot;]].select(c[&quot;window_via&quot;]), c[&quot;window_via&quot;], &quot;left_semi&quot;)
+    n_read = inputs[meta[&quot;driver&quot;]].count()
+    for rule in meta[&quot;filters&quot;].values():
+        inputs[meta[&quot;driver&quot;]] = inputs[meta[&quot;driver&quot;]].where(rule)
+    n_kept = inputs[meta[&quot;driver&quot;]].count()
+
+    # 5 PROCESSOR: the pure build
+    built = build(*inputs.values(), meta[&quot;params&quot;])
+
+    # 6 keys as of the event
+    out = lookup_keys(built, silver[dm[&quot;table&quot;]], dm[&quot;business_key&quot;], dm[&quot;key&quot;], dm[&quot;as_of&quot;])
+
+    # 7 completeness: every owed feed has sent its file for the window&#x27;s day
+    got = files.groupBy(&quot;file_date&quot;).agg(F.collect_set(&quot;warehouse&quot;).alias(&quot;got&quot;))
+    owed = F.array(*[F.lit(x) for x in meta[&quot;owed_feeds&quot;]])
+    out = (out.join(got, out[wcol] == got[&quot;file_date&quot;], &quot;left&quot;)
+              .withColumn(&quot;_is_complete&quot;, F.coalesce(F.size(F.array_except(owed, F.col(&quot;got&quot;))) == 0, F.lit(False)))
+              .drop(&quot;file_date&quot;, &quot;got&quot;).withColumn(&quot;_run_id&quot;, F.lit(run_id)))
+
+    # 8 CHECKS with the row ledger
+    ledger = {&quot;read&quot;: n_read, &quot;filtered&quot;: n_read - n_kept, &quot;after_join&quot;: built.count(), &quot;rejected&quot;: 0,
+              &quot;unknown_keys&quot;: out.where(f&quot;{dm[&#x27;key&#x27;]} = -1&quot;).count(), &quot;written&quot;: out.count()}
+    problems = check(out, ledger, meta)
+    if problems:
+        raise RuntimeError(f&quot;{run_id} stopped before writing: {problems}&quot;)   # nothing written, watermark unchanged
+
+    # 9 restatements: compare with the last COMMITTED version (a crashed run&#x27;s half-done write does not count)
+    new_s = window_summary(out, meta)
+    old_s = window_summary(g.where(F.col(wcol).isin(windows)), meta) if v is not None else {}
+    rest = [{&quot;run&quot;: run_id, &quot;window&quot;: k, &quot;old&quot;: old_s[k], &quot;new&quot;: v} for k, v in new_s.items() if k in old_s and old_s[k] != v]
+
+    # 10 WRITER: replace only those windows
+    replace_windows(spark, out, gold_path, wcol, windows)
+    version = DeltaTable.forPath(spark, gold_path).history(1).first()[&quot;version&quot;]
+
+    # 11 run log, then move the watermarks LAST
+    run = {&quot;run&quot;: run_id, &quot;read_from&quot;: marks, &quot;read_to&quot;: highs, &quot;windows&quot;: [str(d) for d in windows],
+           &quot;refused_too_old&quot;: [str(d) for d in too_old], &quot;ledger&quot;: ledger, &quot;restatements&quot;: rest, &quot;gold_version&quot;: version}
+    store.commit(name, highs, run)
+    return run</pre></details>
+<details class="code"><summary>Reading and the metadata store (harness.py)</summary><pre class="code">class Meta:
+    def __init__(self, path: Path):
+        self.path = path
+        self.data = json.loads(path.read_text()) if path.exists() else {&quot;watermarks&quot;: {}, &quot;runs&quot;: [], &quot;restatements&quot;: []}
+
+    def watermark(self, fact, inp):
+        return self.data[&quot;watermarks&quot;].get(f&quot;{fact}.{inp}&quot;, 0)
+
+    def commit(self, fact, high_marks, run):
+        &quot;&quot;&quot;Called LAST, only after the write and the checks succeeded.&quot;&quot;&quot;
+        for inp, hm in high_marks.items():
+            self.data[&quot;watermarks&quot;][f&quot;{fact}.{inp}&quot;] = hm
+        self.data.setdefault(&quot;versions&quot;, {})[fact] = run[&quot;gold_version&quot;]   # the last version readers may trust
+        self.data[&quot;runs&quot;].append(run)
+        self.data[&quot;restatements&quot;] += run[&quot;restatements&quot;]
+        self.path.write_text(json.dumps(self.data, indent=1, default=str))
+
+
+def high_mark(df: DataFrame, col: str) -&gt; int:
+    &quot;&quot;&quot;Fixed once at the start of the run: changes arriving later wait for the next run.&quot;&quot;&quot;
+    return df.agg(F.max(col)).first()[0] or 0
+
+
+def read_changes(df: DataFrame, col: str, low: int, high: int) -&gt; DataFrame:
+    &quot;&quot;&quot;Only the rows changed after the watermark, up to the high mark: a closed range.&quot;&quot;&quot;
+    return df.where((F.col(col) &gt; low) &amp; (F.col(col) &lt;= high))
+
+
+def assign_keys(history: DataFrame, keymap: DataFrame, bk: str, key: str) -&gt; DataFrame:
+    &quot;&quot;&quot;Stable surrogate keys: existing versions keep their key; new versions get the next numbers.&quot;&quot;&quot;
+    known = history.join(keymap, [bk, &quot;valid_from&quot;], &quot;left&quot;)
+    start = keymap.agg(F.coalesce(F.max(key), F.lit(0))).first()[0]
+    rows = sorted(known.where(F.col(key).isNull()).select(bk, &quot;valid_from&quot;).collect())
+    add = [(r[0], r[1], start + i + 1) for i, r in enumerate(rows)]
+    added = history.sparkSession.createDataFrame(add, f&quot;{bk} string, valid_from date, {key} int&quot;)
+    return keymap.unionByName(added)</pre></details>
+<details class="code"><summary>Checks and the ledger (harness.py)</summary><pre class="code">def window_summary(df: DataFrame, meta: dict) -&gt; dict:
+    &quot;&quot;&quot;Per window: row count, total of each measure, unknown keys. Used for restatements.&quot;&quot;&quot;
+    key, cols = meta[&quot;dimension&quot;][&quot;key&quot;], [&quot;rows&quot;] + meta[&quot;measures&quot;] + [&quot;unknown_keys&quot;]
+    aggs = [F.count(&quot;*&quot;).alias(&quot;rows&quot;)] + [F.sum(m).alias(m) for m in meta[&quot;measures&quot;]]
+    aggs.append(F.sum((F.col(key) == -1).cast(&quot;int&quot;)).alias(&quot;unknown_keys&quot;))
+    s = df.groupBy(meta[&quot;window_col&quot;]).agg(*aggs)
+    return {str(r[0]): {c: r[c] for c in cols} for r in s.collect()}
+
+
+def check(out: DataFrame, ledger: dict, meta: dict) -&gt; list:
+    problems = []
+    dupes = out.groupBy(*meta[&quot;grain&quot;]).count().where(&quot;count &gt; 1&quot;).count()
+    if dupes:
+        problems.append(f&quot;grain not unique: {dupes} keys appear more than once&quot;)
+    if ledger[&quot;read&quot;] != ledger[&quot;filtered&quot;] + ledger[&quot;rejected&quot;] + ledger[&quot;written&quot;]:
+        problems.append(f&quot;ledger does not balance: {ledger}&quot;)
+    if ledger[&quot;after_join&quot;] != ledger[&quot;read&quot;] - ledger[&quot;filtered&quot;]:
+        problems.append(f&quot;a lookup join changed the row count: {ledger[&#x27;read&#x27;] - ledger[&#x27;filtered&#x27;]} in, {ledger[&#x27;after_join&#x27;]} out&quot;)
+    if ledger[&quot;written&quot;] and ledger[&quot;unknown_keys&quot;] / ledger[&quot;written&quot;] &gt; meta[&quot;max_unknown_rate&quot;]:
+        problems.append(&quot;too many unknown dealers&quot;)
+    return problems</pre></details>
+<p>All files: <code>_guides/code/silver_to_gold/</code> in the site's repository (builds.py, harness.py, data.py, test_builds.py, e2e.py).</p>
+</section>
+<div class="sib" style="margin-top:34px"><a href="/learn/silver-to-gold/worked-example/">← The worked example</a><a href="/learn/silver-to-gold/">All the pages</a><a href="/learn/silver-to-gold/kinds-of-fact/">The six kinds of fact →</a></div>
+</div>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Concepts</b><a href="/leaders/">For leaders</a><a href="/learn/fundamentals/">Fundamentals</a><a href="/learn/data-systems/">Data systems</a><a href="/learn/data-systems/platform/">Data and AI platform</a><a href="/learn/data-systems/platform/#hops">Data engineering</a><a href="/concepts/semantic-layer/">BI and analytics</a><a href="/concepts/#ml-engineering">ML</a><a href="/learn/ai-universe/">AI</a><a href="/learn/data-systems/platform/#concerns">Across all of them</a><a href="/concepts/#a-z">Key concepts, A to Z</a></div><div><b>On your cloud</b><a href="/platforms/databricks/">Databricks</a><a href="/platforms/aws/">AWS</a><a href="/platforms/azure/">Azure and Fabric</a><a href="/platforms/gcp/">Google Cloud</a><a href="/platforms/open/">Open source</a><a href="/platforms/anthropic/">Claude (Anthropic)</a><a href="/certifications/">All certifications</a></div><div><b>Your role</b><a href="/paths/">Find your path</a><a href="/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/forward-deployed/">Forward Deployed Engineering</a><a href="/mindset/">Worried about AI?</a><a href="/projects/">All projects to join</a></div><div><b>How we work</b><a href="/how-we-work/#thinking">Thinking principles</a><a href="/how-we-work/#ba">Business analysis</a><a href="/how-we-work/#pm">Project management</a><a href="/learn/technical-anchor/">The technical anchor</a></div><div><b>Causes and deep tech</b><a href="/ai-for-cause/">AI for a cause</a><a href="/deep-tech/">Deep tech</a></div><div><b>About</b><a href="/about/">About this site</a><a href="/about/#join">Write or teach</a><a href="/writing/">Blog</a><a href="/research/">All open specifications</a><a href="/assets/">All open-source code</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>

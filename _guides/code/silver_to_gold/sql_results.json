@@ -1,0 +1,2611 @@
+{
+ "dimensions": {
+  "d-type1": {
+   "sources": [
+    {
+     "name": "silver_products",
+     "sql": "CREATE TABLE silver_products (product_id VARCHAR, product_name VARCHAR, brand VARCHAR, size VARCHAR);\nINSERT INTO silver_products VALUES\n  ('P1','Highway Plus','Apex','205/55R16'),\n  ('P2','City Grip','Apex','185/65R15'),\n  ('P3','Trail King','Roadster','265/65R17');",
+     "cols": [
+      "product_id",
+      "product_name",
+      "brand",
+      "size"
+     ],
+     "rows": [
+      [
+       "P1",
+       "Highway Plus",
+       "Apex",
+       "205/55R16"
+      ],
+      [
+       "P2",
+       "City Grip",
+       "Apex",
+       "185/65R15"
+      ],
+      [
+       "P3",
+       "Trail King",
+       "Roadster",
+       "265/65R17"
+      ]
+     ]
+    },
+    {
+     "name": "silver_products_day2",
+     "sql": "CREATE TABLE silver_products_day2 (product_id VARCHAR, product_name VARCHAR, brand VARCHAR, size VARCHAR);\nINSERT INTO silver_products_day2 VALUES\n  ('P1','Highway Plus','Apex','205/55R16'),\n  ('P2','City Grip 2','Apex','185/65R15'),   -- renamed\n  ('P3','Trail King','Roadster','265/65R17'),\n  ('P4','Snow Master','Roadster','195/65R15'); -- new",
+     "cols": [
+      "product_id",
+      "product_name",
+      "brand",
+      "size"
+     ],
+     "rows": [
+      [
+       "P1",
+       "Highway Plus",
+       "Apex",
+       "205/55R16"
+      ],
+      [
+       "P2",
+       "City Grip 2",
+       "Apex",
+       "185/65R15"
+      ],
+      [
+       "P3",
+       "Trail King",
+       "Roadster",
+       "265/65R17"
+      ],
+      [
+       "P4",
+       "Snow Master",
+       "Roadster",
+       "195/65R15"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "Night 1: build the dimension. The key is a number gold hands out; the source's own id stays as a column.",
+     "sql": "CREATE TABLE dim_product AS\nSELECT row_number() OVER (ORDER BY product_id) AS product_key,\n       product_id, product_name, brand, size\nFROM silver_products;",
+     "out": {
+      "cols": [
+       "product_key",
+       "product_id",
+       "product_name",
+       "brand",
+       "size"
+      ],
+      "rows": [
+       [
+        "1",
+        "P1",
+        "Highway Plus",
+        "Apex",
+        "205/55R16"
+       ],
+       [
+        "2",
+        "P2",
+        "City Grip",
+        "Apex",
+        "185/65R15"
+       ],
+       [
+        "3",
+        "P3",
+        "Trail King",
+        "Roadster",
+        "265/65R17"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "Night 2, first half: rewrite rows whose attributes changed. The key does not move.",
+     "sql": "UPDATE dim_product d\nSET product_name = s.product_name, brand = s.brand, size = s.size\nFROM silver_products_day2 s\nWHERE d.product_id = s.product_id\n  AND (d.product_name IS DISTINCT FROM s.product_name\n    OR d.brand        IS DISTINCT FROM s.brand\n    OR d.size         IS DISTINCT FROM s.size);",
+     "out": null
+    },
+    {
+     "cap": "Night 2, second half: add products gold has never seen, with the next free keys.",
+     "sql": "INSERT INTO dim_product\nSELECT (SELECT COALESCE(max(product_key), 0) FROM dim_product)\n         + row_number() OVER (ORDER BY s.product_id),\n       s.product_id, s.product_name, s.brand, s.size\nFROM silver_products_day2 s\nWHERE NOT EXISTS (SELECT 1 FROM dim_product d WHERE d.product_id = s.product_id);",
+     "out": {
+      "cols": [
+       "product_key",
+       "product_id",
+       "product_name",
+       "brand",
+       "size"
+      ],
+      "rows": [
+       [
+        "1",
+        "P1",
+        "Highway Plus",
+        "Apex",
+        "205/55R16"
+       ],
+       [
+        "2",
+        "P2",
+        "City Grip 2",
+        "Apex",
+        "185/65R15"
+       ],
+       [
+        "3",
+        "P3",
+        "Trail King",
+        "Roadster",
+        "265/65R17"
+       ],
+       [
+        "4",
+        "P4",
+        "Snow Master",
+        "Roadster",
+        "195/65R15"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "d-type2": {
+   "sources": [
+    {
+     "name": "silver_dealer_changes",
+     "sql": "CREATE TABLE silver_dealer_changes (dealer_id VARCHAR, name VARCHAR, region VARCHAR, tier VARCHAR, changed_on DATE);\nINSERT INTO silver_dealer_changes VALUES\n  ('D1','Sharma Tyres','North','Gold',     DATE '2026-11-01'),\n  ('D1','Sharma Tyres','North','Gold',     DATE '2026-11-08'),  -- re-sent, nothing changed\n  ('D1','Sharma Tyres','North','Platinum', DATE '2026-11-14'),\n  ('D7','Patel Motors','North','Silver',   DATE '2026-11-01'),\n  ('D7','Patel Motors','West', 'Silver',   DATE '2026-11-12');",
+     "cols": [
+      "dealer_id",
+      "name",
+      "region",
+      "tier",
+      "changed_on"
+     ],
+     "rows": [
+      [
+       "D1",
+       "Sharma Tyres",
+       "North",
+       "Gold",
+       "2026-11-01"
+      ],
+      [
+       "D1",
+       "Sharma Tyres",
+       "North",
+       "Gold",
+       "2026-11-08"
+      ],
+      [
+       "D1",
+       "Sharma Tyres",
+       "North",
+       "Platinum",
+       "2026-11-14"
+      ],
+      [
+       "D7",
+       "Patel Motors",
+       "North",
+       "Silver",
+       "2026-11-01"
+      ],
+      [
+       "D7",
+       "Patel Motors",
+       "West",
+       "Silver",
+       "2026-11-12"
+      ]
+     ]
+    },
+    {
+     "name": "silver_order_lines",
+     "sql": "CREATE TABLE silver_order_lines (line_id VARCHAR, dealer_id VARCHAR, promised_date DATE);\nINSERT INTO silver_order_lines VALUES\n  ('L1','D1',DATE '2026-11-10'), ('L3','D7',DATE '2026-11-11'),\n  ('L4','D7',DATE '2026-11-13'), ('L6','D1',DATE '2026-11-15');",
+     "cols": [
+      "line_id",
+      "dealer_id",
+      "promised_date"
+     ],
+     "rows": [
+      [
+       "L1",
+       "D1",
+       "2026-11-10"
+      ],
+      [
+       "L3",
+       "D7",
+       "2026-11-11"
+      ],
+      [
+       "L4",
+       "D7",
+       "2026-11-13"
+      ],
+      [
+       "L6",
+       "D1",
+       "2026-11-15"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "Drop rows where nothing changed (the re-sent 8 Nov row), by comparing each row with the one before it.",
+     "sql": "CREATE TABLE dealer_changes_clean AS\nSELECT *\nFROM (SELECT *,\n             concat_ws('|', name, region, tier) AS sig,\n             lag(concat_ws('|', name, region, tier))\n               OVER (PARTITION BY dealer_id ORDER BY changed_on) AS prev_sig\n      FROM silver_dealer_changes)\nWHERE prev_sig IS NULL OR sig <> prev_sig;",
+     "out": {
+      "cols": [
+       "dealer_id",
+       "name",
+       "region",
+       "tier",
+       "changed_on"
+      ],
+      "rows": [
+       [
+        "D1",
+        "Sharma Tyres",
+        "North",
+        "Gold",
+        "2026-11-01"
+       ],
+       [
+        "D1",
+        "Sharma Tyres",
+        "North",
+        "Platinum",
+        "2026-11-14"
+       ],
+       [
+        "D7",
+        "Patel Motors",
+        "North",
+        "Silver",
+        "2026-11-01"
+       ],
+       [
+        "D7",
+        "Patel Motors",
+        "West",
+        "Silver",
+        "2026-11-12"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "Each version ends where the next one starts. The last version stays open (a far-future end date, so range joins need no NULL handling).",
+     "sql": "CREATE TABLE dim_dealer AS\nSELECT row_number() OVER (ORDER BY dealer_id, changed_on) AS dealer_key,\n       dealer_id, name, region, tier,\n       changed_on AS valid_from,\n       COALESCE(lead(changed_on) OVER (PARTITION BY dealer_id ORDER BY changed_on),\n                DATE '9999-12-31')                          AS valid_to,\n       lead(changed_on) OVER (PARTITION BY dealer_id ORDER BY changed_on) IS NULL AS is_current\nFROM dealer_changes_clean;",
+     "out": {
+      "cols": [
+       "dealer_key",
+       "dealer_id",
+       "name",
+       "region",
+       "tier",
+       "valid_from",
+       "valid_to",
+       "is_current"
+      ],
+      "rows": [
+       [
+        "1",
+        "D1",
+        "Sharma Tyres",
+        "North",
+        "Gold",
+        "2026-11-01",
+        "2026-11-14",
+        "false"
+       ],
+       [
+        "2",
+        "D1",
+        "Sharma Tyres",
+        "North",
+        "Platinum",
+        "2026-11-14",
+        "9999-12-31",
+        "true"
+       ],
+       [
+        "3",
+        "D7",
+        "Patel Motors",
+        "North",
+        "Silver",
+        "2026-11-01",
+        "2026-11-12",
+        "false"
+       ],
+       [
+        "4",
+        "D7",
+        "Patel Motors",
+        "West",
+        "Silver",
+        "2026-11-12",
+        "9999-12-31",
+        "true"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "A fact looks up the version true on its event date (valid_from inclusive, valid_to exclusive).",
+     "sql": "SELECT o.line_id, o.dealer_id, o.promised_date,\n       d.dealer_key, d.region, d.tier\nFROM silver_order_lines o\nLEFT JOIN dim_dealer d\n  ON d.dealer_id = o.dealer_id\n AND o.promised_date >= d.valid_from\n AND o.promised_date <  d.valid_to\nORDER BY o.line_id;",
+     "out": {
+      "cols": [
+       "line_id",
+       "dealer_id",
+       "promised_date",
+       "dealer_key",
+       "region",
+       "tier"
+      ],
+      "rows": [
+       [
+        "L1",
+        "D1",
+        "2026-11-10",
+        "1",
+        "North",
+        "Gold"
+       ],
+       [
+        "L3",
+        "D7",
+        "2026-11-11",
+        "3",
+        "North",
+        "Silver"
+       ],
+       [
+        "L4",
+        "D7",
+        "2026-11-13",
+        "4",
+        "West",
+        "Silver"
+       ],
+       [
+        "L6",
+        "D1",
+        "2026-11-15",
+        "2",
+        "North",
+        "Platinum"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "d-type3": {
+   "sources": [
+    {
+     "name": "silver_dealer_regions",
+     "sql": "CREATE TABLE silver_dealer_regions (dealer_id VARCHAR, name VARCHAR, region VARCHAR, from_date DATE);\nINSERT INTO silver_dealer_regions VALUES\n  ('D1','Sharma Tyres','North',DATE '2026-11-01'),\n  ('D7','Patel Motors','North',DATE '2026-11-01'),\n  ('D7','Patel Motors','West', DATE '2026-11-12');",
+     "cols": [
+      "dealer_id",
+      "name",
+      "region",
+      "from_date"
+     ],
+     "rows": [
+      [
+       "D1",
+       "Sharma Tyres",
+       "North",
+       "2026-11-01"
+      ],
+      [
+       "D7",
+       "Patel Motors",
+       "North",
+       "2026-11-01"
+      ],
+      [
+       "D7",
+       "Patel Motors",
+       "West",
+       "2026-11-12"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "Take each dealer's newest row, and bring in the region from the row before it.",
+     "sql": "CREATE TABLE dim_dealer_t3 AS\nSELECT row_number() OVER (ORDER BY dealer_id) AS dealer_key,\n       dealer_id, name,\n       region          AS current_region,\n       prev_region     AS previous_region,\n       from_date       AS current_region_since\nFROM (SELECT *,\n             lag(region) OVER (PARTITION BY dealer_id ORDER BY from_date) AS prev_region,\n             row_number() OVER (PARTITION BY dealer_id ORDER BY from_date DESC) AS rn\n      FROM silver_dealer_regions)\nWHERE rn = 1;",
+     "out": {
+      "cols": [
+       "dealer_key",
+       "dealer_id",
+       "name",
+       "current_region",
+       "previous_region",
+       "current_region_since"
+      ],
+      "rows": [
+       [
+        "1",
+        "D1",
+        "Sharma Tyres",
+        "North",
+        "",
+        "2026-11-01"
+       ],
+       [
+        "2",
+        "D7",
+        "Patel Motors",
+        "West",
+        "North",
+        "2026-11-12"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "d-mini": {
+   "sources": [
+    {
+     "name": "silver_dealer_monthly_profile",
+     "sql": "CREATE TABLE silver_dealer_monthly_profile (dealer_id VARCHAR, month VARCHAR, volume_band VARCHAR, risk_band VARCHAR, qty INTEGER);\nINSERT INTO silver_dealer_monthly_profile VALUES\n  ('D1','2026-10','Medium','Low',    40), ('D1','2026-11','Medium','Low',    55),\n  ('D7','2026-10','High',  'Low',   120), ('D7','2026-11','High',  'Medium',130),\n  ('D9','2026-10','Low',   'Medium', 12), ('D9','2026-11','Medium','Medium', 30);",
+     "cols": [
+      "dealer_id",
+      "month",
+      "volume_band",
+      "risk_band",
+      "qty"
+     ],
+     "rows": [
+      [
+       "D1",
+       "2026-10",
+       "Medium",
+       "Low",
+       "40"
+      ],
+      [
+       "D1",
+       "2026-11",
+       "Medium",
+       "Low",
+       "55"
+      ],
+      [
+       "D7",
+       "2026-10",
+       "High",
+       "Low",
+       "120"
+      ],
+      [
+       "D7",
+       "2026-11",
+       "High",
+       "Medium",
+       "130"
+      ],
+      [
+       "D9",
+       "2026-10",
+       "Low",
+       "Medium",
+       "12"
+      ],
+      [
+       "D9",
+       "2026-11",
+       "Medium",
+       "Medium",
+       "30"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "The mini-dimension holds one row per band combination that exists, not one per dealer.",
+     "sql": "CREATE TABLE dim_dealer_profile AS\nSELECT row_number() OVER (ORDER BY volume_band, risk_band) AS profile_key,\n       volume_band, risk_band\nFROM (SELECT DISTINCT volume_band, risk_band FROM silver_dealer_monthly_profile);",
+     "out": {
+      "cols": [
+       "profile_key",
+       "volume_band",
+       "risk_band"
+      ],
+      "rows": [
+       [
+        "1",
+        "High",
+        "Low"
+       ],
+       [
+        "2",
+        "High",
+        "Medium"
+       ],
+       [
+        "3",
+        "Low",
+        "Medium"
+       ],
+       [
+        "4",
+        "Medium",
+        "Low"
+       ],
+       [
+        "5",
+        "Medium",
+        "Medium"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "The monthly fact carries the profile key that was true that month.",
+     "sql": "CREATE TABLE fact_dealer_month AS\nSELECT p.dealer_id, p.month, m.profile_key, p.qty\nFROM silver_dealer_monthly_profile p\nJOIN dim_dealer_profile m USING (volume_band, risk_band);",
+     "out": {
+      "cols": [
+       "dealer_id",
+       "month",
+       "profile_key",
+       "qty"
+      ],
+      "rows": [
+       [
+        "D1",
+        "2026-10",
+        "4",
+        "40"
+       ],
+       [
+        "D1",
+        "2026-11",
+        "4",
+        "55"
+       ],
+       [
+        "D7",
+        "2026-10",
+        "1",
+        "120"
+       ],
+       [
+        "D7",
+        "2026-11",
+        "2",
+        "130"
+       ],
+       [
+        "D9",
+        "2026-10",
+        "3",
+        "12"
+       ],
+       [
+        "D9",
+        "2026-11",
+        "5",
+        "30"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "Ask the question: tyres by risk band, per month. D7's Medium risk in November shows up in November only.",
+     "sql": "SELECT f.month, m.risk_band, sum(f.qty) AS qty\nFROM fact_dealer_month f JOIN dim_dealer_profile m USING (profile_key)\nGROUP BY f.month, m.risk_band ORDER BY f.month, m.risk_band;",
+     "out": {
+      "cols": [
+       "month",
+       "risk_band",
+       "qty"
+      ],
+      "rows": [
+       [
+        "2026-10",
+        "Low",
+        "160"
+       ],
+       [
+        "2026-10",
+        "Medium",
+        "12"
+       ],
+       [
+        "2026-11",
+        "Low",
+        "55"
+       ],
+       [
+        "2026-11",
+        "Medium",
+        "160"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "d-date": {
+   "sources": [],
+   "steps": [
+    {
+     "cap": "One row per day for an Indian financial year (April to March). In Spark or Databricks, replace the generator with explode(sequence(DATE'2026-04-01', DATE'2027-03-31', INTERVAL 1 DAY)).",
+     "sql": "CREATE TABLE dim_date AS\nSELECT CAST(strftime(d, '%Y%m%d') AS INTEGER)                    AS date_key,\n       d                                                          AS date,\n       dayname(d)                                                 AS day_name,\n       isodow(d) >= 6                                             AS is_weekend,\n       strftime(d, '%Y-%m')                                       AS year_month,\n       'FY' || (year(d) + CASE WHEN month(d) >= 4 THEN 0 ELSE -1 END)\n            || '-' || right(CAST(year(d) + CASE WHEN month(d) >= 4 THEN 1 ELSE 0 END AS VARCHAR), 2) AS fiscal_year,\n       'Q' || CAST(((month(d) + 8) % 12) // 3 + 1 AS INTEGER)       AS fiscal_quarter\nFROM (SELECT CAST(unnest(generate_series(DATE '2026-04-01', DATE '2027-03-31', INTERVAL 1 DAY)) AS DATE) AS d);",
+     "out": {
+      "cols": [
+       "date_key",
+       "date",
+       "day_name",
+       "is_weekend",
+       "year_month",
+       "fiscal_year",
+       "fiscal_quarter"
+      ],
+      "rows": [
+       [
+        "20261113",
+        "2026-11-13",
+        "Friday",
+        "false",
+        "2026-11",
+        "FY2026-27",
+        "Q3"
+       ],
+       [
+        "20261114",
+        "2026-11-14",
+        "Saturday",
+        "true",
+        "2026-11",
+        "FY2026-27",
+        "Q3"
+       ],
+       [
+        "20261115",
+        "2026-11-15",
+        "Sunday",
+        "true",
+        "2026-11",
+        "FY2026-27",
+        "Q3"
+       ],
+       [
+        "20270331",
+        "2027-03-31",
+        "Wednesday",
+        "false",
+        "2027-03",
+        "FY2026-27",
+        "Q4"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "Add the unknown date, so a fact whose date is missing still joins.",
+     "sql": "INSERT INTO dim_date VALUES (-1, NULL, 'Unknown', FALSE, 'Unknown', 'Unknown', 'Unknown');",
+     "out": {
+      "cols": [
+       "date_key",
+       "date",
+       "day_name",
+       "is_weekend",
+       "year_month",
+       "fiscal_year",
+       "fiscal_quarter"
+      ],
+      "rows": [
+       [
+        "-1",
+        "",
+        "Unknown",
+        "false",
+        "Unknown",
+        "Unknown",
+        "Unknown"
+       ],
+       [
+        "20261113",
+        "2026-11-13",
+        "Friday",
+        "false",
+        "2026-11",
+        "FY2026-27",
+        "Q3"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "d-role": {
+   "sources": [
+    {
+     "name": "fact_order_line_dates",
+     "sql": "CREATE TABLE fact_order_line_dates (line_id VARCHAR, promised_date_key INTEGER, delivered_date_key INTEGER);\nINSERT INTO fact_order_line_dates VALUES\n  ('L1', 20261110, 20261110), ('L2', 20261110, 20261111), ('L3', 20261111, 20261112), ('L7', 20261113, NULL);",
+     "cols": [
+      "line_id",
+      "promised_date_key",
+      "delivered_date_key"
+     ],
+     "rows": [
+      [
+       "L1",
+       "20261110",
+       "20261110"
+      ],
+      [
+       "L2",
+       "20261110",
+       "20261111"
+      ],
+      [
+       "L3",
+       "20261111",
+       "20261112"
+      ],
+      [
+       "L7",
+       "20261113",
+       ""
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "Give each role its own view, so report tools show 'Promised date' and 'Delivered date' as separate pickers.",
+     "sql": "CREATE VIEW dim_promised_date  AS SELECT date_key AS promised_date_key,  date AS promised_date,  day_name AS promised_day  FROM dim_date;\nCREATE VIEW dim_delivered_date AS SELECT date_key AS delivered_date_key, date AS delivered_date, day_name AS delivered_day FROM dim_date;",
+     "out": null
+    },
+    {
+     "cap": "Join both roles to the same fact. A LEFT JOIN on the second keeps L7, which has not been delivered yet.",
+     "sql": "SELECT f.line_id, p.promised_day, d.delivered_day,\n       date_diff('day', p.promised_date, d.delivered_date) AS days_after_promise\nFROM fact_order_line_dates f\nJOIN dim_promised_date p USING (promised_date_key)\nLEFT JOIN dim_delivered_date d USING (delivered_date_key)\nORDER BY f.line_id;",
+     "out": {
+      "cols": [
+       "line_id",
+       "promised_day",
+       "delivered_day",
+       "days_after_promise"
+      ],
+      "rows": [
+       [
+        "L1",
+        "Tuesday",
+        "Tuesday",
+        "0"
+       ],
+       [
+        "L2",
+        "Tuesday",
+        "Wednesday",
+        "1"
+       ],
+       [
+        "L3",
+        "Wednesday",
+        "Thursday",
+        "1"
+       ],
+       [
+        "L7",
+        "Friday",
+        "",
+        ""
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "d-junk": {
+   "sources": [
+    {
+     "name": "silver_orders",
+     "sql": "CREATE TABLE silver_orders (order_id VARCHAR, is_rush VARCHAR, payment_mode VARCHAR, gift_wrap VARCHAR, amount INTEGER);\nINSERT INTO silver_orders VALUES\n  ('O1','Y','COD',    'N', 1400), ('O2','N','Prepaid','N', 800),\n  ('O3','Y','COD',    'N',  300), ('O4','N','Prepaid','Y', 500);",
+     "cols": [
+      "order_id",
+      "is_rush",
+      "payment_mode",
+      "gift_wrap",
+      "amount"
+     ],
+     "rows": [
+      [
+       "O1",
+       "Y",
+       "COD",
+       "N",
+       "1400"
+      ],
+      [
+       "O2",
+       "N",
+       "Prepaid",
+       "N",
+       "800"
+      ],
+      [
+       "O3",
+       "Y",
+       "COD",
+       "N",
+       "300"
+      ],
+      [
+       "O4",
+       "N",
+       "Prepaid",
+       "Y",
+       "500"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "One row per combination that really occurs. (If the flags are few, you can instead cross join every possible value so the table is complete up front.)",
+     "sql": "CREATE TABLE dim_order_flags AS\nSELECT row_number() OVER (ORDER BY is_rush, payment_mode, gift_wrap) AS order_flags_key,\n       is_rush, payment_mode, gift_wrap\nFROM (SELECT DISTINCT is_rush, payment_mode, gift_wrap FROM silver_orders);",
+     "out": {
+      "cols": [
+       "order_flags_key",
+       "is_rush",
+       "payment_mode",
+       "gift_wrap"
+      ],
+      "rows": [
+       [
+        "1",
+        "N",
+        "Prepaid",
+        "N"
+       ],
+       [
+        "2",
+        "N",
+        "Prepaid",
+        "Y"
+       ],
+       [
+        "3",
+        "Y",
+        "COD",
+        "N"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "The fact keeps order_id (see the next example) and one key for all three flags.",
+     "sql": "CREATE TABLE fact_order AS\nSELECT o.order_id, f.order_flags_key, o.amount\nFROM silver_orders o\nJOIN dim_order_flags f\n  ON f.is_rush = o.is_rush AND f.payment_mode = o.payment_mode AND f.gift_wrap = o.gift_wrap;",
+     "out": {
+      "cols": [
+       "order_id",
+       "order_flags_key",
+       "amount"
+      ],
+      "rows": [
+       [
+        "O1",
+        "3",
+        "1400"
+       ],
+       [
+        "O2",
+        "1",
+        "800"
+       ],
+       [
+        "O3",
+        "3",
+        "300"
+       ],
+       [
+        "O4",
+        "2",
+        "500"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "d-degenerate": {
+   "sources": [
+    {
+     "name": "fact_order_line",
+     "sql": "CREATE TABLE fact_order_line (order_id VARCHAR, line_no INTEGER, product_id VARCHAR, qty INTEGER);\nINSERT INTO fact_order_line VALUES\n  ('O1',1,'P1',10), ('O1',2,'P2',5), ('O2',1,'P1',8), ('O2',2,'P3',4);",
+     "cols": [
+      "order_id",
+      "line_no",
+      "product_id",
+      "qty"
+     ],
+     "rows": [
+      [
+       "O1",
+       "1",
+       "P1",
+       "10"
+      ],
+      [
+       "O1",
+       "2",
+       "P2",
+       "5"
+      ],
+      [
+       "O2",
+       "1",
+       "P1",
+       "8"
+      ],
+      [
+       "O2",
+       "2",
+       "P3",
+       "4"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "No join, no table. Group and filter on the order number directly.",
+     "sql": "SELECT order_id, count(*) AS lines, sum(qty) AS tyres\nFROM fact_order_line\nGROUP BY order_id ORDER BY order_id;",
+     "out": {
+      "cols": [
+       "order_id",
+       "lines",
+       "tyres"
+      ],
+      "rows": [
+       [
+        "O1",
+        "2",
+        "15"
+       ],
+       [
+        "O2",
+        "2",
+        "12"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "d-bridge": {
+   "sources": [
+    {
+     "name": "silver_dealer_services",
+     "sql": "CREATE TABLE silver_dealer_services (dealer_id VARCHAR, service VARCHAR);\nINSERT INTO silver_dealer_services VALUES\n  ('D1','Fitting'), ('D1','Balancing'),\n  ('D7','Fitting'), ('D7','Alignment'), ('D7','Balancing');",
+     "cols": [
+      "dealer_id",
+      "service"
+     ],
+     "rows": [
+      [
+       "D1",
+       "Fitting"
+      ],
+      [
+       "D1",
+       "Balancing"
+      ],
+      [
+       "D7",
+       "Fitting"
+      ],
+      [
+       "D7",
+       "Alignment"
+      ],
+      [
+       "D7",
+       "Balancing"
+      ]
+     ]
+    },
+    {
+     "name": "fact_dealer_revenue",
+     "sql": "CREATE TABLE fact_dealer_revenue (dealer_id VARCHAR, revenue INTEGER);\nINSERT INTO fact_dealer_revenue VALUES ('D1',1000), ('D7',1500);",
+     "cols": [
+      "dealer_id",
+      "revenue"
+     ],
+     "rows": [
+      [
+       "D1",
+       "1000"
+      ],
+      [
+       "D7",
+       "1500"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "The bridge: one row per dealer and service, weight = 1 divided by how many services the dealer offers.",
+     "sql": "CREATE TABLE bridge_dealer_service AS\nSELECT dealer_id, service,\n       1.0 / count(*) OVER (PARTITION BY dealer_id) AS weight\nFROM silver_dealer_services;",
+     "out": {
+      "cols": [
+       "dealer_id",
+       "service",
+       "weight"
+      ],
+      "rows": [
+       [
+        "D1",
+        "Balancing",
+        "0.5"
+       ],
+       [
+        "D1",
+        "Fitting",
+        "0.5"
+       ],
+       [
+        "D7",
+        "Alignment",
+        "0.3333"
+       ],
+       [
+        "D7",
+        "Balancing",
+        "0.3333"
+       ],
+       [
+        "D7",
+        "Fitting",
+        "0.3333"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "The wrong way and the right way, side by side. Revenue is really 2,500.",
+     "sql": "SELECT b.service,\n       sum(f.revenue)                       AS revenue_naive,\n       round(sum(f.revenue * b.weight), 2)  AS revenue_weighted\nFROM fact_dealer_revenue f\nJOIN bridge_dealer_service b USING (dealer_id)\nGROUP BY b.service ORDER BY b.service;",
+     "out": {
+      "cols": [
+       "service",
+       "revenue_naive",
+       "revenue_weighted"
+      ],
+      "rows": [
+       [
+        "Alignment",
+        "1500",
+        "500"
+       ],
+       [
+        "Balancing",
+        "2500",
+        "1000"
+       ],
+       [
+        "Fitting",
+        "2500",
+        "1000"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "d-hierarchy": {
+   "sources": [
+    {
+     "name": "silver_geography",
+     "sql": "CREATE TABLE silver_geography (geo_id VARCHAR, name VARCHAR, level VARCHAR, parent_id VARCHAR);\nINSERT INTO silver_geography VALUES\n  ('R1','North','region',NULL),       ('R2','West','region',NULL),\n  ('S1','Delhi','state','R1'),        ('S2','Maharashtra','state','R2'),\n  ('C1','New Delhi','city','S1'),     ('C2','Mumbai','city','S2'), ('C3','Pune','city','S2');",
+     "cols": [
+      "geo_id",
+      "name",
+      "level",
+      "parent_id"
+     ],
+     "rows": [
+      [
+       "R1",
+       "North",
+       "region",
+       ""
+      ],
+      [
+       "R2",
+       "West",
+       "region",
+       ""
+      ],
+      [
+       "S1",
+       "Delhi",
+       "state",
+       "R1"
+      ],
+      [
+       "S2",
+       "Maharashtra",
+       "state",
+       "R2"
+      ],
+      [
+       "C1",
+       "New Delhi",
+       "city",
+       "S1"
+      ],
+      [
+       "C2",
+       "Mumbai",
+       "city",
+       "S2"
+      ],
+      [
+       "C3",
+       "Pune",
+       "city",
+       "S2"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "A fixed three-level tree is just two self-joins. (A tree of unknown depth needs a recursive query; do it once here, never in reports.)",
+     "sql": "CREATE TABLE dim_geography AS\nSELECT row_number() OVER (ORDER BY c.geo_id) AS geography_key,\n       c.name AS city, s.name AS state, r.name AS region\nFROM silver_geography c\nJOIN silver_geography s ON s.geo_id = c.parent_id AND s.level = 'state'\nJOIN silver_geography r ON r.geo_id = s.parent_id AND r.level = 'region'\nWHERE c.level = 'city';",
+     "out": {
+      "cols": [
+       "geography_key",
+       "city",
+       "state",
+       "region"
+      ],
+      "rows": [
+       [
+        "1",
+        "New Delhi",
+        "Delhi",
+        "North"
+       ],
+       [
+        "2",
+        "Mumbai",
+        "Maharashtra",
+        "West"
+       ],
+       [
+        "3",
+        "Pune",
+        "Maharashtra",
+        "West"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "d-inferred": {
+   "sources": [
+    {
+     "name": "dim_dealer_i",
+     "sql": "CREATE TABLE dim_dealer_i (dealer_key INTEGER, dealer_id VARCHAR, name VARCHAR, region VARCHAR, is_inferred BOOLEAN);\nINSERT INTO dim_dealer_i VALUES\n  (-1,'?','Unknown','Unknown',FALSE),\n  ( 1,'D1','Sharma Tyres','North',FALSE),\n  ( 2,'D7','Patel Motors','West',FALSE);",
+     "cols": [
+      "dealer_key",
+      "dealer_id",
+      "name",
+      "region",
+      "is_inferred"
+     ],
+     "rows": [
+      [
+       "-1",
+       "?",
+       "Unknown",
+       "Unknown",
+       "false"
+      ],
+      [
+       "1",
+       "D1",
+       "Sharma Tyres",
+       "North",
+       "false"
+      ],
+      [
+       "2",
+       "D7",
+       "Patel Motors",
+       "West",
+       "false"
+      ]
+     ]
+    },
+    {
+     "name": "silver_late_order_lines",
+     "sql": "CREATE TABLE silver_late_order_lines (line_id VARCHAR, dealer_id VARCHAR, qty INTEGER);\nINSERT INTO silver_late_order_lines VALUES ('L1','D1',10), ('L4','D7',4), ('L5','D9',6);",
+     "cols": [
+      "line_id",
+      "dealer_id",
+      "qty"
+     ],
+     "rows": [
+      [
+       "L1",
+       "D1",
+       "10"
+      ],
+      [
+       "L4",
+       "D7",
+       "4"
+      ],
+      [
+       "L5",
+       "D9",
+       "6"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "Create a placeholder for every dealer id the facts mention but the dimension does not know.",
+     "sql": "INSERT INTO dim_dealer_i\nSELECT (SELECT max(dealer_key) FROM dim_dealer_i) + row_number() OVER (ORDER BY dealer_id),\n       dealer_id, 'Unknown (inferred)', 'Unknown', TRUE\nFROM (SELECT DISTINCT dealer_id FROM silver_late_order_lines o\n      WHERE NOT EXISTS (SELECT 1 FROM dim_dealer_i d WHERE d.dealer_id = o.dealer_id));",
+     "out": {
+      "cols": [
+       "dealer_key",
+       "dealer_id",
+       "name",
+       "region",
+       "is_inferred"
+      ],
+      "rows": [
+       [
+        "-1",
+        "?",
+        "Unknown",
+        "Unknown",
+        "false"
+       ],
+       [
+        "1",
+        "D1",
+        "Sharma Tyres",
+        "North",
+        "false"
+       ],
+       [
+        "2",
+        "D7",
+        "Patel Motors",
+        "West",
+        "false"
+       ],
+       [
+        "3",
+        "D9",
+        "Unknown (inferred)",
+        "Unknown",
+        "true"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "Build the fact. Every line now has a real key, even L5.",
+     "sql": "CREATE TABLE fact_line AS\nSELECT o.line_id, d.dealer_key, o.qty\nFROM silver_late_order_lines o JOIN dim_dealer_i d USING (dealer_id);",
+     "out": {
+      "cols": [
+       "line_id",
+       "dealer_key",
+       "qty"
+      ],
+      "rows": [
+       [
+        "L1",
+        "1",
+        "10"
+       ],
+       [
+        "L4",
+        "2",
+        "4"
+       ],
+       [
+        "L5",
+        "3",
+        "6"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "Days later the real D9 arrives from silver. Fill the placeholder in. Its key, and so the fact, does not change.",
+     "sql": "UPDATE dim_dealer_i\nSET name = 'Gupta Wheels', region = 'West', is_inferred = FALSE\nWHERE dealer_id = 'D9';",
+     "out": {
+      "cols": [
+       "line_id",
+       "dealer_key",
+       "dealer_id",
+       "name",
+       "region",
+       "is_inferred"
+      ],
+      "rows": [
+       [
+        "L1",
+        "1",
+        "D1",
+        "Sharma Tyres",
+        "North",
+        "false"
+       ],
+       [
+        "L4",
+        "2",
+        "D7",
+        "Patel Motors",
+        "West",
+        "false"
+       ],
+       [
+        "L5",
+        "3",
+        "D9",
+        "Gupta Wheels",
+        "West",
+        "false"
+       ]
+      ]
+     }
+    }
+   ]
+  }
+ },
+ "facts": {
+  "f-transaction": {
+   "sources": [
+    {
+     "name": "silver_order_lines",
+     "sql": "CREATE TABLE silver_order_lines (line_id VARCHAR, order_id VARCHAR, dealer_id VARCHAR, product_id VARCHAR,\n                                 qty_ordered INTEGER, unit_price INTEGER, promised_date DATE);\nINSERT INTO silver_order_lines VALUES\n  ('L1','O1','D1',    'P1',10,100,DATE '2026-11-10'),\n  ('L2','O1','D1',    'P2', 5, 80,DATE '2026-11-10'),\n  ('L3','O2','D7',    'P1', 8,100,DATE '2026-11-11'),\n  ('L4','O2','D7',    'P3', 4,150,DATE '2026-11-13'),\n  ('L5','O3','D9',    'P2', 6, 80,DATE '2026-11-13'),\n  ('L6','O4','TEST01','P1', 1,100,DATE '2026-11-13');   -- a test dealer: never reaches gold",
+     "cols": [
+      "line_id",
+      "order_id",
+      "dealer_id",
+      "product_id",
+      "qty_ordered",
+      "unit_price",
+      "promised_date"
+     ],
+     "rows": [
+      [
+       "L1",
+       "O1",
+       "D1",
+       "P1",
+       "10",
+       "100",
+       "2026-11-10"
+      ],
+      [
+       "L2",
+       "O1",
+       "D1",
+       "P2",
+       "5",
+       "80",
+       "2026-11-10"
+      ],
+      [
+       "L3",
+       "O2",
+       "D7",
+       "P1",
+       "8",
+       "100",
+       "2026-11-11"
+      ],
+      [
+       "L4",
+       "O2",
+       "D7",
+       "P3",
+       "4",
+       "150",
+       "2026-11-13"
+      ],
+      [
+       "L5",
+       "O3",
+       "D9",
+       "P2",
+       "6",
+       "80",
+       "2026-11-13"
+      ],
+      [
+       "L6",
+       "O4",
+       "TEST01",
+       "P1",
+       "1",
+       "100",
+       "2026-11-13"
+      ]
+     ]
+    },
+    {
+     "name": "silver_deliveries",
+     "sql": "CREATE TABLE silver_deliveries (delivery_id VARCHAR, line_id VARCHAR, warehouse VARCHAR, qty INTEGER, delivered_date DATE);\nINSERT INTO silver_deliveries VALUES\n  ('X1', 'L1','WH-A',10,DATE '2026-11-10'),\n  ('X2', 'L2','WH-A', 5,DATE '2026-11-11'),   -- a day late\n  ('X3', 'L3','WH-B', 6,DATE '2026-11-11'),   -- L3 comes in two deliveries\n  ('X3b','L3','WH-B', 2,DATE '2026-11-12'),\n  ('X4', 'L4','WH-A', 4,DATE '2026-11-13'),\n  ('X5', 'L5','WH-A', 6,DATE '2026-11-13');",
+     "cols": [
+      "delivery_id",
+      "line_id",
+      "warehouse",
+      "qty",
+      "delivered_date"
+     ],
+     "rows": [
+      [
+       "X1",
+       "L1",
+       "WH-A",
+       "10",
+       "2026-11-10"
+      ],
+      [
+       "X2",
+       "L2",
+       "WH-A",
+       "5",
+       "2026-11-11"
+      ],
+      [
+       "X3",
+       "L3",
+       "WH-B",
+       "6",
+       "2026-11-11"
+      ],
+      [
+       "X3b",
+       "L3",
+       "WH-B",
+       "2",
+       "2026-11-12"
+      ],
+      [
+       "X4",
+       "L4",
+       "WH-A",
+       "4",
+       "2026-11-13"
+      ],
+      [
+       "X5",
+       "L5",
+       "WH-A",
+       "6",
+       "2026-11-13"
+      ]
+     ]
+    },
+    {
+     "name": "dim_dealer",
+     "sql": "CREATE TABLE dim_dealer (dealer_key INTEGER, dealer_id VARCHAR, name VARCHAR, region VARCHAR, valid_from DATE, valid_to DATE);\nINSERT INTO dim_dealer VALUES\n  (-1,'?', 'Unknown',      'Unknown',DATE '1900-01-01',DATE '9999-12-31'),\n  ( 1,'D1','Sharma Tyres', 'North',  DATE '2026-11-01',DATE '9999-12-31'),\n  ( 2,'D7','Patel Motors', 'North',  DATE '2026-11-01',DATE '2026-11-12'),\n  ( 3,'D7','Patel Motors', 'West',   DATE '2026-11-12',DATE '9999-12-31');",
+     "cols": [
+      "dealer_key",
+      "dealer_id",
+      "name",
+      "region",
+      "valid_from",
+      "valid_to"
+     ],
+     "rows": [
+      [
+       "-1",
+       "?",
+       "Unknown",
+       "Unknown",
+       "1900-01-01",
+       "9999-12-31"
+      ],
+      [
+       "1",
+       "D1",
+       "Sharma Tyres",
+       "North",
+       "2026-11-01",
+       "9999-12-31"
+      ],
+      [
+       "2",
+       "D7",
+       "Patel Motors",
+       "North",
+       "2026-11-01",
+       "2026-11-12"
+      ],
+      [
+       "3",
+       "D7",
+       "Patel Motors",
+       "West",
+       "2026-11-12",
+       "9999-12-31"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "The build. Add the child rows (deliveries) up to one row per line first, then join. Then look up the dealer version true on the promised date, with -1 for a dealer silver has not got yet.",
+     "sql": "CREATE TABLE fact_order_line AS\nWITH delivered AS (                       -- one row per line, BEFORE joining\n  SELECT line_id, sum(qty) AS qty_delivered, max(delivered_date) AS last_delivered\n  FROM silver_deliveries GROUP BY line_id)\nSELECT o.line_id,\n       o.order_id,                                            -- degenerate dimension\n       COALESCE(d.dealer_key, -1)                AS dealer_key,\n       CAST(strftime(o.promised_date, '%Y%m%d') AS INTEGER) AS promised_date_key,\n       o.qty_ordered,\n       COALESCE(x.qty_delivered, 0)              AS qty_delivered,\n       o.qty_ordered * o.unit_price              AS line_amount,\n       COALESCE(x.qty_delivered, 0) >= o.qty_ordered\n         AND x.last_delivered <= o.promised_date AS is_otif\nFROM silver_order_lines o\nLEFT JOIN delivered x ON x.line_id = o.line_id\nLEFT JOIN dim_dealer d\n  ON d.dealer_id = o.dealer_id\n AND o.promised_date >= d.valid_from AND o.promised_date < d.valid_to\nWHERE o.dealer_id NOT LIKE 'TEST%';",
+     "out": {
+      "cols": [
+       "line_id",
+       "order_id",
+       "dealer_key",
+       "promised_date_key",
+       "qty_ordered",
+       "qty_delivered",
+       "line_amount",
+       "is_otif"
+      ],
+      "rows": [
+       [
+        "L1",
+        "O1",
+        "1",
+        "20261110",
+        "10",
+        "10",
+        "1000",
+        "true"
+       ],
+       [
+        "L2",
+        "O1",
+        "1",
+        "20261110",
+        "5",
+        "5",
+        "400",
+        "false"
+       ],
+       [
+        "L3",
+        "O2",
+        "2",
+        "20261111",
+        "8",
+        "8",
+        "800",
+        "false"
+       ],
+       [
+        "L4",
+        "O2",
+        "3",
+        "20261113",
+        "4",
+        "4",
+        "600",
+        "true"
+       ],
+       [
+        "L5",
+        "O3",
+        "-1",
+        "20261113",
+        "6",
+        "6",
+        "480",
+        "true"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "Check the grain: one row per line. This must return no rows.",
+     "sql": "SELECT line_id, count(*) AS n\nFROM fact_order_line GROUP BY line_id HAVING count(*) > 1;",
+     "out": {
+      "cols": [
+       "line_id",
+       "n"
+      ],
+      "rows": []
+     }
+    },
+    {
+     "cap": "The trap, on purpose: join the deliveries straight in. L3 has two deliveries, so it appears twice and its 8 tyres are counted as 16.",
+     "sql": "SELECT sum(o.qty_ordered) AS tyres_ordered_WRONG\nFROM silver_order_lines o\nLEFT JOIN silver_deliveries x ON x.line_id = o.line_id\nWHERE o.dealer_id NOT LIKE 'TEST%';",
+     "out": {
+      "cols": [
+       "tyres_ordered_WRONG",
+       "tyres_ordered_RIGHT"
+      ],
+      "rows": [
+       [
+        "41",
+        "33"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "f-periodic": {
+   "sources": [
+    {
+     "name": "silver_stock_movements",
+     "sql": "CREATE TABLE silver_stock_movements (warehouse VARCHAR, product_id VARCHAR, movement_date DATE, qty_change INTEGER);\nINSERT INTO silver_stock_movements VALUES\n  ('WH-A','P1',DATE '2026-11-10', 100),   -- received\n  ('WH-A','P1',DATE '2026-11-12', -30),   -- dispatched\n  ('WH-A','P2',DATE '2026-11-10',  50),\n  ('WH-A','P2',DATE '2026-11-13', -20),\n  ('WH-B','P1',DATE '2026-11-11',  60);",
+     "cols": [
+      "warehouse",
+      "product_id",
+      "movement_date",
+      "qty_change"
+     ],
+     "rows": [
+      [
+       "WH-A",
+       "P1",
+       "2026-11-10",
+       "100"
+      ],
+      [
+       "WH-A",
+       "P1",
+       "2026-11-12",
+       "-30"
+      ],
+      [
+       "WH-A",
+       "P2",
+       "2026-11-10",
+       "50"
+      ],
+      [
+       "WH-A",
+       "P2",
+       "2026-11-13",
+       "-20"
+      ],
+      [
+       "WH-B",
+       "P1",
+       "2026-11-11",
+       "60"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "Build a row for every day from each pair's first movement, then add up movements to date. Days with no movement get net 0 and keep the level. (In Spark or Databricks, replace the day generator with explode(sequence(...)).)",
+     "sql": "CREATE TABLE fact_stock_daily AS\nWITH pairs AS (\n  SELECT warehouse, product_id, min(movement_date) AS first_day\n  FROM silver_stock_movements GROUP BY warehouse, product_id),\ndays AS (\n  SELECT CAST(unnest(generate_series(DATE '2026-11-10', DATE '2026-11-14', INTERVAL 1 DAY)) AS DATE) AS day),\nspine AS (\n  SELECT p.warehouse, p.product_id, d.day\n  FROM pairs p JOIN days d ON d.day >= p.first_day),\nmoved AS (\n  SELECT warehouse, product_id, movement_date AS day, sum(qty_change) AS net\n  FROM silver_stock_movements GROUP BY warehouse, product_id, movement_date)\nSELECT s.warehouse, s.product_id, s.day,\n       COALESCE(m.net, 0) AS net_movement,\n       sum(COALESCE(m.net, 0)) OVER (PARTITION BY s.warehouse, s.product_id\n                                     ORDER BY s.day) AS closing_qty\nFROM spine s\nLEFT JOIN moved m USING (warehouse, product_id, day);",
+     "out": {
+      "cols": [
+       "warehouse",
+       "product_id",
+       "day",
+       "net_movement",
+       "closing_qty"
+      ],
+      "rows": [
+       [
+        "WH-A",
+        "P1",
+        "2026-11-10",
+        "100",
+        "100"
+       ],
+       [
+        "WH-A",
+        "P1",
+        "2026-11-11",
+        "0",
+        "100"
+       ],
+       [
+        "WH-A",
+        "P1",
+        "2026-11-12",
+        "-30",
+        "70"
+       ],
+       [
+        "WH-A",
+        "P1",
+        "2026-11-13",
+        "0",
+        "70"
+       ],
+       [
+        "WH-A",
+        "P1",
+        "2026-11-14",
+        "0",
+        "70"
+       ],
+       [
+        "WH-A",
+        "P2",
+        "2026-11-10",
+        "50",
+        "50"
+       ],
+       [
+        "WH-A",
+        "P2",
+        "2026-11-11",
+        "0",
+        "50"
+       ],
+       [
+        "WH-A",
+        "P2",
+        "2026-11-12",
+        "0",
+        "50"
+       ],
+       [
+        "WH-A",
+        "P2",
+        "2026-11-13",
+        "-20",
+        "30"
+       ],
+       [
+        "WH-A",
+        "P2",
+        "2026-11-14",
+        "0",
+        "30"
+       ],
+       [
+        "WH-B",
+        "P1",
+        "2026-11-11",
+        "60",
+        "60"
+       ],
+       [
+        "WH-B",
+        "P1",
+        "2026-11-12",
+        "0",
+        "60"
+       ],
+       [
+        "WH-B",
+        "P1",
+        "2026-11-13",
+        "0",
+        "60"
+       ],
+       [
+        "WH-B",
+        "P1",
+        "2026-11-14",
+        "0",
+        "60"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "What you may add up. Across warehouses on one day: fine. Across days: never. Compare the three answers for product P1.",
+     "sql": "SELECT\n  (SELECT sum(closing_qty) FROM fact_stock_daily\n    WHERE product_id = 'P1' AND day = DATE '2026-11-14')                AS right_latest_day_all_warehouses,\n  (SELECT sum(closing_qty) FROM fact_stock_daily WHERE product_id = 'P1') AS wrong_added_over_days,\n  (SELECT round(avg(t), 1) FROM (SELECT day, sum(closing_qty) AS t\n     FROM fact_stock_daily WHERE product_id = 'P1' GROUP BY day))        AS right_average_stock;",
+     "out": {
+      "cols": [
+       "right_latest_day_all_warehouses",
+       "wrong_added_over_days",
+       "right_average_stock"
+      ],
+      "rows": [
+       [
+        "130",
+        "650",
+        "130"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "f-accumulating": {
+   "sources": [
+    {
+     "name": "silver_line_events",
+     "sql": "CREATE TABLE silver_line_events (line_id VARCHAR, event VARCHAR, event_date DATE);\nINSERT INTO silver_line_events VALUES\n  ('L1','ordered',  DATE '2026-11-08'), ('L1','picked',   DATE '2026-11-09'),\n  ('L1','shipped',  DATE '2026-11-09'), ('L1','delivered',DATE '2026-11-10'),\n  ('L2','ordered',  DATE '2026-11-08'), ('L2','picked',   DATE '2026-11-09'), ('L2','shipped', DATE '2026-11-10'),\n  ('L3','ordered',  DATE '2026-11-09'), ('L3','picked',   DATE '2026-11-10');",
+     "cols": [
+      "line_id",
+      "event",
+      "event_date"
+     ],
+     "rows": [
+      [
+       "L1",
+       "ordered",
+       "2026-11-08"
+      ],
+      [
+       "L1",
+       "picked",
+       "2026-11-09"
+      ],
+      [
+       "L1",
+       "shipped",
+       "2026-11-09"
+      ],
+      [
+       "L1",
+       "delivered",
+       "2026-11-10"
+      ],
+      [
+       "L2",
+       "ordered",
+       "2026-11-08"
+      ],
+      [
+       "L2",
+       "picked",
+       "2026-11-09"
+      ],
+      [
+       "L2",
+       "shipped",
+       "2026-11-10"
+      ],
+      [
+       "L3",
+       "ordered",
+       "2026-11-09"
+      ],
+      [
+       "L3",
+       "picked",
+       "2026-11-10"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "The processor, as a view: turn milestone events into one row per line. It is pure: events in, rows out.",
+     "sql": "CREATE VIEW v_line_pipeline AS\nSELECT line_id,\n       max(CASE WHEN event = 'ordered'   THEN event_date END) AS ordered_date,\n       max(CASE WHEN event = 'picked'    THEN event_date END) AS picked_date,\n       max(CASE WHEN event = 'shipped'   THEN event_date END) AS shipped_date,\n       max(CASE WHEN event = 'delivered' THEN event_date END) AS delivered_date\nFROM silver_line_events GROUP BY line_id;",
+     "out": null
+    },
+    {
+     "cap": "Night 1: build the table, with the measures worked out from the dates. Empty steps stay empty. An 'is_open' flag stops open lines hiding inside averages.",
+     "sql": "CREATE TABLE fact_line_pipeline AS\nSELECT line_id, ordered_date, picked_date, shipped_date, delivered_date,\n       date_diff('day', ordered_date, shipped_date)  AS days_order_to_ship,\n       delivered_date IS NULL                        AS is_open\nFROM v_line_pipeline;",
+     "out": {
+      "cols": [
+       "line_id",
+       "ordered_date",
+       "picked_date",
+       "shipped_date",
+       "delivered_date",
+       "days_order_to_ship",
+       "is_open"
+      ],
+      "rows": [
+       [
+        "L1",
+        "2026-11-08",
+        "2026-11-09",
+        "2026-11-09",
+        "2026-11-10",
+        "1",
+        "false"
+       ],
+       [
+        "L2",
+        "2026-11-08",
+        "2026-11-09",
+        "2026-11-10",
+        "",
+        "2",
+        "true"
+       ],
+       [
+        "L3",
+        "2026-11-09",
+        "2026-11-10",
+        "",
+        "",
+        "",
+        "true"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "Night 2: new events arrive. L2 is delivered, L3 ships, and a new line L4 is ordered.",
+     "sql": "INSERT INTO silver_line_events VALUES\n  ('L2','delivered',DATE '2026-11-11'), ('L3','shipped',DATE '2026-11-11'), ('L4','ordered',DATE '2026-11-11');",
+     "out": null
+    },
+    {
+     "cap": "Night 2, the writer: MERGE by line. Rows that exist are updated, new lines are inserted. Run it twice and nothing changes.",
+     "sql": "MERGE INTO fact_line_pipeline t\nUSING (SELECT line_id, ordered_date, picked_date, shipped_date, delivered_date,\n              date_diff('day', ordered_date, shipped_date) AS days_order_to_ship,\n              delivered_date IS NULL                       AS is_open\n       FROM v_line_pipeline) s\nON t.line_id = s.line_id\nWHEN MATCHED THEN UPDATE SET\n     ordered_date = s.ordered_date, picked_date = s.picked_date,\n     shipped_date = s.shipped_date, delivered_date = s.delivered_date,\n     days_order_to_ship = s.days_order_to_ship, is_open = s.is_open\nWHEN NOT MATCHED THEN INSERT VALUES\n     (s.line_id, s.ordered_date, s.picked_date, s.shipped_date, s.delivered_date,\n      s.days_order_to_ship, s.is_open);",
+     "out": {
+      "cols": [
+       "line_id",
+       "ordered_date",
+       "picked_date",
+       "shipped_date",
+       "delivered_date",
+       "days_order_to_ship",
+       "is_open"
+      ],
+      "rows": [
+       [
+        "L1",
+        "2026-11-08",
+        "2026-11-09",
+        "2026-11-09",
+        "2026-11-10",
+        "1",
+        "false"
+       ],
+       [
+        "L2",
+        "2026-11-08",
+        "2026-11-09",
+        "2026-11-10",
+        "2026-11-11",
+        "2",
+        "false"
+       ],
+       [
+        "L3",
+        "2026-11-09",
+        "2026-11-10",
+        "2026-11-11",
+        "",
+        "2",
+        "true"
+       ],
+       [
+        "L4",
+        "2026-11-11",
+        "",
+        "",
+        "",
+        "",
+        "true"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "The question: average days to ship, and how many lines are still open. Open lines are counted, never averaged away.",
+     "sql": "SELECT round(avg(days_order_to_ship), 2) AS avg_days_to_ship,\n       count(*) FILTER (WHERE is_open)   AS open_lines,\n       count(*)                          AS all_lines\nFROM fact_line_pipeline;",
+     "out": {
+      "cols": [
+       "avg_days_to_ship",
+       "open_lines",
+       "all_lines"
+      ],
+      "rows": [
+       [
+        "1.67",
+        "2",
+        "4"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "f-factless": {
+   "sources": [
+    {
+     "name": "silver_rep_visits",
+     "sql": "CREATE TABLE silver_rep_visits (visit_id VARCHAR, dealer_id VARCHAR, rep VARCHAR, visit_date DATE);\nINSERT INTO silver_rep_visits VALUES\n  ('V1','D1','Asha',DATE '2026-11-03'), ('V2','D1','Asha',DATE '2026-11-10'),\n  ('V3','D7','Ravi',DATE '2026-11-04');",
+     "cols": [
+      "visit_id",
+      "dealer_id",
+      "rep",
+      "visit_date"
+     ],
+     "rows": [
+      [
+       "V1",
+       "D1",
+       "Asha",
+       "2026-11-03"
+      ],
+      [
+       "V2",
+       "D1",
+       "Asha",
+       "2026-11-10"
+      ],
+      [
+       "V3",
+       "D7",
+       "Ravi",
+       "2026-11-04"
+      ]
+     ]
+    },
+    {
+     "name": "dim_dealer_names",
+     "sql": "CREATE TABLE dim_dealer_names (dealer_id VARCHAR, name VARCHAR);\nINSERT INTO dim_dealer_names VALUES ('D1','Sharma Tyres'),('D7','Patel Motors'),('D11','Khan Auto'),('D12','Rao Wheels');",
+     "cols": [
+      "dealer_id",
+      "name"
+     ],
+     "rows": [
+      [
+       "D1",
+       "Sharma Tyres"
+      ],
+      [
+       "D7",
+       "Patel Motors"
+      ],
+      [
+       "D11",
+       "Khan Auto"
+      ],
+      [
+       "D12",
+       "Rao Wheels"
+      ]
+     ]
+    },
+    {
+     "name": "silver_promo_offers",
+     "sql": "CREATE TABLE silver_promo_offers (promo_id VARCHAR, dealer_id VARCHAR, start_date DATE, end_date DATE);\nINSERT INTO silver_promo_offers VALUES\n  ('NOV-DEAL','D1', DATE '2026-11-10', DATE '2026-11-14'),\n  ('NOV-DEAL','D7', DATE '2026-11-10', DATE '2026-11-14'),\n  ('NOV-DEAL','D11',DATE '2026-11-10', DATE '2026-11-14'),\n  ('NOV-DEAL','D12',DATE '2026-11-10', DATE '2026-11-14');",
+     "cols": [
+      "promo_id",
+      "dealer_id",
+      "start_date",
+      "end_date"
+     ],
+     "rows": [
+      [
+       "NOV-DEAL",
+       "D1",
+       "2026-11-10",
+       "2026-11-14"
+      ],
+      [
+       "NOV-DEAL",
+       "D7",
+       "2026-11-10",
+       "2026-11-14"
+      ],
+      [
+       "NOV-DEAL",
+       "D11",
+       "2026-11-10",
+       "2026-11-14"
+      ],
+      [
+       "NOV-DEAL",
+       "D12",
+       "2026-11-10",
+       "2026-11-14"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "The event fact has keys and no numbers. One row per visit.",
+     "sql": "CREATE TABLE fact_dealer_visit AS\nSELECT DISTINCT visit_id, dealer_id, rep, visit_date      -- DISTINCT: a re-sent visit is still one visit\nFROM silver_rep_visits;",
+     "out": {
+      "cols": [
+       "visit_id",
+       "dealer_id",
+       "rep",
+       "visit_date"
+      ],
+      "rows": [
+       [
+        "V1",
+        "D1",
+        "Asha",
+        "2026-11-03"
+       ],
+       [
+        "V2",
+        "D1",
+        "Asha",
+        "2026-11-10"
+       ],
+       [
+        "V3",
+        "D7",
+        "Ravi",
+        "2026-11-04"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "Count the rows. Start from the dimension so dealers with no visits show 0 (a fact alone cannot show them).",
+     "sql": "SELECT d.name, count(v.visit_id) AS visits\nFROM dim_dealer_names d\nLEFT JOIN fact_dealer_visit v USING (dealer_id)\nGROUP BY d.name ORDER BY visits DESC, d.name;",
+     "out": {
+      "cols": [
+       "name",
+       "visits"
+      ],
+      "rows": [
+       [
+        "Sharma Tyres",
+        "2"
+       ],
+       [
+        "Patel Motors",
+        "1"
+       ],
+       [
+        "Khan Auto",
+        "0"
+       ],
+       [
+        "Rao Wheels",
+        "0"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "The coverage fact is silver_promo_offers: who was offered the promo. The question 'who did not order?' is an anti-join between coverage and what happened (orders in the promo window, from the transaction fact).",
+     "sql": "SELECT p.promo_id, p.dealer_id, n.name\nFROM silver_promo_offers p\nJOIN dim_dealer_names n USING (dealer_id)\nWHERE NOT EXISTS (\n  SELECT 1 FROM silver_order_lines o\n  WHERE o.dealer_id = p.dealer_id\n    AND o.promised_date BETWEEN p.start_date AND p.end_date)\nORDER BY p.dealer_id;",
+     "out": {
+      "cols": [
+       "promo_id",
+       "dealer_id",
+       "name"
+      ],
+      "rows": [
+       [
+        "NOV-DEAL",
+        "D11",
+        "Khan Auto"
+       ],
+       [
+        "NOV-DEAL",
+        "D12",
+        "Rao Wheels"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "f-aggregate": {
+   "sources": [],
+   "steps": [
+    {
+     "cap": "Group the transaction fact. Keep lines and otif_lines as counts.",
+     "sql": "CREATE TABLE fact_otif_region_day AS\nSELECT d.region,\n       CAST(strptime(CAST(f.promised_date_key AS VARCHAR), '%Y%m%d') AS DATE) AS promised_date,\n       count(*)                                  AS lines,\n       sum(CASE WHEN f.is_otif THEN 1 ELSE 0 END) AS otif_lines,\n       sum(f.qty_ordered)                        AS qty_ordered\nFROM fact_order_line f\nJOIN dim_dealer d USING (dealer_key)\nGROUP BY d.region, f.promised_date_key;",
+     "out": {
+      "cols": [
+       "region",
+       "promised_date",
+       "lines",
+       "otif_lines",
+       "qty_ordered",
+       "otif_pct"
+      ],
+      "rows": [
+       [
+        "North",
+        "2026-11-10",
+        "2",
+        "1",
+        "15",
+        "50"
+       ],
+       [
+        "North",
+        "2026-11-11",
+        "1",
+        "0",
+        "8",
+        "0"
+       ],
+       [
+        "Unknown",
+        "2026-11-13",
+        "1",
+        "1",
+        "6",
+        "100"
+       ],
+       [
+        "West",
+        "2026-11-13",
+        "1",
+        "1",
+        "4",
+        "100"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "Roll up to region. The percent of percents is wrong; the sum of counts is right.",
+     "sql": "SELECT region,\n       round(avg(100.0 * otif_lines / lines), 1)       AS wrong_avg_of_percents,\n       round(100.0 * sum(otif_lines) / sum(lines), 1)  AS right_percent_from_counts\nFROM fact_otif_region_day\nGROUP BY region ORDER BY region;",
+     "out": {
+      "cols": [
+       "region",
+       "wrong_avg_of_percents",
+       "right_percent_from_counts"
+      ],
+      "rows": [
+       [
+        "North",
+        "25",
+        "33.3"
+       ],
+       [
+        "Unknown",
+        "100",
+        "100"
+       ],
+       [
+        "West",
+        "100",
+        "100"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "f-consolidated": {
+   "sources": [
+    {
+     "name": "silver_sales_plan",
+     "sql": "CREATE TABLE silver_sales_plan (region VARCHAR, month VARCHAR, planned_qty INTEGER);\nINSERT INTO silver_sales_plan VALUES ('North','2026-11',100), ('West','2026-11',60), ('South','2026-11',40);",
+     "cols": [
+      "region",
+      "month",
+      "planned_qty"
+     ],
+     "rows": [
+      [
+       "North",
+       "2026-11",
+       "100"
+      ],
+      [
+       "West",
+       "2026-11",
+       "60"
+      ],
+      [
+       "South",
+       "2026-11",
+       "40"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "Two inputs brought to the same grain, then combined. COALESCE turns a missing side into 0 and gap shows what is missing.",
+     "sql": "CREATE TABLE fact_plan_vs_actual AS\nWITH actual AS (\n  SELECT d.region,\n         strftime(CAST(strptime(CAST(f.promised_date_key AS VARCHAR), '%Y%m%d') AS DATE), '%Y-%m') AS month,\n         sum(f.qty_ordered) AS actual_qty\n  FROM fact_order_line f JOIN dim_dealer d USING (dealer_key)\n  GROUP BY 1, 2)\nSELECT COALESCE(p.region, a.region) AS region,\n       COALESCE(p.month,  a.month)  AS month,\n       COALESCE(p.planned_qty, 0)   AS planned_qty,\n       COALESCE(a.actual_qty,  0)   AS actual_qty,\n       COALESCE(a.actual_qty, 0) - COALESCE(p.planned_qty, 0) AS gap\nFROM silver_sales_plan p\nFULL OUTER JOIN actual a ON a.region = p.region AND a.month = p.month;",
+     "out": {
+      "cols": [
+       "region",
+       "month",
+       "planned_qty",
+       "actual_qty",
+       "gap"
+      ],
+      "rows": [
+       [
+        "North",
+        "2026-11",
+        "100",
+        "23",
+        "-77"
+       ],
+       [
+        "South",
+        "2026-11",
+        "40",
+        "0",
+        "-40"
+       ],
+       [
+        "Unknown",
+        "2026-11",
+        "0",
+        "6",
+        "6"
+       ],
+       [
+        "West",
+        "2026-11",
+        "60",
+        "4",
+        "-56"
+       ]
+      ]
+     }
+    }
+   ]
+  },
+  "f-allocation": {
+   "sources": [
+    {
+     "name": "silver_alloc_lines",
+     "sql": "CREATE TABLE silver_alloc_lines (order_id VARCHAR, line_id VARCHAR, line_amount DECIMAL(12,2));\nINSERT INTO silver_alloc_lines VALUES\n  ('A1','A1-1',100.00), ('A1','A1-2',100.00), ('A1','A1-3',100.00),\n  ('B1','B1-1',1000.00), ('B1','B1-2', 400.00);",
+     "cols": [
+      "order_id",
+      "line_id",
+      "line_amount"
+     ],
+     "rows": [
+      [
+       "A1",
+       "A1-1",
+       "100.00"
+      ],
+      [
+       "A1",
+       "A1-2",
+       "100.00"
+      ],
+      [
+       "A1",
+       "A1-3",
+       "100.00"
+      ],
+      [
+       "B1",
+       "B1-1",
+       "1000.00"
+      ],
+      [
+       "B1",
+       "B1-2",
+       "400.00"
+      ]
+     ]
+    },
+    {
+     "name": "silver_order_freight",
+     "sql": "CREATE TABLE silver_order_freight (order_id VARCHAR, freight DECIMAL(12,2));\nINSERT INTO silver_order_freight VALUES ('A1',100.00), ('B1',90.00);",
+     "cols": [
+      "order_id",
+      "freight"
+     ],
+     "rows": [
+      [
+       "A1",
+       "100.00"
+      ],
+      [
+       "B1",
+       "90.00"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "The wrong way: round each line's share. Three equal lines each get 33.33, and 100.00 becomes 99.99.",
+     "sql": "SELECT order_id, freight, sum(share) AS allocated_naive\nFROM (SELECT l.order_id, f.freight,\n             round(f.freight * l.line_amount / sum(l.line_amount) OVER (PARTITION BY l.order_id), 2) AS share\n      FROM silver_alloc_lines l JOIN silver_order_freight f USING (order_id))\nGROUP BY order_id, freight ORDER BY order_id;",
+     "out": {
+      "cols": [
+       "order_id",
+       "freight",
+       "allocated_naive"
+      ],
+      "rows": [
+       [
+        "A1",
+        "100.00",
+        "99.99"
+       ],
+       [
+        "B1",
+        "90.00",
+        "90"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "The right way: each line gets (rounded running share) minus (rounded running share of the line before it). The pieces add up to exactly the freight.",
+     "sql": "CREATE TABLE fact_line_freight AS\nWITH running AS (\n  SELECT l.order_id, l.line_id, l.line_amount, f.freight,\n         sum(l.line_amount) OVER (PARTITION BY l.order_id ORDER BY l.line_id) AS cum_amount,\n         sum(l.line_amount) OVER (PARTITION BY l.order_id)                   AS total_amount\n  FROM silver_alloc_lines l JOIN silver_order_freight f USING (order_id)),\nshares AS (\n  SELECT *, round(freight * cum_amount / total_amount, 2) AS cum_share FROM running)\nSELECT order_id, line_id, line_amount,\n       cum_share - COALESCE(lag(cum_share) OVER (PARTITION BY order_id ORDER BY line_id), 0) AS freight_share\nFROM shares;",
+     "out": {
+      "cols": [
+       "order_id",
+       "line_id",
+       "line_amount",
+       "freight_share"
+      ],
+      "rows": [
+       [
+        "A1",
+        "A1-1",
+        "100.00",
+        "33.33"
+       ],
+       [
+        "A1",
+        "A1-2",
+        "100.00",
+        "33.34"
+       ],
+       [
+        "A1",
+        "A1-3",
+        "100.00",
+        "33.33"
+       ],
+       [
+        "B1",
+        "B1-1",
+        "1000.00",
+        "64.29"
+       ],
+       [
+        "B1",
+        "B1-2",
+        "400.00",
+        "25.71"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "The check every allocation needs: the shares add back to the header, order by order. This returns no rows when it is right.",
+     "sql": "SELECT f.order_id, f.freight, sum(a.freight_share) AS allocated\nFROM silver_order_freight f JOIN fact_line_freight a USING (order_id)\nGROUP BY f.order_id, f.freight\nHAVING sum(a.freight_share) <> f.freight;",
+     "out": {
+      "cols": [
+       "order_id",
+       "freight",
+       "allocated"
+      ],
+      "rows": []
+     }
+    }
+   ]
+  },
+  "f-adjustment": {
+   "sources": [
+    {
+     "name": "silver_sales_entries",
+     "sql": "CREATE TABLE silver_sales_entries (entry_id VARCHAR, line_id VARCHAR, recorded_on DATE, amount INTEGER, reason VARCHAR);\nINSERT INTO silver_sales_entries VALUES\n  ('E1','L1',DATE '2026-11-10', 1000, 'original'),\n  ('E2','L1',DATE '2026-11-20', -200, 'price corrected'),\n  ('E3','L1',DATE '2026-11-22',   50, 'late surcharge'),\n  ('E4','L2',DATE '2026-11-10',  400, 'original');",
+     "cols": [
+      "entry_id",
+      "line_id",
+      "recorded_on",
+      "amount",
+      "reason"
+     ],
+     "rows": [
+      [
+       "E1",
+       "L1",
+       "2026-11-10",
+       "1000",
+       "original"
+      ],
+      [
+       "E2",
+       "L1",
+       "2026-11-20",
+       "-200",
+       "price corrected"
+      ],
+      [
+       "E3",
+       "L1",
+       "2026-11-22",
+       "50",
+       "late surcharge"
+      ],
+      [
+       "E4",
+       "L2",
+       "2026-11-10",
+       "400",
+       "original"
+      ]
+     ]
+    }
+   ],
+   "steps": [
+    {
+     "cap": "The fact is the silver entries as they are: append-only, one row per entry.",
+     "sql": "CREATE TABLE fact_sales_ledger AS\nSELECT entry_id, line_id, recorded_on, amount, reason FROM silver_sales_entries;",
+     "out": {
+      "cols": [
+       "entry_id",
+       "line_id",
+       "recorded_on",
+       "amount",
+       "reason"
+      ],
+      "rows": [
+       [
+        "E1",
+        "L1",
+        "2026-11-10",
+        "1000",
+        "original"
+       ],
+       [
+        "E2",
+        "L1",
+        "2026-11-20",
+        "-200",
+        "price corrected"
+       ],
+       [
+        "E3",
+        "L1",
+        "2026-11-22",
+        "50",
+        "late surcharge"
+       ],
+       [
+        "E4",
+        "L2",
+        "2026-11-10",
+        "400",
+        "original"
+       ]
+      ]
+     }
+    },
+    {
+     "cap": "Today's truth, and what we knew on 15 November. Same table, one extra filter.",
+     "sql": "SELECT line_id,\n       sum(amount)                                                    AS amount_now,\n       sum(amount) FILTER (WHERE recorded_on <= DATE '2026-11-15')   AS amount_reported_on_15_nov\nFROM fact_sales_ledger GROUP BY line_id ORDER BY line_id;",
+     "out": {
+      "cols": [
+       "line_id",
+       "amount_now",
+       "amount_reported_on_15_nov"
+      ],
+      "rows": [
+       [
+        "L1",
+        "850",
+        "1000"
+       ],
+       [
+        "L2",
+        "400",
+        "400"
+       ]
+      ]
+     }
+    }
+   ]
+  }
+ }
+}

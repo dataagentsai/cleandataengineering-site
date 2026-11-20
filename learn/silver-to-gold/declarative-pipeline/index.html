@@ -1,0 +1,339 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Can Silver to Gold Be a Databricks Declarative Pipeline?</title>
+<meta name="description" content="Whether the silver-to-gold layer can be a Lakeflow declarative pipeline: the example as AUTO CDC and materialized views, replayed night by night, with pros, cons and a verdict per kind of gold table."><link rel="canonical" href="https://cleandataengineering.ai/learn/silver-to-gold/declarative-pipeline/">
+<meta property="og:title" content="Can Silver to Gold Be a Databricks Declarative Pipeline?"><meta property="og:description" content="Whether the silver-to-gold layer can be a Lakeflow declarative pipeline: the example as AUTO CDC and materialized views, replayed night by night, with pros, cons and a verdict per kind of gold table."><meta property="og:url" content="https://cleandataengineering.ai/learn/silver-to-gold/declarative-pipeline/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .gh .fig { border:var(--line); border-radius:var(--wob); padding:12px 14px; margin:16px 0; background:#fff; overflow-x:auto; }
+  .gh .fig svg { width:100%; min-width:700px; height:auto; display:block; } .gh .fig text { font-family:var(--hand); fill:#111; }
+  .gh .fig p { font-size:13.5px; color:var(--muted); margin:6px 0 0; }
+  .gh .box { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--butter-wash); }
+  .gh .warn { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--rose-wash); }
+  .gh table.t td { font-size:14px; } .gh td.v { font-weight:700; }
+  .gh .toc { columns:2; } @media (max-width:700px){ .gh .toc { columns:1; } }
+  .gh ol.steps li { margin-bottom:6px; }
+</style><style>
+  .gh tr.hl td { background:#fff6dc; } .gh tr.dim td { color:#8a8a8a; }
+  .gh .part { border-top:3px solid var(--ink); margin-top:44px; padding-top:8px; }
+  .gh .kind { border:var(--line); border-radius:var(--wob); padding:4px 18px 10px; margin:22px 0; background:#fff; }
+  .gh .rpw { display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:10px 0; }
+  .gh .rpw div { border:1.5px solid var(--ink); border-radius:10px; padding:8px 12px; font-size:14.5px; }
+  .gh .rpw b { display:block; margin-bottom:4px; }
+  .gh .rpw .r { background:#eef3fb; } .gh .rpw .p { background:#eaf6ef; } .gh .rpw .w { background:#fff6dc; }
+  @media (max-width:760px){ .gh .rpw { grid-template-columns:1fr; } }
+  .gh .start { border:var(--line); border-radius:var(--wob); padding:10px 18px; margin:16px 0; background:#eaf6ef; }
+  .gh details.code summary { cursor:pointer; font-weight:700; margin:10px 0; }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Can silver to gold be a Databricks declarative pipeline?", "description": "Whether the silver-to-gold layer can be a Lakeflow declarative pipeline: the example as AUTO CDC and materialized views, replayed night by night, with pros, cons and a verdict per kind of gold table.", "url": "https://cleandataengineering.ai/learn/silver-to-gold/declarative-pipeline/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-20", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "BreadcrumbList", "itemListElement": [{"@type": "ListItem", "position": 1, "name": "Data engineering", "item": "https://cleandataengineering.ai/data-engineering/"}, {"@type": "ListItem", "position": 2, "name": "Gold data modelling", "item": "https://cleandataengineering.ai/learn/gold-data-modelling/"}, {"@type": "ListItem", "position": 3, "name": "Silver to gold", "item": "https://cleandataengineering.ai/learn/silver-to-gold/"}, {"@type": "ListItem", "position": 4, "name": "Databricks declarative pipeline?", "item": "https://cleandataengineering.ai/learn/silver-to-gold/declarative-pipeline/"}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Concepts</h4><ul><li><details><summary><a href="/leaders/">For leaders</a></summary><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/leaders/spec-driven/">Spec-driven development: agents</a></li><li><a href="/leaders/spec-driven/data-platform/">Spec-driven development: data platforms</a></li><li><a href="/papers/">Technical papers</a></li></ul></details></li><li><details><summary><a href="/learn/fundamentals/">Fundamentals</a></summary><ul><li><a href="/learn/fundamentals/">All fundamentals</a></li><li><a href="/learn/fundamentals/performance/">Performance</a></li><li><a href="/learn/fundamentals/cost/">Cost</a></li><li><a href="/learn/fundamentals/processing/">Processing</a></li><li><a href="/learn/fundamentals/security/">Security</a></li><li><a href="/learn/fundamentals/storage/">Storage</a></li><li><a href="/learn/fundamentals/database-families/">Database families</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/">Data systems</a></summary><ul><li><a href="/learn/data-systems/">The whole system, end to end</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li><li class="sub">Upstreams</li><li><a href="/learn/data-systems/upstreams/">Know your sources</a></li><li><a href="/learn/data-systems/upstreams/big-picture/">Upstreams, the big picture</a></li><li><a href="/learn/data-systems/upstreams/apis/">API sources</a></li><li><a href="/learn/data-systems/upstreams/files/">File sources</a></li><li><a href="/learn/data-systems/upstreams/joins/">Learning the joins</a></li><li><a href="/learn/data-systems/upstreams/answers/">Where the answers go</a></li><li><a href="/learn/data-systems/upstreams/questionnaire/">Source system questionnaire</a></li><li class="sub">Downstreams</li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/platform/">Data and AI platform</a></summary><ul><li class="sub">Conceptual architecture</li><li><a href="/learn/data-systems/platform/">The platform, whole</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#hops">Data engineering</a></summary><ul><li><a href="/learn/data-platform-suite/">Our platform, picture to code</a></li><li class="sub">The hops</li><li><a href="/learn/data-platform-architecture/ingestion/">Hop 1: sources to bronze</a></li><li><a href="/learn/data-platform-architecture/bronze-to-silver/">Hop 2: bronze to silver</a></li><li><a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a></li><li><a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a></li><li class="sub">Tables and formats</li><li><a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a></li><li><a href="/learn/table-maintenance/">Who maintains your tables</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse: who owns the catalog?</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li class="sub">Databricks interview prep</li><li><a href="/learn/databricks-interview/">All interview topics</a></li><li><a href="/learn/databricks-interview/delta-maintenance/">OPTIMIZE, VACUUM, compaction</a></li><li><a href="/learn/databricks-interview/table-maintenance-pictures/">Table maintenance in pictures (real runs)</a></li><li><a href="/learn/databricks-interview/clustering-and-compaction/">Compaction, partitioning, Z-order, liquid</a></li><li><a href="/learn/databricks-interview/maintenance-strategy/">Maintenance strategy: auto or scheduled</a></li><li><a href="/learn/databricks-interview/slow-writes/">Why writes are slow</a></li><li><a href="/learn/databricks-interview/backup-and-recovery-azure/">Backup and recovery on Azure</a></li><li><a href="/learn/databricks-interview/tagging-best-practices/">Tagging best practices</a></li><li><a href="/learn/databricks-interview/row-level-security/">Row-level security and masking</a></li><li><a href="/learn/databricks-interview/compute-choice/">Which compute for which job</a></li><li><a href="/learn/databricks-interview/joins/">Join types</a></li><li><a href="/learn/databricks-interview/skew-and-shuffle/">Skew, salting and shuffle</a></li><li><a href="/learn/databricks-interview/aqe-photon-po/">AQE, Photon, Predictive Optimization</a></li><li><a href="/learn/databricks-interview/cost-and-performance/">Biggest cost and performance levers</a></li><li><a href="/learn/databricks-interview/declarative-and-semantic/">What declarative means + semantic example</a></li><li><a href="/learn/databricks-interview/asset-bundles/">Asset Bundles</a></li><li><a href="/learn/databricks-interview/lakeflow-connect/">Lakeflow Connect</a></li><li><a href="/learn/databricks-interview/uniform/">UniForm</a></li><li><a href="/learn/databricks-interview/vector-search/">Vector Search</a></li><li><a href="/learn/databricks-interview/dbt-and-odcs/">dbt and ODCS</a></li><li><a href="/learn/databricks-interview/egress-and-ingress/">Egress and ingress cost</a></li><li><a href="/learn/databricks-interview/hard-problems-and-questions/">Hard problems and question bank</a></li><li class="sub">History, SCD and facts</li><li><a href="/learn/gold-data-modelling/">Gold data modelling</a></li><li><a href="/learn/silver-to-gold/">Silver to gold: the harness</a></li><li><a href="/learn/silver-to-gold/worked-example/">› Worked example (start here)</a></li><li><a href="/learn/silver-to-gold/kinds-of-fact/">› Six kinds of fact</a></li><li><a href="/learn/silver-to-gold/fact-examples/">› Fact examples in SQL</a></li><li><a href="/learn/silver-to-gold/dimension-examples/">› Dimension examples in SQL</a></li><li><a href="/learn/silver-to-gold/rulebook-harness/">› Rulebook: the harness</a></li><li><a href="/learn/spark-declarative-pipelines/">Declarative pipelines: open source vs Lakeflow</a></li><li><a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD2: AUTO CDC or own PySpark?</a></li><li><a href="/learn/gold-harness-spec/">Gold harness spec: facts and SCD2</a></li><li><a href="/learn/time-travel-vs-scd2/">Time travel as SCD Type 2?</a></li><li class="sub">Streaming and real time</li><li><a href="/learn/streaming/">Streaming on AWS and Databricks</a></li><li><a href="/learn/streaming/options/">Streaming: all options</a></li><li><a href="/learn/streaming/sim/">Streaming simulator</a></li><li><a href="/learn/streaming/real-time-mode/">Databricks real time: RTM and Lakehouse//RT</a></li><li class="sub">Quality and testing</li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/data-platform-sim/data-quality/">Data quality, metadata-driven</a></li><li class="sub">Hands-on simulators</li><li><a href="/learn/data-platform-sim/">One batch through Spark and Delta</a></li><li><a href="/learn/data-platform-sim/spark/">Spark internals</a></li><li><a href="/learn/data-platform-sim/delta/">Delta Lake internals</a></li><li><a href="/learn/data-platform-sim/performance/">Spark performance: 12 problems</a></li><li><a href="/learn/data-platform-sim/problems/">Problems solved: SCD2, late data, duplicates</a></li><li class="sub">On AWS</li><li><a href="/learn/data-platform-architecture/aws-databricks/">AWS + Databricks, ETL end to end</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse on AWS: A vs B</a></li><li><a href="/learn/aws-data-services/">AWS data services catalog</a></li><li class="sub">Open specs</li><li><a href="/learn/datatwin/">DataTwin</a></li><li><a href="/projects/data-eng-specs/">Clean Data Engineering specs</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/semantic-layer/">BI and analytics</a></summary><ul><li><a href="/concepts/semantic-layer/">Hop 4: the semantic layer</a></li><li><a href="/writing/genie-metric-views/">Genie and metric views</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/">Power BI vs Databricks AI/BI</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/power-bi/">Power BI and Fabric, in depth</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/ai-bi/">Databricks AI/BI, in depth</a></li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/#ml-engineering">ML</a></summary><ul><li><a href="/concepts/#ml-engineering">Key ML ideas (pages coming)</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/ai-universe/">AI</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness-intro/">Agent Harness, the big picture</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/agent-harness-stack-map/">Agent Harness: architecture map</a></li><li><a href="/learn/drug-safety-agent-databricks/">Drug-safety agent on Databricks: the tour</a></li><li><a href="/learn/agent-frameworks/">Agent frameworks: when to use which</a></li><li><a href="/learn/which-model/">Which AI model for which job</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li><li><a href="/learn/ai-governance/">AI governance: running AI you can trust</a></li><li><a href="/learn/ai-gateways/">AI gateways: which one to use</a></li><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">Open spec: AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">Open spec: AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">Open spec: AgentTwin</a></li><li><a href="/lab/">The AgentTwin Lab</a></li><li><a href="https://github.com/dataagentsai/reference-agent">Code: Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">Code: AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Code: Eval Harness Framework</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#concerns">Across all of them</a></summary><ul><li><a href="/learn/data-systems/platform/#concerns">All 24 concerns</a></li><li><a href="/learn/data-platform-mind-map/">Mind map: every concern, every cloud</a></li><li><a href="/learn/data-systems/platform/layout/">Layout: catalogs and schemas</a></li><li><a href="/learn/data-systems/platform/environments/">Environments and CI/CD</a></li><li><a href="/learn/data-systems/platform/cost/">Cost and FinOps</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li><li><a href="/learn/data-platform-architecture/test-strategy/">Test strategy in practice</a></li></ul></details></li><li><a href="/concepts/#a-z">Key concepts, A to Z</a></li></ul><h4>On your cloud</h4><ul><li><details><summary><a href="/platforms/databricks/">Databricks</a></summary><ul><li><a href="/platforms/databricks/#systems">Data systems</a></li><li><a href="/platforms/databricks/#de">Data engineering</a></li><li><a href="/platforms/databricks/#bi">BI and analytics</a></li><li><a href="/platforms/databricks/#ml">ML</a></li><li><a href="/platforms/databricks/#ai">AI</a></li><li><a href="/platforms/databricks/#across">Across all of them</a></li><li><a href="/platforms/databricks/#paths">Learning paths</a></li><li><a href="/platforms/databricks/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/aws/">AWS</a></summary><ul><li><a href="/platforms/aws/#systems">Data systems</a></li><li><a href="/platforms/aws/#de">Data engineering</a></li><li><a href="/platforms/aws/#bi">BI and analytics</a></li><li><a href="/platforms/aws/#ml">ML</a></li><li><a href="/platforms/aws/#ai">AI</a></li><li><a href="/platforms/aws/#across">Across all of them</a></li><li><a href="/platforms/aws/#paths">Learning paths</a></li><li><a href="/platforms/aws/#certs">Certifications</a></li><li><a href="/learn/aws-data-services/">AWS data services: all 66</a></li></ul></details></li><li><details><summary><a href="/platforms/azure/">Azure and Fabric</a></summary><ul><li><a href="/platforms/azure/#systems">Data systems</a></li><li><a href="/platforms/azure/#de">Data engineering</a></li><li><a href="/platforms/azure/#bi">BI and analytics</a></li><li><a href="/platforms/azure/#ml">ML</a></li><li><a href="/platforms/azure/#ai">AI</a></li><li><a href="/platforms/azure/#across">Across all of them</a></li><li><a href="/platforms/azure/#paths">Learning paths</a></li><li><a href="/platforms/azure/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/gcp/">Google Cloud</a></summary><ul><li><a href="/platforms/gcp/#systems">Data systems</a></li><li><a href="/platforms/gcp/#de">Data engineering</a></li><li><a href="/platforms/gcp/#bi">BI and analytics</a></li><li><a href="/platforms/gcp/#ml">ML</a></li><li><a href="/platforms/gcp/#ai">AI</a></li><li><a href="/platforms/gcp/#across">Across all of them</a></li><li><a href="/platforms/gcp/#paths">Learning paths</a></li><li><a href="/platforms/gcp/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/open/">Open source</a></summary><ul><li><a href="/platforms/open/#systems">Data systems</a></li><li><a href="/platforms/open/#de">Data engineering</a></li><li><a href="/platforms/open/#bi">BI and analytics</a></li><li><a href="/platforms/open/#ml">ML</a></li><li><a href="/platforms/open/#ai">AI</a></li><li><a href="/platforms/open/#across">Across all of them</a></li><li><a href="/platforms/open/#paths">Learning paths</a></li><li><a href="/platforms/open/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/anthropic/">Claude (Anthropic)</a></summary><ul><li><a href="/platforms/anthropic/#ai">AI</a></li><li><a href="/platforms/anthropic/#certs">Certifications</a></li></ul></details></li><li><a href="/certifications/">All certifications</a></li></ul><h4>Your role</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/data-engineering/">Data Engineering</a></summary><ul><li><a href="/data-engineering/">Start here</a></li><li><a href="/paths/data-engineering/">Learning path</a></li><li><a href="/data-engineering/#tools">Practice and simulators</a></li><li><a href="/projects/?subject=data">Projects to join</a></li><li><a href="/concepts/#data-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/">Learning path</a></li><li><a href="/learn/agent-harness-sim/">Simulator: Agent Harness</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li><li><a href="/projects/?subject=ai">Projects to join</a></li><li><a href="/concepts/#ai-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/">Learning path</a></li><li><a href="/learn/llm-api-sim/">Simulator: Claude API</a></li><li><a href="/projects/?subject=llm">Projects to join</a></li><li><a href="/concepts/#llm-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/">Learning path</a></li><li><a href="/concepts/#ml-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/">Learning path</a></li><li><a href="/concepts/#software-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/forward-deployed/">Start here: the roadmap</a></li><li><a href="/paths/forward-deployed/">Learning path</a></li><li><a href="/concepts/#forward-deployed">Key concepts</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li><li><a href="/projects/">All projects to join</a></li></ul><h4>How we work</h4><ul><li><details><summary><a href="/how-we-work/#thinking">Thinking principles</a></summary><ul><li><a href="/how-we-work/#thinking">All thinking principles</a></li><li><a href="/how-we-work/critical-thinking/">Critical thinking in data projects</a></li></ul></details></li><li><a href="/how-we-work/#ba">Business analysis</a></li><li><details><summary><a href="/how-we-work/#pm">Project management</a></summary><ul><li><a href="/how-we-work/#pm">All project management</a></li><li><a href="/how-we-work/estimation/">Estimation mistakes in data projects</a></li><li><a href="/how-we-work/project-management-mistakes/">Top project management mistakes</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li></ul></details></li><li><details><summary><a href="/learn/technical-anchor/">The technical anchor</a></summary><ul><li><a href="/learn/technical-anchor/">The role</a></li><li><a href="/learn/technical-anchor/discovery/">Discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li></ul></details></li></ul><h4>Causes and deep tech</h4><ul><li><details><summary><a href="/ai-for-cause/">AI for a cause</a></summary><ul><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul></details></li><li><details><summary><a href="/deep-tech/">Deep tech</a></summary><ul><li><a href="/problems/">Hard problems</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul></details></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li><li><a href="/about/#join">Write or teach</a></li><li><a href="/writing/">Blog</a></li><li><a href="/research/">All open specifications</a></li><li><a href="/assets/">All open-source code</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<p class="crumbs"><a href="/">Home</a> › <a href="/data-engineering/">Data engineering</a> › <a href="/learn/gold-data-modelling/">Gold data modelling</a> › <a href="/learn/silver-to-gold/">Silver to gold</a> › Databricks declarative pipeline?</p>
+<p class="eyebrow" style="margin-top:22px">Silver to gold · Decide · 9 min read</p>
+<h1>Can silver to gold be a Databricks declarative pipeline?</h1>
+<p class="lede">AUTO CDC and materialized views can build gold. Here is what the example looks like that way, what you gain, what you give up, and a verdict for each kind of gold table. <span class="note">This is one page of <a href="/learn/silver-to-gold/">Silver to gold</a>.</span></p>
+<div class="gh">
+<ul class="toc"><li><a href="#c-short">Can silver to gold be a Databricks declarative pipeline?</a></li><li><a href="#c-sketch">What Part A&#x27;s example looks like as a declarative pipeline</a></li><li><a href="#c-pros">Pros and cons</a></li></ul>
+<section id="c-short" class="part"><p class="eyebrow">Part C · 1</p><h2>Can silver to gold be a Databricks declarative pipeline?</h2>
+<div class="box"><b>Short answer.</b> It <i>can</i> run as a Lakeflow Spark Declarative Pipeline, but we do <b>not</b> recommend it for this layer. Gold is where the bookkeeping lives: choosing which days to rebuild, checking before writing, completeness, restatements, correction plans, the row ledger and stable keys. A declarative pipeline gives none of these. <b>Our default is the harness</b>, run as a Databricks job (or on any Spark). Two optional exceptions: materialized views for some aggregates, where a Databricks team wants them, and AUTO CDC for dimensions, but only if silver does not already keep history. Go fully declarative only for small marts where nobody audits past numbers.</div>
+<p><b>Why dimensions stay in the harness.</b> In our platform, silver already keeps SCD Type 2 history (our own PySpark engine). Gold only adds stable keys (1, 2, 3 from a key map) on top of those versions. AUTO CDC would redo history that silver already holds, and give hash keys instead of stable integers. Declarative pipelines do have a natural home in our platform: bronze to silver, as an optional engine for teams that ask for it.</p>
+<p>First, what "declarative" means: you say <i>what</i> each table is ("fact_otif is build_otif over these silver tables"), and the engine works out <i>how</i>: order, what is new, retries, refresh. The harness is the opposite. You (well, the shared code) say exactly how each night runs. More on the idea itself: <a href="/learn/spark-declarative-pipelines/">Declarative or not</a>.</p>
+<div class="fig"><svg viewBox="0 0 1000 268" role="img" aria-label="Three ways to run silver to gold. 1, the harness, our default: facts, dimensions and aggregates in the harness, run by a Databricks job or any Spark on any cloud, same code on a laptop; pursue. 2, hybrid: facts and dimensions in the harness, some aggregates as materialized views where a team wants them; pursue with care. 3, all declarative: dimensions by AUTO CDC, facts and aggregates as materialized views, checks as expectations; only for small marts nobody audits."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><rect x="10" y="10" width="310" height="248" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="165.0" y="139.0" font-size="15" text-anchor="middle"></text><text x="165" y="38" font-size="16" text-anchor="middle">1. Harness (our default)</text><rect x="30" y="56" width="270" height="34" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="165.0" y="77.33333333333333" font-size="13" text-anchor="middle">facts, dims, aggregates: harness</text><rect x="30" y="98" width="270" height="34" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="165.0" y="119.33333333333333" font-size="13" text-anchor="middle">run by a Databricks job</text><rect x="30" y="140" width="270" height="34" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="165.0" y="161.33333333333334" font-size="13" text-anchor="middle">or any Spark, any cloud</text><rect x="30" y="182" width="270" height="34" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="165.0" y="203.33333333333334" font-size="13" text-anchor="middle">same code on a laptop</text><text x="165" y="240" font-size="14" text-anchor="middle">Pursue</text><rect x="340" y="10" width="310" height="248" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="495.0" y="139.0" font-size="15" text-anchor="middle"></text><text x="495" y="38" font-size="16" text-anchor="middle">2. Hybrid</text><rect x="360" y="56" width="270" height="34" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="495.0" y="77.33333333333333" font-size="13" text-anchor="middle">facts and dims: the harness</text><rect x="360" y="98" width="270" height="34" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="495.0" y="119.33333333333333" font-size="13" text-anchor="middle">some aggregates: materialized</text><rect x="360" y="140" width="270" height="34" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="495.0" y="161.33333333333334" font-size="13" text-anchor="middle">views, where a team wants them</text><rect x="360" y="182" width="270" height="34" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="495.0" y="203.33333333333334" font-size="13" text-anchor="middle">one job runs harness, then MVs</text><text x="495" y="240" font-size="14" text-anchor="middle">Pursue with care</text><rect x="670" y="10" width="310" height="248" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="825.0" y="139.0" font-size="15" text-anchor="middle"></text><text x="825" y="38" font-size="16" text-anchor="middle">3. All declarative</text><rect x="690" y="56" width="270" height="34" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="825.0" y="77.33333333333333" font-size="13" text-anchor="middle">dim_dealer: AUTO CDC (SCD2)</text><rect x="690" y="98" width="270" height="34" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="825.0" y="119.33333333333333" font-size="13" text-anchor="middle">fact_otif: materialized view</text><rect x="690" y="140" width="270" height="34" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="825.0" y="161.33333333333334" font-size="13" text-anchor="middle">aggregates: materialized views</text><rect x="690" y="182" width="270" height="34" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="825.0" y="203.33333333333334" font-size="13" text-anchor="middle">checks: expectations</text><text x="825" y="240" font-size="14" text-anchor="middle">Only small marts nobody audits</text></svg><p>Three ways to run this layer. The harness is the default; the other two are options.</p></div>
+</section>
+<section id="c-sketch" class="part"><p class="eyebrow">Part C · 2</p><h2>What Part A's example looks like as a declarative pipeline</h2>
+<p>The same tyre example, written for Lakeflow. Read it next to Part A. The build is the same function. What changes is everything around it.</p>
+<div class="warn"><b>Status:</b> this sketch was written for this page and has <b>not</b> been run on Databricks. Function names are from the Lakeflow Python API as documented in November 2026; check the current docs before copying.</div>
+<pre class="code"># Lakeflow Spark Declarative Pipelines (Databricks). A sketch written for this page: NOT run on Databricks yet.
+from pyspark import pipelines as dp
+from pyspark.sql import functions as F
+from builds import build_otif                      # the same pure build as Part A, unchanged
+
+# Dimension: SCD Type 2 from the dealer change feed. The engine handles order, repeats and deletes.
+dp.create_streaming_table(&quot;dim_dealer&quot;)
+dp.create_auto_cdc_flow(
+    target=&quot;dim_dealer&quot;,
+    source=&quot;dealer_changes&quot;,                       # a streaming view over silver dealer changes
+    keys=[&quot;dealer_id&quot;],
+    sequence_by=F.col(&quot;effective_date&quot;),           # versions are stamped with THIS column (see the cons)
+    stored_as_scd_type=2,
+)
+
+# Dealer versions with a key and a date range, shared by the fact and the aggregate.
+@dp.materialized_view(name=&quot;dealer_versions&quot;)
+def dealer_versions():
+    return (spark.read.table(&quot;dim_dealer&quot;)
+            .select(&quot;dealer_id&quot;, &quot;region&quot;,
+                    F.xxhash64(&quot;dealer_id&quot;, &quot;__START_AT&quot;).alias(&quot;dealer_key&quot;),   # a hash, not 1, 2, 3
+                    F.col(&quot;__START_AT&quot;).alias(&quot;vf&quot;),
+                    F.coalesce(&quot;__END_AT&quot;, F.lit(&quot;9999-12-31&quot;).cast(&quot;date&quot;)).alias(&quot;vt&quot;)))
+
+# Fact: a materialized view. The engine decides each night whether it can refresh
+# incrementally or must recompute; you do not choose which days are rebuilt.
+@dp.materialized_view(name=&quot;fact_otif&quot;)
+@dp.expect_or_fail(&quot;dealer looked up&quot;, &quot;dealer_key IS NOT NULL&quot;)
+def fact_otif():
+    lines = spark.read.table(&quot;silver.order_lines&quot;).where(&quot;dealer_id NOT IN (&#x27;TEST01&#x27;)&quot;)
+    dels = spark.read.table(&quot;silver.deliveries&quot;)
+    built = build_otif(lines, dels, {})
+    dim = spark.read.table(&quot;dealer_versions&quot;).drop(&quot;region&quot;)
+    on = ((built.dealer_id == dim.dealer_id)
+          &amp; (built.promised_date &gt;= dim.vf) &amp; (built.promised_date &lt; dim.vt))
+    return (built.join(dim, on, &quot;left&quot;).drop(dim.dealer_id, &quot;vf&quot;, &quot;vt&quot;)
+                 .withColumn(&quot;dealer_key&quot;, F.coalesce(&quot;dealer_key&quot;, F.lit(-1))))
+
+# Grain check: expectations look at one row at a time, so a check across rows needs its own table.
+@dp.materialized_view(name=&quot;check_fact_otif_grain&quot;)
+@dp.expect_or_fail(&quot;one row per line&quot;, &quot;n = 1&quot;)
+def check_fact_otif_grain():
+    return spark.read.table(&quot;fact_otif&quot;).groupBy(&quot;line_id&quot;).agg(F.count(&quot;*&quot;).alias(&quot;n&quot;))
+
+# Aggregate: the best fit for a materialized view.
+@dp.materialized_view(name=&quot;otif_by_region_day&quot;)
+def otif_by_region_day():
+    return (spark.read.table(&quot;fact_otif&quot;)
+            .join(spark.read.table(&quot;dealer_versions&quot;).select(&quot;dealer_key&quot;, &quot;region&quot;), &quot;dealer_key&quot;, &quot;left&quot;)
+            .groupBy(&quot;promised_date&quot;, &quot;region&quot;)
+            .agg(F.count(&quot;*&quot;).alias(&quot;lines&quot;), F.sum(&quot;otif&quot;).alias(&quot;otif_lines&quot;)))</pre>
+<h3>Each harness step, and what the declarative pipeline does instead</h3>
+<div class="tw"><table class="t"><tr><th>Harness step (Part A)</th><th>In a declarative pipeline</th><th>Compared with the harness</th></tr><tr><td><b>1-2. Bookmarks, changed rows</b></td><td>The engine keeps them (checkpoints, refresh tracking). You write none.</td><td>Better: less code</td></tr><tr><td><b>3. Which windows to rebuild</b></td><td>A materialized view refreshes as the engine decides: incrementally when it can, otherwise a full recompute. You cannot say &#x27;rebuild only 11 and 13 Nov&#x27;.</td><td>Engine&#x27;s choice, not yours</td></tr><tr><td><b>4. The build</b></td><td>The same pure function, called inside the decorated function.</td><td>Same</td></tr><tr><td><b>5. Keys as of the event</b></td><td>Your own range join to the AUTO CDC table (__START_AT, __END_AT). No key map, so keys are hashes or business key plus start date.</td><td>Possible, with work</td></tr><tr><td><b>5b. Late dealer re-keyed</b></td><td>In a materialized view, yes, on the next recompute. In a streaming table, no: a stream joined to a dimension sees the dimension as it was when each row was processed.</td><td>Depends on the table type</td></tr><tr><td><b>6. Completeness</b></td><td>A column you compute in the view from a table of received files.</td><td>Possible</td></tr><tr><td><b>6b. Checks</b></td><td>Expectations check one row at a time. Grain, totals and ledger balance need extra check tables, as in the sketch.</td><td>Partly</td></tr><tr><td><b>6c. Row ledger</b></td><td>The event log has rows written per table and expectation pass and fail counts. Counts per filter and per join are not there.</td><td>Partly</td></tr><tr><td><b>Restatements</b></td><td>A view keeps no record of the number it used to show. Comparing with the last published version needs a step outside the pipeline.</td><td>Missing</td></tr><tr><td><b>Correction plans for closed months</b></td><td>No such idea. You change silver, or force a full refresh.</td><td>Missing</td></tr><tr><td><b>7. Write, then move the bookmark</b></td><td>Each table&#x27;s refresh is all or nothing. But the pipeline as a whole is not: for a while, readers can see the new fact with the old aggregate.</td><td>Better per table; watch across tables</td></tr></table></div>
+<h3>Part A's nights, replayed in your head on Lakeflow</h3>
+<ul><li><b>Night 1:</b> fact_otif is computed. L5 gets -1, 13 Nov is flagged incomplete (if you added the completeness column). No bookmark code was needed.</li>
+<li><b>Night 2:</b> the view refreshes. L3 shows 8 delivered, L5 becomes key 4 by itself. Good. But nobody records that 11 Nov and 13 Nov changed after they were shown. Was it a refresh of three days or of all history? The event log tells you afterwards; you did not choose.</li>
+<li><b>The crash:</b> the engine retries, and each table's refresh is all or nothing. Good, and no code needed.</li>
+<li><b>The careless join:</b> caught only if you wrote the grain check view. Without it, the doubled L3 goes straight to the dashboard.</li></ul>
+</section>
+<section id="c-pros" class="part"><p class="eyebrow">Part C · 3</p><h2>Pros and cons</h2>
+<h3>Pros</h3><div class="tw"><table class="t"><tr><th>Pro</th><th>What it gives</th><th>Matters most when</th></tr><tr><td><b>Far less plumbing</b></td><td>No bookmarks, run order, retries or checkpoints to write and test</td><td>Small teams, many simple tables</td></tr><tr><td><b>The dependency graph is drawn for you</b></td><td>Tables run in the right order; lineage and a UI come free</td><td>Many tables depending on each other</td></tr><tr><td><b>SCD Type 2 dimensions in a few lines</b></td><td>AUTO CDC handles out-of-order changes, repeats and deletes</td><td>Silver does not keep history already</td></tr><tr><td><b>Late dimension members fixed by themselves</b></td><td>A materialized view is recomputed against today&#x27;s dimension, so L5&#x27;s -1 becomes 4 with no extra code</td><td>Facts built as materialized views</td></tr><tr><td><b>Quality rules and run history in one place</b></td><td>Expectations with keep, drop or fail; a queryable event log</td><td>Teams without their own run log</td></tr><tr><td><b>Aggregates kept up to date cheaply</b></td><td>Incremental refresh of materialized views on serverless, when the engine can</td><td>Dashboards over big facts</td></tr><tr><td><b>Catches broken pipelines before they run</b></td><td>Validate (dry-run) finds missing tables, columns and cycles with no data</td><td>Every pipeline, in CI</td></tr><tr><td><b>Your build still works</b></td><td>The pure build from Part A runs inside unchanged, and is still tested on a laptop</td><td>Keeping the option to leave</td></tr></table></div>
+<h3>Cons</h3><div class="tw"><table class="t"><tr><th>Con</th><th>What goes wrong</th><th>What to do about it</th></tr><tr><td><b>You do not control how gold is written</b></td><td>The engine chooses incremental or full recompute. A fact that silently falls back to full recompute costs more as history grows, and you may only notice on the bill.</td><td>Check the refresh technique in the event log after every change</td></tr><tr><td><b>No restatement log</b></td><td>Published numbers change silently when late data arrives</td><td>Add a job step that compares with the last published version</td></tr><tr><td><b>No correction plans</b></td><td>Fixing a closed month means changing silver or a full refresh</td><td>Keep corrections in silver as records, never edits</td></tr><tr><td><b>Keys are hashes, not a key map</b></td><td>AUTO CDC does not hand out 1, 2, 3. Hash keys work, but are big and cannot be re-pointed</td><td>Fine for most; finance-grade marts may want a key map</td></tr><tr><td><b>AUTO CDC stamps versions with the sequence column</b></td><td>If you sequence by a change number, __START_AT is that number, not a date, and you cannot look up &#x27;as of 13 Nov&#x27;</td><td>Sequence by an effective date, or keep a separate date column</td></tr><tr><td><b>Checks across rows need extra tables</b></td><td>Expectations see one row at a time; grain and totals need check views</td><td>Write them, as in the sketch</td></tr><tr><td><b>Streaming-table facts freeze the dimension</b></td><td>Rows keep the dimension as it was when processed; a late dealer is never re-keyed without a full refresh</td><td>Build facts as materialized views, not streaming tables</td></tr><tr><td><b>Full refresh is a big hammer</b></td><td>It rereads sources from the start; if old bronze or silver files have been removed, history is lost</td><td>Protect important tables from full refresh</td></tr><tr><td><b>Price on classic compute</b></td><td>Declarative is 1.3 to 2.4 times the jobs rate per DBU on classic compute; the same rate on serverless</td><td>Use serverless, or pick the edition per pipeline</td></tr><tr><td><b>Tied to Databricks for the best parts</b></td><td>Expectations, snapshot CDC and the event log are Lakeflow only; open-source Spark Declarative Pipelines has the engine, not these</td><td>Keep builds as plain functions so you can leave</td></tr><tr><td><b>Harder to see the middle</b></td><td>Declarative hides steps by design; seeing one join&#x27;s output means extra temporary views</td><td>Use views for steps you need to inspect</td></tr></table></div>
+<h3>Verdict per kind of table</h3><div class="tw"><table class="t"><tr><th>Gold table</th><th>Declarative way</th><th>Verdict</th></tr><tr><td><b>SCD Type 2 dimensions</b></td><td>AUTO CDC</td><td class="v">Drop when silver keeps history (ours does): use the harness&#x27;s dimension pipeline for stable keys. Pursue with care otherwise</td></tr><tr><td><b>Aggregate facts</b></td><td>Materialized views</td><td class="v">Pursue with care: optional, on serverless, check the refresh technique</td></tr><tr><td><b>Factless facts</b></td><td>Materialized views</td><td class="v">Pursue with care</td></tr><tr><td><b>Transaction facts, small to medium history, no audit need</b></td><td>Materialized views over silver</td><td class="v">Pursue with care: watch the refresh technique</td></tr><tr><td><b>Transaction facts, large or finance-grade (restatements, correction plans)</b></td><td>Harness as a job task</td><td class="v">Keep the harness</td></tr><tr><td><b>Periodic snapshots</b></td><td>Materialized view if small; a carried-forward level over years is costly to recompute</td><td class="v">Pursue with care</td></tr><tr><td><b>Accumulating snapshots</b></td><td>AUTO CDC Type 1 keyed by line, ignoring empty values in updates, can fill milestones in</td><td class="v">Pursue with care: test that known milestones are never blanked</td></tr><tr><td><b>Consolidated facts</b></td><td>Materialized views</td><td class="v">Pursue with care: same grain traps</td></tr></table></div>
+<h3>How to choose</h3>
+<ul><li><b>Harness (our default)</b> for every gold table: facts, dimensions and aggregates. It runs as a Databricks job, or on any Spark, on any cloud, with Delta or Iceberg, and the same code is tested on a laptop. It is the only choice that gives every table the same audit trail.</li>
+<li><b>Hybrid</b> when a team is Databricks-only and wants some aggregates as materialized views. Facts and dimensions stay in the harness; one Databricks job runs the harness, then refreshes the views.</li>
+<li><b>All declarative</b> only for a small mart on Databricks where nobody needs a record of changed past numbers and the team wants the least code.</li>
+<li>In all three, keep the build a plain pure function. Then moving between them is a change of wrapper, not a rewrite.</li></ul>
+<p>Cost per DBU, open source vs Lakeflow, and where declarative helps in bronze to silver: <a href="/learn/spark-declarative-pipelines/">Declarative or not</a>. SCD Type 2 with AUTO CDC against our own code: <a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD Type 2 on Databricks</a>.</p>
+</section>
+<div class="sib" style="margin-top:34px"><a href="/learn/silver-to-gold/bookmark/">← Who makes the bookmark?</a><a href="/learn/silver-to-gold/">All the pages</a><a href="/learn/silver-to-gold/sql-and-dbt/">The fact in SQL and dbt →</a></div>
+</div>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Concepts</b><a href="/leaders/">For leaders</a><a href="/learn/fundamentals/">Fundamentals</a><a href="/learn/data-systems/">Data systems</a><a href="/learn/data-systems/platform/">Data and AI platform</a><a href="/learn/data-systems/platform/#hops">Data engineering</a><a href="/concepts/semantic-layer/">BI and analytics</a><a href="/concepts/#ml-engineering">ML</a><a href="/learn/ai-universe/">AI</a><a href="/learn/data-systems/platform/#concerns">Across all of them</a><a href="/concepts/#a-z">Key concepts, A to Z</a></div><div><b>On your cloud</b><a href="/platforms/databricks/">Databricks</a><a href="/platforms/aws/">AWS</a><a href="/platforms/azure/">Azure and Fabric</a><a href="/platforms/gcp/">Google Cloud</a><a href="/platforms/open/">Open source</a><a href="/platforms/anthropic/">Claude (Anthropic)</a><a href="/certifications/">All certifications</a></div><div><b>Your role</b><a href="/paths/">Find your path</a><a href="/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/forward-deployed/">Forward Deployed Engineering</a><a href="/mindset/">Worried about AI?</a><a href="/projects/">All projects to join</a></div><div><b>How we work</b><a href="/how-we-work/#thinking">Thinking principles</a><a href="/how-we-work/#ba">Business analysis</a><a href="/how-we-work/#pm">Project management</a><a href="/learn/technical-anchor/">The technical anchor</a></div><div><b>Causes and deep tech</b><a href="/ai-for-cause/">AI for a cause</a><a href="/deep-tech/">Deep tech</a></div><div><b>About</b><a href="/about/">About this site</a><a href="/about/#join">Write or teach</a><a href="/writing/">Blog</a><a href="/research/">All open specifications</a><a href="/assets/">All open-source code</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
