@@ -147,6 +147,7 @@ SECTIONS = [
             ("Agent Harness, the big picture", "/learn/agent-harness-intro/"),
             ("Agent Harness", "/learn/agent-harness/"),
             ("Agent Harness: architecture map", "/learn/agent-harness-stack-map/"),
+            ("Agent frameworks: when to use which", "/learn/agent-frameworks/"),
             ("Eval Harness", "/learn/eval-harness/"),
             ("Agent guardrails", "/learn/agent-guardrails/"),
             ("AI governance: running AI you can trust", "/learn/ai-governance/"),
