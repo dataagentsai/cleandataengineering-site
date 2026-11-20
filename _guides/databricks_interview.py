@@ -752,6 +752,7 @@ import json as _json
 
 RES = _json.loads((Path(__file__).parent / "code" / "table_maintenance" / "results.json").read_text())
 GREY = "#9aa0a6"
+PC = _json.loads((Path(__file__).parent / "code" / "table_maintenance" / "partitions.json").read_text())
 
 
 def _cells(x, y, w, kinds, size=13, gap=4):
@@ -1019,6 +1020,41 @@ def p_slow_writes():
         sec("ex", "Example", "The same 300,000 rows, four ways to write them", fig(bars, "Measured on a local machine; the ratio matters, not the seconds.")
             + T(["How it was written", "Write time", "Files", "Avg file size", "Time to read it back"], rows)
             + f"<p>Case A is the classic mistake. With 8 tasks and {ws['partitions_of_customer_id']:,} customers, each task holds rows for most customers and writes a file for each one, so 8 × 1,000 ≈ 8,000 files of {ws['a_partition_by_high_cardinality']['avg_file_kb']} KB. It wrote about {round(ws['a_partition_by_high_cardinality']['seconds'] / ws['d_no_partition_right_sized']['seconds'])} times slower than case D, and reading it back was slower too, because the cost is paid again on every read.</p>")
+        + sec("parts", "Partition count", "What decides how many partitions a DataFrame has", "<p>A partition is one chunk of the data that one task works on. The count is not a setting you make once: <b>each step either keeps it or recomputes it</b>, and the write uses whatever the DataFrame has at that moment. One task writes at least one file per partition.</p>"
+              + T(["Step", "Basis for the number of partitions"], [
+                  ["Reading Parquet or Delta files", "Spark packs file pieces into partitions of up to <code>maxSplitBytes</code>, which is about <code>spark.sql.files.maxPartitionBytes</code> (128 MB), lowered for small inputs so every core gets work. Each file also costs an assumed <code>spark.sql.files.openCostInBytes</code> (4 MB), so thousands of tiny files count as far more data than they hold. Parquet can be split inside a file; a compressed CSV or JSON file cannot (one file, one partition)."],
+                  ["After a shuffle (join, groupBy, distinct, window)", "Rows are assigned by <b>hash of the key</b> modulo <code>spark.sql.shuffle.partitions</code> (200 by default). With adaptive query execution on, Spark merges small partitions at run time."],
+                  ["repartition(n)", "Exactly n; rows spread evenly (round-robin)"],
+                  ["repartition(col) or repartition(n, col)", "Hash of the column, into the shuffle partition count (or n). All rows with the same value land in one partition, so a popular value makes one huge partition"],
+                  ["repartitionByRange(n, col)", "Sorted ranges sampled from the data"],
+                  ["coalesce(n)", "At most n, by merging neighbours with no shuffle; cannot increase the count"],
+                  ["filter, select, withColumn, map", "Unchanged. A filter that drops 99 percent of rows still leaves the same number of (now nearly empty) partitions"],
+                  ["union", "The sum of the inputs"],
+                  ["Created from a list or range", "The default parallelism (about the number of cores)"],
+                  ["Table partitions (folders) from partitionBy or a partitioned table", "Not the same thing. They only let a read skip folders; they do not set the DataFrame partition count"]])
+              + "<p><b>See it:</b></p>" + CODE("""
+df.rdd.getNumPartitions()                     # partitions right now (planned; AQE may change it at run time)
+len(df.inputFiles())                          # source files behind a read
+
+from pyspark.sql import functions as F       # rows per partition: shows skew and empty partitions
+df.groupBy(F.spark_partition_id()).count().orderBy("count").show()
+
+df.explain("formatted")                       # Exchange nodes show shuffle partitioning
+# Spark UI, Stages tab: tasks in the write stage = partitions being written
+""")
+              + "<p><b>Measured on the demo tables</b> (the same ones as the example above):</p>"
+              + T(["What I did", "Result"], [
+                  ["Read the table of 8,000 tiny files", f"{PC['many_tiny_files']['partitions_after_read']} partitions. Arithmetic: 8,000 files × 4 MB open cost ÷ 128 MB = 250"],
+                  ["Filter that drops most rows", f"still {PC['many_tiny_files']['partitions_after_filter']} partitions"],
+                  ["Read the table of 2 files", f"{PC['two_files']['partitions_after_read']} partitions"],
+                  ["Read a compacted table of 12 files", f"{PC['compacted_orders']['partitions_after_read']} partitions"],
+                  ["groupBy on the 8,000-file table", f"{PC['after_shuffle']['aqe_false_planned_partitions']} partitions (the shuffle setting) with AQE off; planned as {PC['after_shuffle']['aqe_true_planned_partitions']} with AQE on, because it merges small ones"],
+                  ["repartition(8)", f"{PC['repartition_8']['partitions']} partitions with {PC['repartition_8']['min_rows']:,} rows each"],
+                  ["repartition by a key where 10 percent of rows share one value", f"{PC['skew_by_key']['partitions_with_rows']} partitions with rows; smallest {PC['skew_by_key']['min_rows']:,} rows, largest {PC['skew_by_key']['max_rows']:,}"],
+                  ["Write with repartition(8)", f"{PC['files_written']['repartition_8_no_partitionBy']} files"],
+                  ["Write with repartition(8) and partitionBy(customer_id)", f"{PC['files_written']['repartition_8_partitionBy_customer']:,} files"],
+                  ["Write with repartition(customer_id) and partitionBy(customer_id)", f"{PC['files_written']['repartition_by_customer_partitionBy_customer']:,} files"]])
+              + "<p>So when a write is slow, the partition count is inherited from the last step that set it: the file read, a shuffle, or your own repartition. Print it just before the write, and change it there.</p>")
         + sec("why", "Why writes get slow", "The usual causes", T(["Cause", "Sign", "Fix"], [
             ["Partitioning on a high-cardinality column", "Files = tasks × partitions; writes stall on file creation", "Repartition by the partition key before writing, or use liquid clustering instead"],
             ["Too many tiny commits", "Thousands of log entries, each with fixed overhead", "Bigger batches; fewer, larger writes"],
@@ -1032,7 +1068,18 @@ def p_slow_writes():
             ["Storage far from compute, or throttled", "Slow uploads, throttling errors", "Same region; spread files over more paths; check storage limits"],
             ["Small cluster, spilling", "Spill in the write stage", "Larger memory nodes, fewer columns, filter earlier"]]))
         + sec("best", "Best approaches", "A checklist, in order", "<ol><li>Look at the write stage in the Spark UI: task time spread, output rows per task, number of output files.</li><li>Count the files you create per write (tasks × partitions) and aim for fewer, larger ones.</li><li>Pick the layout first: liquid clustering for new tables; partition only low-cardinality columns on big tables.</li><li>Turn on optimized writes when you write partitioned data from many tasks.</li><li>Use append for logs and events; use MERGE with deletion vectors for changes; avoid rewriting whole tables.</li><li>Batch small commits.</li><li>Compact afterwards with OPTIMIZE, scheduled or automatic.</li></ol>")
-        + sec("ask", "Practice", "Questions to rehearse", qlist(["A job writing 2 TB a day to a partitioned table is slow. Where do you look?", "Why does partitioning by user id make writes slow?", "How do optimized writes help, and what do they cost?", "How would you speed up a MERGE that rewrites 90 percent of the files?"]))
+        + sec("fastest", "Fastest way", "The fastest way to write huge data", "<ol>"
+              "<li><b>Write from many tasks in parallel, with files near 128 MB to 1 GB.</b> Partitions ≈ data size ÷ target file size. Never <code>coalesce(1)</code>.</li>"
+              "<li><b>Do not partition on a high-cardinality column.</b> Write unpartitioned or liquid-clustered; if you must partition, <code>repartition</code> by that column first, or turn on optimized writes.</li>"
+              "<li><b>Append; do not rewrite.</b> A bulk load is an append or a CREATE TABLE AS. MERGE and overwrite rewrite files and are far slower.</li>"
+              "<li><b>If the data is already Parquet, do not rewrite it.</b> <code>CONVERT TO DELTA</code> only adds a log over the existing files; <code>COPY INTO</code> and clones also avoid heavy rewrites.</li>"
+              "<li><b>Defer the tidying.</b> Load first, then run OPTIMIZE or clustering afterwards. Turn off auto compaction during the load, and keep statistics to the columns you filter on (<code>delta.dataSkippingNumIndexedCols</code>).</li>"
+              "<li><b>Remove work before the write:</b> no Python UDFs, no skewed joins, no unneeded shuffle in front of the sink.</li>"
+              "<li><b>Give it enough compute and storage throughput:</b> scale out the workers, keep compute in the same region as the storage, and spread very large loads over several tables or partitions written in parallel (watch for commit conflicts).</li>"
+              "<li><b>Use Photon and a fast codec</b> (snappy or zstd); measure, since stronger compression costs CPU.</li>"
+              "<li><b>Make the job restartable:</b> spot workers with retries, and idempotent writes so a retry does not duplicate.</li></ol>"
+              + f"<p>The demo shows the effect: the same rows wrote in {ws['d_no_partition_right_sized']['seconds']} s as two right-sized files, against {ws['a_partition_by_high_cardinality']['seconds']} s as {ws['a_partition_by_high_cardinality']['files']:,} tiny files. The fastest write is the one that makes the fewest, largest files in parallel, and does the least extra work.</p>")
+        + sec("ask", "Practice", "Questions to rehearse", qlist(["What decides how many partitions a DataFrame has?", "What is the fastest way to write a huge dataset?", "A job writing 2 TB a day to a partitioned table is slow. Where do you look?", "Why does partitioning by user id make writes slow?", "How do optimized writes help, and what do they cost?", "How would you speed up a MERGE that rewrites 90 percent of the files?"]))
         + say("I count files created per write, check the layout, and fix skew and task counts before touching the cluster."),
         [("Is more cluster the answer to slow writes?", "Rarely. The usual cause is too many files or a rewrite of too much data."), ("Do optimized writes always help?", "They cut file counts but add a shuffle, so they cost time on the write itself.")])
 

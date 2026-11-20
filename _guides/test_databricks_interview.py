@@ -29,7 +29,7 @@ REQUIRED = [
     ("table-maintenance-pictures", ["REORG", "deletion vector", "VERSION AS OF", "200 tiny files"]),
     ("clustering-and-compaction", ["snappy", "Hilbert", "minNumFiles", "partitioning"]),
     ("maintenance-strategy", ["Predictive Optimization", "external table", "691,000", "availableNow"]),
-    ("slow-writes", ["8,000", "repartition", "optimized writes"]),
+    ("slow-writes", ["8,000", "repartition", "optimized writes", "maxPartitionBytes", "spark_partition_id", "CONVERT TO DELTA", "250 partitions"]),
     ("backup-and-recovery-azure", ["deep clone", "UNDROP", "Terraform", "geo-redundant"]),
     ("tagging-best-practices", ["system.billing.usage", "budget", "governed tags", "chargeback"]),
     ("row-level-security", ["Photon", "SQL function", "entitlements"]),
