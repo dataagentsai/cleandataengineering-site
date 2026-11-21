@@ -1,4 +1,4 @@
-"""Databricks compute and cost: a hub and ten pages at /learn/databricks-compute/.
+"""Databricks compute and cost: a hub and twelve pages at /learn/databricks-compute/.
 
     python3 _guides/databricks_compute.py      (then python3 _site/nav.py and python3 _site/seo.py)
 
@@ -77,6 +77,20 @@ PAGES = [
              ("What can I configure on serverless jobs?", "Performance mode, the environment version and libraries, the job timeout and retries, notifications, tags and a budget policy. You cannot choose machine types, worker counts, Photon or init scripts."),
              ("A warehouse is slow. Do I make it bigger or add clusters?", "Make it bigger when a single query is slow or spills to disk. Add clusters when queries wait in a queue. Size helps one query, clusters help concurrency."),
              ("When should I use classic compute instead of serverless?", "When you need Scala or RDD code, custom images or init scripts, custom networking, always-on low-latency streaming, runs longer than 7 days, or the lowest hourly price on spot for large steady work.")]),
+    dict(slug="compute-settings", title="Databricks compute settings reference: SQL warehouse types, job clusters, node types, access modes and wrong settings", short="Compute settings",
+         desc="Every kind of compute in one map, then the settings for SQL warehouses (serverless, pro, classic), serverless and classic jobs, all-purpose clusters and node types, with the good value, the wrong value and what to check.",
+         related=["compute-choice", "levers", "tags", "cost"],
+         qa=[("Do classic SQL warehouses still exist?", "Yes. The three types are serverless, pro and classic, and I found no deprecation notice. Serverless is the UI default where available, and classic or pro remain for custom networking, hybrid connections, or when serverless is not enabled."),
+             ("Why might my warehouse be classic when I wanted serverless?", "Warehouses created through the API or Terraform without the type set have defaulted to classic. Set the warehouse type and the serverless flag explicitly."),
+             ("Should I turn on autoscaling for a streaming job cluster?", "Databricks advises against it, because classic autoscaling is slow to shrink streaming clusters. Use a fixed size, or move the workload to a pipeline with enhanced autoscaling."),
+             ("Can I use Graviton for everything?", "No. It is documented as unsupported for Databricks SQL, declarative pipelines and Container Services, and Python UDFs need runtime 15.2 or later. Test plain batch jobs first.")]),
+    dict(slug="cost-by-workload", title="Databricks cost map: every workload type, every compute type, DBU rates, the mapping and what goes wrong", short="Cost by workload",
+         desc="One table of workload types, one of compute types with illustrative DBU rates, and the mapping between them with worked monthly examples, the wrong-compute multipliers and a monthly check.",
+         related=["levers", "calc", "tags", "cost"],
+         qa=[("Why can the same job cost so differently on different compute?", "Because the price per DBU depends on the product, and classic compute adds a separate cloud bill for machines. In the examples, the same nightly job costs about 2.2 times more on an all-purpose cluster than on jobs compute."),
+             ("Is serverless more expensive per DBU?", "Yes on paper, because the rate includes the machines. Compare the full monthly cost, including cloud VMs, boot time and idle time on classic."),
+             ("Which numbers on this page can I rely on?", "Use them for ratios and mistakes only. The rates are third-party summaries of AWS list prices, not the official price list, and serverless DBU use is assumed equal to classic."),
+             ("What is the quickest way to find a mismatch?", "List your top 10 costs, name the workload and the compute for each, and check them against the mapping table.")]),
     dict(slug="photon-and-caches", title="Photon and every Databricks cache: result, Spark, disk, page and metadata caches", short="Photon and caches",
          desc="How Photon replaces Spark's JVM operators with a vectorized C++ engine, when it helps, and which cache each compute type supports: result cache, Spark cache, disk cache, OS page cache, Delta metadata cache.",
          related=["aqe", "levers"],

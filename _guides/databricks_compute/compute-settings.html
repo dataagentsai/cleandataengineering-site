@@ -1,0 +1,115 @@
+<section id="s44"><p class="eyebrow">The map</p><h2>Every kind of compute, in one table</h2>
+<div class="callout"><p><b>Three words that are not the same thing.</b> <b>Classic vs serverless</b> says <em>who runs the machines</em>: you (in your cloud account) or Databricks (in its account). <b>All-purpose vs jobs vs SQL warehouse</b> says <em>what the compute is for</em>. <b>Interactive</b> is just a way of working, typing in a notebook, and is not a product. So an <b>all-purpose cluster is a classic cluster used for interactive work</b>. A job cluster is also classic, but it is not all-purpose. A serverless notebook is interactive, but it is not classic.</p></div>
+<p>There are three families: <b>SQL warehouses</b> (for SQL and BI), <b>jobs compute</b> (for scheduled work) and <b>all-purpose compute</b> (for interactive work). Each exists in a classic form that runs in your own cloud account, and most have a serverless form that runs in Databricks' account.</p>
+<div class="tw"><table class="t">
+<tr><th>Compute</th><th>Classic form</th><th>Serverless form</th><th>Used for</th></tr>
+<tr><td><b>SQL warehouse</b></td><td><b>Classic</b> and <b>Pro</b> warehouses (VMs in your account)</td><td><b>Serverless</b> warehouse</td><td>SQL editor, dashboards, Power BI, apps sending SQL</td></tr>
+<tr><td><b>Jobs compute</b></td><td><b>Job cluster</b>, created for one run and deleted after</td><td><b>Serverless jobs</b></td><td>Scheduled and triggered batch work</td></tr>
+<tr><td><b>All-purpose compute</b></td><td><b>All-purpose cluster</b>, in standard or dedicated access mode</td><td><b>Serverless notebooks</b></td><td>Interactive development, exploration, ML</td></tr>
+<tr><td><b>Pipelines</b></td><td>Classic pipeline compute</td><td><b>Serverless pipelines</b></td><td>Declarative bronze, silver and gold</td></tr>
+</table></div>
+<p>Yes, classic warehouses still exist. I found no deprecation notice. The three warehouse types are serverless, pro and classic. For choosing between them, see <a href="/learn/databricks-compute/choosing-compute/">choosing compute</a>. This page is the settings reference: what each setting does, what to set and what people set wrongly.</p></section>
+
+<section id="s45"><p class="eyebrow">Warehouses</p><h2>SQL warehouse settings: serverless, pro and classic</h2>
+<h3>Which type, and why classic still exists</h3>
+<div class="tw"><table class="t">
+<tr><th></th><th>Serverless</th><th>Pro</th><th>Classic</th></tr>
+<tr><td>Runs in</td><td>Databricks' account</td><td>Your cloud account</td><td>Your cloud account</td></tr>
+<tr><td>Start-up</td><td>Seconds</td><td>Several minutes (typically about 4)</td><td>Several minutes (typically about 4)</td></tr>
+<tr><td>Photon</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Predictive IO</td><td>Yes</td><td>Yes</td><td>No</td></tr>
+<tr><td>Intelligent Workload Management</td><td>Yes</td><td>No</td><td>No</td></tr>
+<tr><td>Scaling</td><td>Automatic, within your minimum and maximum</td><td>Slower to scale up and down</td><td>Slower to scale up and down</td></tr>
+<tr><td>Why choose it</td><td>The default choice when it is available</td><td>Custom networking, federation or hybrid connections, or serverless not available</td><td>Basic interactive exploration when neither other type is possible</td></tr>
+</table></div>
+<ul>
+<li>In the UI, serverless is the default where your region supports it.</li>
+<li><b>Through the API, the default type has been classic.</b> A warehouse created from Terraform or a script without the type set can silently be a classic one. To get serverless, set the type and the serverless flag explicitly (the docs describe <code>warehouse_type</code> and <code>enable_serverless_compute</code>).</li>
+<li>Classic and pro warehouses need enough vCPU quota in your cloud account. If quota is short, the warehouse fails to start.</li></ul>
+<h3>The settings</h3>
+<div class="tw"><table class="t">
+<tr><th>Setting</th><th>What it does</th><th>Good value</th><th>Wrong value</th></tr>
+<tr><td>Cluster size</td><td>The size of each cluster, from 2X-Small (one worker) to 4X-Large (256 workers). It sets how fast one query runs.</td><td>Start small and raise it only if a query is slow or spills to disk. Databricks suggests starting a serverless warehouse larger and stepping down while testing.</td><td>Leaving a large default for light queries, or raising size to fix a queue</td></tr>
+<tr><td>Scaling: minimum and maximum clusters</td><td>How many clusters run at once. This sets concurrency. The default is one and one.</td><td>Maximum sized to the real peak. Rule of thumb: one cluster per 10 concurrent queries.</td><td>Maximum of 1 with many dashboard users, or a very high maximum with no cost alert</td></tr>
+<tr><td>Auto stop</td><td>Minutes of idle time before it stops</td><td>Serverless: the default is 10 minutes, the UI minimum is 5, the API allows 1. Pro and classic: default 45, minimum 10. Shorten for ad-hoc use.</td><td>Leaving 45 minutes on a pro or classic warehouse</td></tr>
+<tr><td>Warehouse type</td><td>Serverless, pro or classic</td><td>Serverless unless you need networking control</td><td>Pro by habit, or classic by an API default</td></tr>
+<tr><td>Statement timeout</td><td>Stops a query that runs too long. The default is 2 days. Set at session or workspace level, with a warehouse-level setting in Beta.</td><td>A limit that suits your longest legitimate query</td><td>Leaving the 2-day default</td></tr>
+<tr><td>Permissions</td><td>Who can use or manage the warehouse</td><td>Use for the team that owns it, manage for few</td><td>Everyone can manage</td></tr>
+<tr><td>Tags</td><td>Attach cost attribution labels</td><td>Team, environment and owner on every warehouse</td><td>No tags, so the bill cannot be split</td></tr>
+<tr><td>Default warehouse</td><td>An admin can set a workspace-wide default warehouse for ad-hoc queries (introduced in 2026). It works with all three types.</td><td>Point it at a small serverless warehouse</td><td>Leaving ad-hoc users on a large shared one</td></tr>
+</table></div>
+<div class="callout w"><p><b>Not confirmed from the docs I could search:</b> the Advanced options in the create form, which include the spot instance policy (pro and classic only), the release channel (current or preview) and tags. Open the form in your workspace and read each option's help text before relying on my description.</p></div></section>
+
+<section id="s46"><p class="eyebrow">Jobs</p><h2>Jobs: serverless or classic job cluster</h2>
+<div class="tw"><table class="t">
+<tr><th>Use</th><th>When</th></tr>
+<tr><td><b>Serverless jobs</b></td><td>Python or SQL tasks, no special needs, bursty or modest volume, you do not want to tune a cluster. Use Standard performance mode when a start-up of 4 to 6 minutes is fine.</td></tr>
+<tr><td><b>Classic job cluster</b></td><td>Scala or RDD code, custom images or init scripts, custom networking, always-on streaming, runs longer than 7 days, specific machine types, or large steady work where spot pricing wins.</td></tr>
+</table></div>
+<h3>Serverless job settings</h3>
+<p>Performance mode, environment version and libraries, job timeout, retries, notifications, tags and a budget policy. There are no machine settings. See <a href="/learn/databricks-compute/choosing-compute/">choosing compute</a>.</p>
+<h3>Classic job cluster settings</h3>
+<div class="tw"><table class="t">
+<tr><th>Setting</th><th>What it does</th><th>Good value</th><th>Wrong value</th></tr>
+<tr><td>Databricks Runtime version</td><td>Spark, Python and library versions</td><td>A current long-term-support version, pinned</td><td>An old runtime that is out of support, or "latest" that changes under you</td></tr>
+<tr><td>Photon</td><td>A faster engine at a higher DBU rate</td><td>On for SQL-heavy and large scans, after a test</td><td>On for Python UDF code, or never tested</td></tr>
+<tr><td>Worker node type</td><td>The machine family and size for workers (see the node types section)</td><td>Match the bottleneck: memory for spill, compute for CPU</td><td>The largest type "to be safe"</td></tr>
+<tr><td>Driver node type</td><td>The machine for the driver. It can differ from workers.</td><td>Smaller than workers unless you collect big results</td><td>A big driver on every job, or a tiny one with <code>collect()</code></td></tr>
+<tr><td>Workers: fixed or autoscaling</td><td>A fixed count, or a minimum and maximum</td><td>Autoscaling for batch with uneven stages. Fixed size for continuous streaming.</td><td>Autoscaling on a streaming job (Databricks advises against it, because it is slow to shrink), or autoscaling on a <code>spark-submit</code> job, which does not support it</td></tr>
+<tr><td>Availability (spot)</td><td>On-demand, spot, or spot with fallback. <code>first_on_demand</code> sets how many of the first nodes, starting with the driver, are on-demand.</td><td>Spot with fallback, <code>first_on_demand</code> of 1 to keep the driver on-demand</td><td>All spot for a job that cannot restart, or all on-demand for large fault-tolerant batch</td></tr>
+<tr><td>Access mode</td><td>Standard (shared) or dedicated (single user or group)</td><td>Standard for most work</td><td>Dedicated by default</td></tr>
+<tr><td>Spark configuration</td><td>Overrides Spark defaults</td><td>Few, documented and justified</td><td>Copied lists from old blog posts that fight AQE</td></tr>
+<tr><td>Tags and policy</td><td>Cost labels, and guardrails on what users can create</td><td>Required tags and a policy that caps size</td><td>No policy, so anyone can launch a huge cluster</td></tr>
+<tr><td>Timeout and retries</td><td>Stop a hung job, and rerun a failed one</td><td>A timeout and a small retry count (the timeout applies to each retry)</td><td>No timeout, or <code>max_retries</code> of -1</td></tr>
+<tr><td>Reusing a job cluster across tasks</td><td>Pays start-up once for several tasks</td><td>Share it for similar tasks</td><td>A separate cluster for every small task</td></tr>
+</table></div></section>
+
+<section id="s47"><p class="eyebrow">Server types</p><h2>Node types: which machine for which problem</h2>
+<p>On AWS, Databricks node types follow the EC2 families. Other clouds have equivalents with different names. Databricks also offers <b>fleet instance types</b>, which can draw from several similar machines to reduce capacity errors.</p>
+<div class="tw"><table class="t">
+<tr><th>Family</th><th>Use it when</th><th>Notes</th></tr>
+<tr><td><b>General purpose</b> (m-family, fleet: <code>md-fleet</code>)</td><td>You are unsure, or the job is balanced</td><td>A safe starting point</td></tr>
+<tr><td><b>Memory optimized</b> (r-family, fleet: <code>rd-fleet</code>, <code>rgd-fleet</code>)</td><td>The Spark UI shows spill to disk, wide joins, or big aggregations</td><td>Often better than adding more general-purpose nodes</td></tr>
+<tr><td><b>Compute optimized</b> (c-family)</td><td>The job is CPU-bound and does little shuffling</td><td>Too little memory for large joins</td></tr>
+<tr><td><b>Storage optimized</b> (i-family)</td><td>Read-heavy and interactive work that benefits from local SSD and the disk cache</td><td>I did not find a Databricks fleet type for this family</td></tr>
+<tr><td><b>GPU</b> (g and p families)</td><td>Model training and some inference</td><td>Not available as fleet types. Pick a specific GPU type, usually on dedicated access mode.</td></tr>
+<tr><td><b>Graviton</b> (Arm)</td><td>Plain batch jobs, to cut the VM price</td><td>Documented as unsupported for Databricks SQL, declarative pipelines and Container Services. Python UDFs need runtime 15.2 or later. Not offered as a fleet type.</td></tr>
+</table></div>
+<ul>
+<li>A <code>d</code> in the name (for example <code>md-fleet</code>) means local SSD, which the disk cache uses.</li>
+<li>When the worker type is a fleet type, the spot bid percentage has no effect.</li>
+<li>Single node compute runs everything on the driver. Use it for small exploration, not for jobs that need to scale.</li></ul>
+<div class="tw"><table class="t">
+<tr><th>Symptom in the Spark UI</th><th>Try</th></tr>
+<tr><td>Spill to disk, out-of-memory errors</td><td>Memory optimized nodes, or fewer cores per node</td></tr>
+<tr><td>CPU at 100 percent, little shuffle</td><td>Compute optimized nodes</td></tr>
+<tr><td>Repeated scans of the same data</td><td>Nodes with local SSD, so the disk cache helps</td></tr>
+<tr><td>Nodes below about 30 percent CPU and memory</td><td>Fewer or smaller nodes</td></tr>
+<tr><td>One slow task while others finish</td><td>Skew. A different node type will not fix it.</td></tr>
+</table></div></section>
+
+<section id="s48"><p class="eyebrow">All-purpose</p><h2>All-purpose compute: access modes and the usual mistakes</h2>
+<ul>
+<li><b>Standard</b> access mode (formerly called shared) supports Python, SQL and Scala on recent runtimes, and Databricks recommends it for most workloads. It has limits: no R, no Hive UDFs, no <code>sc</code> or <code>sqlContext</code> in Scala.</li>
+<li><b>Dedicated</b> access mode (formerly single user) is for RDD APIs, GPUs, R and privileged machine access.</li>
+<li><b>Auto-termination:</b> a value of 0 in a policy means never. I could not confirm the default for all-purpose compute, so check it in your workspace.</li></ul>
+<div class="tw"><table class="t">
+<tr><th>Mistake</th><th>Why it hurts</th><th>Fix</th></tr>
+<tr><td>Auto-termination off or set to many hours</td><td>An idle cluster bills all night and at weekends</td><td>A policy that forces a short auto-termination</td></tr>
+<tr><td>A big cluster for a notebook that reads a small table</td><td>Pays for unused cores</td><td>Single node, or serverless notebooks</td></tr>
+<tr><td>Scheduled jobs left on an all-purpose cluster</td><td>Higher DBU rate</td><td>Move to jobs compute or serverless jobs</td></tr>
+<tr><td>Dedicated mode by default</td><td>Fewer users per cluster and more clusters</td><td>Standard unless you need RDD, GPU or R</td></tr>
+<tr><td>No cluster policy</td><td>Anyone can launch an expensive cluster</td><td>Policies that cap size, force tags and set auto-termination</td></tr>
+</table></div>
+<h3>Find the wrong settings in your own workspace</h3>
+<div class="callout g"><p><code>SELECT cluster_id, cluster_name, auto_termination_minutes, worker_node_type, min_autoscale_workers, max_autoscale_workers FROM system.compute.clusters WHERE delete_time IS NULL ORDER BY auto_termination_minutes DESC NULLS FIRST</code></p></div>
+<p>Column names here are from memory and may differ in your workspace, so check the table's schema first. Run it against a small copy, as explained on the <a href="/learn/databricks-compute/system-tables/">system tables page</a>.</p></section>
+
+<section id="s49"><p class="eyebrow">Checked</p><h2>What was checked, and what was not</h2>
+<p>Checked against Databricks documentation on 21 November 2026:</p>
+<ul>
+<li><a href="https://docs.databricks.com/aws/en/compute/sql-warehouse/warehouse-types.html">SQL warehouse types</a> and <a href="https://learn.microsoft.com/azure/databricks/compute/sql-warehouse/create">creating a warehouse</a> (size range, scaling defaults, auto-stop, API default type, quota)</li>
+<li><a href="https://docs.databricks.com/aws/compute/sql-warehouse/warehouse-behavior">Warehouse sizing and scaling</a></li>
+<li><a href="https://learn.microsoft.com/azure/databricks/compute/configure">Compute configuration reference</a> (autoscaling, spot and <code>first_on_demand</code>, policies) and <a href="https://docs.databricks.com/aws/en/compute/fleet-instance-types">fleet instance types</a> (families, local disk, GPU and Graviton limits)</li>
+<li><a href="https://docs.databricks.com/aws/compute/access-mode-limitations">Access modes</a> and <a href="https://docs.databricks.com/aws/en/ldp/auto-scaling">autoscaling for pipelines</a> (and the advice to avoid autoscaling for streaming)</li></ul>
+<div class="callout w"><p><b>Not confirmed:</b> the default auto-termination and default access mode for all-purpose compute, whether Photon is on by default on classic compute, the spot policy, channel and tags options on warehouses, which node families are best for the disk cache, the <code>system.compute.clusters</code> column names, and anything specific to Azure or Google Cloud, where machine names and defaults differ. Check each in your workspace.</p></div></section>

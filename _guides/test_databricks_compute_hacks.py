@@ -13,6 +13,8 @@ import dbx_vs_aws as DV  # noqa: E402
 ROOT = Path(__file__).resolve().parent.parent
 HACKS = DC.render(next(p for p in DC.PAGES if p["slug"] == "cost-saving-hacks"))
 CHOOSE = DC.render(next(p for p in DC.PAGES if p["slug"] == "choosing-compute"))
+SETTINGS = DC.render(next(p for p in DC.PAGES if p["slug"] == "compute-settings"))
+COST = DC.render(next(p for p in DC.PAGES if p["slug"] == "cost-by-workload"))
 VS = DV.render()
 FORBIDDEN = [r"octave", r"jkh", r"dataagents(?!ai)"]  # the dataagentsai GitHub org links are allowed
 
@@ -21,11 +23,14 @@ REQUIRED = [
     ("hacks", HACKS, ["Standard performance mode", "statement timeout", "SPOT_WITH_FALLBACK", "first_on_demand", "Pursue", "Drop", "Not confirmed"]),
     ("hacks", HACKS, ["4 to 6 minutes", "2 days", "runs/submit", "node_timeline"]),
     ("choose", CHOOSE, ["serverless SQL warehouse", "serverless notebooks", "serverless jobs", "serverless pipelines", "Peak Queued Queries", "10 concurrent queries"]),
-    ("choose", CHOOSE, ["Common mistakes", "Standard mode", "7 days", "dedicated", "budget policy", "Not confirmed"]),
+    ("choose", CHOOSE, ["Common mistakes", "A shared dev setup", "$8,667", "Standard mode", "7 days", "dedicated", "budget policy", "Not confirmed"]),
+    ("settings", SETTINGS, ["Classic", "Pro", "Serverless", "warehouse_type", "Three words that are not the same", "first_on_demand", "md-fleet", "Graviton", "Not confirmed"]),
+    ("settings", SETTINGS, ["10 concurrent queries", "Auto stop", "access mode", "spark-submit", "Good value", "Wrong value"]),
+    ("cost", COST, ["Table 1", "Table 2", "Table 3", "Table 4", "$445.20", "$205.20", "$1,478", "$3,696", "1.44 times faster", "Standard mode", "about $0.15", "about $0.70", "Not confirmed"]),
     ("vs", VS, ["UniForm", "S3 Tables", "Lake Formation", "Predictive Optimization", "Scorecard", "Limitations to know"]),
     ("vs", VS, ["column mapping", "deletion vectors", "64 MB", "private to those customers"]),
 ]
-PAGES = [("hacks", HACKS), ("choose", CHOOSE), ("vs", VS)]
+PAGES = [("hacks", HACKS), ("choose", CHOOSE), ("settings", SETTINGS), ("cost", COST), ("vs", VS)]
 
 
 @pytest.mark.parametrize("name,html,words", REQUIRED)
@@ -53,4 +58,4 @@ def test_internal_links_exist(name, html):
 @pytest.mark.parametrize("name,html", PAGES)
 def test_tables_have_verdict_or_winner(name, html):
     # every page that gives options must say Pursue/Drop or name a winner
-    assert re.search(r"Pursue|Winner|winner", html), name
+    assert re.search(r"Pursue|Winner|winner|Good value", html), name

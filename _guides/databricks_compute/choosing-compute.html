@@ -33,7 +33,7 @@
 <tr><td>Predictability</td><td>Steady 24 hours a day, or bursty?</td><td>Bursty: serverless, because idle time is cheap. Steady and heavy: classic on spot or committed VMs can win.</td></tr>
 <tr><td>Language and API</td><td>Scala, R, RDD code, continuous streaming triggers?</td><td>Classic or dedicated compute. Serverless restricts these.</td></tr>
 <tr><td>Libraries and customisation</td><td>Custom images, init scripts, special drivers?</td><td>Classic</td></tr>
-<tr><td>Networking</td><td>Custom networking, hybrid connections, federation?</td><td>Pro or classic warehouse, or classic compute</td></tr>
+<tr><td>Networking</td><td>Must the compute sit inside your private network, for example to reach a database that only has a private IP, or a firewall that allows only your own IP ranges?</td><td>Serverless runs in Databricks' network, not yours. It can reach private resources only through a network connectivity configuration (private endpoints, stable IP ranges, outbound policies), which has limits: for example, firewall enablement is not supported for S3 or DynamoDB. If you cannot or may not set that up, use a pro warehouse or classic compute.</td></tr>
 <tr><td>Run length</td><td>Could a run exceed 7 days?</td><td>Classic. Serverless stops runs after 7 days.</td></tr>
 <tr><td>Cost attribution</td><td>Do you need to trace each VM on the cloud bill?</td><td>Classic, where tags reach the VMs. Serverless uses budget policies.</td></tr>
 <tr><td>Team skill</td><td>Is anyone available to tune clusters?</td><td>No one: serverless</td></tr>
@@ -111,6 +111,42 @@
 <li><b>Does it need Scala, RDD code, custom images, special networking, always-on streaming, or runs over 7 days?</b> Use a classic job cluster.</li>
 <li><b>Is it large, steady and heavy?</b> Price a classic cluster on spot against serverless for your real usage.</li>
 <li><b>Is it a declarative pipeline?</b> Use serverless pipelines in triggered mode.</li></ol></section>
+
+<section id="s57"><p class="eyebrow">Worked decision</p><h2>A shared dev setup for data engineers and data scientists, available any time</h2>
+<p><b>"Anytime they can query" does not mean "a cluster running 24 hours a day".</b> It means a user can start work whenever they want and not wait long. Compute that starts in seconds, or restarts on demand, gives the same availability without paying for the empty hours.</p>
+<div class="tw"><table class="t">
+<tr><th>Option</th><th>How it works</th><th>Illustrative monthly cost</th><th>Verdict</th></tr>
+<tr><td><b>A. One big shared cluster running 24 hours a day</b></td><td>8 machines (16 DBU per hour) on all-purpose compute, always on</td><td>730 h × 16 = 11,680 DBU × $0.55 = $6,424, plus VMs $2,243 = <b>$8,667</b></td><td class="v drop">Drop. Most of those hours are empty.</td></tr>
+<tr><td><b>B. One shared cluster that starts on demand and stops when idle</b></td><td>Standard access mode, autoscaling from 2 to 8 machines, auto-terminate after 30 to 60 minutes. Users reconnect and it restarts.</td><td>Active 12 h a day for 22 days at an average of 4 machines: 264 h × 8 DBU × $0.55 = $1,162, plus VMs $406 = <b>$1,567</b></td><td class="v pursue">Pursue when many users run light work and need Scala, RDD or libraries</td></tr>
+<tr><td><b>C. Serverless notebooks, one per person</b></td><td>No cluster to wait for or share. Each person's session is isolated.</td><td>You pay only while a session is active. At an assumed 2 DBU per active hour, 88 hours a month is 176 DBU × $0.75 = <b>$132 per person</b></td><td class="v pursue">Pursue as the default for DE and DS</td></tr>
+<tr><td><b>D. One small serverless SQL warehouse per team</b></td><td>2X-Small (4 DBU per hour), starts in seconds, short auto-stop. Anyone can run SQL at any time.</td><td>6 busy hours a day for 22 days: 132 h × 4 = 528 DBU × $0.70 = <b>$370</b></td><td class="v pursue">Pursue for ad-hoc SQL</td></tr>
+<tr><td><b>E. Personal single-node classic clusters</b></td><td>One small machine per person, policy-limited, auto-terminate after 20 to 30 minutes</td><td>88 active hours × 2 DBU × $0.55 = $97, plus VMs $34 = <b>$131 per person</b>, before idle tails</td><td class="v pursue">Pursue for work serverless cannot do</td></tr>
+<tr><td><b>F. An instance pool to speed up classic starts</b></td><td>Idle VMs wait in a pool so a cluster starts faster</td><td>No DBUs for idle pool machines, but your cloud bills them while they sit</td><td class="v pursue">Pursue only with a small minimum idle count</td></tr>
+</table></div>
+<h3>The cheapest effective setup</h3>
+<ol>
+<li><b>Serverless notebooks for most DE and DS work</b> (option C), because nothing runs, or bills, when nobody is working.</li>
+<li><b>One small serverless SQL warehouse per team</b> (option D) for anyone who just wants to query.</li>
+<li><b>Personal single-node classic clusters or a shared standard cluster</b> (E or B) only for what serverless cannot do: Scala or RDD code, custom images, GPUs, or private-network access.</li>
+<li><b>Run heavy or scheduled work as a job,</b> not on the dev cluster. See the nightly ETL decision on <a href="/learn/databricks-compute/cost-by-workload/">the cost map</a>.</li></ol>
+<h3>Guardrails that matter more than the choice</h3>
+<ul>
+<li><b>A cluster policy</b> that forces auto-termination (60 minutes at most), caps the number of machines, allows only a few machine types, and requires tags.</li>
+<li><b>A dev catalog with sampled or synthetic data,</b> so nobody scans production-sized tables to try an idea.</li>
+<li><b>A budget policy and tags</b> on every serverless workload, so dev spend is visible by team.</li>
+<li><b>An alert on anything running longer than a set number of hours,</b> using the compute system tables.</li>
+<li><b>Never put a scheduled production job or a refreshing dashboard on a dev cluster.</b> Activity keeps an idle cluster from auto-terminating.</li></ul>
+<h3>What goes wrong</h3>
+<div class="tw"><table class="t">
+<tr><th>Problem</th><th>Why</th><th>Fix</th></tr>
+<tr><td>The "shared" cluster never stops</td><td>A forgotten loop, streaming query or auto-refresh counts as activity, so auto-termination never triggers</td><td>Policy, alerts, and no scheduled work on dev compute</td></tr>
+<tr><td>One user's heavy query slows everyone</td><td>A shared cluster has shared memory and cores</td><td>Serverless or personal compute for heavy work, and a sampled dev catalog</td></tr>
+<tr><td>Library conflicts on a shared cluster</td><td>Everyone installs into one environment</td><td>Notebook-scoped libraries, or serverless environments per person</td></tr>
+<tr><td>Standard mode blocks something people need</td><td>Standard access mode has no R, and limits on RDD and Spark context</td><td>Dedicated mode for those users only</td></tr>
+<tr><td>Classic start-up kills the "anytime" promise</td><td>A cold classic cluster takes minutes</td><td>Serverless, or a small pool</td></tr>
+<tr><td>Serverless cannot reach a private dev database</td><td>It runs in Databricks' network</td><td>A network connectivity configuration, or classic compute for that user</td></tr>
+</table></div>
+<p>The figures use the same illustrative assumptions as the cost map: 2 DBU per machine per hour, $0.384 per machine per hour in cloud VMs, and third-party summaries of list rates. Serverless DBU use per session is an assumption.</p></section>
 
 <section id="s43"><p class="eyebrow">Checked</p><h2>What was checked, and what was not</h2>
 <p>These were checked against Databricks documentation on 21 November 2026:</p>
