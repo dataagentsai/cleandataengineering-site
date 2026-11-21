@@ -15,6 +15,7 @@ HACKS = DC.render(next(p for p in DC.PAGES if p["slug"] == "cost-saving-hacks"))
 CHOOSE = DC.render(next(p for p in DC.PAGES if p["slug"] == "choosing-compute"))
 SETTINGS = DC.render(next(p for p in DC.PAGES if p["slug"] == "compute-settings"))
 COST = DC.render(next(p for p in DC.PAGES if p["slug"] == "cost-by-workload"))
+LOGS = DC.render(next(p for p in DC.PAGES if p["slug"] == "logs-and-visibility"))
 VS = DV.render()
 FORBIDDEN = [r"octave", r"jkh", r"dataagents(?!ai)"]  # the dataagentsai GitHub org links are allowed
 
@@ -24,13 +25,15 @@ REQUIRED = [
     ("hacks", HACKS, ["4 to 6 minutes", "2 days", "runs/submit", "node_timeline"]),
     ("choose", CHOOSE, ["serverless SQL warehouse", "serverless notebooks", "serverless jobs", "serverless pipelines", "Peak Queued Queries", "10 concurrent queries"]),
     ("choose", CHOOSE, ["Common mistakes", "A shared dev setup", "$8,667", "Standard mode", "7 days", "dedicated", "budget policy", "Not confirmed"]),
-    ("settings", SETTINGS, ["Classic", "Pro", "Serverless", "warehouse_type", "Three words that are not the same", "first_on_demand", "md-fleet", "Graviton", "Not confirmed"]),
+    ("settings", SETTINGS, ["Classic", "Pro", "Serverless", "warehouse_type", "Classic SQL warehouse vs pro SQL warehouse", "$697", "Three words that are not the same", "first_on_demand", "md-fleet", "Graviton", "Not confirmed"]),
     ("settings", SETTINGS, ["10 concurrent queries", "Auto stop", "access mode", "spark-submit", "Good value", "Wrong value"]),
     ("cost", COST, ["Table 1", "Table 2", "Table 3", "Table 4", "$445.20", "$205.20", "$1,478", "$3,696", "1.44 times faster", "Standard mode", "about $0.15", "about $0.70", "Not confirmed"]),
+    ("logs", LOGS, ["Spark UI", "query profile", "system.billing.usage", "job_run_id", "/api/2.0/sql/history/queries", "watermark", "Not confirmed", "$4 a month"]),
+    ("hacks", HACKS, ["Reserved instances", "commit units", "list prices"]),
     ("vs", VS, ["UniForm", "S3 Tables", "Lake Formation", "Predictive Optimization", "Scorecard", "Limitations to know"]),
     ("vs", VS, ["column mapping", "deletion vectors", "64 MB", "private to those customers"]),
 ]
-PAGES = [("hacks", HACKS), ("choose", CHOOSE), ("settings", SETTINGS), ("cost", COST), ("vs", VS)]
+PAGES = [("hacks", HACKS), ("choose", CHOOSE), ("settings", SETTINGS), ("cost", COST), ("logs", LOGS), ("vs", VS)]
 
 
 @pytest.mark.parametrize("name,html,words", REQUIRED)

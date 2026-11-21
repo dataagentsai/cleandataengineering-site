@@ -114,6 +114,7 @@ SECTIONS = [
             ("How billing works: DBUs, SKUs, autoscaling", "/learn/databricks-compute/how-billing-works/"),
             ("Dividing the bill (chargeback)", "/learn/databricks-compute/dividing-the-bill/"),
             ("System tables and what reading them costs", "/learn/databricks-compute/system-tables/"),
+            ("Serverless visibility and logs", "/learn/databricks-compute/logs-and-visibility/"),
             ("Delta Sharing and cross-region cost", "/learn/databricks-compute/delta-sharing-and-regions/"),
             ("Backup and recovery architecture", "/learn/databricks-compute/backup-and-recovery-architecture/"),
             ("Cost-saving hacks", "/learn/databricks-compute/cost-saving-hacks/"),

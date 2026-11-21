@@ -1,0 +1,85 @@
+<section id="s59"><p class="eyebrow">Why</p><h2>Why serverless feels opaque</h2>
+<p>Classic compute runs on machines in your cloud account, so you can look inside them. Serverless runs in Databricks' account, so you get no machines to inspect. Databricks says Spark logs are not available for serverless notebooks and jobs (you only get client-side application logs), and the Spark UI is not available (the query profile replaces it). There is no host access and no way to install a monitoring agent.</p>
+<div class="tw"><table class="t">
+<tr><th>What you want to see</th><th>Classic compute</th><th>Serverless</th></tr>
+<tr><td>Spark UI (stages, tasks, skew)</td><td>Yes</td><td>No. Use the query profile and query insights.</td></tr>
+<tr><td>Driver and executor logs</td><td>Yes</td><td>No Spark logs. Client-side application logs only.</td></tr>
+<tr><td>Machine CPU and memory over time</td><td>Yes, including <code>system.compute.node_timeline</code> for all-purpose and jobs compute</td><td>No machines to measure</td></tr>
+<tr><td>Cluster start, resize and stop events</td><td>Yes</td><td>Not applicable</td></tr>
+<tr><td>Cost split by machine tag</td><td>Yes, tags reach the cloud bill</td><td>No. Use budget policies and job or warehouse ids.</td></tr>
+<tr><td>Cost per run, in DBUs</td><td>Yes</td><td>Yes. <code>job_run_id</code> is filled in for serverless jobs.</td></tr>
+<tr><td>Per-query detail</td><td>Yes</td><td>Yes. Query history covers SQL warehouses and serverless notebooks and jobs.</td></tr>
+</table></div>
+<p>So serverless is not blind. You trade machine-level detail for query-level and run-level detail.</p></section>
+
+<section id="s60"><p class="eyebrow">What exists</p><h2>What information Databricks keeps, by source</h2>
+<div class="tw"><table class="t">
+<tr><th>Source</th><th>What it holds</th><th>Retention</th><th>Covers serverless?</th></tr>
+<tr><td><code>system.billing.usage</code></td><td>Every billable record: DBUs by SKU, workspace, job run, cluster or warehouse id, and tags</td><td>365 days</td><td>Yes</td></tr>
+<tr><td><code>system.billing.list_prices</code></td><td>List price history per SKU (not your discount)</td><td>Indefinite</td><td>Yes</td></tr>
+<tr><td><code>system.compute.clusters</code>, <code>node_types</code></td><td>Cluster configuration history and the machine types available</td><td>Check the docs</td><td>Classic only</td></tr>
+<tr><td><code>system.compute.node_timeline</code></td><td>Per-minute utilisation of all-purpose and jobs compute</td><td>The docs I found disagree: 90 or 395 days</td><td>No</td></tr>
+<tr><td><code>system.query.history</code></td><td>Each query: who, when, duration, rows, bytes, status, source</td><td>The docs I found disagree: 180 or 365 days</td><td>Yes, for warehouses and serverless notebooks and jobs</td></tr>
+<tr><td><code>system.lakeflow.*</code></td><td>Job and pipeline definitions, run and task timelines, pipeline updates</td><td>Check the docs</td><td>Yes</td></tr>
+<tr><td><code>system.access.audit</code></td><td>Who did what, in which workspace, when</td><td>365 days</td><td>Yes</td></tr>
+<tr><td><code>system.access.table_lineage</code>, <code>column_lineage</code></td><td>Each read or write of a Unity Catalog table, with column detail</td><td>365 days</td><td>For work on governed compute</td></tr>
+<tr><td>Pipeline event log</td><td>Update progress, data quality results, flow metrics, as a table in your storage</td><td>Yours</td><td>Yes</td></tr>
+<tr><td>Query profile and job run page</td><td>Per-query operator detail and selected metrics. A UI, with the query history API behind it.</td><td>Per run</td><td>Yes. It replaces the Spark UI on serverless.</td></tr>
+<tr><td>Spark UI, driver and executor logs</td><td>Stages, tasks, executors, stack traces</td><td>While the cluster exists, or in delivered logs</td><td>No</td></tr>
+</table></div>
+<p>An account admin can set a longer retention for system tables (in Beta at the time of the docs I read, with 395 days free). Billing and audit tables are the ones to copy out before they age off.</p></section>
+
+<section id="s61"><p class="eyebrow">Extract</p><h2>How to get it out programmatically</h2>
+<div class="tw"><table class="t">
+<tr><th>Route</th><th>Use it for</th><th>Needs a warehouse?</th></tr>
+<tr><td><b>SQL on system tables</b> (SQL connector or SDK)</td><td>Billing, compute, lineage, audit and run timelines</td><td>Yes. The smallest one works.</td></tr>
+<tr><td><b>Query history API</b> (<code>GET /api/2.0/sql/history/queries</code>)</td><td>Queries on warehouses and serverless, with filters by time, user and status. It works without Unity Catalog.</td><td>No, it is a control-plane call</td></tr>
+<tr><td><b>Jobs API</b> (<code>/api/2.1/jobs/runs/list</code> and run details)</td><td>Run start and end, duration, task outcomes</td><td>No</td></tr>
+<tr><td><b>Clusters API events</b> (<code>/api/2.0/clusters/events</code>)</td><td>Start, resize and terminate on classic clusters</td><td>No</td></tr>
+<tr><td><b>Audit log delivery</b></td><td>Workspace audit events delivered as JSON or into system tables</td><td>No for JSON files. Yes to read the table.</td></tr>
+</table></div>
+<p>Rules that keep it cheap and correct: pull only new rows using a time watermark, re-read the last few days because billing rows can be corrected late, and upsert by key.</p>
+<h3>A sketch (not run against a workspace, so test it first)</h3>
+<pre class="code"># 1) system table, incremental, smallest serverless warehouse
+from databricks import sql
+conn = sql.connect(server_hostname=HOST, http_path=WAREHOUSE_PATH, access_token=TOKEN)
+cur = conn.cursor()
+cur.execute("""
+  SELECT * FROM system.billing.usage
+  WHERE usage_date >= date_sub(current_date(), 3)   -- re-read recent days
+""")
+rows = cur.fetchall()          # upsert into your store by record_id
+
+# 2) query history, no warehouse needed
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.service.sql import QueryFilter, TimeRange
+w = WorkspaceClient()
+queries = w.query_history.list(
+    filter_by=QueryFilter(query_start_time_range=TimeRange(start_time_ms=START_MS, end_time_ms=END_MS)),
+    include_metrics=True)
+
+# 3) job runs since the last watermark
+for run in w.jobs.list_runs(start_time_from=START_MS, expand_tasks=False):
+    pass                         # store run_id, start, end, state, job_id</pre>
+<p>Method and field names in the SDK change between versions, so check them against the version you install.</p></section>
+
+<section id="s62"><p class="eyebrow">Cheapest</p><h2>The cheapest way to read it</h2>
+<div class="tw"><table class="t">
+<tr><th>Approach</th><th>Cost</th><th>Verdict</th></tr>
+<tr><td>Call the REST APIs on a schedule with a watermark</td><td>No warehouse. Your own small script, and API rate limits to respect.</td><td class="v pursue">Pursue for query history, runs and cluster events</td></tr>
+<tr><td>One daily incremental SQL pull of the system tables on a 2X-Small serverless warehouse</td><td>A 3-minute run is about 0.2 DBU (4 DBU per hour × 0.05 hour), so roughly $0.14 a day, about $4 a month at an illustrative $0.70 per DBU</td><td class="v pursue">Pursue for billing, lineage and audit</td></tr>
+<tr><td>Deliver audit logs as files to your own storage</td><td>Storage and requests only</td><td class="v pursue">Pursue where you need raw audit data outside Databricks</td></tr>
+<tr><td>Keep the copy in the store you already run for analysis</td><td>No Databricks compute at query time</td><td class="v pursue">Pursue. It is the design from the system tables page.</td></tr>
+<tr><td>Dashboards or agents querying system tables directly</td><td>Compute on every query, on large tables</td><td class="v drop">Drop</td></tr>
+<tr><td>Third-party monitoring that polls constantly</td><td>That vendor's fees, plus warehouse time for polling</td><td class="v drop">Drop unless you already use it</td></tr>
+</table></div>
+<div class="callout g"><p><b>Best setup.</b> Two small scheduled jobs: one that calls the APIs, and one that runs the daily system-table pull. Both write to your own store. Everything you ask later runs there, not on Databricks.</p></div>
+<p>More on why reading system tables costs money, and on copying them: <a href="/learn/databricks-compute/system-tables/">system tables</a>.</p></section>
+
+<section id="s63"><p class="eyebrow">Checked</p><h2>What was checked, and what was not</h2>
+<ul>
+<li><a href="https://docs.databricks.com/aws/compute/serverless/limitations">Serverless limitations</a> (no Spark UI, no Spark logs on serverless notebooks and jobs, query profile instead)</li>
+<li><a href="https://docs.databricks.com/aws/en/admin/system-tables">System tables</a> (schemas, retention, serverless fields)</li>
+<li><a href="https://docs.databricks.com/api/workspace/queryhistory">Query history API</a>, plus community and third-party descriptions of the Jobs and Clusters APIs</li>
+<li><a href="https://www.datadoghq.com/blog/databricks-native-monitoring-resources/">A monitoring vendor's summary</a> of what serverless exposes</li></ul>
+<div class="callout w"><p><b>Not confirmed:</b> the retention of <code>node_timeline</code> and <code>query.history</code> (sources disagree), the details of cluster log delivery to your storage, API rate limits, whether every endpoint needs no warehouse, the SDK method signatures, and the exact system table list for your region. Check each in your workspace.</p></div></section>

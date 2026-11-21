@@ -1,4 +1,4 @@
-"""Databricks compute and cost: a hub and twelve pages at /learn/databricks-compute/.
+"""Databricks compute and cost: a hub and thirteen pages at /learn/databricks-compute/.
 
     python3 _guides/databricks_compute.py      (then python3 _site/nav.py and python3 _site/seo.py)
 
@@ -91,6 +91,13 @@ PAGES = [
              ("Is serverless more expensive per DBU?", "Yes on paper, because the rate includes the machines. Compare the full monthly cost, including cloud VMs, boot time and idle time on classic."),
              ("Which numbers on this page can I rely on?", "Use them for ratios and mistakes only. The rates are third-party summaries of AWS list prices, not the official price list, and serverless DBU use is assumed equal to classic."),
              ("What is the quickest way to find a mismatch?", "List your top 10 costs, name the workload and the compute for each, and check them against the mapping table.")]),
+    dict(slug="logs-and-visibility", title="Why serverless feels opaque: what Databricks logs, how to extract it programmatically and the cheapest way to read it", short="Logs and visibility",
+         desc="What you lose and what you keep on serverless, every source of run, query, billing, audit and lineage information with retention, how to extract it by SQL and REST API, and the cheapest way to do it.",
+         related=["tags", "levers", "cost", "calc"],
+         qa=[("Why is serverless compute opaque?", "It runs in Databricks' account, so there are no machines to inspect. Databricks says Spark logs and the Spark UI are not available for serverless notebooks and jobs. You use the query profile, query history and system tables instead."),
+             ("Can I see cost per job on serverless?", "Yes. The billing usage system table fills in the job run id for serverless jobs, so you can total DBUs per job or run."),
+             ("What is the cheapest way to read the logs?", "Call the REST APIs on a schedule, which need no warehouse, and run one small daily incremental pull of the system tables on the smallest serverless warehouse. Keep the copy in your own store."),
+             ("Is there an equivalent of reserved instances for serverless?", "Not for machines, because they are Databricks' own. A commit discount on DBUs applies to serverless. On classic compute you can also reserve the VMs.")]),
     dict(slug="photon-and-caches", title="Photon and every Databricks cache: result, Spark, disk, page and metadata caches", short="Photon and caches",
          desc="How Photon replaces Spark's JVM operators with a vectorized C++ engine, when it helps, and which cache each compute type supports: result cache, Spark cache, disk cache, OS page cache, Delta metadata cache.",
          related=["aqe", "levers"],
