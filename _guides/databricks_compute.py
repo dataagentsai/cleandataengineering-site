@@ -1,4 +1,4 @@
-"""Databricks compute and cost: a hub and eight pages at /learn/databricks-compute/.
+"""Databricks compute and cost: a hub and nine pages at /learn/databricks-compute/.
 
     python3 _guides/databricks_compute.py      (then python3 _site/nav.py and python3 _site/seo.py)
 
@@ -102,6 +102,13 @@ PAGES = [
          related=["backup-az", "egress"],
          qa=[("Is Delta time travel a backup?", "No. It lives in the same storage and VACUUM deletes old files by design. It is a fast undo."),
              ("Is copying the bucket to another region safe for Delta tables?", "Not by itself. Files can arrive out of order, so a table's log may point at files that have not arrived. Use deep clone or validate after replication.")]),
+    dict(slug="cost-saving-hacks", title="Databricks cost-saving hacks: the biggest levers, hidden tricks and checked settings", short="Cost-saving hacks",
+         desc="Find where the money goes, then the compute, warehouse, pipeline, data and cloud-side changes that cut a Databricks bill, each with a Pursue or Drop verdict and the limits that were checked against current documentation.",
+         related=["levers", "tags", "compute-choice", "cost"],
+         qa=[("What is the first thing to do to cut a Databricks bill?", "Rank spend by job, warehouse and cluster from the usage system table, then fix the top few. A small number of items usually carry most of the cost."),
+             ("Is serverless Standard mode cheaper?", "It uses fewer DBUs than the default performance mode, and Databricks cites savings of up to 70 percent. Start-up is slower, typically 4 to 6 minutes, and the start-up time is not billed. It suits work that can wait."),
+             ("How do I stop a runaway query?", "Set a statement timeout. The default is 2 days. You can set it for a session or the workspace. A warehouse-level setting is in Beta."),
+             ("Why does a job keep billing after it hangs?", "Without a job timeout it runs until it ends. A timeout applies to each retry, so set the retry limit too.")]),
 ]
 for p in PAGES:
     p["body_file"] = SRC / f"{p['slug']}.html"

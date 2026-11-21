@@ -113,6 +113,7 @@ SECTIONS = [
             ("System tables and what reading them costs", "/learn/databricks-compute/system-tables/"),
             ("Delta Sharing and cross-region cost", "/learn/databricks-compute/delta-sharing-and-regions/"),
             ("Backup and recovery architecture", "/learn/databricks-compute/backup-and-recovery-architecture/"),
+            ("Cost-saving hacks", "/learn/databricks-compute/cost-saving-hacks/"),
             ("Databricks interview prep", None),
             ("All interview topics", "/learn/databricks-interview/"),
             ("OPTIMIZE, VACUUM, compaction", "/learn/databricks-interview/delta-maintenance/"),

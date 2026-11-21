@@ -1,0 +1,89 @@
+<section id="s27"><p class="eyebrow">Start here</p><h2>Find where the money goes before you tune anything</h2>
+<p>Most of a Databricks bill comes from a small number of jobs, warehouses and clusters. Tuning the long tail first wastes effort. Rank your spend, fix the top few, then measure again.</p>
+<div class="callout g"><p><code>SELECT usage_metadata.job_id, usage_metadata.warehouse_id, usage_metadata.cluster_id, SUM(usage_quantity) AS dbus FROM system.billing.usage WHERE usage_date &gt;= current_date() - 30 GROUP BY ALL ORDER BY dbus DESC LIMIT 20</code></p></div>
+<p>Run this once a month from a small incremental copy rather than against the system tables directly, as explained on <a href="/learn/databricks-compute/system-tables/">the system tables page</a>. Multiply DBUs by the list price for a rough dollar figure, and remember that list price is not your contract price.</p>
+<h3>A monthly routine</h3>
+<ol>
+<li>List the top 10 jobs, warehouses and clusters by DBUs.</li>
+<li>For each, check idle time and CPU or memory use (<code>system.compute.node_timeline</code>) and failed or retried runs.</li>
+<li>Look for zombies: jobs nobody reads, warehouses that never stop, clusters left running.</li>
+<li>Fix the top three. Measure again next month.</li></ol>
+</section>
+
+<section id="s28"><p class="eyebrow">Compute</p><h2>Compute choices that cost less</h2>
+<div class="tw"><table class="t">
+<tr><th>Hack</th><th>Why it saves</th><th>Watch out</th><th>Verdict</th></tr>
+<tr><td>Scheduled work on Jobs compute or serverless jobs, not all-purpose clusters</td><td>All-purpose compute has a higher DBU rate. Third-party summaries put the gap anywhere from under 2 times to over 3 times per DBU depending on cloud and tier, so check your own price list.</td><td>Interactive development still needs all-purpose or serverless notebooks</td><td class="v pursue">Pursue. Often the single biggest fix.</td></tr>
+<tr><td>Serverless jobs in Standard performance mode for work that can wait</td><td>Same SKU but fewer DBUs. Databricks cites savings of up to 70 percent. The start-up time is not billed.</td><td>Start-up typically takes 4 to 6 minutes, against under a minute in the default mode. It is set per job. It is not available for one-time runs created through the <code>runs/submit</code> endpoint.</td><td class="v pursue">Pursue for backfills and overnight loads</td></tr>
+<tr><td>Auto-stop and auto-terminate everything</td><td>Idle time is pure waste</td><td>See the warehouse limits below</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Set a job timeout and a retry limit</td><td>A hung job or an endless retry loop bills until someone notices</td><td>A timeout applies to each retry, not to the whole run. <code>max_retries</code> of -1 retries forever.</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Spot workers with an on-demand driver</td><td>Pays the spot discount on workers. <code>SPOT_WITH_FALLBACK</code> falls back to on-demand when spot is unavailable, and <code>first_on_demand</code> of 1 keeps the driver on-demand.</td><td>Long shuffles can fail when spot capacity is lost. The worker mix changes from run to run, so record what you were billed.</td><td class="v pursue">Pursue for fault-tolerant batch</td></tr>
+<tr><td>A smaller driver than the workers</td><td>The driver and workers can use different node types. Jobs that do not <code>collect()</code> rarely need a large driver.</td><td>Raise it if you see driver out-of-memory errors</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Graviton instances on classic compute</td><td>Cheaper VMs for similar speed</td><td>Check that your libraries support Arm</td><td class="v pursue">Pursue after a test run</td></tr>
+<tr><td>Right-size from data, not guesses</td><td>Nodes under about 30 percent CPU and memory in <code>node_timeline</code> are over-sized</td><td>Do not shrink below what the heaviest shuffle stage needs</td><td class="v pursue">Pursue</td></tr>
+<tr><td>One shared job cluster across the tasks of a job</td><td>Pays the start-up once</td><td>Tasks with very different needs still need their own</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Photon only where it wins</td><td>It raises the DBU rate, so it must save more time than it costs</td><td>Little help for Python UDFs, tiny jobs and RDD code. Measure first.</td><td class="v pursue">Pursue after measuring</td></tr>
+<tr><td>Cluster policies as guardrails</td><td>Cap DBUs per hour, force auto-termination and tags, block huge node types</td><td>Serverless does not support compute policies. Use budget policies there.</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Pools by default</td><td>Faster start-up</td><td>You pay your cloud for idle pool VMs</td><td class="v drop">Drop unless start-up time really matters</td></tr>
+</table></div>
+<p>More on the machine families and what each is for: <a href="/learn/databricks-compute/cluster-architecture/">cluster architecture</a>, <a href="/learn/databricks-interview/compute-choice/">which compute for which job</a>.</p></section>
+
+<section id="s29"><p class="eyebrow">Warehouses</p><h2>SQL warehouses and dashboards</h2>
+<div class="tw"><table class="t">
+<tr><th>Hack</th><th>Detail</th><th>Verdict</th></tr>
+<tr><td>Shorten auto-stop</td><td>Documented defaults: serverless warehouses stop after 10 minutes of idle time, with a minimum of 5 minutes in the UI and 1 minute when created through the API. Pro and classic default to 45 minutes, with a minimum of 10.</td><td class="v pursue">Pursue. Serverless with a short stop is the cheapest idle profile.</td></tr>
+<tr><td>Set a statement timeout</td><td>The default is 2 days, so a runaway query can run for a very long time. You can set it at session or workspace level. A warehouse-level setting is in Beta and needs an admin to enable the preview.</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Start with a small size</td><td>Scale up only when one query is slow. Add clusters only when queries queue.</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Cap the maximum number of clusters</td><td>One bad dashboard can spin up many</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Refresh dashboards less often</td><td>Not every few minutes, and not at weekends, unless someone acts on the result. Every refresh keeps the warehouse awake.</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Precompute heavy joins into gold tables or materialized views</td><td>BI queries then read a small result instead of recomputing joins on every open</td><td class="v pursue">Pursue</td></tr>
+<tr><td>One warehouse per business unit</td><td>Cost attribution stops at the warehouse, so separate warehouses give a clean chargeback</td><td class="v pursue">Pursue</td></tr>
+</table></div>
+<p>More: <a href="/learn/databricks-compute/warehouses-and-serverless/">SQL warehouses and serverless</a>, <a href="/learn/databricks-compute/dividing-the-bill/">dividing the bill</a>.</p></section>
+
+<section id="s30"><p class="eyebrow">Pipelines</p><h2>Pipelines and streaming</h2>
+<ul>
+<li><b>Run non-real-time streaming as scheduled batch</b> with the available-now trigger. An always-on stream keeps a cluster up around the clock.</li>
+<li><b>Prefer triggered mode over continuous</b> for pipelines. Databricks says continuous mode needs an always-on cluster and is significantly more expensive. If you do need continuous, Databricks recommends running it as a continuous job.</li>
+<li><b>Use production mode for scheduled runs.</b> In development mode a pipeline reuses a long-running cluster across updates and does not retry on errors, so idle time can build up. A forum answer from a Databricks employee gives a 2-hour default shutdown delay for development mode, but I could not confirm that in the official docs, and the official properties page says auto-termination cannot be overridden. Do not depend on a shutdown setting without testing it.</li>
+<li><b>Read only new data</b> with Auto Loader, the change data feed or incremental materialized views, instead of reloading everything.</li></ul>
+<p>More: <a href="/learn/spark-declarative-pipelines/">declarative pipelines</a>, <a href="/learn/streaming/">streaming</a>.</p></section>
+
+<section id="s31"><p class="eyebrow">Data</p><h2>Data and layout: cheaper because they are faster</h2>
+<ul>
+<li><b>Filter early and select only the columns you need.</b> Scanning less data is the cheapest speed-up.</li>
+<li><b>Fix the layout.</b> Liquid clustering or sensible partitioning, regular compaction, no tiny files. See <a href="/learn/databricks-interview/slow-writes/">why writes are slow</a>.</li>
+<li><b>Avoid rewriting whole tables.</b> Append where you can, and use MERGE with deletion vectors for changes.</li>
+<li><b>Remove the usual accidents:</b> Python UDFs, <code>collect()</code>, skewed joins and accidental cross joins.</li>
+<li><b>Z-order on huge tables is expensive to maintain.</b> Liquid clustering is usually cheaper.</li>
+<li><b>Compare Predictive Optimization with your own scheduled OPTIMIZE,</b> and only maintain tables that are actually queried.</li></ul></section>
+
+<section id="s32"><p class="eyebrow">Hidden</p><h2>Hidden and cloud-side costs</h2>
+<div class="tw"><table class="t">
+<tr><th>Hack</th><th>Why it saves</th><th>Verdict</th></tr>
+<tr><td>Keep compute and storage in the same region</td><td>Avoids cross-region transfer fees</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Use an S3 gateway endpoint instead of routing storage traffic through NAT</td><td>NAT gateways charge per GB processed</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Set retention, run VACUUM, delete unused tables, clones and old logs</td><td>Old versions and logs add storage and request cost</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Delete unused vector search endpoints</td><td>Standard endpoints do not scale down on their own, so you keep paying for the larger capacity until you delete and recreate them. Storage-optimized endpoints scale down when an index is deleted. The product is being renamed AI Search, and a stop and start option is in preview, so check how a stopped endpoint is billed.</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Review model serving endpoints</td><td>Scale-to-zero settings differ by endpoint type. I did not confirm the billing rules, so check the model serving pricing page.</td><td class="v pursue">Pursue after checking</td></tr>
+<tr><td>Never query system tables without a date filter, and copy them incrementally for analysis</td><td>Each exploratory query bills compute</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Run a log-heavy debug cluster for long</td><td>Cluster logs delivered to your storage grow quickly</td><td class="v drop">Drop</td></tr>
+</table></div></section>
+
+<section id="s33"><p class="eyebrow">Governance</p><h2>Tags, budgets and commitments</h2>
+<ul>
+<li><b>Tag everything and enforce it</b> with cluster policies and budget policies. You cannot cut what you cannot attribute. See <a href="/learn/databricks-interview/tagging-best-practices/">tagging best practices</a>.</li>
+<li><b>Size commitments to your steady baseline, not your peak.</b> A commit discount only helps if you use it, and an over-commit wastes money.</li>
+<li><b>Use savings plans or reserved instances for always-on VMs</b> on classic compute.</li>
+<li><b>Check whether Databricks spend counts toward your existing cloud commitment</b> if you buy through a cloud marketplace.</li>
+<li><b>Join the Databricks bill to the cloud bill.</b> The system tables show DBUs at list price and exclude your VMs and storage. See <a href="/learn/databricks-compute/how-billing-works/">how billing works</a>.</li></ul></section>
+
+<section id="s34"><p class="eyebrow">Checked</p><h2>What was checked, and what was not</h2>
+<p>These settings were checked against Databricks documentation on 21 November 2026:</p>
+<ul>
+<li><a href="https://docs.databricks.com/aws/en/compute/serverless/performance-modes">Serverless performance modes</a> (start-up times, cost, per-job setting, <code>runs/submit</code> limit)</li>
+<li><a href="https://docs.databricks.com/aws/sql/language-manual/parameters/statement_timeout">Statement timeout</a> (default and scopes) and <a href="https://learn.microsoft.com/azure/databricks/compute/sql-warehouse/create">warehouse creation</a> (auto-stop defaults and minimums)</li>
+<li><a href="https://docs.databricks.com/aws/en/ldp/best-practices">Pipeline best practices</a> (triggered versus continuous, development mode)</li>
+<li><a href="https://learn.microsoft.com/nb-no/azure/databricks/workflows/jobs/settings">Job settings</a> (timeout and retries) and <a href="https://docs.databricks.com/aws/en/compute/flexible-node-types">flexible node types</a> (driver and worker types)</li>
+<li><a href="https://docs.databricks.com/aws/en/vector-search/vector-search-cost-management">Vector search cost management</a></li></ul>
+<div class="callout w"><p><b>Not confirmed:</b> the exact DBU rates and the Jobs versus all-purpose gap (third-party sources disagree and rates change), the development-mode shutdown delay, model serving scale-to-zero billing, and how a stopped vector search endpoint is billed. Treat each as "check before relying on it". Savings depend on your workload, so this page gives no percentages except the figure Databricks itself cites for Standard mode.</p></div></section>
