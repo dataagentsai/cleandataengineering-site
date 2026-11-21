@@ -16,6 +16,7 @@ HTML = TV.render()
 REQUIRED = [
     ("ten places", ["ten places", "10 places", "Fan-out", "one_to_many", "MEASURE(conversion_rate)"]),
     ("four objects", ["Physical table", "Normal view", "Materialized view", "Metric view", "Pursue", "Drop", "Not confirmed"]),
+    ("incremental", ["Examples where it recomputes everything", "LIMIT", "Recursive CTE", "Expectations", "DECIMAL", "serverless", "INCREMENTAL STRICT", "row tracking"]),
     ("numbers", ["175 / 2200 = 8.0%", "10.0%", "6.4%", "9.5%", "140", "340"]),
 ]
 

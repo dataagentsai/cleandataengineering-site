@@ -86,6 +86,28 @@ order_id  freight            order_id  line_id  amt
 <tr><td>Shaping one table for one reader (rename columns, hide a few)</td><td>Overkill</td><td class="v pursue">Normal view</td></tr></table></div>
 <p>See <a href="/learn/metric-views/performance/">speed: materialization and pre-aggregation</a> and <a href="/learn/metric-views/security/">row-level security</a>.</p></section>
 
+<section id="s12"><p class="eyebrow">When a materialized view cannot refresh incrementally</p><h2>Examples where it recomputes everything</h2>
+<p>An <b>incremental refresh</b> reads only the source rows that changed. A <b>full recompute</b> reads everything again. Databricks tries the first and falls back to the second, and you pay for the difference. These are the cases the docs list, each with an example. Checked against the Databricks docs on 21 November 2026; the AWS and Azure pages differ slightly, so treat the list as a guide.</p>
+<div class="tw"><table class="t">
+<tr><th>Case</th><th>Example</th><th>What happens</th><th>What to do</th></tr>
+<tr><td><b>Classic compute</b></td><td>The pipeline runs on a classic cluster</td><td>Full recompute each time. Incremental refresh needs serverless.</td><td>Use serverless pipelines</td></tr>
+<tr><td><b>LIMIT in the query</b></td><td><code>SELECT product, SUM(revenue) r FROM sales GROUP BY product ORDER BY r DESC LIMIT 10</code></td><td>The limit operators cannot be incrementalised, so a "top 10" view is recomputed whole</td><td>Store the full aggregate as the view and take the top 10 when reading</td></tr>
+<tr><td><b>Recursive CTE</b></td><td>A parent-child hierarchy walked with <code>WITH RECURSIVE</code></td><td>Not eligible, so full recompute</td><td>Flatten the hierarchy in a table first</td></tr>
+<tr><td><b>Expectations in the definition</b></td><td><code>CONSTRAINT valid_amount EXPECT (amount &gt; 0)</code> on the view</td><td>Fully refreshed on each update</td><td>Put the quality checks on the table feeding it</td></tr>
+<tr><td><b>Source is not a Delta table</b></td><td>Reading files in a volume, an external location, a foreign catalog, or a foreign Iceberg table</td><td>Not supported for incremental refresh</td><td>Land the data into a Delta table first</td></tr>
+<tr><td><b>Floating-point sums</b></td><td><code>SUM(price)</code> where <code>price</code> is <code>DOUBLE</code></td><td>Floating-point addition can give slightly different totals depending on order, so the engine may not trust it (the Azure page says this; the AWS table does not mention it)</td><td>Cast to <code>DECIMAL</code></td></tr>
+<tr><td><b>Most of the source changed</b></td><td>A nightly job rewrites 80% of the source table</td><td>Even when eligible, a cost check can decide a full recompute is cheaper</td><td>Nothing to fix: this is the right choice</td></tr>
+<tr><td><b>A function you wrote changed</b></td><td>You edit a Python UDF used in the view</td><td>Old rows keep the old logic until a full refresh</td><td>Run a full refresh yourself after changing it</td></tr>
+<tr><td><b>Window function without a partition</b></td><td><code>ROW_NUMBER() OVER (ORDER BY day)</code></td><td>The Azure page says window functions need <code>PARTITION BY</code> columns to refresh incrementally</td><td>Add <code>PARTITION BY</code>, for example by region</td></tr>
+</table></div>
+<h3>What is supported</h3>
+<p>The docs list <code>GROUP BY</code>, non-recursive CTEs, <code>UNION ALL</code>, inner, left, right and full joins, and <code>QUALIFY</code> as supported. Some refresh types also need row tracking on the source tables.</p>
+<h3>How to stop a silent full recompute</h3>
+<ul>
+<li><b>See which method will be used:</b> <code>EXPLAIN CREATE MATERIALIZED VIEW ...</code> reports whether the query can refresh incrementally.</li>
+<li><b>Refuse to fall back:</b> the refresh policy can be set so the statement fails when an incremental refresh is not possible. The docs name <code>INCREMENTAL</code> and <code>INCREMENTAL STRICT</code>. Check the current syntax before using them.</li></ul>
+<div class="box"><p><b>Why this is on a page about metric views.</b> Metric view materialization is built on materialized views, so a rollup behind a metric view can fall into the same traps. A fast read is not proof of a cheap refresh. Check both.</p></div></section>
+
 <section id="s8"><p class="eyebrow">Decision chart</p><h2>Which one, step by step</h2>
 {{DECIDE}}</section>
 
@@ -113,4 +135,4 @@ order_id  freight            order_id  line_id  amt
 <p>Normal views fill the gaps: a renamed or trimmed copy of one table for one reader.</p></section>
 
 <section id="s11"><p class="eyebrow">Honest limits</p><h2>What to check before you build</h2>
-<div class="callout w"><p><b>Not confirmed from this session:</b> current YAML keys and minimum runtime for metric views; whether your BI tool reads metric views natively or needs custom SQL; how a materialized view refreshes on your compute and what it costs; the exact materialization options for metric views. The earlier page <a href="/learn/metric-views/limits/">Limits of each</a> lists the limits as of its own check date. The sample tables and numbers above are small and made up to show the idea, not benchmarks.</p></div></section>
+<div class="callout w"><p><b>Not confirmed from this session:</b> current YAML keys and minimum runtime for metric views; whether your BI tool reads metric views natively or needs custom SQL; the cost of a materialized view refresh on your compute (the list of non-incremental cases above was checked in the docs, but it changes); the exact materialization options for metric views. The earlier page <a href="/learn/metric-views/limits/">Limits of each</a> lists the limits as of its own check date. The sample tables and numbers above are small and made up to show the idea, not benchmarks.</p></div></section>
