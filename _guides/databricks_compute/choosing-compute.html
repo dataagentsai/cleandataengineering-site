@@ -1,0 +1,124 @@
+<section id="s35"><p class="eyebrow">Start here</p><h2>How many kinds of serverless are there?</h2>
+<p>"Serverless" is not one thing. Databricks uses the word for several separate products, and each has different settings. For your own code and SQL there are four. Other serverless features are billed and configured separately.</p>
+<div class="tw"><table class="t">
+<tr><th>Kind</th><th>What it runs</th><th>Who uses it</th></tr>
+<tr><td><b>1. Serverless SQL warehouse</b></td><td>SQL queries from the SQL editor, dashboards, Power BI and other BI tools</td><td>Analysts, BI tools, apps that send SQL</td></tr>
+<tr><td><b>2. Serverless notebooks</b></td><td>Python and SQL in an interactive notebook</td><td>Engineers and data scientists developing</td></tr>
+<tr><td><b>3. Serverless jobs</b></td><td>Scheduled or triggered tasks in Lakeflow Jobs</td><td>Production batch pipelines</td></tr>
+<tr><td><b>4. Serverless pipelines</b></td><td>Lakeflow Spark Declarative Pipelines</td><td>Declarative bronze, silver and gold</td></tr>
+<tr><td>Other serverless features</td><td>Model Serving, Predictive Optimization, and others, each with its own endpoint or billing line</td><td>Specific features. Check each one's page and price.</td></tr>
+</table></div>
+<p>The first four share one idea: you do not pick machines, and Databricks runs the compute in its own account. Notebooks, jobs and pipelines all run on the same kind of serverless engine. A SQL warehouse is a separate product with its own sizing.</p>
+<div class="callout w"><p>Enabling serverless for SQL warehouses is a separate step from enabling it for notebooks, jobs and pipelines, and availability depends on cloud and region. If a choice is greyed out in your workspace, ask your account admin before assuming it does not exist.</p></div>
+</section>
+
+<section id="s36"><p class="eyebrow">Configuration</p><h2>What you can configure on each kind</h2>
+<div class="tw"><table class="t">
+<tr><th>Kind</th><th>You can set</th><th>You cannot set</th></tr>
+<tr><td>Serverless SQL warehouse</td><td>Cluster size (T-shirt size), the minimum and maximum number of clusters, auto-stop (5 minutes at the lowest in the UI, 1 minute through the API), tags, permissions, and a statement timeout at session or workspace level</td><td>Machine type, Photon on or off (it is always on), spot, init scripts, which VPC it runs in</td></tr>
+<tr><td>Serverless notebook</td><td>Environment version, base environment and libraries, and memory (standard is 16 GB, high is 32 GB, with a higher DBU rate for high memory)</td><td>Machine type, number of workers, most Spark settings, compute policies</td></tr>
+<tr><td>Serverless job</td><td>Performance mode (performance optimized or standard), environment and libraries, job timeout, retries, notifications, tags and a budget policy</td><td>Machine type, number of workers, autoscaling limits, Photon on or off, init scripts, custom images</td></tr>
+<tr><td>Serverless pipeline</td><td>Serverless on or off, triggered or continuous mode, performance mode, and a budget policy</td><td>Machines and worker counts</td></tr>
+</table></div>
+<p>The pattern is simple: on serverless you set <em>behaviour and limits</em> (mode, timeout, memory, libraries, tags), and you give up <em>machine-level control</em> (node type, worker count, spot, init scripts, Photon). Only warehouses give you a sizing knob, because a warehouse is sized by T-shirt size and cluster count.</p>
+<p>Two settings are worth knowing exactly: <b>serverless jobs in Standard mode</b> use fewer DBUs but typically take 4 to 6 minutes to start, and <b>auto-stop</b> on pro and classic warehouses defaults to 45 minutes with a 10-minute minimum, while serverless defaults to 10 minutes. The page on <a href="/learn/databricks-compute/cost-saving-hacks/">cost-saving hacks</a> lists the rest.</p>
+</section>
+
+<section id="s37"><p class="eyebrow">Factors</p><h2>The factors that decide the choice</h2>
+<div class="tw"><table class="t">
+<tr><th>Factor</th><th>Ask</th><th>Leans toward</th></tr>
+<tr><td>Workload shape</td><td>Scheduled batch, interactive, live BI queries, or always-on streaming?</td><td>Batch: jobs compute or serverless jobs. Interactive: serverless notebook. BI: SQL warehouse. Always-on streaming: classic job cluster.</td></tr>
+<tr><td>Concurrency</td><td>How many queries run at the same moment, not how many people exist?</td><td>Many concurrent queries: a warehouse with more clusters</td></tr>
+<tr><td>Latency</td><td>Does a user wait for the first result? Is a start-up of minutes acceptable?</td><td>Seconds: serverless. Minutes fine: classic, or serverless Standard mode.</td></tr>
+<tr><td>Predictability</td><td>Steady 24 hours a day, or bursty?</td><td>Bursty: serverless, because idle time is cheap. Steady and heavy: classic on spot or committed VMs can win.</td></tr>
+<tr><td>Language and API</td><td>Scala, R, RDD code, continuous streaming triggers?</td><td>Classic or dedicated compute. Serverless restricts these.</td></tr>
+<tr><td>Libraries and customisation</td><td>Custom images, init scripts, special drivers?</td><td>Classic</td></tr>
+<tr><td>Networking</td><td>Custom networking, hybrid connections, federation?</td><td>Pro or classic warehouse, or classic compute</td></tr>
+<tr><td>Run length</td><td>Could a run exceed 7 days?</td><td>Classic. Serverless stops runs after 7 days.</td></tr>
+<tr><td>Cost attribution</td><td>Do you need to trace each VM on the cloud bill?</td><td>Classic, where tags reach the VMs. Serverless uses budget policies.</td></tr>
+<tr><td>Team skill</td><td>Is anyone available to tune clusters?</td><td>No one: serverless</td></tr>
+<tr><td>Availability</td><td>Is serverless enabled in your cloud and region?</td><td>If not, pro warehouses and classic compute</td></tr>
+</table></div></section>
+
+<section id="s38"><p class="eyebrow">Scenarios</p><h2>Which compute for which job</h2>
+<div class="tw"><table class="t">
+<tr><th>Scenario</th><th>Pick</th><th>Why</th><th>Verdict</th></tr>
+<tr><td>Scheduled ETL, nothing unusual</td><td>Serverless jobs, Standard mode if it can wait</td><td>No cluster to tune, and idle time is not billed</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Large steady ETL, Scala or RDD code, spot savings wanted</td><td>Classic job cluster</td><td>Full control and the lowest hourly rate on spot</td><td class="v pursue">Pursue</td></tr>
+<tr><td>A few analysts running ad-hoc SQL</td><td>One small serverless SQL warehouse, short auto-stop</td><td>Starts in seconds and costs almost nothing idle</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Dashboards for many users, Power BI</td><td>Serverless SQL warehouse with a higher maximum cluster count, one per business unit</td><td>Concurrency scales out, and cost is attributable</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Live, always-on application queries</td><td>A warehouse sized for the peak, or a database designed for point lookups</td><td>Warehouses are for analytic queries. Many tiny key lookups are a different workload.</td><td class="v pursue">Pursue with a load test</td></tr>
+<tr><td>Notebook development</td><td>Serverless notebook, or standard all-purpose compute</td><td>Fast start for one user</td><td class="v pursue">Pursue</td></tr>
+<tr><td>GPU, RDD, R, or privileged machine access</td><td>Dedicated all-purpose compute</td><td>These need dedicated access mode</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Always-on low-latency streaming</td><td>Classic job cluster, continuous</td><td>Serverless does not support the continuous and processing-time triggers</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Custom networking or hybrid connections</td><td>Pro warehouse or classic compute</td><td>These run in your own cloud network</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Declarative pipelines</td><td>Serverless pipelines, triggered mode</td><td>Managed scaling, no always-on cluster</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Scheduled production job on an all-purpose cluster</td><td>Move it to jobs compute or serverless jobs</td><td>All-purpose carries a higher DBU rate</td><td class="v drop">Drop</td></tr>
+<tr><td>One huge warehouse for every team</td><td>Separate warehouses per business unit</td><td>No attribution, and teams slow each other down</td><td class="v drop">Drop</td></tr>
+</table></div>
+<p>More detail on the warehouse types: <a href="/learn/databricks-compute/warehouses-and-serverless/">SQL warehouses and serverless</a>. Interview-style version: <a href="/learn/databricks-interview/compute-choice/">which compute for which job</a>.</p></section>
+
+<section id="s39"><p class="eyebrow">Sizing</p><h2>Number of users, concurrency and performance</h2>
+<p><b>Count concurrent queries, not users.</b> Ten users can mean two queries or two hundred. A dashboard with twelve tiles sends twelve queries each time it opens or refreshes.</p>
+<div class="tw"><table class="t">
+<tr><th>Problem you see</th><th>What it means</th><th>Fix</th></tr>
+<tr><td>One query is slow, or spills to disk</td><td>The cluster is too small for that query</td><td>Increase the <b>size</b></td></tr>
+<tr><td>Many queries wait in a queue</td><td>Too few clusters for the concurrency</td><td>Raise the <b>maximum number of clusters</b></td></tr>
+<tr><td>Cost is too high, queries are fast</td><td>The warehouse is bigger than it needs to be</td><td>Step down one size, as long as nothing spills or slows noticeably</td></tr>
+</table></div>
+<ul>
+<li>On classic and pro warehouses, the planning rule is about 10 concurrent queries per cluster. Autoscaling adds clusters based on the estimated time to clear running and queued queries, and a query queued for 5 minutes triggers scale-up.</li>
+<li>Serverless warehouses scale on the time needed to process running, queued and expected incoming queries (looking about two minutes ahead), and scale down after 15 minutes of low load while keeping enough clusters for the last 15 minutes' peak.</li>
+<li>Queries queue when every cluster is full or the warehouse is starting. A queue holds up to 1,000 queries.</li>
+<li>Watch the <b>Peak Queued Queries</b> metric on the warehouse monitoring page. A value that is consistently above zero means more size or more clusters.</li>
+<li>Databricks suggests starting a serverless warehouse larger than you think you need and sizing down as you test.</li>
+<li>Pro and classic warehouses take several minutes to start (typically about 4). Serverless starts in seconds. Serverless also has Intelligent Workload Management, which pro and classic lack, and pro adds Predictive IO but classic has Photon only.</li></ul>
+<p>Treat the 10-per-cluster figure as a planning rule, not a hard limit, and load test with your real dashboards.</p></section>
+
+<section id="s40"><p class="eyebrow">Mistakes</p><h2>Common mistakes</h2>
+<div class="tw"><table class="t">
+<tr><th>Mistake</th><th>Why it hurts</th><th>Fix</th></tr>
+<tr><td>Scheduled jobs left on all-purpose clusters</td><td>Higher DBU rate, and the cluster often stays up</td><td>Jobs compute or serverless jobs</td></tr>
+<tr><td>Making the warehouse bigger to fix a queue</td><td>Size helps one query. Queues need more clusters.</td><td>Raise the maximum cluster count</td></tr>
+<tr><td>Dashboards refreshing every few minutes</td><td>Each refresh keeps the warehouse awake all day</td><td>Refresh less often, and use result caching and precomputed tables</td></tr>
+<tr><td>Choosing serverless for work it cannot run</td><td>No RDD APIs and no sparkContext, no continuous streaming triggers, a 7-day limit</td><td>Check the limits first, or use classic</td></tr>
+<tr><td>One warehouse shared by every team</td><td>No cost attribution, and noisy neighbours</td><td>One warehouse per business unit</td></tr>
+<tr><td>Ignoring the queue metric</td><td>Users blame the tool while queries wait</td><td>Alert on Peak Queued Queries</td></tr>
+<tr><td>Long auto-stop on pro or classic warehouses</td><td>The default is 45 minutes of idle billing</td><td>Shorten it, or use serverless</td></tr>
+<tr><td>Picking a pro warehouse when serverless is available</td><td>Slow start and no Intelligent Workload Management</td><td>Use pro only for custom networking or when serverless is unavailable</td></tr>
+<tr><td>Dedicated access mode by default</td><td>Databricks recommends standard for most work. Dedicated is for RDD, GPUs, R and privileged access.</td><td>Start with standard</td></tr>
+<tr><td>Turning Photon on or off without measuring</td><td>It raises the DBU rate, and helps only some workloads</td><td>Test your real job</td></tr>
+<tr><td>Assuming serverless is always cheaper</td><td>Its DBU rate is higher. It saves idle time and VM work, not every dollar.</td><td>Compare total monthly cost for your usage pattern</td></tr>
+<tr><td>Treating serverless as zero-effort</td><td>A newer environment version can change behaviour, for example how errors surface under Spark Connect</td><td>Pin the environment version and test before upgrading</td></tr>
+<tr><td>No tags or budget policy on serverless</td><td>Usage cannot be split by team afterwards</td><td>Set a budget policy on every serverless workload</td></tr>
+</table></div></section>
+
+<section id="s41"><p class="eyebrow">Watch out</p><h2>What to watch out for</h2>
+<ul>
+<li><b>Start-up time.</b> Serverless in default mode starts quickly. Standard mode, pro and classic take minutes. Do not put a slow start in front of a user.</li>
+<li><b>Serverless limits.</b> Only Spark Connect APIs, no RDD access, no global temporary views, 7-day maximum runs. The full list is on the <a href="/learn/databricks-vs-aws-lakehouse/#s13">limitations section</a> of the comparison page.</li>
+<li><b>Quotas.</b> Serverless usage is limited in DBUs per hour, so a big backfill can hit a quota.</li>
+<li><b>Opaque cost.</b> You see DBUs, not machines. Use system tables and budget policies for attribution.</li>
+<li><b>Availability.</b> Check that serverless is enabled for your cloud, region and each product kind.</li>
+<li><b>Environment versions.</b> They change what libraries and behaviour you get. Pin and test.</li>
+<li><b>Dev and prod.</b> Keep separate warehouses and workspaces so a dev experiment cannot slow production dashboards.</li></ul></section>
+
+<section id="s42"><p class="eyebrow">Quick chooser</p><h2>Six questions, in order</h2>
+<ol>
+<li><b>Is it SQL from a BI tool or editor?</b> Use a serverless SQL warehouse. Use pro or classic only for custom networking or when serverless is unavailable.</li>
+<li><b>Is it interactive development?</b> Use a serverless notebook, or standard all-purpose compute. Use dedicated for GPU, RDD or R.</li>
+<li><b>Is it a scheduled job?</b> Use serverless jobs unless a limit blocks it. Use Standard mode if it can wait.</li>
+<li><b>Does it need Scala, RDD code, custom images, special networking, always-on streaming, or runs over 7 days?</b> Use a classic job cluster.</li>
+<li><b>Is it large, steady and heavy?</b> Price a classic cluster on spot against serverless for your real usage.</li>
+<li><b>Is it a declarative pipeline?</b> Use serverless pipelines in triggered mode.</li></ol></section>
+
+<section id="s43"><p class="eyebrow">Checked</p><h2>What was checked, and what was not</h2>
+<p>These were checked against Databricks documentation on 21 November 2026:</p>
+<ul>
+<li><a href="https://docs.databricks.com/compute/serverless/index.html">Serverless compute overview</a> (notebooks, jobs, pipelines, SQL warehouses, and separate enablement for warehouses)</li>
+<li><a href="https://docs.databricks.com/aws/en/compute/sql-warehouse/warehouse-types.html">SQL warehouse types</a> (serverless, pro and classic features and start-up)</li>
+<li><a href="https://docs.databricks.com/aws/compute/sql-warehouse/warehouse-behavior">Warehouse sizing, scaling and queuing</a> (10 queries per cluster, queue limit, scale-up and scale-down rules)</li>
+<li><a href="https://docs.databricks.com/aws/en/compute/serverless/dependencies">Serverless environment, dependencies and memory</a></li>
+<li><a href="https://docs.databricks.com/aws/compute/access-mode-limitations">Access modes and limitations</a> (standard and dedicated)</li>
+<li><a href="https://docs.databricks.com/aws/en/compute/serverless/limitations">Serverless limitations</a> and <a href="https://docs.databricks.com/aws/en/compute/serverless/performance-modes">performance modes</a></li></ul>
+<div class="callout w"><p><b>Not confirmed:</b> whether high memory is still labelled preview, the exact minimum and maximum cluster controls shown on a serverless warehouse in your workspace, the default auto-termination time of all-purpose clusters, which release channels apply to serverless warehouses and pipelines, and the full list of other serverless features. Check the settings page in your own workspace before you rely on any of them.</p></div></section>

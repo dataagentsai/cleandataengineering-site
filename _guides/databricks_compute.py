@@ -1,4 +1,4 @@
-"""Databricks compute and cost: a hub and nine pages at /learn/databricks-compute/.
+"""Databricks compute and cost: a hub and ten pages at /learn/databricks-compute/.
 
     python3 _guides/databricks_compute.py      (then python3 _site/nav.py and python3 _site/seo.py)
 
@@ -70,6 +70,13 @@ PAGES = [
          qa=[("Will client A and client B get different serverless?", "Yes. They are different accounts and Databricks isolates each customer's serverless workloads from every other customer's. Nothing is shared at the VM level."),
              ("Can one client have separate serverless for prod and dev, or BU1 and BU2?", "Yes. Use separate workspaces for hard separation, and separate warehouses plus serverless budget policies per business unit for soft separation. Each workspace uses serverless independently."),
              ("Bigger warehouse or more clusters?", "A bigger size makes one query faster. More clusters let more queries run at once without queueing. They fix different problems.")]),
+    dict(slug="choosing-compute", title="Choosing Databricks compute: classic, serverless, SQL warehouses, users, batch and live access, settings and mistakes", short="Choosing compute",
+         desc="How many kinds of serverless there are, what you can and cannot configure on each, the factors that decide the choice (users, concurrency, latency, batch versus live, language, networking), scenarios with verdicts, sizing, common mistakes and what to watch out for.",
+         related=["compute-choice", "levers", "tags", "cost"],
+         qa=[("How many types of serverless does Databricks have?", "Four for your own code and SQL: serverless SQL warehouses, serverless notebooks, serverless jobs and serverless pipelines. Other features such as Model Serving and Predictive Optimization are separate serverless products with their own settings and billing."),
+             ("What can I configure on serverless jobs?", "Performance mode, the environment version and libraries, the job timeout and retries, notifications, tags and a budget policy. You cannot choose machine types, worker counts, Photon or init scripts."),
+             ("A warehouse is slow. Do I make it bigger or add clusters?", "Make it bigger when a single query is slow or spills to disk. Add clusters when queries wait in a queue. Size helps one query, clusters help concurrency."),
+             ("When should I use classic compute instead of serverless?", "When you need Scala or RDD code, custom images or init scripts, custom networking, always-on low-latency streaming, runs longer than 7 days, or the lowest hourly price on spot for large steady work.")]),
     dict(slug="photon-and-caches", title="Photon and every Databricks cache: result, Spark, disk, page and metadata caches", short="Photon and caches",
          desc="How Photon replaces Spark's JVM operators with a vectorized C++ engine, when it helps, and which cache each compute type supports: result cache, Spark cache, disk cache, OS page cache, Delta metadata cache.",
          related=["aqe", "levers"],

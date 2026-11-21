@@ -107,6 +107,7 @@ SECTIONS = [
             ("All compute and cost pages", "/learn/databricks-compute/"),
             ("Cluster architecture, memory, machine types", "/learn/databricks-compute/cluster-architecture/"),
             ("SQL warehouses and serverless", "/learn/databricks-compute/warehouses-and-serverless/"),
+            ("Choosing compute: serverless, classic, warehouses", "/learn/databricks-compute/choosing-compute/"),
             ("Photon and every cache", "/learn/databricks-compute/photon-and-caches/"),
             ("How billing works: DBUs, SKUs, autoscaling", "/learn/databricks-compute/how-billing-works/"),
             ("Dividing the bill (chargeback)", "/learn/databricks-compute/dividing-the-bill/"),
