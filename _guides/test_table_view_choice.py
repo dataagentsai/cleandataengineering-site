@@ -31,7 +31,8 @@ def test_forbidden_names():
 
 def test_internal_links_exist():
     for href in set(re.findall(r'href="(/[^"#?]*)"', HTML)):
-        assert (ROOT / href.strip("/") / "index.html").exists() or href in ("/",), href
+        target = ROOT / href.strip("/")
+        assert (target / "index.html").exists() or target.is_file() or href == "/", href
 
 
 def test_no_unfilled_placeholders():
