@@ -103,6 +103,7 @@ SECTIONS = [
             ("Iceberg lakehouse: who owns the catalog?", "/learn/iceberg-lakehouse-aws-databricks/"),
             ("AWS-native vs Databricks lakehouse", "/learn/databricks-vs-aws-lakehouse/"),
             ("Metric views, taught from zero", "/learn/metric-views/"),
+            ("Table, view, materialized view or metric view", "/learn/table-view-materialized-view-metric-view/"),
             ("Databricks compute and cost", None),
             ("All compute and cost pages", "/learn/databricks-compute/"),
             ("Cluster architecture, memory, machine types", "/learn/databricks-compute/cluster-architecture/"),

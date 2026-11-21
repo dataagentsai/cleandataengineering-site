@@ -1,0 +1,116 @@
+<p class="verify">Written from the author's knowledge of Databricks docs, not re-checked live. Example numbers were computed by running the SQL on a small local engine with the tiny tables shown. Check the "Not confirmed" list at the bottom before you design.</p>
+
+<section id="s1"><p class="eyebrow">The short answer</p><h2>Four ways to keep a business number</h2>
+<p>A business number such as "conversion rate" or "net revenue" has to live somewhere. You have four choices, and they differ on two questions: <b>is the result stored, or computed when asked?</b> and <b>is the grouping fixed, or chosen by the person asking?</b></p>
+{{FOUR}}
+<div class="box"><p><b>The one-line rule.</b> Use <b>tables</b> for data that pipelines write. Use <b>views</b> and <b>materialized views</b> for one fixed question. Use a <b>metric view</b> when the same number must be right under many groupings and in many places. Without one, the formula ends up written in ten places.</p></div></section>
+
+<section id="s2"><p class="eyebrow">What each one is</p><h2>The four objects in plain words</h2>
+<div class="tw"><table class="t">
+<tr><th></th><th>Physical table</th><th>Normal view</th><th>Materialized view</th><th>Metric view</th></tr>
+<tr><td><b>What it holds</b></td><td>The rows themselves</td><td>A saved SELECT</td><td>A saved SELECT plus its stored result</td><td>A saved list of measures, dimensions and joins (YAML)</td></tr>
+<tr><td><b>When it computes</b></td><td>When a pipeline writes it</td><td>Every time someone reads it</td><td>At refresh time; reads use the stored result</td><td>Every time someone asks, for the grouping they ask for</td></tr>
+<tr><td><b>Who chooses the grouping</b></td><td>Whoever writes the query</td><td>The author, when creating it</td><td>The author, when creating it</td><td>The person asking, with <code>GROUP BY</code></td></tr>
+<tr><td><b>Can a pipeline update or delete rows</b></td><td>Yes</td><td>No, nothing is stored</td><td>No, the engine refreshes it</td><td>No, nothing is stored (unless you switch on materialization)</td></tr>
+<tr><td><b>Read speed</b></td><td>Fast</td><td>As slow as the query</td><td>Fast</td><td>As slow as the query, unless materialized</td></tr>
+<tr><td><b>Costs while idle</b></td><td>Storage</td><td>Nothing</td><td>Storage, plus the refresh compute</td><td>Nothing</td></tr>
+</table></div></section>
+
+<section id="s3"><p class="eyebrow">Problem 1</p><h2>The grain problem, with real numbers</h2>
+<p><b>Grain</b> means what one row stands for and what you group by. Take a tiny table of daily results:</p>
+<pre class="code">daily_facts
+day         region  channel  visits  orders
+2026-01-01  North   web       1000      50
+2026-01-01  South   web        100      20
+2026-01-02  North   app       1000     100
+2026-01-02  South   web        100       5</pre>
+<p>Conversion rate means orders divided by visits. Compute it two ways for the whole table:</p>
+<pre class="code">SUM(orders) / SUM(visits)      = 175 / 2200 = 8.0%   (right)
+AVG(orders / visits)           = 10.0%               (wrong)</pre>
+<p>The second one gives each row the same weight, so the 100-visit South rows count as much as the 1,000-visit North rows. Now suppose you saved a normal view that groups by region:</p>
+<pre class="code">CREATE VIEW conv_by_region AS
+SELECT region, SUM(orders) / SUM(visits) AS conversion_rate
+FROM daily_facts GROUP BY region;
+-- North 7.5%   South 12.5%</pre>
+<p>Someone now wants the overall figure, or the figure by day. The view has already thrown away the orders and visits, so the only thing left to do is average the two rates: (7.5% + 12.5%) / 2 = <b>10.0%, the wrong number again</b>. By day the right answers are 6.4% and 9.5%, and the view cannot produce them at all.</p>
+<p>A metric view stores the formula and not the result:</p>
+<pre class="code">measures:
+  - name: conversion_rate
+    expr: SUM(orders) / SUM(visits)
+
+SELECT day, MEASURE(conversion_rate) FROM daily_metrics GROUP BY ALL;   -- 6.4%, 9.5%
+SELECT MEASURE(conversion_rate) FROM daily_metrics;                      -- 8.0%</pre>
+<p>Same formula, any grouping, right every time. A materialized view has the same weakness as the normal view, because what it stores was grouped when it was built.</p></section>
+
+<section id="s4"><p class="eyebrow">Problem 2</p><h2>Without a metric view, the SQL lives in ten places</h2>
+<p>The grain problem is the sharpest case of a wider one: <b>repeated code</b>. A normal view or table can hold the formula once, but only for one grouping. Everyone who needs another grouping copies the formula into their own query. Count the places in a normal company:</p>
+<ol>
+<li>the sales dashboard</li><li>the finance report</li><li>the weekly email</li><li>a notebook for the data team</li><li>the Power BI model</li><li>a Genie space</li><li>an AI agent's queries</li><li>an alert on a drop</li><li>a customer-facing report</li><li>the board pack extract</li></ol>
+{{COPIES}}
+<p>Ten copies do not stay equal. One author forgets to remove cancelled orders. One averages instead of summing. One filters to a single channel. Each query looks reasonable on its own, and the meeting starts with "which number is right?" The cost shows up when the rule changes:</p>
+<div class="tw"><table class="t">
+<tr><th>Change</th><th>Formula in ten places</th><th>Metric view</th></tr>
+<tr><td>"Exclude test orders from now on"</td><td>Find and edit ten queries. Miss one, and it quietly disagrees.</td><td>Edit one line. Every dashboard, tool and agent picks it up.</td></tr>
+<tr><td>"Rename the measure"</td><td>Ten edits, some of them in tools you do not own</td><td>One edit, and the old name can stay as a synonym</td></tr>
+<tr><td>"Which formula did the board see last month?"</td><td>Search ten places</td><td>Read one file in git</td></tr></table></div></section>
+
+<section id="s5"><p class="eyebrow">Problem 3</p><h2>Fan-out: a join that quietly repeats rows</h2>
+<pre class="code">orders_h (headers)           lines
+order_id  freight            order_id  line_id  amt
+1           100              1         1         50
+2            40              1         2         30
+                             1         3         20
+                             2         1         70</pre>
+<p>Total freight is 100 + 40 = <b>140</b>. Join headers to lines and sum freight, and order 1 appears three times:</p>
+<pre class="code">SELECT SUM(o.freight) FROM orders_h o JOIN lines l USING (order_id);   -- 340  (wrong)</pre>
+<p>A normal view that includes this join builds the mistake in. Every dashboard on it inherits 340. In a metric view the join is declared once, with its cardinality (<code>one_to_many</code>), and the engine keeps each measure at its own grain, so freight stays 140 while line amounts still sum by line. More on this: <a href="/learn/metric-views/granularity/">grain and fan-out</a>.</p></section>
+
+<section id="s6"><p class="eyebrow">Problem 4</p><h2>Many flavours of the same number</h2>
+<p>Teams ask for "revenue", "revenue from web only", "revenue last 7 days" and "revenue from premium customers". In SQL each one is a copy of the query with an extra <code>WHERE</code> or <code>CASE</code>. On our tiny table, web revenue is North 5,000 and South 2,400. As views that means four views to keep in step; as tables, four tables to refresh. In a metric view they are four named measures on one source:</p>
+<pre class="code">measures:
+  - name: revenue
+    expr: SUM(revenue)
+  - name: web_revenue
+    expr: SUM(revenue) FILTER (WHERE channel = 'web')</pre>
+<p>Each one can then be cut by region, day or anything else the fields allow.</p></section>
+
+<section id="s7"><p class="eyebrow">Where table and materialized view win</p><h2>Speed, writes and security</h2>
+<p>A metric view is not a faster or cheaper way to hold data. It stores nothing by default, so a query still scans the gold tables beneath it. That is where the other three earn their place.</p>
+<div class="tw"><table class="t">
+<tr><th>Need</th><th>Why a metric view is not the answer</th><th>Use</th></tr>
+<tr><td>A pipeline updates, deletes or merges rows (for example slowly changing history)</td><td>It stores no rows</td><td class="v pursue">Physical table</td></tr>
+<tr><td>Heavy cleaning, deduplication or joins of raw data</td><td>It defines numbers, not transformations</td><td class="v pursue">Tables in the pipeline (bronze, silver, gold)</td></tr>
+<tr><td>One fixed, expensive question read by many people, such as a daily executive summary</td><td>It would recompute it on every read</td><td class="v pursue">Materialized view</td></tr>
+<tr><td>A metric view is correct but too slow on big data</td><td>Correct is not fast</td><td class="v pursue">Metric view <i>with</i> materialization, or a pre-aggregated gold table</td></tr>
+<tr><td>Row filters and column masks that must always apply</td><td>Put security on the gold tables, so every route is covered</td><td class="v pursue">Tables with row filters and masks</td></tr>
+<tr><td>Shaping one table for one reader (rename columns, hide a few)</td><td>Overkill</td><td class="v pursue">Normal view</td></tr></table></div>
+<p>See <a href="/learn/metric-views/performance/">speed: materialization and pre-aggregation</a> and <a href="/learn/metric-views/security/">row-level security</a>.</p></section>
+
+<section id="s8"><p class="eyebrow">Decision chart</p><h2>Which one, step by step</h2>
+{{DECIDE}}</section>
+
+<section id="s9"><p class="eyebrow">Scenarios</p><h2>Common situations, with a verdict</h2>
+<div class="tw"><table class="t">
+<tr><th>Situation</th><th>Use</th><th>Verdict</th><th>Why</th></tr>
+<tr><td>Silver table updated by a nightly merge</td><td>Physical table</td><td class="v pursue">Pursue</td><td>Needs writes and deletes</td></tr>
+<tr><td>One dashboard, one fixed grouping, small data</td><td>Normal view</td><td class="v pursue">Pursue</td><td>Simplest thing that works</td></tr>
+<tr><td>One dashboard, one fixed grouping, slow query read all day</td><td>Materialized view</td><td class="v pursue">Pursue</td><td>Compute once, read many times</td></tr>
+<tr><td>Ratio or distinct count that people slice many ways</td><td>Metric view</td><td class="v pursue">Pursue</td><td>Stays correct under any grouping</td></tr>
+<tr><td>Same KPI in dashboard, Power BI, Genie, alerts and agents</td><td>Metric view</td><td class="v pursue">Pursue</td><td>One definition instead of ten copies</td></tr>
+<tr><td>Header-and-line data where totals must not double</td><td>Metric view with <code>one_to_many</code></td><td class="v pursue">Pursue</td><td>Stops fan-out</td></tr>
+<tr><td>A metric view to replace the gold tables</td><td>Metric view only</td><td class="v drop">Drop</td><td>Dirty or non-atomic data gives wrong numbers faster</td></tr>
+<tr><td>A metric view for a number only one person uses once</td><td>Metric view</td><td class="v drop">Drop</td><td>A normal query is less work</td></tr>
+<tr><td>A materialized view for a number people regroup</td><td>Materialized view</td><td class="v drop">Drop</td><td>Its stored grouping cannot be re-summed correctly</td></tr>
+<tr><td>A normal view per grouping: by region, by month, by region and month, and so on</td><td>Many views</td><td class="v drop">Drop</td><td>Views multiply; a metric view needs one</td></tr>
+<tr><td>Security rules only inside a metric view's <code>filter</code></td><td>Metric view</td><td class="v drop">Drop</td><td>That is scope, not security; put row filters on the tables</td></tr></table></div></section>
+
+<section id="s10"><p class="eyebrow">Put together</p><h2>How the four fit as layers</h2>
+<ol class="steps">
+<li><b>Tables</b> at the bottom: clean, atomic gold tables written by pipelines, with row filters and masks.</li>
+<li><b>Materialized views</b> (optional) beside them for fixed, expensive summaries.</li>
+<li><b>Metric views</b> on top: the one place each business number is defined, over the gold tables and joins.</li>
+<li><b>Everything else</b> (dashboards, Power BI, Genie, agents, alerts) reads the metric view, so none of them writes the formula again.</li></ol>
+<p>Normal views fill the gaps: a renamed or trimmed copy of one table for one reader.</p></section>
+
+<section id="s11"><p class="eyebrow">Honest limits</p><h2>What to check before you build</h2>
+<div class="callout w"><p><b>Not confirmed from this session:</b> current YAML keys and minimum runtime for metric views; whether your BI tool reads metric views natively or needs custom SQL; how a materialized view refreshes on your compute and what it costs; the exact materialization options for metric views. The earlier page <a href="/learn/metric-views/limits/">Limits of each</a> lists the limits as of its own check date. The sample tables and numbers above are small and made up to show the idea, not benchmarks.</p></div></section>
