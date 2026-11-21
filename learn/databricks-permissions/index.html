@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Databricks Permissions Explained: Unity Catalog, ACLs, Admins and Grants</title>
+<meta name="description" content="A plain guide to Databricks permissions: the five layers (identity, entitlements, workspace object ACLs, Unity Catalog privileges, storage), admin roles, the USE CATALOG + USE SCHEMA + SELECT rule, ownership vs MANAGE, row filters, column masks and ABAC, service principals, workspace binding and audit, with ready-made grants for common roles, mistakes to avoid and a verdict for each choice."><link rel="canonical" href="https://cleandataengineering.ai/learn/databricks-permissions/">
+<meta property="og:title" content="Databricks Permissions Explained: Unity Catalog, ACLs, Admins and Grants"><meta property="og:description" content="A plain guide to Databricks permissions: the five layers (identity, entitlements, workspace object ACLs, Unity Catalog privileges, storage), admin roles, the USE CATALOG + USE SCHEMA + SELECT rule, ownership vs MANAGE, row filters, column masks and ABAC, service principals, workspace binding and audit, with ready-made grants for common roles, mistakes to avoid and a verdict for each choice."><meta property="og:url" content="https://cleandataengineering.ai/learn/databricks-permissions/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .bi .fig { border:var(--line); border-radius:var(--wob); padding:12px 14px; margin:16px 0; background:#fff; overflow-x:auto; }
+  .bi .fig svg { width:100%; min-width:680px; height:auto; display:block; } .bi .fig text { font-family:var(--hand); fill:#111; }
+  .bi .fig p { font-size:13.5px; color:var(--muted); margin:6px 0 0; }
+  .bi .box { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--butter-wash); }
+  .bi .warn { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--rose-wash); }
+  .bi .tabs3 { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
+  .bi .tabs3 a { border:1.5px solid var(--ink); border-radius:999px; padding:4px 14px; background:#fff; color:var(--ink); text-decoration:none; font-size:15px; }
+  .bi .tabs3 a.on { background:var(--butter-wash); font-weight:700; }
+  .bi table.t td { font-size:14px; }
+  .bi td.v { font-weight:700; white-space:nowrap; }
+  .bi .toc { columns:2; } @media (max-width:700px){ .bi .toc { columns:1; } }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Databricks permissions: who can do what, from account admin to a single table", "description": "A plain guide to Databricks permissions: the five layers (identity, entitlements, workspace object ACLs, Unity Catalog privileges, storage), admin roles, the USE CATALOG + USE SCHEMA + SELECT rule, ownership vs MANAGE, row filters, column masks and ABAC, service principals, workspace binding and audit, with ready-made grants for common roles, mistakes to avoid and a verdict for each choice.", "url": "https://cleandataengineering.ai/learn/databricks-permissions/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-21", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "What do I need to read a table in Unity Catalog?", "acceptedAnswer": {"@type": "Answer", "text": "USE CATALOG on the catalog, USE SCHEMA on the schema, and SELECT on the table, or SELECT on the schema or catalog above it, which inherits downward. SELECT alone is not enough."}}, {"@type": "Question", "name": "What is the difference between an owner and MANAGE?", "acceptedAnswer": {"@type": "Answer", "text": "An object has exactly one owner, who has every capability on it. MANAGE can be given to several principals and lets them manage privileges, transfer ownership, rename and drop, but it does not give them data access. A MANAGE holder can still grant themselves SELECT. ALL PRIVILEGES does not include MANAGE."}}, {"@type": "Question", "name": "Is there a DENY statement?", "acceptedAnswer": {"@type": "Answer", "text": "I found no SQL DENY statement in the docs. Denial exists through ABAC DENY policies, which are labelled Beta."}}, {"@type": "Question", "name": "Should I grant permissions to users or groups?", "acceptedAnswer": {"@type": "Answer", "text": "Groups. Account groups can be granted Unity Catalog data access and workspace permissions, and a person who changes team only has to move between groups. Service principals, not people, should own and run production jobs."}}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Concepts</h4><ul><li><details><summary><a href="/leaders/">For leaders</a></summary><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/leaders/spec-driven/">Spec-driven development: agents</a></li><li><a href="/leaders/spec-driven/data-platform/">Spec-driven development: data platforms</a></li><li><a href="/papers/">Technical papers</a></li></ul></details></li><li><details><summary><a href="/learn/fundamentals/">Fundamentals</a></summary><ul><li><a href="/learn/fundamentals/">All fundamentals</a></li><li><a href="/learn/fundamentals/performance/">Performance</a></li><li><a href="/learn/fundamentals/cost/">Cost</a></li><li><a href="/learn/fundamentals/processing/">Processing</a></li><li><a href="/learn/fundamentals/security/">Security</a></li><li><a href="/learn/fundamentals/storage/">Storage</a></li><li><a href="/learn/fundamentals/database-families/">Database families</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/">Data systems</a></summary><ul><li><a href="/learn/data-systems/">The whole system, end to end</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li><li class="sub">Upstreams</li><li><a href="/learn/data-systems/upstreams/">Know your sources</a></li><li><a href="/learn/data-systems/upstreams/big-picture/">Upstreams, the big picture</a></li><li><a href="/learn/data-systems/upstreams/apis/">API sources</a></li><li><a href="/learn/data-systems/upstreams/files/">File sources</a></li><li><a href="/learn/data-systems/upstreams/joins/">Learning the joins</a></li><li><a href="/learn/data-systems/upstreams/answers/">Where the answers go</a></li><li><a href="/learn/data-systems/upstreams/questionnaire/">Source system questionnaire</a></li><li class="sub">Downstreams</li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/platform/">Data and AI platform</a></summary><ul><li class="sub">Conceptual architecture</li><li><a href="/learn/data-systems/platform/">The platform, whole</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#hops">Data engineering</a></summary><ul><li><a href="/learn/data-platform-suite/">Our platform, picture to code</a></li><li class="sub">The hops</li><li><a href="/learn/data-platform-architecture/ingestion/">Hop 1: sources to bronze</a></li><li><a href="/learn/data-platform-architecture/bronze-to-silver/">Hop 2: bronze to silver</a></li><li><a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a></li><li><a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a></li><li class="sub">Tables and formats</li><li><a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a></li><li><a href="/learn/row-vs-column-storage/">Row vs column storage</a></li><li><a href="/learn/table-maintenance/">Who maintains your tables</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse: who owns the catalog?</a></li><li><a href="/learn/databricks-vs-aws-lakehouse/">AWS-native vs Databricks lakehouse</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/databricks-permissions/">Databricks permissions</a></li><li><a href="/learn/table-view-materialized-view-metric-view/">Table, view, materialized view or metric view</a></li><li><a href="/learn/materialized-views/">Databricks materialized views</a></li><li class="sub">Databricks compute and cost</li><li><a href="/learn/databricks-compute/">All compute and cost pages</a></li><li><a href="/learn/databricks-compute/cluster-architecture/">Cluster architecture, memory, machine types</a></li><li><a href="/learn/databricks-compute/warehouses-and-serverless/">SQL warehouses and serverless</a></li><li><a href="/learn/databricks-compute/choosing-compute/">Choosing compute: serverless, classic, warehouses</a></li><li><a href="/learn/databricks-compute/compute-settings/">Compute settings: warehouses, jobs, node types</a></li><li><a href="/learn/databricks-compute/cost-by-workload/">Cost map: workloads, compute and DBU rates</a></li><li><a href="/learn/databricks-compute/photon-and-caches/">Photon and every cache</a></li><li><a href="/learn/databricks-compute/how-billing-works/">How billing works: DBUs, SKUs, autoscaling</a></li><li><a href="/learn/databricks-compute/dividing-the-bill/">Dividing the bill (chargeback)</a></li><li><a href="/learn/databricks-compute/system-tables/">System tables and what reading them costs</a></li><li><a href="/learn/databricks-compute/logs-and-visibility/">Serverless visibility and logs</a></li><li><a href="/learn/databricks-compute/delta-sharing-and-regions/">Delta Sharing and cross-region cost</a></li><li><a href="/learn/databricks-compute/backup-and-recovery-architecture/">Backup and recovery architecture</a></li><li><a href="/learn/databricks-compute/cost-saving-hacks/">Cost-saving hacks</a></li><li class="sub">Databricks interview prep</li><li><a href="/learn/databricks-interview/">All interview topics</a></li><li><a href="/learn/databricks-interview/delta-maintenance/">OPTIMIZE, VACUUM, compaction</a></li><li><a href="/learn/databricks-interview/table-maintenance-pictures/">Table maintenance in pictures (real runs)</a></li><li><a href="/learn/databricks-interview/clustering-and-compaction/">Compaction, partitioning, Z-order, liquid</a></li><li><a href="/learn/databricks-interview/maintenance-strategy/">Maintenance strategy: auto or scheduled</a></li><li><a href="/learn/databricks-interview/slow-writes/">Why writes are slow</a></li><li><a href="/learn/databricks-interview/backup-and-recovery-azure/">Backup and recovery on Azure</a></li><li><a href="/learn/databricks-interview/tagging-best-practices/">Tagging best practices</a></li><li><a href="/learn/databricks-interview/row-level-security/">Row-level security and masking</a></li><li><a href="/learn/databricks-interview/compute-choice/">Which compute for which job</a></li><li><a href="/learn/databricks-interview/joins/">Join types</a></li><li><a href="/learn/databricks-interview/skew-and-shuffle/">Skew, salting and shuffle</a></li><li><a href="/learn/databricks-interview/aqe-photon-po/">AQE, Photon, Predictive Optimization</a></li><li><a href="/learn/databricks-interview/cost-and-performance/">Biggest cost and performance levers</a></li><li><a href="/learn/databricks-interview/declarative-and-semantic/">What declarative means + semantic example</a></li><li><a href="/learn/databricks-interview/asset-bundles/">Asset Bundles</a></li><li><a href="/learn/databricks-interview/lakeflow-connect/">Lakeflow Connect</a></li><li><a href="/learn/databricks-interview/uniform/">UniForm</a></li><li><a href="/learn/databricks-interview/vector-search/">Vector Search</a></li><li><a href="/learn/databricks-interview/dbt-and-odcs/">dbt and ODCS</a></li><li><a href="/learn/databricks-interview/egress-and-ingress/">Egress and ingress cost</a></li><li><a href="/learn/databricks-interview/hard-problems-and-questions/">Hard problems and question bank</a></li><li class="sub">History, SCD and facts</li><li><a href="/learn/gold-data-modelling/">Gold data modelling</a></li><li><a href="/learn/silver-to-gold/">Silver to gold: the harness</a></li><li><a href="/learn/silver-to-gold/worked-example/">› Worked example (start here)</a></li><li><a href="/learn/silver-to-gold/kinds-of-fact/">› Six kinds of fact</a></li><li><a href="/learn/silver-to-gold/fact-examples/">› Fact examples in SQL</a></li><li><a href="/learn/silver-to-gold/dimension-examples/">› Dimension examples in SQL</a></li><li><a href="/learn/silver-to-gold/rulebook-harness/">› Rulebook: the harness</a></li><li><a href="/learn/spark-declarative-pipelines/">Declarative pipelines: open source vs Lakeflow</a></li><li><a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD2: AUTO CDC or own PySpark?</a></li><li><a href="/learn/gold-harness-spec/">Gold harness spec: facts and SCD2</a></li><li><a href="/learn/time-travel-vs-scd2/">Time travel as SCD Type 2?</a></li><li class="sub">Streaming and real time</li><li><a href="/learn/streaming/">Streaming on AWS and Databricks</a></li><li><a href="/learn/streaming/options/">Streaming: all options</a></li><li><a href="/learn/streaming/sim/">Streaming simulator</a></li><li><a href="/learn/streaming/real-time-mode/">Databricks real time: RTM and Lakehouse//RT</a></li><li class="sub">Quality and testing</li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/data-platform-sim/data-quality/">Data quality, metadata-driven</a></li><li class="sub">Hands-on simulators</li><li><a href="/learn/data-platform-sim/">One batch through Spark and Delta</a></li><li><a href="/learn/data-platform-sim/spark/">Spark internals</a></li><li><a href="/learn/data-platform-sim/delta/">Delta Lake internals</a></li><li><a href="/learn/data-platform-sim/performance/">Spark performance: 12 problems</a></li><li><a href="/learn/data-platform-sim/problems/">Problems solved: SCD2, late data, duplicates</a></li><li class="sub">On AWS</li><li><a href="/learn/data-platform-architecture/aws-databricks/">AWS + Databricks, ETL end to end</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse on AWS: A vs B</a></li><li><a href="/learn/databricks-vs-aws-lakehouse/">AWS-native vs Databricks, all concerns</a></li><li><a href="/learn/aws-data-services/">AWS data services catalog</a></li><li class="sub">Open specs</li><li><a href="/learn/datatwin/">DataTwin</a></li><li><a href="/projects/data-eng-specs/">Clean Data Engineering specs</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/semantic-layer/">BI and analytics</a></summary><ul><li><a href="/concepts/semantic-layer/">Hop 4: the semantic layer</a></li><li><a href="/writing/genie-metric-views/">Genie and metric views</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/">Power BI vs Databricks AI/BI</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/power-bi/">Power BI and Fabric, in depth</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/ai-bi/">Databricks AI/BI, in depth</a></li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/#ml-engineering">ML</a></summary><ul><li><a href="/concepts/#ml-engineering">Key ML ideas (pages coming)</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/ai-universe/">AI</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness-intro/">Agent Harness, the big picture</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/agent-harness-stack-map/">Agent Harness: architecture map</a></li><li><a href="/learn/drug-safety-agent-databricks/">Drug-safety agent on Databricks: the tour</a></li><li><a href="/learn/agent-frameworks/">Agent frameworks: when to use which</a></li><li><a href="/learn/which-model/">Which AI model for which job</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li><li><a href="/learn/ai-governance/">AI governance: running AI you can trust</a></li><li><a href="/learn/ai-gateways/">AI gateways: which one to use</a></li><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">Open spec: AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">Open spec: AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">Open spec: AgentTwin</a></li><li><a href="/lab/">The AgentTwin Lab</a></li><li><a href="https://github.com/dataagentsai/reference-agent">Code: Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">Code: AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Code: Eval Harness Framework</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#concerns">Across all of them</a></summary><ul><li><a href="/learn/data-systems/platform/#concerns">All 24 concerns</a></li><li><a href="/learn/data-platform-mind-map/">Mind map: every concern, every cloud</a></li><li><a href="/learn/data-systems/platform/layout/">Layout: catalogs and schemas</a></li><li><a href="/learn/data-systems/platform/environments/">Environments and CI/CD</a></li><li><a href="/learn/data-systems/platform/cost/">Cost and FinOps</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li><li><a href="/learn/data-platform-architecture/test-strategy/">Test strategy in practice</a></li></ul></details></li><li><a href="/concepts/#a-z">Key concepts, A to Z</a></li></ul><h4>On your cloud</h4><ul><li><details><summary><a href="/platforms/databricks/">Databricks</a></summary><ul><li><a href="/platforms/databricks/#systems">Data systems</a></li><li><a href="/platforms/databricks/#de">Data engineering</a></li><li><a href="/platforms/databricks/#bi">BI and analytics</a></li><li><a href="/platforms/databricks/#ml">ML</a></li><li><a href="/platforms/databricks/#ai">AI</a></li><li><a href="/platforms/databricks/#across">Across all of them</a></li><li><a href="/platforms/databricks/#paths">Learning paths</a></li><li><a href="/platforms/databricks/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/aws/">AWS</a></summary><ul><li><a href="/platforms/aws/#systems">Data systems</a></li><li><a href="/platforms/aws/#de">Data engineering</a></li><li><a href="/platforms/aws/#bi">BI and analytics</a></li><li><a href="/platforms/aws/#ml">ML</a></li><li><a href="/platforms/aws/#ai">AI</a></li><li><a href="/platforms/aws/#across">Across all of them</a></li><li><a href="/platforms/aws/#paths">Learning paths</a></li><li><a href="/platforms/aws/#certs">Certifications</a></li><li><a href="/learn/aws-data-services/">AWS data services: all 66</a></li></ul></details></li><li><details><summary><a href="/platforms/azure/">Azure and Fabric</a></summary><ul><li><a href="/platforms/azure/#systems">Data systems</a></li><li><a href="/platforms/azure/#de">Data engineering</a></li><li><a href="/platforms/azure/#bi">BI and analytics</a></li><li><a href="/platforms/azure/#ml">ML</a></li><li><a href="/platforms/azure/#ai">AI</a></li><li><a href="/platforms/azure/#across">Across all of them</a></li><li><a href="/platforms/azure/#paths">Learning paths</a></li><li><a href="/platforms/azure/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/gcp/">Google Cloud</a></summary><ul><li><a href="/platforms/gcp/#systems">Data systems</a></li><li><a href="/platforms/gcp/#de">Data engineering</a></li><li><a href="/platforms/gcp/#bi">BI and analytics</a></li><li><a href="/platforms/gcp/#ml">ML</a></li><li><a href="/platforms/gcp/#ai">AI</a></li><li><a href="/platforms/gcp/#across">Across all of them</a></li><li><a href="/platforms/gcp/#paths">Learning paths</a></li><li><a href="/platforms/gcp/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/open/">Open source</a></summary><ul><li><a href="/platforms/open/#systems">Data systems</a></li><li><a href="/platforms/open/#de">Data engineering</a></li><li><a href="/platforms/open/#bi">BI and analytics</a></li><li><a href="/platforms/open/#ml">ML</a></li><li><a href="/platforms/open/#ai">AI</a></li><li><a href="/platforms/open/#across">Across all of them</a></li><li><a href="/platforms/open/#paths">Learning paths</a></li><li><a href="/platforms/open/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/anthropic/">Claude (Anthropic)</a></summary><ul><li><a href="/platforms/anthropic/#ai">AI</a></li><li><a href="/platforms/anthropic/#certs">Certifications</a></li></ul></details></li><li><a href="/certifications/">All certifications</a></li></ul><h4>Your role</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/data-engineering/">Data Engineering</a></summary><ul><li><a href="/data-engineering/">Start here</a></li><li><a href="/paths/data-engineering/">Learning path</a></li><li><a href="/data-engineering/#tools">Practice and simulators</a></li><li><a href="/projects/?subject=data">Projects to join</a></li><li><a href="/concepts/#data-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/">Learning path</a></li><li><a href="/learn/agent-harness-sim/">Simulator: Agent Harness</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li><li><a href="/projects/?subject=ai">Projects to join</a></li><li><a href="/concepts/#ai-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/">Learning path</a></li><li><a href="/learn/llm-api-sim/">Simulator: Claude API</a></li><li><a href="/projects/?subject=llm">Projects to join</a></li><li><a href="/concepts/#llm-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/">Learning path</a></li><li><a href="/concepts/#ml-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/">Learning path</a></li><li><a href="/concepts/#software-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/forward-deployed/">Start here: the roadmap</a></li><li><a href="/paths/forward-deployed/">Learning path</a></li><li><a href="/concepts/#forward-deployed">Key concepts</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li><li><a href="/projects/">All projects to join</a></li></ul><h4>How we work</h4><ul><li><details><summary><a href="/how-we-work/#thinking">Thinking principles</a></summary><ul><li><a href="/how-we-work/#thinking">All thinking principles</a></li><li><a href="/how-we-work/critical-thinking/">Critical thinking in data projects</a></li></ul></details></li><li><a href="/how-we-work/#ba">Business analysis</a></li><li><details><summary><a href="/how-we-work/#pm">Project management</a></summary><ul><li><a href="/how-we-work/#pm">All project management</a></li><li><a href="/how-we-work/estimation/">Estimation mistakes in data projects</a></li><li><a href="/how-we-work/project-management-mistakes/">Top project management mistakes</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li></ul></details></li><li><details><summary><a href="/learn/technical-anchor/">The technical anchor</a></summary><ul><li><a href="/learn/technical-anchor/">The role</a></li><li><a href="/learn/technical-anchor/discovery/">Discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li></ul></details></li></ul><h4>Causes and deep tech</h4><ul><li><details><summary><a href="/ai-for-cause/">AI for a cause</a></summary><ul><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul></details></li><li><details><summary><a href="/deep-tech/">Deep tech</a></summary><ul><li><a href="/problems/">Hard problems</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul></details></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li><li><a href="/about/#join">Write or teach</a></li><li><a href="/writing/">Blog</a></li><li><a href="/research/">All open specifications</a></li><li><a href="/assets/">All open-source code</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<div class="bi"><p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › Databricks permissions</p>
+<p class="eyebrow" style="margin-top:22px">Databricks · governance and security</p>
+<h1>Databricks permissions: who can do what, from account admin to a single table</h1><p class="lede">A plain guide to Databricks permissions: the five layers (identity, entitlements, workspace object ACLs, Unity Catalog privileges, storage), admin roles, the USE CATALOG + USE SCHEMA + SELECT rule, ownership vs MANAGE, row filters, column masks and ABAC, service principals, workspace binding and audit, with ready-made grants for common roles, mistakes to avoid and a verdict for each choice.</p>
+<p class="verify">Read from the Databricks documentation on 21 November 2026 (AWS pages). Several pages were only partly readable, and some features are Beta. The "Not confirmed" list at the bottom says what I could not check. SQL marked "sketch" has not been run.</p>
+
+<section id="s1"><p class="eyebrow">The big picture</p><h2>Five layers, and all of them must say yes</h2>
+<p>People say "permissions" as if it were one thing. In Databricks it is five separate checks, and a failed request usually means one layer said no while you were looking at another.</p>
+<div class="fig"><svg viewBox="0 0 1000 235" role="img" aria-label="Five layers of Databricks permissions, left to right: identity (who you are), entitlements (which features you may use in a workspace), workspace object ACLs (notebooks, jobs, compute, warehouses), Unity Catalog grants plus row filters and column masks (data), and storage credentials and external locations (the files). Every layer must allow the action."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><rect x="10" y="30" width="176" height="120" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="98.0" y="77.0" font-size="15" text-anchor="middle">Who are you?</text><text x="98.0" y="95.0" font-size="13" text-anchor="middle">user, group,</text><text x="98.0" y="113.0" font-size="13" text-anchor="middle">service principal</text><path d="M188,90 L206,90" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="208" y="30" width="176" height="120" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="296.0" y="77.0" font-size="15" text-anchor="middle">May you use</text><text x="296.0" y="95.0" font-size="13" text-anchor="middle">this feature here?</text><text x="296.0" y="113.0" font-size="13" text-anchor="middle">entitlements</text><path d="M386,90 L404,90" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="406" y="30" width="176" height="120" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="494.0" y="68.0" font-size="15" text-anchor="middle">May you use this</text><text x="494.0" y="86.0" font-size="13" text-anchor="middle">workspace object?</text><text x="494.0" y="104.0" font-size="13" text-anchor="middle">ACLs: notebook, job,</text><text x="494.0" y="122.0" font-size="13" text-anchor="middle">cluster, warehouse</text><path d="M584,90 L602,90" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="604" y="30" width="176" height="120" rx="10" fill="#f1eefb" stroke="#111" stroke-width="1.5"/><text x="692.0" y="68.0" font-size="15" text-anchor="middle">May you touch</text><text x="692.0" y="86.0" font-size="13" text-anchor="middle">this data?</text><text x="692.0" y="104.0" font-size="13" text-anchor="middle">Unity Catalog grants,</text><text x="692.0" y="122.0" font-size="13" text-anchor="middle">filters and masks</text><path d="M782,90 L800,90" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="802" y="30" width="176" height="120" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="890.0" y="68.0" font-size="15" text-anchor="middle">May the bytes</text><text x="890.0" y="86.0" font-size="13" text-anchor="middle">be read?</text><text x="890.0" y="104.0" font-size="13" text-anchor="middle">storage credential,</text><text x="890.0" y="122.0" font-size="13" text-anchor="middle">external location</text><text x="500" y="190" font-size="16" text-anchor="middle">Every layer has to say yes. A grant in one layer cannot make up for a no in another.</text><text x="500" y="216" font-size="14" text-anchor="middle">Example: SELECT on a table still fails without USE CATALOG, and a notebook you can edit still cannot read data you were never granted.</text></svg><p>Five checks, one after another. All must pass.</p></div>
+<div class="tw"><table class="t">
+<tr><th>Layer</th><th>Question</th><th>Where you set it</th></tr>
+<tr><td>1. Identity</td><td>Who is asking: a person, a group, or a service principal (a non-human identity for jobs and apps)?</td><td>Account console, identity provider sync</td></tr>
+<tr><td>2. Entitlements</td><td>May this identity use this kind of feature in this workspace (notebooks, SQL, create compute)?</td><td>Workspace settings, identity and access</td></tr>
+<tr><td>3. Workspace object ACLs</td><td>May it open, run, edit or manage this notebook, job, cluster or warehouse?</td><td>The Permissions button on each object</td></tr>
+<tr><td>4. Unity Catalog</td><td>May it read or change this table, volume or function? Which rows and columns?</td><td><code>GRANT</code>, row filters, column masks, ABAC policies</td></tr>
+<tr><td>5. Storage</td><td>May anything read the cloud files directly?</td><td>Storage credentials and external locations</td></tr></table></div></section>
+
+<section id="s2"><p class="eyebrow">Layer 1: identity</p><h2>Users, groups, service principals and the three admins</h2>
+<div class="tw"><table class="t">
+<tr><th>Identity</th><th>What it is</th><th>Use it for</th></tr>
+<tr><td>User</td><td>A person, identified by email</td><td>Interactive work</td></tr>
+<tr><td>Group</td><td>A set of users, service principals and other groups</td><td><b>All grants</b>. Account groups can get Unity Catalog data access and workspace permissions.</td></tr>
+<tr><td>Service principal</td><td>An identity for code, with no password and no person behind it</td><td>Production jobs, pipelines and apps</td></tr></table></div>
+<ul>
+<li><b>Identities live in the account</b> and are assigned to workspaces. Identity federation is on by default for new workspaces.</li>
+<li><b>Sync from your identity provider.</b> The docs recommend automatic identity management (Microsoft Entra ID and Okta), where the provider stays the source of truth. SCIM provisioning is the fallback, and it does not support nested groups or service principals.</li>
+<li><b>Old workspace-local groups</b> cannot be given Unity Catalog data access or used across workspaces. Convert them to account groups.</li>
+<li><b>Limits:</b> accounts created on or after 17 November 2025 can hold up to 50,000 users and service principals combined and 10,000 groups. Older accounts: 10,000 and 5,000.</li></ul>
+<h3>The three admin roles</h3>
+<div class="tw"><table class="t">
+<tr><th>Role</th><th>Scope</th><th>Can do</th><th>Cannot do</th></tr>
+<tr><td><b>Account admin</b></td><td>Whole account</td><td>Create metastores and workspaces, assign admin roles and workspace access, grant privileges on a metastore, configure storage credentials, enable system tables</td><td>Day-to-day object grants are not its job</td></tr>
+<tr><td><b>Metastore admin</b> (optional)</td><td>One metastore</td><td>Change ownership and grant privileges on any object, read metadata of all objects, set tags, delete the metastore</td><td>Metastores set up by automatic enablement have none by default</td></tr>
+<tr><td><b>Workspace admin</b></td><td>One workspace</td><td>Manage membership and jobs' run-as, manage workspace objects, create catalogs and top-level securables (workspaces created after 8 November 2023)</td><td>Cannot grant on, or change the owner of, existing objects they do not own</td></tr></table></div>
+<p>The docs recommend giving the metastore admin role to a <b>group</b>, not a person. Workspace admins also own the default workspace catalog, so they can manage everything in it.</p></section>
+
+<section id="s3"><p class="eyebrow">Layer 4: Unity Catalog</p><h2>The hierarchy and the rule for reading a table</h2>
+<div class="fig"><svg viewBox="0 0 1000 320" role="img" aria-label="The Unity Catalog hierarchy: a metastore holds catalogs, catalogs hold schemas, and schemas hold tables, views, volumes and functions. Reading a table needs USE CATALOG, USE SCHEMA and SELECT, and a privilege granted on a catalog or schema flows down to everything below it. Storage credentials and external locations sit directly under the metastore, as do connections, shares and recipients."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><rect x="10" y="10" width="300" height="52" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="160.0" y="32.0" font-size="15" text-anchor="middle">Metastore</text><text x="160.0" y="50.0" font-size="13" text-anchor="middle">one per region, attached to workspaces</text><rect x="10" y="90" width="300" height="52" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="160.0" y="112.0" font-size="15" text-anchor="middle">Catalog</text><text x="160.0" y="130.0" font-size="13" text-anchor="middle">needs USE CATALOG</text><path d="M160,64 L160,88" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="10" y="170" width="300" height="52" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="160.0" y="192.0" font-size="15" text-anchor="middle">Schema</text><text x="160.0" y="210.0" font-size="13" text-anchor="middle">needs USE SCHEMA</text><path d="M160,144 L160,168" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="10" y="250" width="300" height="52" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="160.0" y="272.1666666666667" font-size="14" text-anchor="middle">Table, view, volume, function</text><text x="160.0" y="289.1666666666667" font-size="12" text-anchor="middle">needs SELECT (or another privilege)</text><path d="M160,224 L160,248" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="350" y="90" width="290" height="212" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="495.0" y="147.0" font-size="15" text-anchor="middle">Reading a table needs all three:</text><text x="495.0" y="165.0" font-size="13" text-anchor="middle"></text><text x="495.0" y="183.0" font-size="13" text-anchor="middle">USE CATALOG on the catalog</text><text x="495.0" y="201.0" font-size="13" text-anchor="middle">USE SCHEMA on the schema</text><text x="495.0" y="219.0" font-size="13" text-anchor="middle">SELECT on the table,</text><text x="495.0" y="237.0" font-size="13" text-anchor="middle">or on the schema or catalog above,</text><text x="495.0" y="255.0" font-size="13" text-anchor="middle">which flows down</text><path d="M312,116 L348,116" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M312,196 L348,196" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M312,276 L348,276" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="690" y="10" width="300" height="52" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="840.0" y="32.166666666666664" font-size="14" text-anchor="middle">Storage credential</text><text x="840.0" y="49.166666666666664" font-size="12" text-anchor="middle">a cloud role or key</text><rect x="690" y="90" width="300" height="52" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="840.0" y="112.16666666666667" font-size="14" text-anchor="middle">External location</text><text x="840.0" y="129.16666666666669" font-size="12" text-anchor="middle">a path plus a credential</text><path d="M840,64 L840,88" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><rect x="690" y="170" width="300" height="60" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="840.0" y="188.33333333333334" font-size="13" text-anchor="middle">Also under the metastore:</text><text x="840.0" y="204.33333333333334" font-size="11" text-anchor="middle">connections, shares,</text><text x="840.0" y="220.33333333333334" font-size="11" text-anchor="middle">recipients, clean rooms</text><text x="840" y="275" font-size="14" text-anchor="middle">Metastore-level privileges</text><text x="840" y="295" font-size="14" text-anchor="middle">do not flow down to data.</text></svg><p>Grants flow down the left column. The right column is the rule for reading a table.</p></div>
+<div class="tw"><table class="t">
+<tr><th>To do this</th><th>You need</th></tr>
+<tr><td>Read a table or view</td><td><code>USE CATALOG</code>, <code>USE SCHEMA</code>, <code>SELECT</code></td></tr>
+<tr><td>Write to a table</td><td><code>USE CATALOG</code>, <code>USE SCHEMA</code>, <code>MODIFY</code></td></tr>
+<tr><td>Create a table</td><td><code>USE CATALOG</code>, <code>USE SCHEMA</code>, <code>CREATE TABLE</code> on the schema</td></tr>
+<tr><td>Create a schema</td><td><code>USE CATALOG</code>, <code>CREATE SCHEMA</code> on the catalog</td></tr>
+<tr><td>Run a function</td><td><code>USE CATALOG</code>, <code>USE SCHEMA</code>, <code>EXECUTE</code></td></tr>
+<tr><td>Read files in a volume</td><td><code>USE CATALOG</code>, <code>USE SCHEMA</code>, <code>READ VOLUME</code></td></tr></table></div>
+<h3>Inheritance</h3>
+<ul>
+<li>A privilege on a <b>catalog</b> applies to every current and future schema, table, view, volume and function in it. On a <b>schema</b>, to everything inside.</li>
+<li><b>Metastore-level privileges do not flow down</b> to data. They cover metastore actions like <code>CREATE CATALOG</code>. The exception is <code>READ METADATA</code>.</li>
+<li><b>Ownership does not flow down.</b> A catalog owner does not own its schemas, though they can manage them.</li>
+<li><b>Views:</b> a user reading a view does not need privileges on its underlying tables. The view owner's privileges are used.</li>
+<li><b>Workspace binding wins.</b> A catalog not bound to a workspace cannot be reached from it, even with an explicit <code>SELECT</code> (see s10).</li></ul></section>
+
+<section id="s4"><p class="eyebrow">Privileges</p><h2>The privileges you will use, owners, MANAGE and GRANT</h2>
+<div class="tw"><table class="t">
+<tr><th>Privilege</th><th>Where</th><th>What it allows</th></tr>
+<tr><td><code>USE CATALOG</code>, <code>USE SCHEMA</code></td><td>Catalog, schema</td><td>Required to reach anything inside. Gives no data access by itself.</td></tr>
+<tr><td><code>SELECT</code></td><td>Table, view, materialized view, or the schema or catalog above</td><td>Query it</td></tr>
+<tr><td><code>MODIFY</code></td><td>Table, schema, catalog</td><td>Insert, update and delete rows. <code>INSERT</code>, <code>UPDATE</code>, <code>DELETE</code> are finer Beta versions.</td></tr>
+<tr><td><code>CREATE TABLE</code>, <code>CREATE SCHEMA</code>, <code>CREATE VOLUME</code>, <code>CREATE FUNCTION</code>, <code>CREATE MATERIALIZED VIEW</code></td><td>Schema or catalog (<code>CREATE SCHEMA</code>: catalog)</td><td>Create that kind of object</td></tr>
+<tr><td><code>EXECUTE</code></td><td>Function, model, schema, catalog</td><td>Call the function or load the model</td></tr>
+<tr><td><code>READ VOLUME</code>, <code>WRITE VOLUME</code></td><td>Volume, schema, catalog</td><td>Read, or add and change, files</td></tr>
+<tr><td><code>REFRESH</code></td><td>Materialized view</td><td>Refresh it by hand</td></tr>
+<tr><td><code>APPLY TAG</code></td><td>Most objects</td><td>Add and edit tags</td></tr>
+<tr><td><code>BROWSE</code></td><td>Catalog, external location</td><td>See that objects exist and request access, without <code>USE CATALOG</code></td></tr>
+<tr><td><code>READ METADATA</code></td><td>Most objects</td><td>See definitions, grants, filters and masks, without reading data. Not in <code>ALL PRIVILEGES</code>.</td></tr>
+<tr><td><code>MANAGE</code></td><td>Most objects</td><td>Grant and revoke, transfer ownership, rename, drop. Not in <code>ALL PRIVILEGES</code>.</td></tr>
+<tr><td><code>EXTERNAL USE SCHEMA</code></td><td>Schema, catalog</td><td>Temporary credentials so outside engines can read through open APIs. Not in <code>ALL PRIVILEGES</code>.</td></tr>
+<tr><td><code>ALL PRIVILEGES</code></td><td>Most objects</td><td>The ordinary privileges for that object. It leaves out <code>MANAGE</code>, <code>READ METADATA</code> and the two external-use privileges.</td></tr></table></div>
+<p>Metastore-level creation rights (<code>CREATE CATALOG</code>, <code>CREATE EXTERNAL LOCATION</code>, <code>CREATE STORAGE CREDENTIAL</code>, <code>CREATE SHARE</code> and similar) are also privileges. The full reference lists many more, such as secrets, features, flows and connections.</p>
+<h3>Owner, MANAGE and ALL PRIVILEGES are three different things</h3>
+<div class="tw"><table class="t">
+<tr><th></th><th>Owner</th><th><code>MANAGE</code></th><th><code>ALL PRIVILEGES</code></th></tr>
+<tr><td>How many</td><td>Exactly one principal (can be a group)</td><td>Any number</td><td>Any number</td></tr>
+<tr><td>Can grant and revoke</td><td>Yes</td><td>Yes</td><td><b>No</b></td></tr>
+<tr><td>Reads data automatically</td><td>Has every capability on the object</td><td>No, but can grant themselves <code>SELECT</code></td><td>Yes, for the privileges it bundles</td></tr>
+<tr><td>Shown in <code>SHOW GRANTS</code></td><td>No (implicit)</td><td>Yes</td><td>Yes</td></tr></table></div>
+<p>Who may grant on an object: its owner, the owner of the containing catalog or schema, a <code>MANAGE</code> holder, or a metastore admin. The creator of an object becomes its owner, so give production objects to a <b>group or service principal</b> so they survive someone leaving. Transfer with <code>ALTER TABLE main.sales.orders OWNER TO `data-eng`</code>. For views, functions and models, only a metastore admin can hand them to anyone else; other owners can hand them only to themselves or a group they belong to.</p>
+<h3>GRANT, REVOKE, SHOW GRANTS</h3>
+<pre class="code">GRANT USE CATALOG ON CATALOG main TO `finance-team`;
+GRANT USE SCHEMA, SELECT ON SCHEMA main.gold TO `finance-team`;   -- covers every current and future table in gold
+REVOKE SELECT ON SCHEMA main.gold FROM `finance-team`;
+SHOW GRANTS `finance-team` ON SCHEMA main.gold;
+SHOW GRANTS ON TABLE main.gold.orders;                            -- needs READ METADATA, MANAGE or ownership to see everyone's
+-- a service principal is named by its application ID, in backticks
+GRANT SELECT ON TABLE main.gold.orders TO `fab9e00e-ca35-11ec-9d64-0242ac120002`;</pre>
+<p><b>No SQL <code>DENY</code>.</b> I found no <code>DENY</code> statement in the docs. Denials exist only as ABAC DENY policies (Beta, s7). Access is therefore built by granting the right amount, not by granting broadly and denying parts.</p>
+<h3>Starting state</h3>
+<p>Users start with no access to data. Workspace users get <code>USE CATALOG</code> on the workspace catalog, and <code>USE SCHEMA</code> plus the main <code>CREATE</code> privileges on its <code>default</code> schema. The docs also say all users have <code>USE CATALOG</code> on <code>main</code>. The sample catalog <code>samples</code> is read-only.</p></section>
+
+<section id="s5"><p class="eyebrow">Layer 3: workspace objects</p><h2>ACLs on notebooks, jobs, compute and warehouses</h2>
+<p>Workspace admins have <b>CAN MANAGE</b> on every workspace object, and people get <b>CAN MANAGE</b> (or <b>IS OWNER</b>) on what they create. Objects in a folder inherit the folder's permissions. In the UI the lowest read level is called CAN VIEW; the Permissions API calls it CAN READ.</p>
+<div class="tw"><table class="t">
+<tr><th>Object</th><th>Permission levels, lowest to highest</th></tr>
+<tr><td>Notebook, folder, file, Git folder</td><td>CAN VIEW (CAN READ) · CAN RUN · CAN EDIT · CAN MANAGE</td></tr>
+<tr><td>Job</td><td>CAN VIEW · CAN MANAGE RUN · CAN EDIT (Beta, folders only) · IS OWNER · CAN MANAGE</td></tr>
+<tr><td>Lakeflow pipeline</td><td>CAN VIEW · CAN RUN · CAN EDIT (Beta) · CAN MANAGE · IS OWNER</td></tr>
+<tr><td>Classic compute</td><td>CAN VIEW (preview) · CAN ATTACH TO · CAN RESTART · CAN MANAGE</td></tr>
+<tr><td>SQL warehouse</td><td>CAN VIEW · CAN MONITOR · CAN USE · IS OWNER · CAN MANAGE</td></tr>
+<tr><td>Dashboard, query</td><td>CAN VIEW (CAN READ) · CAN RUN · CAN EDIT · CAN MANAGE</td></tr>
+<tr><td>Alert</td><td>CAN RUN · CAN MANAGE</td></tr>
+<tr><td>Model serving endpoint</td><td>CAN VIEW · CAN QUERY · CAN MANAGE</td></tr>
+<tr><td>Instance pool</td><td>CAN ATTACH TO · CAN MANAGE</td></tr>
+<tr><td>Secret scope</td><td>READ · WRITE · MANAGE</td></tr></table></div>
+<h3>Jobs, in detail</h3>
+<div class="tw"><table class="t">
+<tr><th>Ability</th><th>CAN VIEW</th><th>CAN MANAGE RUN</th><th>CAN EDIT</th><th>IS OWNER / CAN MANAGE</th></tr>
+<tr><td>See job and results</td><td>Yes</td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>See Spark UI and run logs</td><td></td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Run now, with other parameters, cancel</td><td></td><td>Yes</td><td>Yes</td><td>Yes</td></tr>
+<tr><td>Edit settings</td><td></td><td></td><td>Yes (not the run-as identity)</td><td>Yes</td></tr>
+<tr><td>Delete, change permissions</td><td></td><td></td><td></td><td>Yes</td></tr></table></div>
+<ul>
+<li>A job has <b>one owner</b>, and a group cannot be the owner.</li>
+<li><b>Run now</b> runs with the permissions of the job owner, not the person who pressed the button. That is why production jobs should be owned by, or run as, a service principal.</li></ul>
+<h3>Compute and warehouses, in detail</h3>
+<div class="tw"><table class="t">
+<tr><th>Ability</th><th>Compute</th><th>Needs</th></tr>
+<tr><td>Attach a notebook</td><td>Classic compute</td><td>CAN ATTACH TO</td></tr>
+<tr><td>Start, restart, terminate</td><td>Classic compute</td><td>CAN RESTART</td></tr>
+<tr><td>Edit, resize, add libraries, view driver logs</td><td>Classic compute</td><td>CAN MANAGE</td></tr>
+<tr><td>Run queries</td><td>SQL warehouse</td><td>CAN USE (CAN MONITOR also runs queries)</td></tr>
+<tr><td>Stop, edit, delete</td><td>SQL warehouse</td><td>IS OWNER or CAN MANAGE</td></tr></table></div>
+<p>By default driver logs are visible only to CAN MANAGE. On the legacy <b>No isolation shared</b> compute, people with lower levels can see service account keys in the log4j file, which is one reason to avoid it.</p>
+<div class="callout w"><p><b>Folder visibility.</b> Someone with CAN VIEW on an object inside a folder can see the parent folder's name without any permission on the folder. The docs also warn that membership of account groups will soon affect workspace object permissions, so review existing grants.</p></div></section>
+
+<section id="s6"><p class="eyebrow">Layer 2: entitlements, policies and access modes</p><h2>Which features and which compute a person may use</h2>
+<div class="tw"><table class="t">
+<tr><th>Entitlement</th><th>Lets the identity</th></tr>
+<tr><td>Workspace access</td><td>Use notebooks, jobs, models and pipelines</td></tr>
+<tr><td>Databricks SQL access</td><td>Use dashboards, queries and SQL warehouses</td></tr>
+<tr><td>Consumer access</td><td>View shared dashboards, Genie and apps, and query warehouses from BI tools. Not create or edit.</td></tr>
+<tr><td>Allow unrestricted cluster creation</td><td>Create compute with any settings. Without it, people create compute only through cluster policies granted to them.</td></tr>
+<tr><td>Allow pool creation</td><td>Create instance pools</td></tr></table></div>
+<ul>
+<li>A user needs <b>at least one access entitlement</b> to enter a workspace. Consumer access is assigned individually, not through the <code>users</code> group.</li>
+<li><b>Cluster policies</b> limit the settings and cost a person can pick. Everyone has the Personal Compute policy by default. Editing a policy does not change existing compute until you enforce it, and job compute is enforced immediately.</li>
+<li><b>The <code>users</code> group changed in 2026.</b> The docs say that from 15 June 2026 the <code>users</code> group has no entitlements and <code>admins</code> has them all, with enforcement for every workspace on 14 September 2026. The entitlements page still shows the older defaults, so check Settings, then Identity and access, in your own workspace.</li></ul>
+<h3>Access modes decide what compute does with Unity Catalog</h3>
+<div class="tw"><table class="t">
+<tr><th>Mode</th><th>Who uses it</th><th>Note</th></tr>
+<tr><td><b>Standard</b></td><td>Many users, with data isolation between them</td><td>Python, SQL, Scala. The docs recommend it unless a feature you need is missing.</td></tr>
+<tr><td><b>Dedicated</b></td><td>One user or one group</td><td>Also R. Filters, masks and dynamic views on it need Runtime 15.4 LTS or later and serverless enabled for the workspace. Unity Catalog Python UDFs are not supported.</td></tr>
+<tr><td><b>No isolation shared</b> (legacy)</td><td>Not described on the pages I read</td><td>Avoid</td></tr></table></div></section>
+
+<section id="s7"><p class="eyebrow">Row and column security</p><h2>Row filters, column masks, ABAC and dynamic views</h2>
+<p>Grants decide <i>which tables</i>. These decide <i>which rows and columns</i> inside a table the person sees.</p>
+<div class="tw"><table class="t">
+<tr><th></th><th>Table-level filter or mask</th><th>ABAC policy</th><th>Dynamic view</th></tr>
+<tr><td>What it is</td><td>A SQL function attached to one table or column</td><td>A rule on a catalog, schema or table that matches governed tags</td><td>A view whose SQL checks who is asking</td></tr>
+<tr><td>Covers new tables automatically</td><td>No</td><td>Yes, through tags</td><td>No</td></tr>
+<tr><td>Who is exempt</td><td>Not stated in the pages I read</td><td>Principals listed under <code>EXCEPT</code></td><td>Anyone who can read the base table</td></tr>
+<tr><td>Status</td><td>Standard</td><td>Core feature not labelled GA on the pages I read; DENY, views and metastore-level policies are Beta</td><td>Standard</td></tr></table></div>
+<pre class="code">-- table-level row filter (from the docs)
+CREATE FUNCTION salary_filter(dept STRING) RETURNS BOOLEAN RETURN dept IS NULL;
+ALTER TABLE employees SET ROW FILTER salary_filter ON (department);
+
+-- ABAC column mask on every column tagged pii=ssn in a schema, for one group (from the docs)
+CREATE POLICY mask_ssn ON SCHEMA prod.customers
+  COLUMN MASK ssn_to_last_nr TO us_analysts EXCEPT admins
+  FOR TABLES MATCH COLUMNS has_tag_value('pii', 'ssn') AS ssn
+  ON COLUMN ssn USING COLUMNS (4);
+
+-- dynamic view: use account-level group membership
+CREATE VIEW sales_redacted AS
+SELECT user_id, CASE WHEN is_account_group_member('auditors') THEN email ELSE 'REDACTED' END AS email
+FROM sales_raw;</pre>
+<ul>
+<li><b>A policy never grants access.</b> The person still needs <code>SELECT</code>. It only hides rows and columns they could otherwise read.</li>
+<li><b>One distinct filter and one mask</b> can resolve per person per table or column, or access is blocked with an error.</li>
+<li><b>Tags are a security boundary.</b> Whoever can apply a tag can change which policies apply, so give <code>APPLY TAG</code> and tag assignment sparingly.</li>
+<li><b>Pipelines run as their owner.</b> Streaming tables and materialized views evaluate policies as the pipeline owner or run-as identity. Add that identity to <code>EXCEPT</code>, or the stored data may be permanently masked.</li>
+<li><b>ABAC needs</b> serverless, or standard or dedicated compute on Runtime 16.4 or later. Older runtimes cannot read ABAC-secured tables.</li>
+<li><b>Limits to know for table-level filters:</b> not on views, not with time travel, no deep or shallow clones, not shareable through OpenSharing, no path-based file access. Dynamic views: use <code>is_account_group_member</code>, not <code>is_member</code>, and do not grant people the base tables.</li>
+<li><b>Quotas for ABAC:</b> 10,000 policies per metastore, 100 per catalog or schema, 50 per table, 20 principals per policy.</li></ul>
+<p>For the same idea inside metric views, see <a href="/learn/metric-views/security/">row-level security with metric views</a>.</p></section>
+
+<section id="s8"><p class="eyebrow">Layer 5: storage</p><h2>Storage credentials and external locations</h2>
+<div class="tw"><table class="t">
+<tr><th>Object</th><th>What it is</th><th>Key privileges</th></tr>
+<tr><td>Storage credential</td><td>A long-lived cloud credential, such as an IAM role</td><td><code>CREATE EXTERNAL LOCATION</code> on it and on the metastore; keep the rights narrow</td></tr>
+<tr><td>External location</td><td>A storage path plus a credential</td><td><code>READ FILES</code>, <code>WRITE FILES</code> (needs <code>READ FILES</code> too), <code>CREATE EXTERNAL TABLE</code>, <code>MANAGE</code></td></tr>
+<tr><td>External table or volume</td><td>A pointer to data at an external location</td><td>The usual table and volume privileges</td></tr></table></div>
+<pre class="code">GRANT READ FILES, WRITE FILES ON EXTERNAL LOCATION raw_landing TO `ingest-team`;
+GRANT CREATE EXTERNAL TABLE ON EXTERNAL LOCATION raw_landing TO `data-eng`;</pre>
+<div class="callout"><p><b>The rule that matters most:</b> do not give people or service principals direct access to the cloud buckets behind Unity Catalog managed tables or volumes. It bypasses the controls, leaves no audit or lineage, and writes from outside can corrupt data. Let Unity Catalog be the only identity that touches those files, and share file access through volumes (<code>/Volumes</code> paths).</p></div>
+<p>An external location can be marked read-only, which can take up to 60 minutes to apply.</p></section>
+
+<section id="s9"><p class="eyebrow">Jobs and apps</p><h2>Service principals and run-as</h2>
+<ul>
+<li><b>Why:</b> a job that runs as a service principal uses that identity, not a person's. The docs say this stops jobs failing when someone leaves or a group changes.</li>
+<li><b>Create and assign:</b> account admins add service principals, and workspace admins can add them to a workspace. Grant them Unity Catalog privileges and group membership like users, and give them access to the compute or warehouse they use.</li>
+<li><b>Managers:</b> creating a service principal makes you its manager, but you still must give yourself its user role to run jobs as it.</li>
+<li><b>OAuth M2M:</b> generate a secret for the service principal (up to 5 secrets, lifetime up to 730 days, unused ones deleted after 90 days). Request a token at the workspace <code>/oidc/v1/token</code> endpoint. Tokens last 3,600 seconds, and the SDKs and CLI refresh them. Set a scope when you create the secret, since it cannot be changed later.</li>
+<li><b>Secret scopes</b> grant READ, WRITE or MANAGE on the whole scope, not single secrets, so anyone who can read one secret can read them all.</li></ul></section>
+
+<section id="s10"><p class="eyebrow">Isolation</p><h2>Workspace binding</h2>
+<p>By default every catalog is open to every workspace on the metastore. Switch a catalog to <code>ISOLATED</code> and bind it to chosen workspaces, so production data cannot be reached from the dev workspace even by someone who holds a grant.</p>
+<pre class="code">databricks catalogs update prod --isolation-mode ISOLATED
+databricks workspace-bindings update-bindings catalog prod \
+  --json '{"add": [{"workspace_id": 123, "binding_type": "BINDING_TYPE_READ_WRITE"}], "remove": []}'</pre>
+<ul><li>Access level is read-write (default) or read-only. External locations can be bound too, but not read-only.</li>
+<li>Setting bindings needs a metastore admin, the catalog owner, or <code>MANAGE</code>.</li>
+<li>A binding is checked when a privilege is used, so unbinding later does not break existing external tables.</li></ul></section>
+
+<section id="s11"><p class="eyebrow">Audit</p><h2>Who has what, and who changed it</h2>
+<ul>
+<li><b>Current grants:</b> <code>SHOW GRANTS</code> on an object, and the Permissions tab in Catalog Explorer. You see everyone's grants only with <code>READ METADATA</code>, <code>MANAGE</code> or ownership; others see their own.</li>
+<li><b>Which policies apply:</b> <code>SHOW EFFECTIVE POLICIES ON SCHEMA prod.customers</code>.</li>
+<li><b>History:</b> <code>system.access.audit</code> (Public Preview) records events. Filter on <code>event_date</code> for speed.</li></ul>
+<pre class="code">SELECT event_time, action_name, user_identity.email AS actor, response.status_code
+FROM system.access.audit
+WHERE service_name = 'unityCatalog'
+  AND action_name IN ('createPolicy', 'deletePolicy', 'createEntityTagAssignment', 'deleteEntityTagAssignment')
+  AND event_date >= current_date() - 30
+ORDER BY event_time DESC;</pre>
+<p>I did not confirm the action names for grant and permission changes, so look at the distinct <code>action_name</code> values in your own table before building an alert.</p></section>
+
+<section id="s12"><p class="eyebrow">Recipes</p><h2>Ready-made grants and common mistakes</h2>
+<div class="tw"><table class="t">
+<tr><th>Role</th><th>Grants (sketch, not run)</th><th>Verdict</th></tr>
+<tr><td>Analysts read the gold layer</td><td><code>GRANT USE CATALOG ON CATALOG prod TO `analysts`;</code><br><code>GRANT USE SCHEMA, SELECT ON SCHEMA prod.gold TO `analysts`;</code></td><td class="v pursue">Pursue: one grant covers future tables</td></tr>
+<tr><td>ETL service principal writes silver</td><td><code>GRANT USE CATALOG ON CATALOG prod TO `&lt;app-id&gt;`;</code><br><code>GRANT USE SCHEMA, SELECT, MODIFY, CREATE TABLE ON SCHEMA prod.silver TO `&lt;app-id&gt;`;</code></td><td class="v pursue">Pursue: least privilege for jobs</td></tr>
+<tr><td>Data engineers build in dev</td><td><code>GRANT USE CATALOG, USE SCHEMA, CREATE TABLE ON CATALOG dev TO `data-eng`;</code></td><td class="v pursue">Pursue in dev, not prod</td></tr>
+<tr><td>Auditors see who has what</td><td><code>GRANT READ METADATA ON CATALOG prod TO `auditors`;</code></td><td class="v pursue">Pursue: metadata only, no data</td></tr>
+<tr><td>BI tool users</td><td>Consumer access entitlement, <code>CAN USE</code> on a warehouse, then the analyst grants above</td><td class="v pursue">Pursue</td></tr>
+<tr><td>Give everyone <code>ALL PRIVILEGES</code> on a catalog</td><td>—</td><td class="v drop">Drop: far more than needed</td></tr>
+<tr><td>Grant to individual users one table at a time</td><td>—</td><td class="v drop">Drop: use groups and schema-level grants</td></tr>
+<tr><td>Production jobs owned by a person</td><td>—</td><td class="v drop">Drop: use a service principal</td></tr>
+<tr><td>Direct bucket access for engineers</td><td>—</td><td class="v drop">Drop: bypasses Unity Catalog</td></tr>
+<tr><td>Filters only inside a metric view's YAML</td><td>—</td><td class="v drop">Drop: that is scope, not security</td></tr></table></div>
+<h3>When something is denied, check in this order</h3>
+<ol class="steps">
+<li><b>Identity and groups:</b> who is the request really running as? A job runs as its owner or run-as identity.</li>
+<li><b>Entitlement:</b> does it have Workspace access or Databricks SQL access in this workspace?</li>
+<li><b>Object ACL:</b> CAN ATTACH TO on the cluster, CAN USE on the warehouse, CAN RUN on the notebook.</li>
+<li><b>Unity Catalog:</b> <code>USE CATALOG</code>, <code>USE SCHEMA</code>, then <code>SELECT</code>. Run <code>SHOW GRANTS</code>.</li>
+<li><b>Workspace binding:</b> is the catalog bound to this workspace?</li>
+<li><b>Compute:</b> is the access mode and runtime able to enforce filters, masks and ABAC?</li>
+<li><b>Storage:</b> for external files, does the location grant <code>READ FILES</code>?</li></ol></section>
+
+<section id="s13"><p class="eyebrow">Honest limits</p><h2>Not confirmed</h2>
+<div class="callout w"><ul>
+<li><b>Partly read pages.</b> Several docs pages were truncated, and parts of the privilege reference, ownership transfer rules and external-location SQL came from a summary, not the full text. Check them before building an approval process.</li>
+<li><b>DENY.</b> No SQL <code>DENY</code> found. The DENY policy syntax page was not read.</li>
+<li><b>Who bypasses table-level filters and masks.</b> The docs I read do not say whether owners or <code>MANAGE</code> holders see unfiltered data.</li>
+<li><b>Whether ABAC is GA.</b> No GA label found on the pages I read; sub-features are labelled Beta.</li>
+<li><b>Job run-as.</b> I confirmed job ownership rules, but not the run-as setting itself, or whether it can differ from the owner.</li>
+<li><b>The <code>users</code> group today.</b> Which entitlement model your workspace uses depends on its state after the 2026 change.</li>
+<li><b>Not read:</b> cluster policy definition rules and the policy permission level name, the dedicated group access page, the standard-mode restricted settings list, Genie space permissions, Delta Sharing privileges, governed tag creation, SCIM setup, storage credential creation, grant-change <code>action_name</code> values.</li>
+<li>All grants shown as "sketch" are patterns from the docs, adapted to made-up names. None was run.</li></ul></div></section>
+
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>What do I need to read a table in Unity Catalog?</summary><p>USE CATALOG on the catalog, USE SCHEMA on the schema, and SELECT on the table, or SELECT on the schema or catalog above it, which inherits downward. SELECT alone is not enough.</p></details><details class="faq"><summary>What is the difference between an owner and MANAGE?</summary><p>An object has exactly one owner, who has every capability on it. MANAGE can be given to several principals and lets them manage privileges, transfer ownership, rename and drop, but it does not give them data access. A MANAGE holder can still grant themselves SELECT. ALL PRIVILEGES does not include MANAGE.</p></details><details class="faq"><summary>Is there a DENY statement?</summary><p>I found no SQL DENY statement in the docs. Denial exists through ABAC DENY policies, which are labelled Beta.</p></details><details class="faq"><summary>Should I grant permissions to users or groups?</summary><p>Groups. Account groups can be granted Unity Catalog data access and workspace permissions, and a person who changes team only has to move between groups. Service principals, not people, should own and run production jobs.</p></details></section>
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2><p>Related on this site: <a href="/learn/metric-views/security/">Row-level security with metric views</a> · <a href="/learn/databricks-compute/">Databricks compute and cost</a> · <a href="/learn/table-maintenance/">Who maintains your tables</a> · <a href="/learn/materialized-views/">Databricks materialized views</a> · <a href="/learn/medallion-architecture/">Medallion architecture</a> · <a href="/learn/ai-governance/">AI governance</a></p><p><a href="/data-engineering/">All data engineering</a> · <a href="/platforms/databricks/">Databricks on this site</a></p></section></div>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Concepts</b><a href="/leaders/">For leaders</a><a href="/learn/fundamentals/">Fundamentals</a><a href="/learn/data-systems/">Data systems</a><a href="/learn/data-systems/platform/">Data and AI platform</a><a href="/learn/data-systems/platform/#hops">Data engineering</a><a href="/concepts/semantic-layer/">BI and analytics</a><a href="/concepts/#ml-engineering">ML</a><a href="/learn/ai-universe/">AI</a><a href="/learn/data-systems/platform/#concerns">Across all of them</a><a href="/concepts/#a-z">Key concepts, A to Z</a></div><div><b>On your cloud</b><a href="/platforms/databricks/">Databricks</a><a href="/platforms/aws/">AWS</a><a href="/platforms/azure/">Azure and Fabric</a><a href="/platforms/gcp/">Google Cloud</a><a href="/platforms/open/">Open source</a><a href="/platforms/anthropic/">Claude (Anthropic)</a><a href="/certifications/">All certifications</a></div><div><b>Your role</b><a href="/paths/">Find your path</a><a href="/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/forward-deployed/">Forward Deployed Engineering</a><a href="/mindset/">Worried about AI?</a><a href="/projects/">All projects to join</a></div><div><b>How we work</b><a href="/how-we-work/#thinking">Thinking principles</a><a href="/how-we-work/#ba">Business analysis</a><a href="/how-we-work/#pm">Project management</a><a href="/learn/technical-anchor/">The technical anchor</a></div><div><b>Causes and deep tech</b><a href="/ai-for-cause/">AI for a cause</a><a href="/deep-tech/">Deep tech</a></div><div><b>About</b><a href="/about/">About this site</a><a href="/about/#join">Write or teach</a><a href="/writing/">Blog</a><a href="/research/">All open specifications</a><a href="/assets/">All open-source code</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
