@@ -99,6 +99,7 @@ SECTIONS = [
             ("The metadata store", "/learn/data-platform-architecture/metadata-store/"),
             ("Tables and formats", None),
             ("Delta vs Iceberg", "/learn/delta-vs-iceberg/"),
+            ("Row vs column storage", "/learn/row-vs-column-storage/"),
             ("Who maintains your tables", "/learn/table-maintenance/"),
             ("Iceberg lakehouse: who owns the catalog?", "/learn/iceberg-lakehouse-aws-databricks/"),
             ("AWS-native vs Databricks lakehouse", "/learn/databricks-vs-aws-lakehouse/"),

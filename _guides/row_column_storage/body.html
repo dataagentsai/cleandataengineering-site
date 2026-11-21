@@ -1,0 +1,102 @@
+<p class="verify">General knowledge of how these systems work, not re-checked against each vendor's docs today. The measured numbers in s3 and s10 come from a short script on this page, run once on a laptop. Check the "Not confirmed" list at the bottom.</p>
+
+<section id="s1"><p class="eyebrow">The idea</p><h2>Same values, two orders</h2>
+<p>A table is a grid of values. A file or a database must still write them in a line, one after another, and there are two natural ways to do it. <b>Row-oriented</b> storage writes one whole record, then the next. <b>Column-oriented</b> storage writes one whole column, then the next.</p>
+{{LAYOUT}}
+<div class="box"><p><b>The one-line rule.</b> Row storage keeps a record's values together, so it is quick to fetch or change one record. Column storage keeps a column's values together, so it is quick to read a few columns across millions of records.</p></div></section>
+
+<section id="s2"><p class="eyebrow">How a column store rebuilds rows</p><h2>A row is not stored. It is rebuilt by position.</h2>
+<p>If every column sits in its own block, where does the "row" go? Nowhere. Every column is written in the <b>same order</b>, so the value at position 2 of every column belongs to row 2. The engine rebuilds a row by picking position 2 from each column it needs.</p>
+{{STITCH}}
+<div class="tw"><table class="t">
+<tr><th>Step</th><th>What happens</th><th>Why it is cheap</th></tr>
+<tr><td>1. Filter</td><td>Scan only the column in the <code>WHERE</code> and note the positions that pass</td><td>One column read, not the whole table</td></tr>
+<tr><td>2. Fetch</td><td>Read the other wanted columns, only at those positions</td><td>Unused columns (here <code>id</code>) stay on disk</td></tr>
+<tr><td>3. Stitch</td><td>Put the values with the same position together as a row</td><td>Positions are simple numbers</td></tr></table></div>
+<p>Delaying the stitch until the last moment is often called <b>late materialization</b>: carry around row numbers, and build real rows only for the few that survive the filter.</p>
+<h3>When the stitching hurts</h3>
+<ul>
+<li><b><code>SELECT *</code> for one record.</b> To rebuild all columns of row 2, the engine must read position 2 from every column block. A table of 50 columns means 50 reads for one row. A row store does it in one.</li>
+<li><b>Changing one row.</b> Its values are in many column blocks, and the blocks are not edited in place. Systems write new data or mark rows as deleted and tidy up later (see s8).</li>
+<li><b>Order must stay aligned.</b> Every column of a block must keep the same order, or the positions stop matching. That is why engines sort or reorder a whole block together, never one column alone.</li></ul>
+<h3>How real systems keep the positions lined up</h3>
+<div class="tw"><table class="t">
+<tr><th>System</th><th>How position works (in general terms)</th></tr>
+<tr><td>Parquet file</td><td>The file is split into <b>row groups</b>. In each group every column is a separate chunk with the same number of values. Row <i>n</i> of the group is value <i>n</i> of each chunk.</td></tr>
+<tr><td>ORC file</td><td>Similar idea with <b>stripes</b> instead of row groups.</td></tr>
+<tr><td>ClickHouse</td><td>Each data part keeps one file per column, aligned by row number, with a sparse index that points into blocks of rows (called granules).</td></tr>
+<tr><td>In-memory (Arrow, DuckDB)</td><td>Columns are arrays; index <i>n</i> in each array is the same row.</td></tr></table></div></section>
+
+<section id="s3"><p class="eyebrow">Reading less</p><h2>What an analytic query actually reads</h2>
+{{READ}}
+<p>Try it on 200,000 rows with five columns (<code>id</code>, <code>region</code>, <code>channel</code>, <code>qty</code>, <code>amount</code>), stored as text, and ask for <code>SUM(amount)</code> grouped by <code>region</code>. The code is in s10. One run on a laptop:</p>
+<div class="tw"><table class="t">
+<tr><th></th><th>Row layout</th><th>Column layout</th></tr>
+<tr><td>Bytes the query has to read</td><td>5,437,347 (everything)</td><td>2,458,232 (only region and amount), 45% of the row layout</td></tr>
+<tr><td>Time to compute it in Python</td><td>0.142 s</td><td>0.083 s</td></tr>
+<tr><td>Same answer?</td><td colspan="2">Yes: both give identical totals</td></tr></table></div>
+<p>Two of five columns is 40% by count. The query read 45% of the bytes, because the columns differ in width. With 50 columns instead of five, the same query would read a few percent. Treat the figures as an illustration of the idea, not a benchmark of any product.</p></section>
+
+<section id="s4"><p class="eyebrow">Compression and skipping</p><h2>Why columns also shrink and skip</h2>
+<ul>
+<li><b>Similar values sit together.</b> A <code>region</code> column holds only a handful of repeating words, so tricks like dictionary encoding and run-length encoding work well. In the same run, compressing the <code>region</code> column on its own shrank it from 1,100,402 to 90,344 bytes (about 12 times). <code>channel</code> shrank about 13 times.</li>
+<li><b>Mixed columns shrink less.</b> <code>id</code>, <code>qty</code> and <code>amount</code> are close to random numbers, so they compressed far less. Over the whole table, the column layout compressed to 1,444,777 bytes against 1,722,204 for the row layout, only about 1.19 times smaller. The demo uses plain zlib on text. Real column formats use better encodings, so expect larger gains there; this run does not measure them.</li>
+<li><b>Statistics let the reader skip.</b> Parquet keeps the minimum and maximum of each column chunk in the file's footer. A query for <code>amount &gt; 800</code> can skip any chunk whose maximum is below 800 without reading it. Row stores can skip too, with indexes, but a plain row file has no such per-column summary.</li></ul></section>
+
+<section id="s5"><p class="eyebrow">File formats</p><h2>Row and column file formats</h2>
+<div class="tw"><table class="t">
+<tr><th>Format</th><th>Layout</th><th>Good for</th><th>Verdict</th></tr>
+<tr><td>CSV</td><td>Row, plain text</td><td>Hand-off to people and simple tools</td><td class="v drop">Drop for analytics at scale</td></tr>
+<tr><td>JSON Lines</td><td>Row, plain text, nested</td><td>Logs and API payloads</td><td class="v drop">Drop for analytics at scale</td></tr>
+<tr><td>Avro</td><td>Row, binary, schema included</td><td>Writing one event at a time, for example on Kafka</td><td class="v pursue">Pursue for streams and landing</td></tr>
+<tr><td>Parquet</td><td>Column chunks inside row groups, with statistics</td><td>Analytics, Delta and Iceberg tables</td><td class="v pursue">Pursue for analytics</td></tr>
+<tr><td>ORC</td><td>Column chunks inside stripes</td><td>Analytics, mostly in the Hive world</td><td class="v pursue">Pursue where you already use it</td></tr>
+<tr><td>Arrow</td><td>Column, in memory (and a file form)</td><td>Passing data between tools without copying</td><td class="v pursue">Pursue for in-process speed</td></tr></table></div></section>
+
+<section id="s6"><p class="eyebrow">Databases</p><h2>Row and column databases</h2>
+<div class="tw"><table class="t">
+<tr><th>Database</th><th>Main layout</th><th>Typical job</th></tr>
+<tr><td>PostgreSQL, MySQL, SQLite</td><td>Row</td><td>Applications: users, orders, payments (OLTP)</td></tr>
+<tr><td>Lakebase (managed Postgres on Databricks)</td><td>Row</td><td>The same, next to your lakehouse</td></tr>
+<tr><td>SQL Server, Oracle</td><td>Row by default, with optional column indexes or in-memory column copies</td><td>Mixed workloads on one system</td></tr>
+<tr><td>ClickHouse</td><td>Column</td><td>Fast analytics and event or cost data over many rows</td></tr>
+<tr><td>Redshift, BigQuery, Snowflake</td><td>Column</td><td>Cloud data warehouses</td></tr>
+<tr><td>DuckDB</td><td>Column</td><td>Analytics on a laptop or inside a program</td></tr>
+<tr><td>Databricks SQL, Spark, Trino</td><td>Engines that read column files (Parquet, Delta, Iceberg) from storage</td><td>Lakehouse analytics</td></tr></table></div>
+<p>The classification is the main design, not a law: several systems add features of the other kind.</p></section>
+
+<section id="s7"><p class="eyebrow">Format vs database</p><h2>They are different layers</h2>
+<div class="tw"><table class="t">
+<tr><th></th><th>File format</th><th>Table format</th><th>Database or engine</th></tr>
+<tr><td>What it is</td><td>How bytes sit in one file</td><td>Rules that make many files behave like one table</td><td>Software that stores, indexes, plans and runs queries</td></tr>
+<tr><td>Examples</td><td>Parquet, Avro, CSV</td><td>Delta, Iceberg</td><td>PostgreSQL, ClickHouse, Spark, Databricks SQL</td></tr>
+<tr><td>Is it row or column?</td><td>Yes, the layout inside the file</td><td>Inherits it: Delta and Iceberg usually hold Parquet, so they are column-oriented</td><td>It depends on the engine's own storage</td></tr></table></div>
+<p>So when a Delta table is slow to update one row, the reason is the column files underneath. See <a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a> and <a href="/learn/table-maintenance/">who maintains your tables</a>.</p></section>
+
+<section id="s8"><p class="eyebrow">Writes and updates</p><h2>Why single-row changes are awkward in column stores</h2>
+<ul>
+<li><b>Files are written once.</b> A Parquet file has a footer with its statistics, so you cannot append one row in place. The engine writes a new file.</li>
+<li><b>A row is in many places.</b> Updating it means touching every column block it appears in.</li>
+<li><b>So systems batch.</b> ClickHouse writes each insert as a new part and merges parts in the background, so it wants inserts in batches, not one row at a time. Delta and Iceberg write new files and can mark old rows deleted (for example with deletion vectors), then compact later.</li>
+<li><b>Row stores are built for this.</b> They update a record where it sits and use an index to find it.</li></ul>
+<p>The usual design is both: a row database takes the live writes, and a pipeline copies the data into column files for analysis. See <a href="/learn/medallion-architecture/">medallion architecture</a>.</p></section>
+
+<section id="s9"><p class="eyebrow">Choosing</p><h2>Common situations, with a verdict</h2>
+<div class="tw"><table class="t">
+<tr><th>Situation</th><th>Use</th><th>Verdict</th><th>Why</th></tr>
+<tr><td>An app reads and writes one order at a time</td><td>Row database</td><td class="v pursue">Pursue</td><td>Whole records, quick changes</td></tr>
+<tr><td>Reports over millions of rows and a few columns</td><td>Column store or Parquet</td><td class="v pursue">Pursue</td><td>Reads only the needed columns</td></tr>
+<tr><td>Landing a Kafka stream of events</td><td>Avro (or JSON) first</td><td class="v pursue">Pursue</td><td>One record at a time, schema attached</td></tr>
+<tr><td>Cost or log analysis over many rows (your CostSherlock data)</td><td>ClickHouse or similar</td><td class="v pursue">Pursue</td><td>Group-bys over a few columns</td></tr>
+<tr><td>Analytics straight from a row database used by the app</td><td>Row database</td><td class="v drop">Drop at scale</td><td>Heavy scans compete with live traffic; copy to a column store</td></tr>
+<tr><td>Frequent one-row updates in a column file</td><td>Parquet files</td><td class="v drop">Drop</td><td>Each change rewrites or marks data</td></tr>
+<tr><td>CSV as the main analytics store</td><td>CSV</td><td class="v drop">Drop</td><td>Reads everything, no types, weak compression</td></tr>
+<tr><td>Fetch one whole record by id from a big analytics table</td><td>A row store or an index</td><td class="v drop">Drop the column store for this</td><td>The row must be rebuilt from every column</td></tr></table></div></section>
+
+<section id="s10"><p class="eyebrow">Honest limits</p><h2>The demo code, and what is not confirmed</h2>
+<p>The numbers above come from this script, standard library only. Your run will differ in the timings; the sizes are fixed by the seed.</p>
+<pre class="code">{{DEMO}}</pre>
+<div class="callout w"><ul>
+<li><b>The demo is not Parquet.</b> It stores text and compresses with zlib to illustrate the idea. Real column formats use binary encodings, dictionaries, run-length encoding and statistics, so their gains differ.</li>
+<li><b>The timings are one run</b> of Python loops on one laptop, not a database benchmark.</li>
+<li><b>Product details</b> (ClickHouse granules, Parquet row group sizes, SQL Server and Oracle column options, which Databricks and cloud warehouse internals are columnar) are from general knowledge, not checked against current docs today.</li></ul></div></section>
