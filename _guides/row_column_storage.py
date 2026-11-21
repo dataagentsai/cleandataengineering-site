@@ -39,6 +39,7 @@ QA = [
 ]
 
 RELATED = [
+    ("How reads and writes work in Delta and Spark", "/learn/how-delta-works/"),
     ("Delta vs Iceberg", "/learn/delta-vs-iceberg/"),
     ("Who maintains your tables", "/learn/table-maintenance/"),
     ("Table, view, materialized view or metric view", "/learn/table-view-materialized-view-metric-view/"),

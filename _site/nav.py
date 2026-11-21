@@ -100,6 +100,7 @@ SECTIONS = [
             ("Tables and formats", None),
             ("Delta vs Iceberg", "/learn/delta-vs-iceberg/"),
             ("Row vs column storage", "/learn/row-vs-column-storage/"),
+            ("How reads and writes work: Delta and Spark", "/learn/how-delta-works/"),
             ("Who maintains your tables", "/learn/table-maintenance/"),
             ("Iceberg lakehouse: who owns the catalog?", "/learn/iceberg-lakehouse-aws-databricks/"),
             ("AWS-native vs Databricks lakehouse", "/learn/databricks-vs-aws-lakehouse/"),
