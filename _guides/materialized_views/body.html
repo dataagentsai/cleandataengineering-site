@@ -1,0 +1,178 @@
+<p class="verify">Read from the Databricks documentation on 21 November 2026 (AWS pages; the Azure pages match except for wording). Features change often, so check the "Not confirmed" list at the bottom. SQL marked "sketch" has not been run.</p>
+
+<section id="s1"><p class="eyebrow">What it is</p><h2>A saved answer that the engine keeps up to date</h2>
+<p>A <b>materialized view</b> (MV) is a query whose result is stored like a table. Readers query it fast, like any table, and Databricks refreshes it when you ask, on a schedule, or when the sources change. A normal view recomputes on every read. An MV pays once at refresh time instead.</p>
+<div class="tw"><table class="t">
+<tr><th></th><th>Standalone MV</th><th>Pipeline-defined MV</th></tr>
+<tr><td>Created with</td><td><code>CREATE MATERIALIZED VIEW</code> in a SQL warehouse or notebook</td><td>The same keyword inside a Lakeflow pipeline's source code</td></tr>
+<tr><td>Who runs the refresh</td><td>A backing pipeline Databricks creates for you (shown as type <code>MV/ST</code> under Jobs &amp; Pipelines)</td><td>Your pipeline</td></tr>
+<tr><td>Schedule</td><td><code>SCHEDULE</code> or <code>TRIGGER ON UPDATE</code> in the statement</td><td>The pipeline's own schedule or trigger</td></tr>
+<tr><td>Good for</td><td>One summary table owned by one team</td><td>A chain of bronze, silver and gold steps that refresh together</td></tr></table></div>
+<p>The result sits in cloud storage and Unity Catalog holds its metadata and query. A few helper tables for incremental refresh live in an internal catalog.</p></section>
+
+<section id="s2"><p class="eyebrow">Where it runs</p><h2>Which compute does the refresh</h2>
+{{WHERE}}
+<div class="tw"><table class="t">
+<tr><th>Question</th><th>Answer from the docs</th></tr>
+<tr><td>Which warehouse can create a standalone MV?</td><td>A <b>Pro or Serverless</b> SQL warehouse, with Unity Catalog. A classic warehouse works for streaming tables but not for MVs.</td></tr>
+<tr><td>Which compute does the refresh run on?</td><td><b>Serverless.</b> A refresh is run by a serverless pipeline, whether the MV is standalone or defined in a Lakeflow pipeline. For a standalone MV, your workspace does not need serverless pipelines turned on; one is used automatically.</td></tr>
+<tr><td>Can it run on classic compute?</td><td>A pipeline-defined MV can be set up on classic compute, but then <b>every update is a full recompute</b>. Incremental refresh needs serverless.</td></tr>
+<tr><td>Can I use a notebook?</td><td>A notebook on serverless compute, Databricks Runtime 18.1 or later, can create and refresh MVs, with limits: no per-table cost attribution, no async refresh, and a table must be refreshed on the compute type that created it.</td></tr>
+<tr><td>Other requirements</td><td>Unity Catalog, a region that supports serverless SQL warehouses, and the serverless terms accepted.</td></tr></table></div></section>
+
+<section id="s3"><p class="eyebrow">Refresh types</p><h2>Incremental refresh, full recompute and the rest</h2>
+<h3>The two kinds of update</h3>
+<div class="tw"><table class="t">
+<tr><th>Update</th><th>What it does</th><th>How you start it</th></tr>
+<tr><td><b>Refresh</b> (the default)</td><td>Tries to read only what changed; falls back to a full recompute if it has to</td><td><code>REFRESH MATERIALIZED VIEW name</code>, a schedule, a trigger, or a pipeline update</td></tr>
+<tr><td><b>Full refresh</b></td><td>Always recalculates everything and resets all checkpoints</td><td><code>REFRESH MATERIALIZED VIEW name FULL</code>, or a pipeline update with full refresh chosen</td></tr></table></div>
+<p>Both give the same data. The difference is cost and method. Full refresh is also how you pick up a changed UDF library (see s5).</p>
+<h3>The techniques, as named in the event log</h3>
+<div class="tw"><table class="t">
+<tr><th>Technique name</th><th>Meaning</th></tr>
+<tr><td><code>ROW_BASED</code>, <code>PARTITION_OVERWRITE</code>, <code>WINDOW_FUNCTION</code>, <code>APPEND_ONLY</code>, <code>GROUP_AGGREGATE</code>, <code>GENERIC_AGGREGATE</code></td><td>Incremental: only changed data was processed, by this method</td></tr>
+<tr><td><code>FULL_RECOMPUTE</code></td><td>Everything was recomputed</td></tr>
+<tr><td><code>NO_OP</code></td><td>Nothing in the sources changed, so nothing ran</td></tr></table></div>
+<p>The docs list these names but do not say how each incremental technique works inside. The UI shows the same result as <b>Incremental</b>, <b>Full recompute</b> or <b>No change</b>.</p>
+<h3>How one refresh decides</h3>
+{{ENGINE}}
+<h3>The refresh policy: who decides</h3>
+<div class="tw"><table class="t">
+<tr><th>Policy</th><th>Behaviour</th><th>Use when</th></tr>
+<tr><td><code>AUTO</code> (default)</td><td>The cost model picks the cheaper of incremental and full</td><td>Most cases</td></tr>
+<tr><td><code>INCREMENTAL</code></td><td>Incremental whenever possible; falls back to full if the plan no longer allows it. Create fails if the query could never be incremental.</td><td>You want incremental but can live with an occasional fallback</td></tr>
+<tr><td><code>INCREMENTAL STRICT</code></td><td>Incremental or fail. The refresh stops with an error instead of recomputing everything.</td><td>A surprise full recompute is not acceptable</td></tr>
+<tr><td><code>FULL</code></td><td>Never incremental, even when it could be</td><td>Small data, or a query you keep changing</td></tr></table></div>
+<pre class="code">CREATE MATERIALIZED VIEW sales_summary
+  REFRESH POLICY INCREMENTAL STRICT
+  AS SELECT region, SUM(CAST(revenue AS DECIMAL(18,2))) AS total_revenue, COUNT(*) AS orders
+     FROM main.sales.orders GROUP BY region;</pre></section>
+
+<section id="s4"><p class="eyebrow">Choosing</p><h2>When to use which refresh setting</h2>
+<div class="tw"><table class="t">
+<tr><th>Situation</th><th>Choose</th><th>Verdict</th><th>Why</th></tr>
+<tr><td>Big source, small daily change, query is eligible</td><td><code>AUTO</code> or <code>INCREMENTAL</code> on serverless</td><td class="v pursue">Pursue</td><td>You pay for the change, not the whole table</td></tr>
+<tr><td>A full recompute would be a billing surprise</td><td><code>INCREMENTAL STRICT</code></td><td class="v pursue">Pursue</td><td>It fails loudly so you can fix the query</td></tr>
+<tr><td>Small table, refreshed rarely</td><td><code>FULL</code> or <code>AUTO</code></td><td class="v pursue">Pursue</td><td>Incremental bookkeeping saves nothing</td></tr>
+<tr><td>Source rewritten most nights</td><td><code>AUTO</code></td><td class="v pursue">Pursue</td><td>The cost model will pick full, which is cheaper then</td></tr>
+<tr><td>Source has no history (Kafka, files you delete)</td><td>A streaming table, not an MV</td><td class="v drop">Drop the MV</td><td>A full refresh would lose data you cannot read again</td></tr>
+<tr><td>Pipeline is classic compute</td><td>MV</td><td class="v drop">Drop</td><td>Every update is a full recompute</td></tr>
+<tr><td>You need results in milliseconds or per-event latency</td><td>A streaming table or a normal table</td><td class="v drop">Drop</td><td>MV updates take seconds or minutes</td></tr></table></div></section>
+
+<section id="s5"><p class="eyebrow">Limitations</p><h2>What stops incremental refresh, and other limits</h2>
+<h3>What forces a full recompute</h3>
+<div class="tw"><table class="t">
+<tr><th>Cause</th><th>Example</th><th>Fix</th></tr>
+<tr><td>Not serverless</td><td>Classic pipeline compute</td><td>Use serverless</td></tr>
+<tr><td><code>LIMIT</code></td><td><code>ORDER BY total DESC LIMIT 100</code></td><td>Store everything; apply the limit when reading</td></tr>
+<tr><td>Recursive CTE</td><td><code>WITH RECURSIVE</code></td><td>Flatten the hierarchy into a table first</td></tr>
+<tr><td>Non-deterministic function</td><td><code>RAND()</code>, or <code>CURRENT_DATE()</code> in <code>SELECT</code></td><td>Only <code>current_date()</code>, <code>current_timestamp()</code> and <code>now()</code> in a <code>WHERE</code> are allowed</td></tr>
+<tr><td>Floating-point sums</td><td><code>SUM(price)</code> on <code>DOUBLE</code></td><td><code>SUM(CAST(price AS DECIMAL(18,2)))</code></td></tr>
+<tr><td>Window without <code>PARTITION BY</code></td><td><code>ROW_NUMBER() OVER (ORDER BY day)</code></td><td>Add <code>PARTITION BY</code></td></tr>
+<tr><td>Source is not Delta or managed Iceberg</td><td>A volume, external location, foreign catalog, or foreign Iceberg table</td><td>Land it into a Delta table first</td></tr>
+<tr><td>Row tracking is off on a source</td><td>A <code>JOIN</code> or <code>UNION ALL</code> over a table without it</td><td>Turn row tracking on for the source</td></tr>
+<tr><td>UDF not marked deterministic, or its behaviour changed</td><td>Python UDF in the query</td><td>Mark it deterministic; after a library upgrade, run a full refresh yourself</td></tr>
+<tr><td>Complex shape above the aggregate</td><td>A <code>GROUP BY</code> with calculations stacked on top</td><td>Put the aggregate last; do the extra maths in a view on top</td></tr>
+<tr><td>Cost model says full is cheaper</td><td>Most of the source changed; deeply nested query</td><td>Nothing to fix. Or force with <code>INCREMENTAL</code> if you disagree</td></tr></table></div>
+<h3>What is supported for incremental refresh</h3>
+<p><code>SELECT</code> with deterministic built-in functions and immutable UDFs, <code>GROUP BY</code>, non-recursive <code>WITH</code>, <code>UNION ALL</code>, inner, left, right and full outer joins, <code>WHERE</code> and <code>HAVING</code>, window functions with <code>PARTITION BY</code>, and <code>QUALIFY</code>. Sources can be Delta tables, managed Iceberg tables, other MVs and streaming tables.</p>
+<h3>Other limits of MVs</h3>
+<ul>
+<li><b>Not low-latency.</b> Updates take seconds or minutes.</li>
+<li><b>No CLONE.</b> An MV cannot be the source or target of a clone.</li>
+<li><b>No OPTIMIZE or VACUUM</b> by you; maintenance is automatic. No identity or surrogate-key columns. No renaming or changing the owner.</li>
+<li><b>Aliases required</b> on every expression (<code>SUM(x) AS total</code>, not bare <code>SUM(x)</code>).</li>
+<li><b>Constraints are informational.</b> Primary and foreign keys are not enforced, though the optimizer can use them (declare with <code>RELY</code> only if they are true).</li>
+<li><b>A <code>SUM</code> over a column that becomes all NULL returns 0, not NULL.</b></li>
+<li><b>Expectations:</b> the two doc pages disagree on whether an MV with expectations can refresh incrementally. Test with <code>EXPLAIN</code>.</li></ul></section>
+
+<section id="s6"><p class="eyebrow">Cost</p><h2>What a refresh costs</h2>
+<ul>
+<li><b>What you are billed:</b> the refresh runs "on serverless compute, billed as serverless Lakeflow pipelines DBUs", on a pipeline separate from your warehouse. Cost scales with the <b>volume of data processed</b>, not the warehouse size. You may see serverless charges even when the warehouse you used is a dedicated one.</li>
+<li><b>Price per DBU:</b> the docs I read give no rate for this, so no dollar rate is quoted here. Look up the current Lakeflow pipelines serverless rate for your cloud and plan.</li>
+<li><b>Why incremental matters (illustration, not a bill):</b> take a 1 TB source with 1% new data a day. An incremental refresh reads about 10 GB. A full recompute reads 1 TB, about 100 times more. If the work is roughly proportional to the data read, the full recompute costs on the order of 100 times more each day.</li>
+<li><b>Storage:</b> the result is stored data, so there is a storage footprint. The docs I read do not say how it is billed.</li></ul>
+<h3>See what an MV actually cost</h3>
+<pre class="code">-- DBUs per refresh pipeline of one MV (from the Databricks docs; fill in your names)
+WITH p AS (
+  SELECT usage_metadata.dlt_pipeline_id AS pipeline_id
+  FROM system.billing.usage
+  WHERE usage_metadata.uc_table_catalog = 'main'
+    AND usage_metadata.uc_table_schema  = 'sales'
+    AND usage_metadata.uc_table_name    = 'sales_summary'
+  LIMIT 1)
+SELECT u.sku_name, u.usage_date, SUM(u.usage_quantity) AS dbus
+FROM system.billing.usage u JOIN p
+  ON u.usage_metadata.dlt_pipeline_id = p.pipeline_id
+GROUP BY ALL ORDER BY usage_date;</pre>
+<p>Tags on the warehouse that created an MV are copied onto its usage rows (<code>custom_tags</code>), so a cost split by team can work. See <a href="/learn/databricks-compute/dividing-the-bill/">dividing the bill</a>.</p></section>
+
+<section id="s7"><p class="eyebrow">Avoid full refresh</p><h2>A checklist to keep refreshes incremental</h2>
+<div class="tw"><table class="t">
+<tr><th>Do</th><th>Instead of</th></tr>
+<tr><td>Run the MV on <b>serverless</b></td><td>Classic compute</td></tr>
+<tr><td><code>ALTER TABLE src SET TBLPROPERTIES (delta.enableRowTracking = true, delta.enableDeletionVectors = true)</code> on every source</td><td>Leaving row tracking off</td></tr>
+<tr><td>Keep sources as <b>Delta tables</b> (or managed Iceberg)</td><td>Reading files, volumes or foreign catalogs directly</td></tr>
+<tr><td>Cast floats to <code>DECIMAL</code> before summing</td><td><code>SUM</code> and <code>AVG</code> on <code>DOUBLE</code></td></tr>
+<tr><td>Add <code>PARTITION BY</code> to every window function</td><td>Global <code>ORDER BY</code> windows</td></tr>
+<tr><td>Store the full aggregate, apply <code>LIMIT</code> in the reading query</td><td><code>LIMIT</code> inside the MV</td></tr>
+<tr><td>Keep <code>current_date()</code> only in <code>WHERE</code></td><td>Non-deterministic functions in <code>SELECT</code></td></tr>
+<tr><td>Mark UDFs deterministic, or use built-in functions</td><td>Opaque Python UDFs</td></tr>
+<tr><td>Put the aggregate at the top of the query; build extra layers as a view on the MV</td><td>Stacking maths on top of <code>GROUP BY</code></td></tr>
+<tr><td>Put expectations on the source table</td><td>Expectations inside the MV (if your test shows it blocks incremental)</td></tr>
+<tr><td>Use <code>INCREMENTAL STRICT</code> on MVs that must stay cheap</td><td>Hoping <code>AUTO</code> keeps choosing incremental</td></tr>
+<tr><td>Test with <code>EXPLAIN CREATE MATERIALIZED VIEW</code> before deploy</td><td>Finding out from the bill</td></tr></table></div></section>
+
+<section id="s8"><p class="eyebrow">How to know</p><h2>Six ways to see whether a refresh was full</h2>
+<ol class="steps">
+<li><b>Before you build: <code>EXPLAIN</code>.</b> Run <code>EXPLAIN CREATE MATERIALIZED VIEW ...</code> with your whole statement (Databricks Runtime 17.3 or later). It prints <code>The Materialized View can be incrementally refreshed.</code> or <code>cannot</code>, then a list of blockers with codes such as <code>OPERATOR_NOT_INCREMENTALIZABLE</code> or <code>INPUT_NOT_IN_DELTA</code>. It checks the shape of the query only, not what the cost model will do later.</li>
+<li><b>After each refresh: the event log.</b>
+<pre class="code">SELECT timestamp, message
+FROM event_log(TABLE(main.sales.sales_summary))
+WHERE event_type = 'planning_information'
+ORDER BY timestamp DESC;
+-- e.g. "Flow 'sales' has been planned to be executed as ROW_BASED."</pre>
+For a standalone MV only the owner can query its event log directly; share it through a view.</li>
+<li><b>Why it chose that: the detail.</b> The same event holds a <code>technique_information</code> list. Each entry has <code>maintenance_type</code>, <code>is_chosen</code>, <code>is_applicable</code> and <code>incrementalization_issues</code>, so you can read why incremental was not chosen. The docs show a parsing query on their monitoring page; I have not run one.</li>
+<li><b>The cost model said no.</b> When incremental was possible but rejected, look in the event log for <code>INCREMENTAL_PLAN_REJECTED_BY_COST_MODEL</code> events. Reasons include <code>CHANGESET_SIZE_THRESHOLD_EXCEEDED</code>, <code>TABLE_SIZE_THRESHOLD_EXCEEDED</code> and <code>EXCESSIVE_OPERATOR_NESTING</code>.</li>
+<li><b>In the UI.</b> The pipeline or Catalog Explorer view has an <b>Incrementalization</b> column (Incremental, Full recompute, No change). A lightbulb opens the Issues panel. The query profile shows a <code>FLOW_FULL_RECOMPUTE</code> insight explaining why. <code>DESCRIBE TABLE EXTENDED name</code> shows the latest refresh and its type, though the docs do not name the field.</li>
+<li><b>Make it fail.</b> With <code>REFRESH POLICY INCREMENTAL STRICT</code>, a refresh that cannot be incremental stops with the error class <code>MATERIALIZED_VIEW_NOT_INCREMENTALIZABLE</code> and a reason such as <code>ROW_TRACKING_NOT_ENABLED</code>, <code>WINDOW_WITHOUT_PARTITION_BY</code>, <code>UDF_NOT_DETERMINISTIC</code> or <code>EXPRESSION_NOT_DETERMINISTIC</code>.</li></ol>
+<p>Also watch the bill: a sudden rise in DBUs for the MV's pipeline in <code>system.billing.usage</code> (s6) is often a quiet switch to full recompute.</p></section>
+
+<section id="s9"><p class="eyebrow">Tips and tricks</p><h2>Practical advice</h2>
+<ul>
+<li><b>Run <code>EXPLAIN</code> in code review,</b> for every new MV and every change to one.</li>
+<li><b>Choose a schedule or trigger that matches the change.</b> <code>SCHEDULE EVERY 1 DAY</code> or a <code>CRON</code> for batch. <code>TRIGGER ON UPDATE [AT MOST EVERY interval]</code> to refresh when sources change (minimum one minute, up to 10 upstream sources per MV, upstreams must be Delta tables, MVs, streaming tables or managed views over them).</li>
+<li><b>Use <code>CLUSTER BY</code> or <code>CLUSTER BY AUTO</code></b> rather than <code>PARTITIONED BY</code>. The docs recommend liquid clustering for MVs.</li>
+<li><b>Use <code>ASYNC</code></b> (<code>REFRESH MATERIALIZED VIEW name ASYNC</code>) for long refreshes you do not want to wait on. The default is <code>SYNC</code>.</li>
+<li><b>Declare keys with <code>RELY</code></b> only when they are true: the optimizer can drop needless joins and aggregations.</li>
+<li><b>Use row filters and column masks</b> in the <code>CREATE</code> statement, not added later.</li>
+<li><b>Do not run <code>FULL</code> on sources that lose history,</b> such as Kafka. Existing data is truncated and may not come back.</li>
+<li><b>After a UDF library upgrade,</b> run <code>REFRESH MATERIALIZED VIEW name FULL</code> on every dependent MV. Databricks cannot see that change.</li>
+<li><b>Use <code>PRIVATE</code> MVs</b> inside a pipeline for steps you do not want published.</li>
+<li><b>Permissions:</b> to refresh you must own the MV or hold <code>REFRESH</code> on it, and the owner needs <code>SELECT</code> on the base tables.</li></ul>
+<pre class="code">CREATE MATERIALIZED VIEW main.sales.daily_revenue
+  CLUSTER BY AUTO
+  REFRESH POLICY INCREMENTAL STRICT
+  SCHEDULE CRON '0 0 2 * * ?' AT TIME ZONE 'UTC'
+  AS SELECT order_date, SUM(CAST(amount AS DECIMAL(18,2))) AS revenue
+     FROM main.sales.orders GROUP BY order_date;   -- sketch: not run</pre></section>
+
+<section id="s10"><p class="eyebrow">Choosing the object</p><h2>MV, streaming table, table or metric view</h2>
+<div class="tw"><table class="t">
+<tr><th>Need</th><th>Use</th><th>Verdict</th><th>Why</th></tr>
+<tr><td>A summary that must match its sources after every refresh, source keeps history</td><td>Materialized view</td><td class="v pursue">Pursue</td><td>The engine keeps it correct and cheap</td></tr>
+<tr><td>Process each new record once; source loses history (Kafka, Auto Loader files)</td><td>Streaming table</td><td class="v pursue">Pursue</td><td>Checkpoints track what was read; a full refresh would truncate</td></tr>
+<tr><td>Rows updated or deleted by your own merge logic</td><td>Physical table</td><td class="v pursue">Pursue</td><td>MVs cannot be written by you</td></tr>
+<tr><td>Same number, many groupings and tools</td><td>Metric view (materialized if slow)</td><td class="v pursue">Pursue</td><td>See <a href="/learn/table-view-materialized-view-metric-view/">the comparison</a></td></tr>
+<tr><td>Query too complex to refresh incrementally on a huge source</td><td>An MV on it</td><td class="v drop">Drop</td><td>Each refresh is a full recompute; build a pre-aggregated table by hand instead</td></tr></table></div></section>
+
+<section id="s11"><p class="eyebrow">Honest limits</p><h2>Not confirmed</h2>
+<div class="callout w"><ul>
+<li><b>What each incremental technique does inside.</b> The docs name <code>ROW_BASED</code>, <code>GROUP_AGGREGATE</code> and the others but do not define them.</li>
+<li><b>Price per DBU, SKU name, pricing tier and storage billing</b> for MV refresh. The docs say serverless Lakeflow pipelines DBUs and give no rate. They also do not say which pipeline edition (Core, Pro or Advanced) a standalone MV is billed under.</li>
+<li><b>Expectations.</b> The pipeline <code>CREATE</code> page says an MV with expectations is fully refreshed on every update. The incremental refresh page says it is supported except in two cases. I have not tested which is right today.</li>
+<li><b>The <code>DESCRIBE EXTENDED</code> field</b> that holds the refresh type, and the full event log schema: the schema page was only partly readable. Treat field names beyond <code>planning_information</code> and <code>technique_information</code> as unconfirmed.</li>
+<li><b>The <code>cost</code> field</b> inside <code>technique_information</code>: one docs page shows it, another summary did not.</li>
+<li><b>Cost of the same refresh on a Pro warehouse vs a serverless one.</b> Both hand the work to a serverless pipeline, but the docs do not spell out the handoff.</li>
+<li>The one example here that I have not run: the <code>CREATE ... CLUSTER BY AUTO ... SCHEDULE CRON</code> statement (marked sketch). The illustration of 1 TB and 1% change is arithmetic, not a measurement.</li></ul></div></section>

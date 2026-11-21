@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Databricks Materialized Views: Refresh Types, Cost, Limits and Avoiding Full Refresh</title>
+<meta name="description" content="A complete guide to Databricks materialized views: where a refresh runs, incremental refresh vs full recompute, the refresh policies, what forces a full recompute, what it costs, tips, and how to find out which refresh really happened with EXPLAIN, the event log and system tables."><link rel="canonical" href="https://cleandataengineering.ai/learn/materialized-views/">
+<meta property="og:title" content="Databricks Materialized Views: Refresh Types, Cost, Limits and Avoiding Full Refresh"><meta property="og:description" content="A complete guide to Databricks materialized views: where a refresh runs, incremental refresh vs full recompute, the refresh policies, what forces a full recompute, what it costs, tips, and how to find out which refresh really happened with EXPLAIN, the event log and system tables."><meta property="og:url" content="https://cleandataengineering.ai/learn/materialized-views/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style><style>
+  .post-meta { font-family:var(--sans); font-size:13px; color:var(--faint); margin:0 0 14px; }
+  .post-meta a { color:var(--muted); }
+  article h1 { max-width:none; }
+  .summary { background:var(--butter-wash); border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 20px; font-family:var(--sans); font-size:15.5px; color:var(--ink-soft); margin:0 0 28px; }
+  article h2 { margin-top:34px; }
+  article ul, article ol { padding-left:22px; } article li { margin:6px 0; }
+  article code { font-family:var(--mono); font-size:.86em; background:var(--surface-2); padding:1px 5px; border-radius:3px; }
+  article pre { background:var(--surface-2); border:1px solid var(--rule); padding:14px 16px; overflow-x:auto; }
+  article pre code { background:none; padding:0; }
+  article blockquote { margin:0 0 16px; padding:10px 18px; background:var(--rose-wash); border:1.5px solid var(--ink); border-radius:var(--wob); color:var(--ink-soft); }
+  .tw { overflow-x:auto; } article table { border-collapse:collapse; font-family:var(--sans); font-size:14px; width:100%; margin:0 0 18px; }
+  article th, article td { text-align:left; padding:8px 10px; border-bottom:1px solid var(--rule); vertical-align:top; }
+  article th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  .drawing { margin:22px 0; background:#fff; border:1.5px solid var(--ink); border-radius:var(--wob); padding:14px 18px; }
+  .drawing svg { width:100%; height:auto; display:block; } .drawing figcaption { font-family:var(--sans); font-size:13px; color:#6A6259; margin-top:8px; }
+  .deeper { border-top:1px solid var(--rule); margin-top:36px; padding-top:18px; font-family:var(--sans); font-size:15px; }
+  .deeper p { margin:0 0 8px; }
+  .chips { display:flex; gap:8px; flex-wrap:wrap; margin:18px 0 6px; font-family:var(--sans); }
+  .chips button { font:13.5px var(--sans); border:1.5px solid var(--ink); background:#fff; color:var(--ink); padding:3px 13px; border-radius:var(--wob); cursor:pointer; }
+  .chips button.on { background:var(--ink); color:var(--paper); border-color:var(--ink); }
+  ul.posts .soon { color:var(--faint); }
+  ul.posts .what { display:block; font-family:var(--sans); font-size:14px; color:var(--muted); margin:2px 0; }
+</style><style>
+  .crumbs { font-size:13.5px; color:var(--faint); margin:28px 0 0; } .crumbs a { color:var(--muted); }
+  .lede { font-size:20px; color:var(--ink-soft); }
+  .toc { border:var(--line); border-radius:var(--wob); padding:12px 20px; background:var(--butter-wash); font-size:15px; margin:20px 0; }
+  .toc ol { margin:6px 0 0; padding-left:20px; columns:2; column-gap:30px; } .toc li { margin:3px 0; }
+  .diagram { margin:18px 0; border:var(--line); border-radius:var(--wob); padding:14px 16px; background:#fff; overflow-x:auto; }
+  .diagram svg { width:100%; min-width:640px; height:auto; display:block; } .diagram text { font-family:var(--hand); }
+  .diagram figcaption { font-size:13.5px; color:var(--muted); margin-top:6px; }
+  .layer { border:var(--line); border-radius:var(--wob); padding:16px 20px; margin:14px 0; background:var(--w, #fff); }
+  .layer h3 { font-size:27px; margin:0 0 4px; } .layer .one { font-size:17px; color:var(--ink-soft); margin:0 0 10px; }
+  .layer dl { display:grid; grid-template-columns:150px 1fr; gap:4px 14px; margin:0; font-size:15px; }
+  .layer dt { color:var(--faint); font-weight:700; font-size:12px; letter-spacing:.06em; text-transform:uppercase; padding-top:3px; }
+  .layer dd { margin:0; }
+  .tw { overflow-x:auto; } table.t { border-collapse:collapse; width:100%; font-size:14.5px; margin:8px 0 18px; }
+  table.t th, table.t td { text-align:left; padding:7px 9px; border-bottom:1.5px dashed var(--rule-firm); vertical-align:top; }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t code, .layer code, p code, li code { font-family:var(--mono); font-size:.84em; background:var(--surface-2); padding:1px 4px; border-radius:3px; }
+  table.rows td { font-family:var(--mono); font-size:12.5px; white-space:nowrap; } table.rows td.bad { background:var(--rose-wash); } table.rows td.new { background:var(--mint-wash); }
+  .rule { display:flex; gap:12px; padding:8px 0; border-bottom:1.5px dashed var(--rule); } .rule b.n { font-family:var(--hand); font-size:24px; min-width:34px; }
+  .note { font-size:14px; color:var(--faint); }
+  .ideas { display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 14px; }
+  .ideas a { font-size:14px; border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  details.faq { border-bottom:1.5px dashed var(--rule-firm); padding:10px 0; } details.faq summary { cursor:pointer; font-weight:600; }
+  details.faq p { margin:8px 0 0; }
+  @media (max-width:640px) { .toc ol { columns:1; } .layer dl { grid-template-columns:1fr; } }
+</style><style>
+  pre.code { font-family:var(--mono); font-size:12.5px; line-height:1.5; background:var(--surface-2); border:1px solid var(--rule); border-radius:8px; padding:12px 14px; overflow-x:auto; }
+  .cap { font-size:13px; color:var(--faint); margin:-8px 0 16px; }
+  .split { display:grid; grid-template-columns:1fr 1fr; gap:14px; } @media (max-width:760px) { .split { grid-template-columns:1fr; } }
+  .card { border:var(--line); border-radius:var(--wob); padding:12px 16px; background:#fff; } .card h4 { font-family:var(--hand); font-weight:400; font-size:21px; margin:0 0 4px; }
+  .card.good { background:var(--mint-wash); } .card.bad { background:var(--rose-wash); }
+  .sib { display:flex; flex-wrap:wrap; gap:8px; margin:14px 0 0; font-size:14px; } .sib a, .sib span { border:1.5px solid var(--ink); border-radius:999px; padding:2px 12px; text-decoration:none; color:var(--ink); background:#fff; } .sib span { background:var(--ink); color:#fff; }
+</style><style>
+  .bi .fig { border:var(--line); border-radius:var(--wob); padding:12px 14px; margin:16px 0; background:#fff; overflow-x:auto; }
+  .bi .fig svg { width:100%; min-width:680px; height:auto; display:block; } .bi .fig text { font-family:var(--hand); fill:#111; }
+  .bi .fig p { font-size:13.5px; color:var(--muted); margin:6px 0 0; }
+  .bi .box { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--butter-wash); }
+  .bi .warn { border:var(--line); border-radius:var(--wob); padding:10px 16px; margin:14px 0; background:var(--rose-wash); }
+  .bi .tabs3 { display:flex; flex-wrap:wrap; gap:8px; margin:18px 0; }
+  .bi .tabs3 a { border:1.5px solid var(--ink); border-radius:999px; padding:4px 14px; background:#fff; color:var(--ink); text-decoration:none; font-size:15px; }
+  .bi .tabs3 a.on { background:var(--butter-wash); font-weight:700; }
+  .bi table.t td { font-size:14px; }
+  .bi td.v { font-weight:700; white-space:nowrap; }
+  .bi .toc { columns:2; } @media (max-width:700px){ .bi .toc { columns:1; } }
+</style><script type="application/ld+json">{"@context": "https://schema.org", "@type": "TechArticle", "headline": "Databricks materialized views: refresh types, cost, limits and how to avoid full refresh", "description": "A complete guide to Databricks materialized views: where a refresh runs, incremental refresh vs full recompute, the refresh policies, what forces a full recompute, what it costs, tips, and how to find out which refresh really happened with EXPLAIN, the event log and system tables.", "url": "https://cleandataengineering.ai/learn/materialized-views/", "inLanguage": "en", "isAccessibleForFree": true, "dateModified": "2026-11-21", "author": {"@type": "Person", "name": "Basant Choudhary", "url": "https://cleandataengineering.ai/#about"}, "publisher": {"@type": "Organization", "name": "Clean Data Engineering", "url": "https://cleandataengineering.ai"}}</script><script type="application/ld+json">{"@context": "https://schema.org", "@type": "FAQPage", "mainEntity": [{"@type": "Question", "name": "Does a materialized view refresh incrementally?", "acceptedAnswer": {"@type": "Answer", "text": "Only when the refresh runs on serverless compute, the query uses supported operations, the source tables allow it, and the cost model judges incremental cheaper than a full recompute. Otherwise Databricks recomputes everything."}}, {"@type": "Question", "name": "How do I know whether a refresh was incremental or full?", "acceptedAnswer": {"@type": "Answer", "text": "Query the pipeline event log for event_type = 'planning_information' (the message names the technique, for example ROW_BASED or FULL_RECOMPUTE), or look at the Incrementalization column in the UI. EXPLAIN CREATE MATERIALIZED VIEW tells you before you build whether the query can be incremental at all."}}, {"@type": "Question", "name": "Can I stop a materialized view from silently doing a full recompute?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. Create it with REFRESH POLICY INCREMENTAL STRICT. If an incremental refresh is not possible, the refresh or create fails instead of recomputing everything."}}, {"@type": "Question", "name": "What does a materialized view refresh cost?", "acceptedAnswer": {"@type": "Answer", "text": "The docs say a refresh runs on serverless compute billed as serverless Lakeflow pipelines DBUs, and that cost scales with the volume of data processed, not with the size of your SQL warehouse. The docs I read give no price per DBU for it."}}]}</script><script data-goatcounter="https://cleandataengineering.goatcounter.com/count" async src="//gc.zgo.at/count.js"></script>
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Clean Data Engineering">
+<meta property="og:image" content="https://cleandataengineering.ai/assets/og-card.png">
+<meta name="twitter:card" content="summary_large_image">
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Concepts</h4><ul><li><details><summary><a href="/leaders/">For leaders</a></summary><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/leaders/spec-driven/">Spec-driven development: agents</a></li><li><a href="/leaders/spec-driven/data-platform/">Spec-driven development: data platforms</a></li><li><a href="/papers/">Technical papers</a></li></ul></details></li><li><details><summary><a href="/learn/fundamentals/">Fundamentals</a></summary><ul><li><a href="/learn/fundamentals/">All fundamentals</a></li><li><a href="/learn/fundamentals/performance/">Performance</a></li><li><a href="/learn/fundamentals/cost/">Cost</a></li><li><a href="/learn/fundamentals/processing/">Processing</a></li><li><a href="/learn/fundamentals/security/">Security</a></li><li><a href="/learn/fundamentals/storage/">Storage</a></li><li><a href="/learn/fundamentals/database-families/">Database families</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/">Data systems</a></summary><ul><li><a href="/learn/data-systems/">The whole system, end to end</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li><li class="sub">Upstreams</li><li><a href="/learn/data-systems/upstreams/">Know your sources</a></li><li><a href="/learn/data-systems/upstreams/big-picture/">Upstreams, the big picture</a></li><li><a href="/learn/data-systems/upstreams/apis/">API sources</a></li><li><a href="/learn/data-systems/upstreams/files/">File sources</a></li><li><a href="/learn/data-systems/upstreams/joins/">Learning the joins</a></li><li><a href="/learn/data-systems/upstreams/answers/">Where the answers go</a></li><li><a href="/learn/data-systems/upstreams/questionnaire/">Source system questionnaire</a></li><li class="sub">Downstreams</li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/platform/">Data and AI platform</a></summary><ul><li class="sub">Conceptual architecture</li><li><a href="/learn/data-systems/platform/">The platform, whole</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#hops">Data engineering</a></summary><ul><li><a href="/learn/data-platform-suite/">Our platform, picture to code</a></li><li class="sub">The hops</li><li><a href="/learn/data-platform-architecture/ingestion/">Hop 1: sources to bronze</a></li><li><a href="/learn/data-platform-architecture/bronze-to-silver/">Hop 2: bronze to silver</a></li><li><a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a></li><li><a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a></li><li class="sub">Tables and formats</li><li><a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a></li><li><a href="/learn/table-maintenance/">Who maintains your tables</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse: who owns the catalog?</a></li><li><a href="/learn/databricks-vs-aws-lakehouse/">AWS-native vs Databricks lakehouse</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/table-view-materialized-view-metric-view/">Table, view, materialized view or metric view</a></li><li><a href="/learn/materialized-views/">Databricks materialized views</a></li><li class="sub">Databricks compute and cost</li><li><a href="/learn/databricks-compute/">All compute and cost pages</a></li><li><a href="/learn/databricks-compute/cluster-architecture/">Cluster architecture, memory, machine types</a></li><li><a href="/learn/databricks-compute/warehouses-and-serverless/">SQL warehouses and serverless</a></li><li><a href="/learn/databricks-compute/choosing-compute/">Choosing compute: serverless, classic, warehouses</a></li><li><a href="/learn/databricks-compute/compute-settings/">Compute settings: warehouses, jobs, node types</a></li><li><a href="/learn/databricks-compute/cost-by-workload/">Cost map: workloads, compute and DBU rates</a></li><li><a href="/learn/databricks-compute/photon-and-caches/">Photon and every cache</a></li><li><a href="/learn/databricks-compute/how-billing-works/">How billing works: DBUs, SKUs, autoscaling</a></li><li><a href="/learn/databricks-compute/dividing-the-bill/">Dividing the bill (chargeback)</a></li><li><a href="/learn/databricks-compute/system-tables/">System tables and what reading them costs</a></li><li><a href="/learn/databricks-compute/logs-and-visibility/">Serverless visibility and logs</a></li><li><a href="/learn/databricks-compute/delta-sharing-and-regions/">Delta Sharing and cross-region cost</a></li><li><a href="/learn/databricks-compute/backup-and-recovery-architecture/">Backup and recovery architecture</a></li><li><a href="/learn/databricks-compute/cost-saving-hacks/">Cost-saving hacks</a></li><li class="sub">Databricks interview prep</li><li><a href="/learn/databricks-interview/">All interview topics</a></li><li><a href="/learn/databricks-interview/delta-maintenance/">OPTIMIZE, VACUUM, compaction</a></li><li><a href="/learn/databricks-interview/table-maintenance-pictures/">Table maintenance in pictures (real runs)</a></li><li><a href="/learn/databricks-interview/clustering-and-compaction/">Compaction, partitioning, Z-order, liquid</a></li><li><a href="/learn/databricks-interview/maintenance-strategy/">Maintenance strategy: auto or scheduled</a></li><li><a href="/learn/databricks-interview/slow-writes/">Why writes are slow</a></li><li><a href="/learn/databricks-interview/backup-and-recovery-azure/">Backup and recovery on Azure</a></li><li><a href="/learn/databricks-interview/tagging-best-practices/">Tagging best practices</a></li><li><a href="/learn/databricks-interview/row-level-security/">Row-level security and masking</a></li><li><a href="/learn/databricks-interview/compute-choice/">Which compute for which job</a></li><li><a href="/learn/databricks-interview/joins/">Join types</a></li><li><a href="/learn/databricks-interview/skew-and-shuffle/">Skew, salting and shuffle</a></li><li><a href="/learn/databricks-interview/aqe-photon-po/">AQE, Photon, Predictive Optimization</a></li><li><a href="/learn/databricks-interview/cost-and-performance/">Biggest cost and performance levers</a></li><li><a href="/learn/databricks-interview/declarative-and-semantic/">What declarative means + semantic example</a></li><li><a href="/learn/databricks-interview/asset-bundles/">Asset Bundles</a></li><li><a href="/learn/databricks-interview/lakeflow-connect/">Lakeflow Connect</a></li><li><a href="/learn/databricks-interview/uniform/">UniForm</a></li><li><a href="/learn/databricks-interview/vector-search/">Vector Search</a></li><li><a href="/learn/databricks-interview/dbt-and-odcs/">dbt and ODCS</a></li><li><a href="/learn/databricks-interview/egress-and-ingress/">Egress and ingress cost</a></li><li><a href="/learn/databricks-interview/hard-problems-and-questions/">Hard problems and question bank</a></li><li class="sub">History, SCD and facts</li><li><a href="/learn/gold-data-modelling/">Gold data modelling</a></li><li><a href="/learn/silver-to-gold/">Silver to gold: the harness</a></li><li><a href="/learn/silver-to-gold/worked-example/">› Worked example (start here)</a></li><li><a href="/learn/silver-to-gold/kinds-of-fact/">› Six kinds of fact</a></li><li><a href="/learn/silver-to-gold/fact-examples/">› Fact examples in SQL</a></li><li><a href="/learn/silver-to-gold/dimension-examples/">› Dimension examples in SQL</a></li><li><a href="/learn/silver-to-gold/rulebook-harness/">› Rulebook: the harness</a></li><li><a href="/learn/spark-declarative-pipelines/">Declarative pipelines: open source vs Lakeflow</a></li><li><a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD2: AUTO CDC or own PySpark?</a></li><li><a href="/learn/gold-harness-spec/">Gold harness spec: facts and SCD2</a></li><li><a href="/learn/time-travel-vs-scd2/">Time travel as SCD Type 2?</a></li><li class="sub">Streaming and real time</li><li><a href="/learn/streaming/">Streaming on AWS and Databricks</a></li><li><a href="/learn/streaming/options/">Streaming: all options</a></li><li><a href="/learn/streaming/sim/">Streaming simulator</a></li><li><a href="/learn/streaming/real-time-mode/">Databricks real time: RTM and Lakehouse//RT</a></li><li class="sub">Quality and testing</li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/data-platform-sim/data-quality/">Data quality, metadata-driven</a></li><li class="sub">Hands-on simulators</li><li><a href="/learn/data-platform-sim/">One batch through Spark and Delta</a></li><li><a href="/learn/data-platform-sim/spark/">Spark internals</a></li><li><a href="/learn/data-platform-sim/delta/">Delta Lake internals</a></li><li><a href="/learn/data-platform-sim/performance/">Spark performance: 12 problems</a></li><li><a href="/learn/data-platform-sim/problems/">Problems solved: SCD2, late data, duplicates</a></li><li class="sub">On AWS</li><li><a href="/learn/data-platform-architecture/aws-databricks/">AWS + Databricks, ETL end to end</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse on AWS: A vs B</a></li><li><a href="/learn/databricks-vs-aws-lakehouse/">AWS-native vs Databricks, all concerns</a></li><li><a href="/learn/aws-data-services/">AWS data services catalog</a></li><li class="sub">Open specs</li><li><a href="/learn/datatwin/">DataTwin</a></li><li><a href="/projects/data-eng-specs/">Clean Data Engineering specs</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/semantic-layer/">BI and analytics</a></summary><ul><li><a href="/concepts/semantic-layer/">Hop 4: the semantic layer</a></li><li><a href="/writing/genie-metric-views/">Genie and metric views</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/">Power BI vs Databricks AI/BI</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/power-bi/">Power BI and Fabric, in depth</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/ai-bi/">Databricks AI/BI, in depth</a></li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/#ml-engineering">ML</a></summary><ul><li><a href="/concepts/#ml-engineering">Key ML ideas (pages coming)</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/ai-universe/">AI</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness-intro/">Agent Harness, the big picture</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/agent-harness-stack-map/">Agent Harness: architecture map</a></li><li><a href="/learn/drug-safety-agent-databricks/">Drug-safety agent on Databricks: the tour</a></li><li><a href="/learn/agent-frameworks/">Agent frameworks: when to use which</a></li><li><a href="/learn/which-model/">Which AI model for which job</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li><li><a href="/learn/ai-governance/">AI governance: running AI you can trust</a></li><li><a href="/learn/ai-gateways/">AI gateways: which one to use</a></li><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">Open spec: AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">Open spec: AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">Open spec: AgentTwin</a></li><li><a href="/lab/">The AgentTwin Lab</a></li><li><a href="https://github.com/dataagentsai/reference-agent">Code: Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">Code: AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Code: Eval Harness Framework</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#concerns">Across all of them</a></summary><ul><li><a href="/learn/data-systems/platform/#concerns">All 24 concerns</a></li><li><a href="/learn/data-platform-mind-map/">Mind map: every concern, every cloud</a></li><li><a href="/learn/data-systems/platform/layout/">Layout: catalogs and schemas</a></li><li><a href="/learn/data-systems/platform/environments/">Environments and CI/CD</a></li><li><a href="/learn/data-systems/platform/cost/">Cost and FinOps</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li><li><a href="/learn/data-platform-architecture/test-strategy/">Test strategy in practice</a></li></ul></details></li><li><a href="/concepts/#a-z">Key concepts, A to Z</a></li></ul><h4>On your cloud</h4><ul><li><details><summary><a href="/platforms/databricks/">Databricks</a></summary><ul><li><a href="/platforms/databricks/#systems">Data systems</a></li><li><a href="/platforms/databricks/#de">Data engineering</a></li><li><a href="/platforms/databricks/#bi">BI and analytics</a></li><li><a href="/platforms/databricks/#ml">ML</a></li><li><a href="/platforms/databricks/#ai">AI</a></li><li><a href="/platforms/databricks/#across">Across all of them</a></li><li><a href="/platforms/databricks/#paths">Learning paths</a></li><li><a href="/platforms/databricks/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/aws/">AWS</a></summary><ul><li><a href="/platforms/aws/#systems">Data systems</a></li><li><a href="/platforms/aws/#de">Data engineering</a></li><li><a href="/platforms/aws/#bi">BI and analytics</a></li><li><a href="/platforms/aws/#ml">ML</a></li><li><a href="/platforms/aws/#ai">AI</a></li><li><a href="/platforms/aws/#across">Across all of them</a></li><li><a href="/platforms/aws/#paths">Learning paths</a></li><li><a href="/platforms/aws/#certs">Certifications</a></li><li><a href="/learn/aws-data-services/">AWS data services: all 66</a></li></ul></details></li><li><details><summary><a href="/platforms/azure/">Azure and Fabric</a></summary><ul><li><a href="/platforms/azure/#systems">Data systems</a></li><li><a href="/platforms/azure/#de">Data engineering</a></li><li><a href="/platforms/azure/#bi">BI and analytics</a></li><li><a href="/platforms/azure/#ml">ML</a></li><li><a href="/platforms/azure/#ai">AI</a></li><li><a href="/platforms/azure/#across">Across all of them</a></li><li><a href="/platforms/azure/#paths">Learning paths</a></li><li><a href="/platforms/azure/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/gcp/">Google Cloud</a></summary><ul><li><a href="/platforms/gcp/#systems">Data systems</a></li><li><a href="/platforms/gcp/#de">Data engineering</a></li><li><a href="/platforms/gcp/#bi">BI and analytics</a></li><li><a href="/platforms/gcp/#ml">ML</a></li><li><a href="/platforms/gcp/#ai">AI</a></li><li><a href="/platforms/gcp/#across">Across all of them</a></li><li><a href="/platforms/gcp/#paths">Learning paths</a></li><li><a href="/platforms/gcp/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/open/">Open source</a></summary><ul><li><a href="/platforms/open/#systems">Data systems</a></li><li><a href="/platforms/open/#de">Data engineering</a></li><li><a href="/platforms/open/#bi">BI and analytics</a></li><li><a href="/platforms/open/#ml">ML</a></li><li><a href="/platforms/open/#ai">AI</a></li><li><a href="/platforms/open/#across">Across all of them</a></li><li><a href="/platforms/open/#paths">Learning paths</a></li><li><a href="/platforms/open/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/anthropic/">Claude (Anthropic)</a></summary><ul><li><a href="/platforms/anthropic/#ai">AI</a></li><li><a href="/platforms/anthropic/#certs">Certifications</a></li></ul></details></li><li><a href="/certifications/">All certifications</a></li></ul><h4>Your role</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/data-engineering/">Data Engineering</a></summary><ul><li><a href="/data-engineering/">Start here</a></li><li><a href="/paths/data-engineering/">Learning path</a></li><li><a href="/data-engineering/#tools">Practice and simulators</a></li><li><a href="/projects/?subject=data">Projects to join</a></li><li><a href="/concepts/#data-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/">Learning path</a></li><li><a href="/learn/agent-harness-sim/">Simulator: Agent Harness</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li><li><a href="/projects/?subject=ai">Projects to join</a></li><li><a href="/concepts/#ai-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/">Learning path</a></li><li><a href="/learn/llm-api-sim/">Simulator: Claude API</a></li><li><a href="/projects/?subject=llm">Projects to join</a></li><li><a href="/concepts/#llm-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/">Learning path</a></li><li><a href="/concepts/#ml-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/">Learning path</a></li><li><a href="/concepts/#software-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/forward-deployed/">Start here: the roadmap</a></li><li><a href="/paths/forward-deployed/">Learning path</a></li><li><a href="/concepts/#forward-deployed">Key concepts</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li><li><a href="/projects/">All projects to join</a></li></ul><h4>How we work</h4><ul><li><details><summary><a href="/how-we-work/#thinking">Thinking principles</a></summary><ul><li><a href="/how-we-work/#thinking">All thinking principles</a></li><li><a href="/how-we-work/critical-thinking/">Critical thinking in data projects</a></li></ul></details></li><li><a href="/how-we-work/#ba">Business analysis</a></li><li><details><summary><a href="/how-we-work/#pm">Project management</a></summary><ul><li><a href="/how-we-work/#pm">All project management</a></li><li><a href="/how-we-work/estimation/">Estimation mistakes in data projects</a></li><li><a href="/how-we-work/project-management-mistakes/">Top project management mistakes</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li></ul></details></li><li><details><summary><a href="/learn/technical-anchor/">The technical anchor</a></summary><ul><li><a href="/learn/technical-anchor/">The role</a></li><li><a href="/learn/technical-anchor/discovery/">Discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li></ul></details></li></ul><h4>Causes and deep tech</h4><ul><li><details><summary><a href="/ai-for-cause/">AI for a cause</a></summary><ul><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul></details></li><li><details><summary><a href="/deep-tech/">Deep tech</a></summary><ul><li><a href="/problems/">Hard problems</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul></details></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li><li><a href="/about/#join">Write or teach</a></li><li><a href="/writing/">Blog</a></li><li><a href="/research/">All open specifications</a></li><li><a href="/assets/">All open-source code</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main class="wrap">
+<div class="bi"><p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › Materialized views</p>
+<p class="eyebrow" style="margin-top:22px">Databricks · tables and refresh</p>
+<h1>Databricks materialized views: refresh types, cost, limits and how to avoid full refresh</h1><p class="lede">A complete guide to Databricks materialized views: where a refresh runs, incremental refresh vs full recompute, the refresh policies, what forces a full recompute, what it costs, tips, and how to find out which refresh really happened with EXPLAIN, the event log and system tables.</p>
+<p class="verify">Read from the Databricks documentation on 21 November 2026 (AWS pages; the Azure pages match except for wording). Features change often, so check the "Not confirmed" list at the bottom. SQL marked "sketch" has not been run.</p>
+
+<section id="s1"><p class="eyebrow">What it is</p><h2>A saved answer that the engine keeps up to date</h2>
+<p>A <b>materialized view</b> (MV) is a query whose result is stored like a table. Readers query it fast, like any table, and Databricks refreshes it when you ask, on a schedule, or when the sources change. A normal view recomputes on every read. An MV pays once at refresh time instead.</p>
+<div class="tw"><table class="t">
+<tr><th></th><th>Standalone MV</th><th>Pipeline-defined MV</th></tr>
+<tr><td>Created with</td><td><code>CREATE MATERIALIZED VIEW</code> in a SQL warehouse or notebook</td><td>The same keyword inside a Lakeflow pipeline's source code</td></tr>
+<tr><td>Who runs the refresh</td><td>A backing pipeline Databricks creates for you (shown as type <code>MV/ST</code> under Jobs &amp; Pipelines)</td><td>Your pipeline</td></tr>
+<tr><td>Schedule</td><td><code>SCHEDULE</code> or <code>TRIGGER ON UPDATE</code> in the statement</td><td>The pipeline's own schedule or trigger</td></tr>
+<tr><td>Good for</td><td>One summary table owned by one team</td><td>A chain of bronze, silver and gold steps that refresh together</td></tr></table></div>
+<p>The result sits in cloud storage and Unity Catalog holds its metadata and query. A few helper tables for incremental refresh live in an internal catalog.</p></section>
+
+<section id="s2"><p class="eyebrow">Where it runs</p><h2>Which compute does the refresh</h2>
+<div class="fig"><svg viewBox="0 0 1000 280" role="img" aria-label="Where a materialized view refresh runs. A SQL warehouse statement or a Lakeflow pipeline you wrote starts a backing serverless pipeline of type MV/ST, which writes the stored result table. You pay for the pipeline&#x27;s serverless compute, not the warehouse size. Without serverless, every update is a full recompute."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><rect x="10" y="20" width="250" height="70" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="135.0" y="42.0" font-size="15" text-anchor="middle">You, in a SQL warehouse</text><text x="135.0" y="60.0" font-size="13" text-anchor="middle">(Pro or Serverless)</text><text x="135.0" y="78.0" font-size="13" text-anchor="middle">CREATE / REFRESH statement</text><rect x="10" y="130" width="250" height="70" rx="10" fill="#eef3fb" stroke="#111" stroke-width="1.5"/><text x="135.0" y="152.0" font-size="15" text-anchor="middle">Or: a Lakeflow pipeline</text><text x="135.0" y="170.0" font-size="13" text-anchor="middle">you wrote (must be set</text><text x="135.0" y="188.0" font-size="13" text-anchor="middle">to serverless)</text><rect x="340" y="60" width="300" height="110" rx="10" fill="#fff6dc" stroke="#111" stroke-width="1.5"/><text x="490.0" y="91.83333333333333" font-size="16" text-anchor="middle">Backing pipeline</text><text x="490.0" y="110.83333333333333" font-size="14" text-anchor="middle">type MV/ST, runs on</text><text x="490.0" y="129.83333333333331" font-size="14" text-anchor="middle">serverless compute</text><text x="490.0" y="148.83333333333331" font-size="14" text-anchor="middle">this is what you pay for</text><rect x="730" y="60" width="260" height="110" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="860.0" y="101.33333333333333" font-size="16" text-anchor="middle">The stored result</text><text x="860.0" y="120.33333333333333" font-size="14" text-anchor="middle">a table in cloud storage</text><text x="860.0" y="139.33333333333331" font-size="14" text-anchor="middle">that readers query fast</text><path d="M262,55 L338,100" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M262,165 L338,130" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><path d="M642,115 L728,115" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="685" y="104" font-size="13" text-anchor="middle">writes</text><text x="500" y="235" font-size="15" text-anchor="middle">Cost follows the data the pipeline processes, not the size of the warehouse that sent the statement.</text><text x="500" y="260" font-size="15" text-anchor="middle">If the pipeline is not serverless, every update is a full recompute.</text></svg><p>The statement starts a serverless pipeline, and the pipeline does the work and the billing.</p></div>
+<div class="tw"><table class="t">
+<tr><th>Question</th><th>Answer from the docs</th></tr>
+<tr><td>Which warehouse can create a standalone MV?</td><td>A <b>Pro or Serverless</b> SQL warehouse, with Unity Catalog. A classic warehouse works for streaming tables but not for MVs.</td></tr>
+<tr><td>Which compute does the refresh run on?</td><td><b>Serverless.</b> A refresh is run by a serverless pipeline, whether the MV is standalone or defined in a Lakeflow pipeline. For a standalone MV, your workspace does not need serverless pipelines turned on; one is used automatically.</td></tr>
+<tr><td>Can it run on classic compute?</td><td>A pipeline-defined MV can be set up on classic compute, but then <b>every update is a full recompute</b>. Incremental refresh needs serverless.</td></tr>
+<tr><td>Can I use a notebook?</td><td>A notebook on serverless compute, Databricks Runtime 18.1 or later, can create and refresh MVs, with limits: no per-table cost attribution, no async refresh, and a table must be refreshed on the compute type that created it.</td></tr>
+<tr><td>Other requirements</td><td>Unity Catalog, a region that supports serverless SQL warehouses, and the serverless terms accepted.</td></tr></table></div></section>
+
+<section id="s3"><p class="eyebrow">Refresh types</p><h2>Incremental refresh, full recompute and the rest</h2>
+<h3>The two kinds of update</h3>
+<div class="tw"><table class="t">
+<tr><th>Update</th><th>What it does</th><th>How you start it</th></tr>
+<tr><td><b>Refresh</b> (the default)</td><td>Tries to read only what changed; falls back to a full recompute if it has to</td><td><code>REFRESH MATERIALIZED VIEW name</code>, a schedule, a trigger, or a pipeline update</td></tr>
+<tr><td><b>Full refresh</b></td><td>Always recalculates everything and resets all checkpoints</td><td><code>REFRESH MATERIALIZED VIEW name FULL</code>, or a pipeline update with full refresh chosen</td></tr></table></div>
+<p>Both give the same data. The difference is cost and method. Full refresh is also how you pick up a changed UDF library (see s5).</p>
+<h3>The techniques, as named in the event log</h3>
+<div class="tw"><table class="t">
+<tr><th>Technique name</th><th>Meaning</th></tr>
+<tr><td><code>ROW_BASED</code>, <code>PARTITION_OVERWRITE</code>, <code>WINDOW_FUNCTION</code>, <code>APPEND_ONLY</code>, <code>GROUP_AGGREGATE</code>, <code>GENERIC_AGGREGATE</code></td><td>Incremental: only changed data was processed, by this method</td></tr>
+<tr><td><code>FULL_RECOMPUTE</code></td><td>Everything was recomputed</td></tr>
+<tr><td><code>NO_OP</code></td><td>Nothing in the sources changed, so nothing ran</td></tr></table></div>
+<p>The docs list these names but do not say how each incremental technique works inside. The UI shows the same result as <b>Incremental</b>, <b>Full recompute</b> or <b>No change</b>.</p>
+<h3>How one refresh decides</h3>
+<div class="fig"><svg viewBox="0 0 1000 312" role="img" aria-label="A decision chart for one refresh. If compute is not serverless the result is always a full recompute. If the source data has not changed nothing runs. If the query cannot be incremental it is a full recompute. Otherwise the cost model picks incremental or full. The INCREMENTAL STRICT policy turns every full recompute into a failed refresh."><defs><marker id="bia" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="#111"/></marker></defs><text x="500" y="22" font-size="17" text-anchor="middle">What happens on each refresh (AUTO policy)</text><rect x="10" y="50" width="190" height="70" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="105.0" y="81.0" font-size="15" text-anchor="middle">Serverless</text><text x="105.0" y="99.0" font-size="13" text-anchor="middle">compute?</text><path d="M202,85 L248,85" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="226" y="76" font-size="13" text-anchor="middle">yes</text><rect x="250" y="50" width="190" height="70" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="345.0" y="81.0" font-size="15" text-anchor="middle">Source data</text><text x="345.0" y="99.0" font-size="13" text-anchor="middle">changed?</text><path d="M442,85 L488,85" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="466" y="76" font-size="13" text-anchor="middle">yes</text><rect x="490" y="50" width="190" height="70" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="585.0" y="81.0" font-size="15" text-anchor="middle">Query can be</text><text x="585.0" y="99.0" font-size="13" text-anchor="middle">incremental?</text><path d="M682,85 L728,85" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="706" y="76" font-size="13" text-anchor="middle">yes</text><rect x="730" y="50" width="190" height="70" rx="10" fill="#fff" stroke="#111" stroke-width="1.5"/><text x="825.0" y="81.0" font-size="15" text-anchor="middle">Cost model says</text><text x="825.0" y="99.0" font-size="13" text-anchor="middle">incremental is cheaper?</text><rect x="10" y="200" width="190" height="56" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="105.0" y="224.0" font-size="15" text-anchor="middle">Full recompute</text><text x="105.0" y="242.0" font-size="13" text-anchor="middle">always</text><path d="M105,122 L105,198" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="124" y="165" font-size="13" text-anchor="middle">no</text><rect x="250" y="200" width="190" height="56" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="345.0" y="224.0" font-size="15" text-anchor="middle">NO_OP</text><text x="345.0" y="242.0" font-size="13" text-anchor="middle">nothing to do</text><path d="M345,122 L345,198" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="364" y="165" font-size="13" text-anchor="middle">no</text><rect x="470" y="200" width="150" height="56" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="545.0" y="233.0" font-size="15" text-anchor="middle">Full recompute</text><path d="M585,122 L545,198" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="548" y="165" font-size="13" text-anchor="middle">no</text><rect x="650" y="200" width="140" height="56" rx="10" fill="#eaf6ef" stroke="#111" stroke-width="1.5"/><text x="720.0" y="233.0" font-size="15" text-anchor="middle">Incremental</text><path d="M800,122 L720,198" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="748" y="165" font-size="13" text-anchor="middle">yes</text><rect x="810" y="200" width="170" height="56" rx="10" fill="#fbeef3" stroke="#111" stroke-width="1.5"/><text x="895.0" y="233.0" font-size="15" text-anchor="middle">Full recompute</text><path d="M860,122 L890,198" stroke="#111" stroke-width="1.4" fill="none" marker-end="url(#bia)"/><text x="892" y="165" font-size="13" text-anchor="middle">no</text><text x="500" y="295" font-size="15" text-anchor="middle">Policy INCREMENTAL STRICT turns every red box into a failed refresh instead.</text></svg><p>One refresh, left to right. Red boxes are the full recomputes.</p></div>
+<h3>The refresh policy: who decides</h3>
+<div class="tw"><table class="t">
+<tr><th>Policy</th><th>Behaviour</th><th>Use when</th></tr>
+<tr><td><code>AUTO</code> (default)</td><td>The cost model picks the cheaper of incremental and full</td><td>Most cases</td></tr>
+<tr><td><code>INCREMENTAL</code></td><td>Incremental whenever possible; falls back to full if the plan no longer allows it. Create fails if the query could never be incremental.</td><td>You want incremental but can live with an occasional fallback</td></tr>
+<tr><td><code>INCREMENTAL STRICT</code></td><td>Incremental or fail. The refresh stops with an error instead of recomputing everything.</td><td>A surprise full recompute is not acceptable</td></tr>
+<tr><td><code>FULL</code></td><td>Never incremental, even when it could be</td><td>Small data, or a query you keep changing</td></tr></table></div>
+<pre class="code">CREATE MATERIALIZED VIEW sales_summary
+  REFRESH POLICY INCREMENTAL STRICT
+  AS SELECT region, SUM(CAST(revenue AS DECIMAL(18,2))) AS total_revenue, COUNT(*) AS orders
+     FROM main.sales.orders GROUP BY region;</pre></section>
+
+<section id="s4"><p class="eyebrow">Choosing</p><h2>When to use which refresh setting</h2>
+<div class="tw"><table class="t">
+<tr><th>Situation</th><th>Choose</th><th>Verdict</th><th>Why</th></tr>
+<tr><td>Big source, small daily change, query is eligible</td><td><code>AUTO</code> or <code>INCREMENTAL</code> on serverless</td><td class="v pursue">Pursue</td><td>You pay for the change, not the whole table</td></tr>
+<tr><td>A full recompute would be a billing surprise</td><td><code>INCREMENTAL STRICT</code></td><td class="v pursue">Pursue</td><td>It fails loudly so you can fix the query</td></tr>
+<tr><td>Small table, refreshed rarely</td><td><code>FULL</code> or <code>AUTO</code></td><td class="v pursue">Pursue</td><td>Incremental bookkeeping saves nothing</td></tr>
+<tr><td>Source rewritten most nights</td><td><code>AUTO</code></td><td class="v pursue">Pursue</td><td>The cost model will pick full, which is cheaper then</td></tr>
+<tr><td>Source has no history (Kafka, files you delete)</td><td>A streaming table, not an MV</td><td class="v drop">Drop the MV</td><td>A full refresh would lose data you cannot read again</td></tr>
+<tr><td>Pipeline is classic compute</td><td>MV</td><td class="v drop">Drop</td><td>Every update is a full recompute</td></tr>
+<tr><td>You need results in milliseconds or per-event latency</td><td>A streaming table or a normal table</td><td class="v drop">Drop</td><td>MV updates take seconds or minutes</td></tr></table></div></section>
+
+<section id="s5"><p class="eyebrow">Limitations</p><h2>What stops incremental refresh, and other limits</h2>
+<h3>What forces a full recompute</h3>
+<div class="tw"><table class="t">
+<tr><th>Cause</th><th>Example</th><th>Fix</th></tr>
+<tr><td>Not serverless</td><td>Classic pipeline compute</td><td>Use serverless</td></tr>
+<tr><td><code>LIMIT</code></td><td><code>ORDER BY total DESC LIMIT 100</code></td><td>Store everything; apply the limit when reading</td></tr>
+<tr><td>Recursive CTE</td><td><code>WITH RECURSIVE</code></td><td>Flatten the hierarchy into a table first</td></tr>
+<tr><td>Non-deterministic function</td><td><code>RAND()</code>, or <code>CURRENT_DATE()</code> in <code>SELECT</code></td><td>Only <code>current_date()</code>, <code>current_timestamp()</code> and <code>now()</code> in a <code>WHERE</code> are allowed</td></tr>
+<tr><td>Floating-point sums</td><td><code>SUM(price)</code> on <code>DOUBLE</code></td><td><code>SUM(CAST(price AS DECIMAL(18,2)))</code></td></tr>
+<tr><td>Window without <code>PARTITION BY</code></td><td><code>ROW_NUMBER() OVER (ORDER BY day)</code></td><td>Add <code>PARTITION BY</code></td></tr>
+<tr><td>Source is not Delta or managed Iceberg</td><td>A volume, external location, foreign catalog, or foreign Iceberg table</td><td>Land it into a Delta table first</td></tr>
+<tr><td>Row tracking is off on a source</td><td>A <code>JOIN</code> or <code>UNION ALL</code> over a table without it</td><td>Turn row tracking on for the source</td></tr>
+<tr><td>UDF not marked deterministic, or its behaviour changed</td><td>Python UDF in the query</td><td>Mark it deterministic; after a library upgrade, run a full refresh yourself</td></tr>
+<tr><td>Complex shape above the aggregate</td><td>A <code>GROUP BY</code> with calculations stacked on top</td><td>Put the aggregate last; do the extra maths in a view on top</td></tr>
+<tr><td>Cost model says full is cheaper</td><td>Most of the source changed; deeply nested query</td><td>Nothing to fix. Or force with <code>INCREMENTAL</code> if you disagree</td></tr></table></div>
+<h3>What is supported for incremental refresh</h3>
+<p><code>SELECT</code> with deterministic built-in functions and immutable UDFs, <code>GROUP BY</code>, non-recursive <code>WITH</code>, <code>UNION ALL</code>, inner, left, right and full outer joins, <code>WHERE</code> and <code>HAVING</code>, window functions with <code>PARTITION BY</code>, and <code>QUALIFY</code>. Sources can be Delta tables, managed Iceberg tables, other MVs and streaming tables.</p>
+<h3>Other limits of MVs</h3>
+<ul>
+<li><b>Not low-latency.</b> Updates take seconds or minutes.</li>
+<li><b>No CLONE.</b> An MV cannot be the source or target of a clone.</li>
+<li><b>No OPTIMIZE or VACUUM</b> by you; maintenance is automatic. No identity or surrogate-key columns. No renaming or changing the owner.</li>
+<li><b>Aliases required</b> on every expression (<code>SUM(x) AS total</code>, not bare <code>SUM(x)</code>).</li>
+<li><b>Constraints are informational.</b> Primary and foreign keys are not enforced, though the optimizer can use them (declare with <code>RELY</code> only if they are true).</li>
+<li><b>A <code>SUM</code> over a column that becomes all NULL returns 0, not NULL.</b></li>
+<li><b>Expectations:</b> the two doc pages disagree on whether an MV with expectations can refresh incrementally. Test with <code>EXPLAIN</code>.</li></ul></section>
+
+<section id="s6"><p class="eyebrow">Cost</p><h2>What a refresh costs</h2>
+<ul>
+<li><b>What you are billed:</b> the refresh runs "on serverless compute, billed as serverless Lakeflow pipelines DBUs", on a pipeline separate from your warehouse. Cost scales with the <b>volume of data processed</b>, not the warehouse size. You may see serverless charges even when the warehouse you used is a dedicated one.</li>
+<li><b>Price per DBU:</b> the docs I read give no rate for this, so no dollar rate is quoted here. Look up the current Lakeflow pipelines serverless rate for your cloud and plan.</li>
+<li><b>Why incremental matters (illustration, not a bill):</b> take a 1 TB source with 1% new data a day. An incremental refresh reads about 10 GB. A full recompute reads 1 TB, about 100 times more. If the work is roughly proportional to the data read, the full recompute costs on the order of 100 times more each day.</li>
+<li><b>Storage:</b> the result is stored data, so there is a storage footprint. The docs I read do not say how it is billed.</li></ul>
+<h3>See what an MV actually cost</h3>
+<pre class="code">-- DBUs per refresh pipeline of one MV (from the Databricks docs; fill in your names)
+WITH p AS (
+  SELECT usage_metadata.dlt_pipeline_id AS pipeline_id
+  FROM system.billing.usage
+  WHERE usage_metadata.uc_table_catalog = 'main'
+    AND usage_metadata.uc_table_schema  = 'sales'
+    AND usage_metadata.uc_table_name    = 'sales_summary'
+  LIMIT 1)
+SELECT u.sku_name, u.usage_date, SUM(u.usage_quantity) AS dbus
+FROM system.billing.usage u JOIN p
+  ON u.usage_metadata.dlt_pipeline_id = p.pipeline_id
+GROUP BY ALL ORDER BY usage_date;</pre>
+<p>Tags on the warehouse that created an MV are copied onto its usage rows (<code>custom_tags</code>), so a cost split by team can work. See <a href="/learn/databricks-compute/dividing-the-bill/">dividing the bill</a>.</p></section>
+
+<section id="s7"><p class="eyebrow">Avoid full refresh</p><h2>A checklist to keep refreshes incremental</h2>
+<div class="tw"><table class="t">
+<tr><th>Do</th><th>Instead of</th></tr>
+<tr><td>Run the MV on <b>serverless</b></td><td>Classic compute</td></tr>
+<tr><td><code>ALTER TABLE src SET TBLPROPERTIES (delta.enableRowTracking = true, delta.enableDeletionVectors = true)</code> on every source</td><td>Leaving row tracking off</td></tr>
+<tr><td>Keep sources as <b>Delta tables</b> (or managed Iceberg)</td><td>Reading files, volumes or foreign catalogs directly</td></tr>
+<tr><td>Cast floats to <code>DECIMAL</code> before summing</td><td><code>SUM</code> and <code>AVG</code> on <code>DOUBLE</code></td></tr>
+<tr><td>Add <code>PARTITION BY</code> to every window function</td><td>Global <code>ORDER BY</code> windows</td></tr>
+<tr><td>Store the full aggregate, apply <code>LIMIT</code> in the reading query</td><td><code>LIMIT</code> inside the MV</td></tr>
+<tr><td>Keep <code>current_date()</code> only in <code>WHERE</code></td><td>Non-deterministic functions in <code>SELECT</code></td></tr>
+<tr><td>Mark UDFs deterministic, or use built-in functions</td><td>Opaque Python UDFs</td></tr>
+<tr><td>Put the aggregate at the top of the query; build extra layers as a view on the MV</td><td>Stacking maths on top of <code>GROUP BY</code></td></tr>
+<tr><td>Put expectations on the source table</td><td>Expectations inside the MV (if your test shows it blocks incremental)</td></tr>
+<tr><td>Use <code>INCREMENTAL STRICT</code> on MVs that must stay cheap</td><td>Hoping <code>AUTO</code> keeps choosing incremental</td></tr>
+<tr><td>Test with <code>EXPLAIN CREATE MATERIALIZED VIEW</code> before deploy</td><td>Finding out from the bill</td></tr></table></div></section>
+
+<section id="s8"><p class="eyebrow">How to know</p><h2>Six ways to see whether a refresh was full</h2>
+<ol class="steps">
+<li><b>Before you build: <code>EXPLAIN</code>.</b> Run <code>EXPLAIN CREATE MATERIALIZED VIEW ...</code> with your whole statement (Databricks Runtime 17.3 or later). It prints <code>The Materialized View can be incrementally refreshed.</code> or <code>cannot</code>, then a list of blockers with codes such as <code>OPERATOR_NOT_INCREMENTALIZABLE</code> or <code>INPUT_NOT_IN_DELTA</code>. It checks the shape of the query only, not what the cost model will do later.</li>
+<li><b>After each refresh: the event log.</b>
+<pre class="code">SELECT timestamp, message
+FROM event_log(TABLE(main.sales.sales_summary))
+WHERE event_type = 'planning_information'
+ORDER BY timestamp DESC;
+-- e.g. "Flow 'sales' has been planned to be executed as ROW_BASED."</pre>
+For a standalone MV only the owner can query its event log directly; share it through a view.</li>
+<li><b>Why it chose that: the detail.</b> The same event holds a <code>technique_information</code> list. Each entry has <code>maintenance_type</code>, <code>is_chosen</code>, <code>is_applicable</code> and <code>incrementalization_issues</code>, so you can read why incremental was not chosen. The docs show a parsing query on their monitoring page; I have not run one.</li>
+<li><b>The cost model said no.</b> When incremental was possible but rejected, look in the event log for <code>INCREMENTAL_PLAN_REJECTED_BY_COST_MODEL</code> events. Reasons include <code>CHANGESET_SIZE_THRESHOLD_EXCEEDED</code>, <code>TABLE_SIZE_THRESHOLD_EXCEEDED</code> and <code>EXCESSIVE_OPERATOR_NESTING</code>.</li>
+<li><b>In the UI.</b> The pipeline or Catalog Explorer view has an <b>Incrementalization</b> column (Incremental, Full recompute, No change). A lightbulb opens the Issues panel. The query profile shows a <code>FLOW_FULL_RECOMPUTE</code> insight explaining why. <code>DESCRIBE TABLE EXTENDED name</code> shows the latest refresh and its type, though the docs do not name the field.</li>
+<li><b>Make it fail.</b> With <code>REFRESH POLICY INCREMENTAL STRICT</code>, a refresh that cannot be incremental stops with the error class <code>MATERIALIZED_VIEW_NOT_INCREMENTALIZABLE</code> and a reason such as <code>ROW_TRACKING_NOT_ENABLED</code>, <code>WINDOW_WITHOUT_PARTITION_BY</code>, <code>UDF_NOT_DETERMINISTIC</code> or <code>EXPRESSION_NOT_DETERMINISTIC</code>.</li></ol>
+<p>Also watch the bill: a sudden rise in DBUs for the MV's pipeline in <code>system.billing.usage</code> (s6) is often a quiet switch to full recompute.</p></section>
+
+<section id="s9"><p class="eyebrow">Tips and tricks</p><h2>Practical advice</h2>
+<ul>
+<li><b>Run <code>EXPLAIN</code> in code review,</b> for every new MV and every change to one.</li>
+<li><b>Choose a schedule or trigger that matches the change.</b> <code>SCHEDULE EVERY 1 DAY</code> or a <code>CRON</code> for batch. <code>TRIGGER ON UPDATE [AT MOST EVERY interval]</code> to refresh when sources change (minimum one minute, up to 10 upstream sources per MV, upstreams must be Delta tables, MVs, streaming tables or managed views over them).</li>
+<li><b>Use <code>CLUSTER BY</code> or <code>CLUSTER BY AUTO</code></b> rather than <code>PARTITIONED BY</code>. The docs recommend liquid clustering for MVs.</li>
+<li><b>Use <code>ASYNC</code></b> (<code>REFRESH MATERIALIZED VIEW name ASYNC</code>) for long refreshes you do not want to wait on. The default is <code>SYNC</code>.</li>
+<li><b>Declare keys with <code>RELY</code></b> only when they are true: the optimizer can drop needless joins and aggregations.</li>
+<li><b>Use row filters and column masks</b> in the <code>CREATE</code> statement, not added later.</li>
+<li><b>Do not run <code>FULL</code> on sources that lose history,</b> such as Kafka. Existing data is truncated and may not come back.</li>
+<li><b>After a UDF library upgrade,</b> run <code>REFRESH MATERIALIZED VIEW name FULL</code> on every dependent MV. Databricks cannot see that change.</li>
+<li><b>Use <code>PRIVATE</code> MVs</b> inside a pipeline for steps you do not want published.</li>
+<li><b>Permissions:</b> to refresh you must own the MV or hold <code>REFRESH</code> on it, and the owner needs <code>SELECT</code> on the base tables.</li></ul>
+<pre class="code">CREATE MATERIALIZED VIEW main.sales.daily_revenue
+  CLUSTER BY AUTO
+  REFRESH POLICY INCREMENTAL STRICT
+  SCHEDULE CRON '0 0 2 * * ?' AT TIME ZONE 'UTC'
+  AS SELECT order_date, SUM(CAST(amount AS DECIMAL(18,2))) AS revenue
+     FROM main.sales.orders GROUP BY order_date;   -- sketch: not run</pre></section>
+
+<section id="s10"><p class="eyebrow">Choosing the object</p><h2>MV, streaming table, table or metric view</h2>
+<div class="tw"><table class="t">
+<tr><th>Need</th><th>Use</th><th>Verdict</th><th>Why</th></tr>
+<tr><td>A summary that must match its sources after every refresh, source keeps history</td><td>Materialized view</td><td class="v pursue">Pursue</td><td>The engine keeps it correct and cheap</td></tr>
+<tr><td>Process each new record once; source loses history (Kafka, Auto Loader files)</td><td>Streaming table</td><td class="v pursue">Pursue</td><td>Checkpoints track what was read; a full refresh would truncate</td></tr>
+<tr><td>Rows updated or deleted by your own merge logic</td><td>Physical table</td><td class="v pursue">Pursue</td><td>MVs cannot be written by you</td></tr>
+<tr><td>Same number, many groupings and tools</td><td>Metric view (materialized if slow)</td><td class="v pursue">Pursue</td><td>See <a href="/learn/table-view-materialized-view-metric-view/">the comparison</a></td></tr>
+<tr><td>Query too complex to refresh incrementally on a huge source</td><td>An MV on it</td><td class="v drop">Drop</td><td>Each refresh is a full recompute; build a pre-aggregated table by hand instead</td></tr></table></div></section>
+
+<section id="s11"><p class="eyebrow">Honest limits</p><h2>Not confirmed</h2>
+<div class="callout w"><ul>
+<li><b>What each incremental technique does inside.</b> The docs name <code>ROW_BASED</code>, <code>GROUP_AGGREGATE</code> and the others but do not define them.</li>
+<li><b>Price per DBU, SKU name, pricing tier and storage billing</b> for MV refresh. The docs say serverless Lakeflow pipelines DBUs and give no rate. They also do not say which pipeline edition (Core, Pro or Advanced) a standalone MV is billed under.</li>
+<li><b>Expectations.</b> The pipeline <code>CREATE</code> page says an MV with expectations is fully refreshed on every update. The incremental refresh page says it is supported except in two cases. I have not tested which is right today.</li>
+<li><b>The <code>DESCRIBE EXTENDED</code> field</b> that holds the refresh type, and the full event log schema: the schema page was only partly readable. Treat field names beyond <code>planning_information</code> and <code>technique_information</code> as unconfirmed.</li>
+<li><b>The <code>cost</code> field</b> inside <code>technique_information</code>: one docs page shows it, another summary did not.</li>
+<li><b>Cost of the same refresh on a Pro warehouse vs a serverless one.</b> Both hand the work to a serverless pipeline, but the docs do not spell out the handoff.</li>
+<li>The one example here that I have not run: the <code>CREATE ... CLUSTER BY AUTO ... SCHEDULE CRON</code> statement (marked sketch). The illustration of 1 TB and 1% change is arithmetic, not a measurement.</li></ul></div></section>
+
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2><details class="faq"><summary>Does a materialized view refresh incrementally?</summary><p>Only when the refresh runs on serverless compute, the query uses supported operations, the source tables allow it, and the cost model judges incremental cheaper than a full recompute. Otherwise Databricks recomputes everything.</p></details><details class="faq"><summary>How do I know whether a refresh was incremental or full?</summary><p>Query the pipeline event log for event_type = &#x27;planning_information&#x27; (the message names the technique, for example ROW_BASED or FULL_RECOMPUTE), or look at the Incrementalization column in the UI. EXPLAIN CREATE MATERIALIZED VIEW tells you before you build whether the query can be incremental at all.</p></details><details class="faq"><summary>Can I stop a materialized view from silently doing a full recompute?</summary><p>Yes. Create it with REFRESH POLICY INCREMENTAL STRICT. If an incremental refresh is not possible, the refresh or create fails instead of recomputing everything.</p></details><details class="faq"><summary>What does a materialized view refresh cost?</summary><p>The docs say a refresh runs on serverless compute billed as serverless Lakeflow pipelines DBUs, and that cost scales with the volume of data processed, not with the size of your SQL warehouse. The docs I read give no price per DBU for it.</p></details></section>
+<section id="next"><p class="eyebrow">Next</p><h2>Where to go next</h2><p>Related on this site: <a href="/learn/table-view-materialized-view-metric-view/">Table, view, materialized view or metric view</a> · <a href="/learn/spark-declarative-pipelines/">Declarative pipelines</a> · <a href="/learn/metric-views/performance/">Metric views: speed and materialization</a> · <a href="/learn/databricks-compute/">Databricks compute and cost</a> · <a href="/learn/table-maintenance/">Who maintains your tables</a> · <a href="/learn/medallion-architecture/">Medallion architecture</a></p><p><a href="/data-engineering/">All data engineering</a> · <a href="/platforms/databricks/">Databricks on this site</a></p></section></div>
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Concepts</b><a href="/leaders/">For leaders</a><a href="/learn/fundamentals/">Fundamentals</a><a href="/learn/data-systems/">Data systems</a><a href="/learn/data-systems/platform/">Data and AI platform</a><a href="/learn/data-systems/platform/#hops">Data engineering</a><a href="/concepts/semantic-layer/">BI and analytics</a><a href="/concepts/#ml-engineering">ML</a><a href="/learn/ai-universe/">AI</a><a href="/learn/data-systems/platform/#concerns">Across all of them</a><a href="/concepts/#a-z">Key concepts, A to Z</a></div><div><b>On your cloud</b><a href="/platforms/databricks/">Databricks</a><a href="/platforms/aws/">AWS</a><a href="/platforms/azure/">Azure and Fabric</a><a href="/platforms/gcp/">Google Cloud</a><a href="/platforms/open/">Open source</a><a href="/platforms/anthropic/">Claude (Anthropic)</a><a href="/certifications/">All certifications</a></div><div><b>Your role</b><a href="/paths/">Find your path</a><a href="/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/forward-deployed/">Forward Deployed Engineering</a><a href="/mindset/">Worried about AI?</a><a href="/projects/">All projects to join</a></div><div><b>How we work</b><a href="/how-we-work/#thinking">Thinking principles</a><a href="/how-we-work/#ba">Business analysis</a><a href="/how-we-work/#pm">Project management</a><a href="/learn/technical-anchor/">The technical anchor</a></div><div><b>Causes and deep tech</b><a href="/ai-for-cause/">AI for a cause</a><a href="/deep-tech/">Deep tech</a></div><div><b>About</b><a href="/about/">About this site</a><a href="/about/#join">Write or teach</a><a href="/writing/">Blog</a><a href="/research/">All open specifications</a><a href="/assets/">All open-source code</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
