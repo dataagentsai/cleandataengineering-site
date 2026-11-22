@@ -231,7 +231,13 @@ SECTIONS = [
         cloud("Google Cloud", "gcp"),
         cloud("Open source", "open"),
         cloud("Claude (Anthropic)", "anthropic", ["ai", "certs"]),
-        ("All certifications", "/certifications/", []),
+        ("Certifications", "/certifications/", [
+            ("All certifications", "/certifications/"),
+            ("Databricks Data Engineer Professional prep", "/certifications/databricks-data-engineer-professional/"),
+            ("Databricks GenAI Engineer prep", "/certifications/databricks-genai-engineer/"),
+            ("Claude Certified Architect prep", "/certifications/claude-certified-architect/"),
+            ("Azure AI Engineer (AI-103) prep", "/certifications/azure-ai-engineer/"),
+        ], "cap"),
     ]),
     ("Your role", [
         ("Find your path", "/paths/", []),
