@@ -12,6 +12,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import de_essentials as DE  # noqa: E402
+import de_kit_data as K  # noqa: E402
 
 E, R, T, table, fig, Lx, L, C = DE.E, DE.R, DE.T, DE.table, DE.fig, DE.Lx, DE.L, DE.C
 BLUE, MINT, BUTTER, ROSE, LAV, GREY = DE.BLUE, DE.MINT, DE.BUTTER, DE.ROSE, DE.LAV, DE.GREY
@@ -222,6 +223,14 @@ QA = [("Is this for technical people?", "No. It is for business analysts, projec
       ("Can we run it faster?", "Yes. Parts A to D can run as a three-day workshop, and Parts E to G as five weekly sessions of half a day. The roadmap page lists the shorter formats.")]
 
 
+KIT = BASE + "starter-kit/"
+SKILL_SLUG = {s[1]: s[0] for s in K.SKILLS}
+TMPL_SLUG = {t[1]: t[0][:-3] for t in K.TEMPLATES}
+TMPL_SLUG["Source register and source questionnaire"] = "source-register"
+assert {s[0] for s in SKILLS} == set(SKILL_SLUG), set(SKILL_SLUG) ^ {s[0] for s in SKILLS}
+assert {t[0] for t in TEMPLATES} <= set(TMPL_SLUG), {t[0] for t in TEMPLATES} - set(TMPL_SLUG)
+
+
 def week_of(n):
     return (n - 1) // PER_WEEK + 1
 
@@ -298,9 +307,9 @@ def programme_page():
             assert x.split(" (")[0] in names, x
     roles = table(["Role", "By the end you can", "Skills to prepare for this role"], [[f"<b>{E(r)}</b>", E(c), "<br>".join(E(x) for x in sk)] for r, c, sk in ROLE_SKILLS])
     skills = table(["Skill", "For", "What it does", "You give it", "You get", "Built in"],
-                   [[f"<b>{E(a)}</b>", E(b), E(c), E(d), E(e), f'<a href="#n{s}">Session {s}</a>'] for a, b, c, d, e, s in SKILLS])
+                   [[f'<a href="{KIT}#sk-{SKILL_SLUG[a]}"><b>{E(a)}</b></a>', E(b), E(c), E(d), E(e), f'<a href="#n{s}">Session {s}</a>'] for a, b, c, d, e, s in SKILLS])
     tmpl = table(["Template", "What it is for", "Folder", "Owner", "First used"],
-                 [[f"<b>{E(a)}</b>", E(b), f"<code>{E(c)}</code>", E(d), f"Session {s}, week {week_of(s)}"] for a, b, c, d, s in TEMPLATES])
+                 [[f'<a href="{KIT}#t-{TMPL_SLUG[a]}"><b>{E(a)}</b></a>', E(b), f"<code>{E(c)}</code>", E(d), f"Session {s}, week {week_of(s)}"] for a, b, c, d, s in TEMPLATES])
     gitw = table(["Word", "What it means, without the jargon"], [[f"<b>{E(a)}</b>", E(b)] for a, b in GIT_WORDS])
     aiuse = table(["Function", "Where AI helps", "What a person must still check"], [[f"<b>{E(a)}</b>", E(b), E(c)] for a, b, c in AI_USE])
     airules = "".join(f"<li>{E(x)}</li>" for x in AI_RULES)
@@ -336,12 +345,12 @@ def programme_page():
 <section id="roles"><p class="eyebrow">Skills development</p><h2>Skills for each role</h2>
 <p>Two kinds of skill. What <b>you</b> can do by the end, and the reusable skills you prepare so an AI assistant does the first draft the same way every time.</p>{roles}</section>
 <section id="skills"><p class="eyebrow">Part G</p><h2>{len(SKILLS)} skills that can be prepared</h2>
-<p>The estimator and the project review are built together in the workshops. Attendees pick the others by role and build them in weeks 11 to 13. Each skill is a folder in git with an instruction, a template and a checklist.</p>{skills}
+<p>The estimator and the project review are built together in the workshops. Attendees pick the others by role and build them in weeks 11 to 13. Each skill is a folder in git with an instruction, a template and a checklist. A first version of every skill is in {L(KIT, 'the starter kit')}: open one from the table, or download them all.</p>{skills}
 <p class="note">The skills build on pages that already exist: {Lx('/how-we-work/estimation/', 'estimation mistakes')}, {Lx(BASE + 'plan/', 'plan: slices and estimates')}, {Lx('/learn/technical-anchor/project-review/checks/', 'the project review checks')}, {Lx(BASE + 'reviews/', 'reviews and sign-offs')} and {Lx(BASE + 'backlog/', 'the corpus backlog')}.</p></section>
 <section id="templates"><p class="eyebrow">The starter kit</p><h2>Templates for a data project</h2>
-<p>{len(TEMPLATES)} templates, each a text file in the project repository. Every one is filled on a real project during the programme.</p>{tmpl}</section>
+<p>{len(TEMPLATES)} templates, each a text file in the project repository. Every one is filled on a real project during the programme. They are all in {L(KIT, 'the starter kit')}: open one from the table, or download the kit.</p>{tmpl}</section>
 <section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(QA)}</section>
-<section id="next"><p class="eyebrow">Go further</p><h2>Related pages</h2><ul><li>{L(BASE, 'The roadmap: 15 topics in 4 parts')}</li><li>{L(BASE + 'ddlc/', 'DDLC by seat')}</li><li>{L(BASE + 'backlog/', 'The corpus backlog')}</li><li>{L(BASE + 'reviews/', 'Reviews and sign-offs')}</li></ul></section>
+<section id="next"><p class="eyebrow">Go further</p><h2>Related pages</h2><ul><li>{L(KIT, 'The starter kit: templates and skills')}</li><li>{L(BASE, 'The roadmap: 15 topics in 4 parts')}</li><li>{L(BASE + 'ddlc/', 'DDLC by seat')}</li><li>{L(BASE + 'backlog/', 'The corpus backlog')}</li><li>{L(BASE + 'reviews/', 'Reviews and sign-offs')}</li></ul></section>
 </div>"""
     title = f"Data project essentials: the {nweeks}-week programme"
     desc = (f"A {nweeks}-week programme for non-technical roles on data projects: {len(SESSIONS)} sessions in seven parts with speaker and duration, Agile and spec-driven development, "
