@@ -167,7 +167,7 @@ def kit_page(files):
 <pre class="tree" style="border:var(--line);border-radius:var(--wob);padding:10px 16px;background:#fff;font-size:14px;line-height:1.5;overflow-x:auto">{E(tree)}</pre>
 <ol>{"".join(f"<li>{E(x)}</li>" for x in steps)}</ol>
 <div class="box"><b>What a skill is:</b> a short written instruction, a template and a checklist that an AI assistant follows the same way every time. The result is a draft. A named person checks it and owns it.</div>
-<p class="note">The kit belongs to {L(BASE + 'programme/', 'the 13-week programme')}, where each template is filled and each skill is built on a real project.</p></section>
+<p class="note">The kit belongs to {L(BASE + 'programme/', 'the six-week programme')}, where each template is filled and each skill is built on a real project.</p></section>
 <section id="templates"><p class="eyebrow">Templates</p><h2>{nt} templates for a data project</h2>{ttab}
 <h3 style="margin-top:18px">Open a template</h3>{tshow}</section>
 <section id="skills"><p class="eyebrow">Skills</p><h2>{ns} skills</h2>{stab}

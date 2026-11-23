@@ -1,4 +1,4 @@
-"""The programme page for Data project essentials: purpose, 26 sessions in 7 parts over 13 weeks, speaker and duration,
+"""The programme page for Data project essentials: purpose, 12 sessions in 7 parts over 6 weeks, speaker and duration,
 self-study, AI for BA / PMO / delivery, skills to prepare, templates for a data project.
 
     python3 _guides/de_programme.py     (then python3 _site/nav.py, python3 _site/seo.py)
@@ -41,64 +41,54 @@ PARTS = {
     "G": ("Skills, estimator, project review and the showcase", "Skills", MINT, "Turn what you learnt into reusable skills, and show one working on your own project."),
 }
 
-# number, part, title, minutes, one idea, you can then.  Sessions 1 to 15 are the roadmap topics on the hub page.
-NEW = [
-    (16, "E", "Agile for a data project: the backlog", 90, "A data backlog is cut in thin slices that run from one source to one trusted number. Each item has a Ready rule and a Done rule.",
-     "Build an Agile backlog for a data project from the corpus backlog: slices, stories, Ready and Done."),
-    (17, "E", "Spec-driven development", 90, "Write what must be true before anyone builds. The spec is the single source for the build, the test and the review.",
-     "Turn a requirement into a short spec with acceptance checks a tester can run on data."),
-    (18, "E", "Everything in git", 90, "Git is a shared folder that keeps every version, shows who changed what, and asks for a review before a change is accepted.",
-     "Keep requirements, specs, decisions, the backlog and templates as text files in one project repository, and propose a change for review. No code."),
-    (19, "E", "Templates for a data project: the starter kit", 60, "A new project should start from a copy of the last good one, not from a blank page.",
-     "Copy the starter kit for your project and fill the first five templates."),
-    (20, "F", "AI basics for delivery roles", 60, "An AI assistant drafts fast and can be wrong with confidence. You give it context, you check the answer, you stay accountable.",
-     "Write a clear request, give the right context, check the result against the source, and know what must never be pasted."),
-    (21, "F", "AI for the business analyst", 90, "AI is strongest on the BA's first drafts: questions, requirements, definitions and acceptance checks.",
-     "Go from meeting notes to a draft spec, a source question list and a metric definition, then correct each one."),
-    (22, "F", "AI for PMO and delivery", 90, "AI reads everything the project wrote and tells you what is missing, late or contradictory.",
-     "Produce a weekly status report, a risk and dependency register and a gate pack from real project files."),
-    (23, "G", "What a skill is, and how to build one", 90, "A skill is a short written instruction, a template and a checklist that an AI assistant follows the same way every time. It lives in git, so it is reviewed and improved like any document.",
-     "Write, test and share your first skill for your own role."),
-    (24, "G", "Skill workshop: the estimator for data projects", 90, "An estimate is a count of what can be counted, a range, and the assumptions behind it. Effort and calendar time are kept apart.",
-     "Run the estimator on a sample scope, challenge its assumptions, and improve the skill."),
-    (25, "G", "Skill workshop: project review", 90, "A review reads the project's documents against the checks for its stage and rates each finding.",
-     "Run a project review on real documents and report the findings as Blocker, Major, Minor or Note."),
-    (26, "G", "Showcase: your skill on your project", 120, "You have learnt it when you can show it working on your own project.",
-     "Present one skill and one filled template from your project, and take a review from the group."),
+# number, part, title, minutes, one idea, you can then, roadmap topics covered (numbers on the hub page)
+SESSIONS = [
+    (1, "A", "The cast, the three seats and stakeholders", 60, "About eighteen people in four groups, and three seats (BA, Tech Anchor, PM) that talk to all of them. Most friction is at the hand-offs.",
+     "Name who you must talk to and about what, say what your seat owns, and map your stakeholders.", [1, 2, 3]),
+    (2, "B", "A data project in one picture, and why projects fail", 60, "Six layers: one we don't own, four we build, one where people use it. Projects fail in six ways of not knowing, each with an early sign.",
+     "Draw the six layers from memory, and spot the early sign of a failure on your own project.", [4, 5]),
+    (3, "B", "The lifecycle: ten stages and three gates", 60, "Decide first, deliver in thin slices, and sign off at three gates.",
+     "Place your project on the ten stages and say what your seat does at each.", [6]),
+    (4, "C", "Upstream: sources and gathering information", 60, "We depend on systems we don't own. Compare what people say, what documents say and what the data shows.",
+     "Run a source meeting, fill a source questionnaire, and record what is still unknown.", [7, 8]),
+    (5, "C", "From landing to the people who use it", 60, "Keep the raw copy, clean it with written rules, give every number one definition and one owner, and name every consumer.",
+     "Write a metric definition with an owner, and check that quality, security, cost and running each have an owner.", [9, 10, 11, 12]),
+    (6, "D", "The backlog, the plan and fail fast", 60, "A reusable backlog, cut in thin slices ordered by risk, with estimates in ranges. Test the most dangerous belief first.",
+     "Pull a first backlog for your seat, cut a plan into slices, and agree a go, change or stop rule.", [13, 14, 15]),
+    (7, "E", "Agile and spec-driven development", 60, "A data backlog is cut in slices with a Ready rule and a Done rule. A written spec comes before any build, and the build, the test and the review all read it.",
+     "Build an Agile backlog for a data project, and turn a requirement into a spec with acceptance checks a tester can run on data.", []),
+    (8, "E", "Everything in git, and the starter kit", 60, "Git is a shared folder that keeps every version, shows who changed what, and asks for a review before a change is accepted. A new project starts from a copy of the starter kit.",
+     "Keep requirements, specs, decisions and the backlog as text files in one project repository, and propose a change for review. No code.", []),
+    (9, "F", "AI basics, and AI for the business analyst", 60, "An AI assistant drafts fast and can be wrong with confidence. You give it context, you check the answer, you stay accountable.",
+     "Go from meeting notes to a draft spec, a source question list and a metric definition, then correct each one. Know what must never be pasted.", []),
+    (10, "F", "AI for PMO and delivery", 60, "AI reads everything the project wrote and tells you what is missing, late or contradictory.",
+     "Produce a weekly status report, a risk and dependency register and a gate pack from real project files.", []),
+    (11, "G", "Skills, and the estimator for data projects", 60, "A skill is a short written instruction, a template and a checklist that an AI assistant follows the same way every time. An estimate is a range with its assumptions.",
+     "Run the estimator on a sample scope, challenge its assumptions, and start a skill for your own role.", []),
+    (12, "G", "Project review, and the showcase", 90, "A review reads the project's documents against the checks for its stage and rates each finding. You have learnt it when you can show it working on your own project.",
+     "Run a project review on real documents, and present one skill and one filled template from your project.", []),
 ]
-PART_OF_TOPIC = {1: "A", 2: "B", 3: "C", 4: "D"}
-SESSIONS = [(n, PART_OF_TOPIC[p], t, 60, idea, able, f"{BASE}#s{n}") for n, p, t, idea, able, *_ in DE.SESSIONS] + [(n, p, t, m, idea, able, f"#n{n}") for n, p, t, m, idea, able in NEW]
-assert [s[0] for s in SESSIONS] == list(range(1, 27))
+assert [x[0] for x in SESSIONS] == list(range(1, len(SESSIONS) + 1))
+assert sorted(t for x in SESSIONS for t in x[6]) == [n for n, *_ in DE.SESSIONS]
+# the first version of this page had 26 sessions; skills and templates still carry those numbers
+OLD2NEW = {**{k: 1 for k in (1, 2, 3)}, 4: 2, 5: 2, 6: 3, 7: 4, 8: 4, **{k: 5 for k in (9, 10, 11, 12)}, **{k: 6 for k in (13, 14, 15)}, 16: 7, 17: 7, 18: 8, 19: 8, 20: 9, 21: 9, 22: 10, 23: 11, 24: 11, 25: 12, 26: 12}
 
 # week: (deep dive on your own: [(href, text)], extra reading in words, what you build)
 WEEKS = {
-    1: ([(BASE + "ecosystem/", "The ecosystem: one big picture"), ("/learn/technical-anchor/", "The technical anchor, in full")],
-        "The list of people on your project against the four groups, and one page on what your seat owns."),
-    2: ([(BASE + "alignment/", "Alignment"), ("/learn/data-systems/", "Data systems, end to end (optional)")],
-        "A stakeholder grid for your project, and the six layers drawn for it from memory."),
-    3: ([("/how-we-work/project-management-mistakes/", "Project management mistakes"), ("/how-we-work/estimation/", "Estimation mistakes")],
-        "The failure causes you see on your project today, each with its evidence. Your project placed on the ten stages."),
-    4: ([(BASE + "extraction/", "Extraction in depth"), ("/learn/data-systems/upstreams/questionnaire/", "Source system questionnaire")],
-        "A filled source questionnaire for one real source, with the unknowns and who could answer them."),
-    5: ([("/learn/medallion-architecture/", "Medallion architecture (optional)"), ("/concepts/semantic-layer/", "Semantic layer and metrics")],
-        "Three cleaning rules with an owner each, and one metric definition with a formula, an owner and a figure to match."),
-    6: ([("/learn/data-systems/downstreams/", "Downstreams, in depth (optional)"), ("/concepts/data-quality/", "Data quality dimensions"), ("/concepts/cost-drivers/", "Where data costs come from")],
-        "A consumer register for one report, and a sheet that says who is alerted and who fixes it."),
-    7: ([(BASE + "backlog/", "The corpus backlog and its planner"), (BASE + "plan/", "Plan: slices and estimates")],
-        "A first backlog filtered to your seat, and a six-month plan cut into three slices."),
-    8: ([(BASE + "reviews/", "Reviews and sign-offs"), (BASE + "fail-fast/", "Fail fast")],
-        "A one-page risk register, and the Agile backlog template filled for your project."),
-    9: ([("/leaders/spec-driven/", "Spec-driven development, for leaders"), ("/concepts/version-control/", "Version control")],
-        "One spec with acceptance checks, and your first change proposed and reviewed in the project repository."),
-    10: ([("/learn/responsible-ai/", "Responsible AI, explained"), ("/concepts/hallucination/", "Hallucination")],
-         "The starter kit copied for your project with five templates filled, and your own list of what you will not paste into an AI tool."),
-    11: ([("/concepts/evidence/", "Evidence"), ("/concepts/human-approval/", "Human approval")],
-         "Business analysts: a draft spec from real notes, corrected by you. PMO and delivery: a status report and a risk register from real files, corrected by you."),
-    12: ([("/how-we-work/estimation/", "Estimation mistakes, read again"), ("/concepts/reusable-assets/", "Reusable assets")],
-         "Your first skill, in git, and an estimate for a sample scope given as a range with its assumptions."),
-    13: ([("/learn/technical-anchor/project-review/", "Project review"), ("/learn/technical-anchor/project-review/checks/", "Project review: the checks")],
-         "A review of one real project document, and your showcase: one skill and one filled template."),
+    1: ([(BASE + "ecosystem/", "The ecosystem: one big picture"), (BASE + "seats/", "The three seats"), (BASE + "why-fail/", "Why data projects fail"), ("/how-we-work/project-management-mistakes/", "Project management mistakes")],
+        "The people on your project against the four groups, with a stakeholder grid. The failure causes you see on your project today, each with its evidence."),
+    2: ([(BASE + "ddlc/", "DDLC by seat"), (BASE + "extraction/", "Extraction in depth"), ("/learn/data-systems/upstreams/questionnaire/", "Source system questionnaire")],
+        "Your project placed on the ten stages, and a filled source questionnaire for one real source, with the unknowns and who could answer them."),
+    3: ([("/concepts/semantic-layer/", "Semantic layer and metrics"), (BASE + "backlog/", "The corpus backlog and its planner"), (BASE + "plan/", "Plan: slices and estimates"), (BASE + "fail-fast/", "Fail fast")],
+        "One metric definition with a formula, an owner and a figure to match. A consumer register for one report. A plan cut into three slices."),
+    4: ([("/leaders/spec-driven/", "Spec-driven development, for leaders"), ("/concepts/version-control/", "Version control"), (BASE + "starter-kit/", "The starter kit")],
+        "The Agile backlog filled for your project, one spec with acceptance checks, and the starter kit copied for your project with your first change reviewed."),
+    5: ([("/learn/responsible-ai/", "Responsible AI, explained"), ("/concepts/hallucination/", "Hallucination"), ("/concepts/human-approval/", "Human approval")],
+        "Business analysts: a draft spec from real notes, corrected by you. PMO and delivery: a status report and a risk register from real files, corrected by you. Your own list of what you will not paste into an AI tool."),
+    6: ([("/how-we-work/estimation/", "Estimation mistakes"), ("/learn/technical-anchor/project-review/checks/", "Project review: the checks"), (BASE + "reviews/", "Reviews and sign-offs")],
+        "An estimate for a sample scope as a range with its assumptions, a review of one real project document, and your showcase: one skill and one filled template."),
 }
+assert len(WEEKS) * PER_WEEK == len(SESSIONS)
 
 PURPOSE = [
     ("Speak one language", "Everyone on a data project uses the same picture, the same ten stages and the same words, so hand-offs between BA, Tech Anchor and PM stop losing meaning."),
@@ -111,7 +101,7 @@ OUTCOMES = ["Every attendee has filled the core templates for a real project.", 
             "The team has one project repository layout that new projects copy.", "Estimates are given as ranges with assumptions, from the same estimator.",
             "Reviews use the same checks and the same four ratings."]
 
-HOW = [("Live session", "60 to 120 minutes", "The idea, the picture, one worked example, then the exercise started together."),
+HOW = [("Live session", "60 to 90 minutes", "The idea, the picture, one worked example, then the exercise started together."),
        ("Deep dive on your own", "About 2 hours a week", "You read the pages listed for the week and go deeper on the topic that matters most to your role."),
        ("Build", "Inside the 2 hours", "You fill a template or build a skill on your own project, and put it in the project repository."),
        ("Show", "First 10 minutes of the next session", "Two attendees show what they built. The group gives one improvement each.")]
@@ -217,10 +207,11 @@ AI_RULES = ["You own the answer. The AI assistant drafts; a named person checks 
             "Keep the request, the result and your correction in git, so the skill improves."]
 
 QA = [("Is this for technical people?", "No. It is for business analysts, project and delivery managers, PMO, product owners, testers and sponsors. There is no code. Git is taught as a shared folder with history and review."),
-      ("How much time does it take?", "Two live sessions a week for thirteen weeks, and about two hours a week on your own to read deeper and build."),
+      ("How much time does it take?", "Two live sessions a week for six weeks, an hour each, and about two hours a week on your own to read deeper and build."),
       ("What is a skill here?", "A short written instruction, a template and a checklist that an AI assistant follows the same way every time. For example the estimator for data projects, or the project review."),
       ("Do I need my own project?", "It helps. Every exercise is done on a real project. If you have none, use a past project you know well."),
-      ("Can we run it faster?", "Yes. Parts A to D can run as a three-day workshop, and Parts E to G as five weekly sessions of half a day. The roadmap page lists the shorter formats.")]
+      ("Can we run it faster?", "Yes. The twelve sessions fit a three-day workshop, four sessions a day, with the building done afterwards on your own project."),
+      ("Where are the fifteen roadmap topics?", "They are all still covered. Each session says which roadmap topics it covers, and the deeper reading is done on your own.")]
 
 
 KIT = BASE + "starter-kit/"
@@ -254,12 +245,12 @@ def d_parts():
     for i, (k, (name, short, col, _)) in enumerate(PARTS.items()):
         nums = [s[0] for s in SESSIONS if s[1] == k]
         x = 8 + i * 142
-        b += R(x, 34, 132, 92, col, [f"Part {k}", short, wk_range(nums).replace(" to ", "–"), f"{len(nums)} sessions"], 16, sw=2.5 if k in "EFG" else 1.5)
+        b += R(x, 34, 132, 92, col, [f"Part {k}", short, wk_range(nums).replace(" to ", "–"), f"{len(nums)} session" + ("s" if len(nums) > 1 else "")], 16, sw=2.5 if k in "EFG" else 1.5)
         if i < 6:
             b += DE.AR(x + 133, 80, x + 141, 80)
     b += T(288, 22, "The roadmap: 15 topics", 14) + T(785, 22, "New: ways of working, AI, skills", 14)
     b += T(500, 150, "Every week: two live sessions, a deep dive on your own, and something you build on your own project", 13.5)
-    return DE.S(1000, 160, b, "Seven parts over thirteen weeks. Parts A to D are the fifteen roadmap topics: people, the project, the layers, the backlog. "
+    return DE.S(1000, 160, b, "Seven parts over six weeks. Parts A to D are the fifteen roadmap topics: people, the project, the layers, the backlog. "
                               "Parts E to G are new: Agile, specs and git; use of AI for BA, PMO and delivery; skills and the showcase.")
 
 
@@ -272,32 +263,33 @@ def programme_page():
     for k, (name, _short, _col, what) in PARTS.items():
         ss = [s for s in SESSIONS if s[1] == k]
         nums = [s[0] for s in ss]
-        prow.append([pill(k), f"<b>{E(name)}</b><br>{E(what)}", f"{min(nums)} to {max(nums)}", str(len(ss)), hm(sum(s[3] for s in ss)), wk_range(nums)])
-    prow.append(["", "<b>Total</b>", "1 to 26", str(len(SESSIONS)), f"<b>{hm(total)}</b>", f"{nweeks} weeks"])
+        prow.append([pill(k), f"<b>{E(name)}</b><br>{E(what)}", (f"{min(nums)} to {max(nums)}" if len(nums) > 1 else str(nums[0])), str(len(ss)), hm(sum(s[3] for s in ss)), wk_range(nums)])
+    prow.append(["", "<b>Total</b>", f"1 to {len(SESSIONS)}", str(len(SESSIONS)), f"<b>{hm(total)}</b>", f"{nweeks} weeks"])
     parts = table(["Part", "What it covers", "Sessions", "Count", "Live time", "When"], prow)
     # schedule table
     srow = []
-    for n, k, t, m, _idea, _able, href in SESSIONS:
-        srow.append([f"Week {week_of(n)}", str(n), f'<a href="{href}">{E(t)}</a>', pill(k), E(SPEAKER), f"{m} min"])
+    for n, k, t, m, _idea, _able, _cov in SESSIONS:
+        srow.append([f"Week {week_of(n)}", str(n), f'<a href="#n{n}">{E(t)}</a>', pill(k), E(SPEAKER), f"{m} min"])
     sched = table(["Week", "No.", "Session", "Part", "Speaker", "Duration"], srow)
     # week cards
     weeks = ""
     for w in range(1, nweeks + 1):
         ss = [s for s in SESSIONS if week_of(s[0]) == w]
         deep, build = WEEKS[w]
-        sl = "<br>".join(f'{pill(k)} <b>{n}</b> <a href="{href}">{E(t)}</a> · {m} min' for n, k, t, m, _i, _a, href in ss)
+        sl = "<br>".join(f'{pill(k)} <b>{n}</b> <a href="#n{n}">{E(t)}</a> · {m} min' for n, k, t, m, _i, _a, _c in ss)
         dl = "<br>".join(Lx(h, t) for h, t in deep)
         weeks += (f'<div class="week" id="w{w}"><h3><span class="n">Week {w}</span>{E(" and ".join(sorted({PARTS[s[1]][1] for s in ss}, key=lambda x: [p[1] for p in PARTS.values()].index(x))))}</h3>'
                   f'<dl><dt>Live sessions</dt><dd>{sl}</dd><dt>Speaker</dt><dd>{E(SPEAKER)}</dd><dt>Deep dive on your own</dt><dd>{dl}</dd><dt>You build</dt><dd>{E(build)}</dd></dl></div>')
     # new session cards
     newc = ""
     cur = ""
-    for n, k, t, m, idea, able in NEW:
+    for n, k, t, m, idea, able, cov in SESSIONS:
         if k != cur:
             cur = k
             newc += f'<p class="part">Part {k} · {E(PARTS[k][0])}</p>'
+        covers = (f'<dt>Roadmap topics</dt><dd>{", ".join(L(f"{BASE}#s{c}", f"{c} {DE.SESSIONS[c - 1][2]}") for c in cov)}</dd>') if cov else ""
         newc += (f'<div class="sess" id="n{n}"><h3><span class="n">{n}</span>{E(t)}</h3><dl><dt>One idea</dt><dd>{E(idea)}</dd><dt>You can then</dt><dd>{E(able)}</dd>'
-                 f'<dt>When</dt><dd>Week {week_of(n)} · {m} min · {E(SPEAKER)}</dd></dl></div>')
+                 f'{covers}<dt>When</dt><dd>Week {week_of(n)} · {m} min · {E(SPEAKER)}</dd></dl></div>')
     purpose = "".join(f"<div><h3>{E(a)}</h3><p>{E(b)}</p></div>" for a, b in PURPOSE)
     outcomes = "".join(f"<li>{E(x)}</li>" for x in OUTCOMES)
     how = table(["Each week", "Time", "What happens"], [[f"<b>{E(a)}</b>", E(b), E(c)] for a, b, c in HOW])
@@ -307,14 +299,14 @@ def programme_page():
             assert x.split(" (")[0] in names, x
     roles = table(["Role", "By the end you can", "Skills to prepare for this role"], [[f"<b>{E(r)}</b>", E(c), "<br>".join(E(x) for x in sk)] for r, c, sk in ROLE_SKILLS])
     skills = table(["Skill", "For", "What it does", "You give it", "You get", "Built in"],
-                   [[f'<a href="{KIT}#sk-{SKILL_SLUG[a]}"><b>{E(a)}</b></a>', E(b), E(c), E(d), E(e), f'<a href="#n{s}">Session {s}</a>'] for a, b, c, d, e, s in SKILLS])
+                   [[f'<a href="{KIT}#sk-{SKILL_SLUG[a]}"><b>{E(a)}</b></a>', E(b), E(c), E(d), E(e), f'<a href="#n{OLD2NEW[s]}">Session {OLD2NEW[s]}</a>'] for a, b, c, d, e, s in SKILLS])
     tmpl = table(["Template", "What it is for", "Folder", "Owner", "First used"],
-                 [[f'<a href="{KIT}#t-{TMPL_SLUG[a]}"><b>{E(a)}</b></a>', E(b), f"<code>{E(c)}</code>", E(d), f"Session {s}, week {week_of(s)}"] for a, b, c, d, s in TEMPLATES])
+                 [[f'<a href="{KIT}#t-{TMPL_SLUG[a]}"><b>{E(a)}</b></a>', E(b), f"<code>{E(c)}</code>", E(d), f"Session {OLD2NEW[s]}, week {week_of(OLD2NEW[s])}"] for a, b, c, d, s in TEMPLATES])
     gitw = table(["Word", "What it means, without the jargon"], [[f"<b>{E(a)}</b>", E(b)] for a, b in GIT_WORDS])
     aiuse = table(["Function", "Where AI helps", "What a person must still check"], [[f"<b>{E(a)}</b>", E(b), E(c)] for a, b, c in AI_USE])
     airules = "".join(f"<li>{E(x)}</li>" for x in AI_RULES)
     toc = "".join(f'<li><a href="#{a}">{b}</a></li>' for a, b in [("purpose", "Purpose of the programme"), ("parts", "Seven parts"), ("schedule", "The schedule: sessions, speaker, duration"),
-                                                                   ("weeks", "Week by week"), ("new", "The new sessions"), ("git", "Everything in git"), ("ai", "Use of AI for BA, PMO and delivery"),
+                                                                   ("weeks", "Week by week"), ("new", "The sessions, one idea each"), ("git", "Everything in git"), ("ai", "Use of AI for BA, PMO and delivery"),
                                                                    ("roles", "Skills for each role"), ("skills", "Skills that can be prepared"), ("templates", "Templates for a data project"), ("faq", "FAQ")])
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › The programme</p>
 <p class="eyebrow" style="margin-top:22px">Programme · for business analysts, PMO, project and delivery managers, product owners, testers and sponsors</p>
@@ -327,14 +319,14 @@ def programme_page():
 <div class="cards3">{purpose}</div>
 <h3 style="margin-top:18px">How we will know it worked</h3><ul>{outcomes}</ul></section>
 <section id="parts"><p class="eyebrow">The shape</p><h2>Seven parts over {nweeks} weeks</h2>
-{fig(d_parts(), "Parts A to D are the fifteen topics of the roadmap. Parts E to G add the way of working, AI and skills.")}{parts}
+{fig(d_parts(), "Parts A to D cover the fifteen topics of the roadmap in six sessions. Parts E to G add the way of working, AI and skills.")}{parts}
 <h3 style="margin-top:18px">How each week runs</h3>{how}</section>
 <section id="schedule"><p class="eyebrow">The schedule</p><h2>{len(SESSIONS)} sessions, speaker and duration</h2>
-<p>Two sessions a week. Sessions 1 to 15 link to their topic on the {L(BASE, 'roadmap')}. Sessions 16 to 26 are described {L('#new', 'below')}.</p>{sched}
+<p>Two sessions a week. Sessions 1 to 6 cover the fifteen topics of the {L(BASE, 'roadmap')}, grouped. Each session is described {L('#new', 'below')}.</p>{sched}
 <p class="note">Total live time: {hm(total)}. With about two hours a week on your own, the whole programme is about {round((total / 60 + 2 * nweeks) / 5) * 5} hours.</p></section>
 <section id="weeks"><p class="eyebrow">Week by week</p><h2>What you attend, read and build each week</h2>
 <p>The live session gives the idea. You go deeper on your own with the pages listed, and you build one thing on your own project.</p>{weeks}</section>
-<section id="new"><p class="eyebrow">Parts E, F and G</p><h2>The new sessions, one idea each</h2>{newc}</section>
+<section id="new"><p class="eyebrow">All twelve</p><h2>The sessions, one idea each</h2>{newc}</section>
 <section id="git"><p class="eyebrow">Part E</p><h2>Everything in git, so AI and spec-driven development can work</h2>
 <p>An AI assistant can only help with what it can read. If requirements are in emails, decisions in chat and the backlog in a slide, it reads none of them. When every document is a text file in one repository, a person or an AI assistant can read the whole project, a spec can drive the build and the test, and every change has an author, a reason and a reviewer.</p>
 {gitw}<h3 style="margin-top:18px">The project repository</h3><p>One layout for every project. A new project copies it from the starter kit.</p><pre class="tree">{E(TREE)}</pre>
@@ -345,7 +337,7 @@ def programme_page():
 <section id="roles"><p class="eyebrow">Skills development</p><h2>Skills for each role</h2>
 <p>Two kinds of skill. What <b>you</b> can do by the end, and the reusable skills you prepare so an AI assistant does the first draft the same way every time.</p>{roles}</section>
 <section id="skills"><p class="eyebrow">Part G</p><h2>{len(SKILLS)} skills that can be prepared</h2>
-<p>The estimator and the project review are built together in the workshops. Attendees pick the others by role and build them in weeks 11 to 13. Each skill is a folder in git with an instruction, a template and a checklist. A first version of every skill is in {L(KIT, 'the starter kit')}: open one from the table, or download them all.</p>{skills}
+<p>The estimator and the project review are worked through together in sessions 11 and 12. Attendees pick the others by role and build them in weeks 5 and 6. Each skill is a folder in git with an instruction, a template and a checklist. A first version of every skill is in {L(KIT, 'the starter kit')}: open one from the table, or download them all.</p>{skills}
 <p class="note">The skills build on pages that already exist: {Lx('/how-we-work/estimation/', 'estimation mistakes')}, {Lx(BASE + 'plan/', 'plan: slices and estimates')}, {Lx('/learn/technical-anchor/project-review/checks/', 'the project review checks')}, {Lx(BASE + 'reviews/', 'reviews and sign-offs')} and {Lx(BASE + 'backlog/', 'the corpus backlog')}.</p></section>
 <section id="templates"><p class="eyebrow">The starter kit</p><h2>Templates for a data project</h2>
 <p>{len(TEMPLATES)} templates, each a text file in the project repository. Every one is filled on a real project during the programme. They are all in {L(KIT, 'the starter kit')}: open one from the table, or download the kit.</p>{tmpl}</section>
