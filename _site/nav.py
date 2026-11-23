@@ -44,7 +44,7 @@ ROLE_KIDS = {
     "ai-engineering": [("Learning path", "/paths/ai-engineering/"), ("Simulator: Agent Harness", "/learn/agent-harness-sim/"),
                        ("Vertical agents", "/ai-engineering/vertical-agents/"), ("Projects to join", "/projects/?subject=ai")],
     "forward-deployed": [("Start here: the roadmap", "/forward-deployed/"), ("Learning path", "/paths/forward-deployed/")],
-    "llm-engineering": [("Learning path", "/paths/llm-engineering/"), ("Simulator: Claude API", "/learn/llm-api-sim/"),
+    "llm-engineering": [("Learning path", "/paths/llm-engineering/"), ("Frontier AI roadmaps", "/learn/frontier-ai-roadmaps/"), ("Simulator: Claude API", "/learn/llm-api-sim/"),
                         ("Projects to join", "/projects/?subject=llm")],
 }
 ROLES = [(d["name"], "/data-engineering/" if d["id"] == "data-engineering" else "/forward-deployed/" if d["id"] == "forward-deployed" else f"/paths/{d['id']}/",
@@ -201,6 +201,7 @@ SECTIONS = [
             ("Drug-safety agent on Databricks: the tour", "/learn/drug-safety-agent-databricks/"),
             ("Agent frameworks: when to use which", "/learn/agent-frameworks/"),
             ("Which AI model for which job", "/learn/which-model/"),
+            ("Frontier AI roadmaps: four roles", "/learn/frontier-ai-roadmaps/"),
             ("Eval Harness", "/learn/eval-harness/"),
             ("Agent guardrails", "/learn/agent-guardrails/"),
             ("AI governance: running AI you can trust", "/learn/ai-governance/"),
