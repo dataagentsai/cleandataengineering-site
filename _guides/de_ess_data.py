@@ -106,7 +106,7 @@ FRICTION = ["The BA says requirements are done; the Tech Anchor finds the data d
 
 # ------------------------------------------------------------------------ corpus backlog
 AREAS = [("start", "Start and discovery", "PRJ"), ("sources", "Sources (upstream)", "SRC"), ("landing", "Landing", "LND"), ("clean", "Clean", "CLN"), ("model", "Model", "MDL"),
-         ("meaning", "Meaning", "MNG"), ("consumers", "People use it (downstream)", "CON"), ("across", "Across everything", "QLT SEC COS RUN"), ("golive", "Go-live and hand-over", "GLV")]
+         ("meaning", "Meaning", "MNG"), ("consumers", "People use it (downstream)", "CON"), ("across", "Across everything", "QLT SEC COS RUN"), ("reviews", "Reviews and sign-offs", "REV"), ("golive", "Go-live and hand-over", "GLV")]
 
 # id, title, owner seat, type, prevents (cause numbers), DDLC stage, applies when, typical size, acceptance criteria (|), evidence, depends on
 BACKLOG = [
@@ -213,6 +213,19 @@ BACKLOG = [
     ("RUN-05", "Support model: who, hours, escalation", "PM", "Decision", [24], 5, "Always", "S", "Names, hours and escalation path agreed with operations", "Support page", "Operations"),
     ("RUN-06", "Operations invited to demos from MVP 1", "PM", "Run", [24], 6, "Always", "S", "A named operations person attends demos|Questions logged", "Attendance", "Operations"),
     ("RUN-07", "Recovery: backup, rollback and rerun", "TA", "Slice", [25], 8, "Always", "M", "Each can be shown to work|Time to recover is known", "Recovery test", "Platform team"),
+    # ---- reviews and sign-offs
+    ("REV-01", "Review and sign-off calendar", "PM", "Document", [14, 20], 2, "Always", "S", "Every review and sign-off has a date, a reviewer and an owner|Lead time for external reviews is included|Reviewers have the dates in their diaries", "Calendar", "Sponsor, reviewers"),
+    ("REV-02", "Review criteria and checklists per artefact", "TA + BA", "Decision", [15, 20], 5, "Always", "S", "For each artefact type, a short checklist of what 'good' means|Agreed before the review, not after", "Checklists", "Team"),
+    ("REV-03", "Independent design review", "TA", "Spike", [20, 23], 4, "Always", "M", "A reviewer who did not build the design has read it|Findings logged with severity and owner|Blockers closed before build", "Review record", "Architect, reviewer"),
+    ("REV-04", "Platform vendor architecture and design review", "TA", "Spike", [21, 25, 26], 4, "A platform vendor is in the design", "M", "Design pack shared with the vendor under the right agreement|Vendor findings received in writing|Each finding accepted, rejected or deferred, with a reason", "Vendor review report and decisions", "Vendor solution architect"),
+    ("REV-05", "Cloud best-practice review of the design", "TA", "Spike", [25, 26], 4, "Always", "M", "The design is checked against the cloud provider's best-practice framework|Gaps on security, reliability, cost and operations are logged", "Framework review record", "Cloud provider, platform team"),
+    ("REV-06", "Findings log with severity, owner and due date", "PM", "Run", [14, 22], 5, "Always", "S", "Every finding is rated (blocker, major, minor, note)|Each has an owner and a date|Reviewed weekly until closed", "Findings log", "Reviewers"),
+    ("REV-07", "Peer review standard for pipeline code", "TA", "Decision", [15, 18], 5, "Always", "S", "Every change is read by a second engineer before release|The checklist includes tests, reruns and data checks", "Standard and sample reviews", "Team"),
+    ("REV-08", "Test evidence reviewed before acceptance", "BA + TA", "Slice", [16], 7, "Always", "S", "Test results are read by someone other than the tester|Gaps are fixed or accepted knowingly", "Review note", "Test team"),
+    ("REV-09", "Production readiness review", "PM", "Decision", [24, 25, 28], 8, "Always", "M", "Operations, security and the business owner have each reviewed their part|Runbook, monitoring, recovery and access are checked|Conditions are written", "Readiness checklist", "Operations, security"),
+    ("REV-10", "Sign-off register", "PM", "Document", [14, 22], 4, "Always", "S", "Each sign-off lists what is signed, by whom, on what evidence, with what conditions|Signers confirm they have read it|Conditional sign-offs have owners and dates", "Register", "Sponsor, signers"),
+    ("REV-11", "Independent review of the estimate", "TA", "Spike", [19], 2, "Always", "S", "A person who did not make the estimate checks assumptions and what is missing|Range widened if assumptions are weak", "Review note", "Reviewer"),
+    ("REV-12", "Vendor advice recorded as decisions, accountability kept", "TA + PM", "Decision", [14, 21], 4, "A vendor reviews the design", "S", "Each piece of vendor advice becomes a recorded decision with a reason|A named person on our side is accountable|Commercial interest of the vendor is noted", "Decision log", "Vendor"),
     # ---- go-live
     ("GLV-01", "Cut-over and rollback rehearsed", "TA", "Spike", [21, 25], 8, "Always", "M", "Rehearsed end to end|Rollback time known", "Rehearsal report", "Operations"),
     ("GLV-02", "First production load reconciled", "BA", "Slice", [15], 9, "Always", "M", "History and first loads match the trusted figures|Finance signs", "Signed reconciliation", "Finance"),

@@ -1115,7 +1115,7 @@ apply();
 # (n, part, title, one idea, you will be able to, [(href, text, status)], exercise)   status: new | old | tech
 SESSIONS = [
     (1, 1, "The cast: who is in a data project", "About eighteen people in four groups, and three seats that talk to all of them.", "Name who you must talk to, and about what.",
-     [(BASE + "cast/", "The cast and who talks to whom", "new")], "List the people on your project against the four groups. Who is missing?"),
+     [(BASE + "cast/", "The cast and who talks to whom", "new"), (BASE + "ecosystem/", "The ecosystem: one big picture", "new")], "List the people on your project against the four groups. Who is missing?"),
     (2, 1, "The three seats: BA, Tech Anchor, PM", "Each seat owns something different, and most friction is at the hand-offs.", "Say what your seat owns, what it does not, and what the other two expect of you.",
      [(BASE + "seats/", "The three seats", "new"), ("/learn/technical-anchor/", "The technical anchor, in full", "old")], "Write what you expect from each of the other two seats. Compare with theirs."),
     (3, 1, "Stakeholders and alignment", "Spend effort where influence is high and interest is low, and make sure everyone means the same thing.", "Map stakeholders, name decision owners, settle a definition dispute.",
@@ -1143,7 +1143,7 @@ SESSIONS = [
     (14, 4, "Plan: slices, Ready and Done, estimates", "Cut in thin slices, order by risk, estimate in ranges.", "Reshape a layer-by-layer plan into slices.",
      [(BASE + "plan/", "Plan: slices and estimates", "new"), ("/how-we-work/estimation/", "Estimation mistakes", "old")], "Take a six-month plan and cut it into three slices. What does slice 1 prove?"),
     (15, 4, "Fail fast, risks and dependencies", "Test the most dangerous belief first, and agree the go, change or stop rule.", "Run the eight tests, keep a one-page register, review a project's documents.",
-     [(BASE + "fail-fast/", "Fail fast", "new"), ("/learn/technical-anchor/project-review/", "Project review", "old"), ("/learn/technical-anchor/project-review/checks/", "Project review: the checks", "old")], "Review one real project document with the stage checks. Count the gaps."),
+     [(BASE + "fail-fast/", "Fail fast", "new"), (BASE + "reviews/", "Reviews and sign-offs", "new"), ("/learn/checks-as-code/", "Checks as code, and the Ops gate", "new"), ("/learn/technical-anchor/project-review/", "Project review", "old"), ("/learn/technical-anchor/project-review/checks/", "Project review: the checks", "old")], "Review one real project document with the stage checks. Count the gaps."),
 ]
 PARTS = {1: ("Part A · The people and the three seats", "peri"), 2: ("Part B · Understand the project", "butter"), 3: ("Part C · Walk the layers", "mint"), 4: ("Part D · Run it with the backlog", "rose")}
 
@@ -1201,7 +1201,7 @@ def hub_page():
                ("/learn/data-systems/upstreams/questionnaire/", "Source system questionnaire"), ("/concepts/", "Key ideas A to Z")]
     inv_tech = [("/learn/data-systems/", "Data systems, end to end"), ("/learn/data-systems/upstreams/", "Upstreams, in depth"), ("/learn/data-systems/downstreams/", "Downstreams, in depth"), ("/learn/medallion-architecture/", "Medallion architecture")]
     new_pages = [("cast", "The cast"), ("seats", "The three seats"), ("stakeholders", "Stakeholders"), ("alignment", "Alignment"), ("picture", "One picture"), ("why-fail", "Why projects fail"), ("ddlc", "DDLC by seat")]
-    new_pages = [(BASE + a + "/", b) for a, b in new_pages] + [(BASE + "layers/" + l["slug"] + "/", f"Layer: {l['name']}") for l in LAYERS] + [(BASE + "gather/", "Gather information"), (BASE + "extraction/", "Extraction in depth"), (BASE + "backlog/", "The corpus backlog"), (BASE + "plan/", "Plan and estimates"), (BASE + "fail-fast/", "Fail fast")]
+    new_pages = [(BASE + a + "/", b) for a, b in new_pages] + [(BASE + "layers/" + l["slug"] + "/", f"Layer: {l['name']}") for l in LAYERS] + [(BASE + "gather/", "Gather information"), (BASE + "extraction/", "Extraction in depth"), (BASE + "ecosystem/", "The ecosystem"), (BASE + "reviews/", "Reviews and sign-offs"), (BASE + "backlog/", "The corpus backlog"), (BASE + "plan/", "Plan and estimates"), (BASE + "fail-fast/", "Fail fast")]
     inv = (f'<div class="cards3"><div><h3>New, written for this programme</h3><ul>{"".join(f"<li>{Lx(h, t)}</li>" for h, t in new_pages)}</ul></div>'
            f'<div><h3>Existing, reused</h3><ul>{"".join(f"<li>{Lx(h, t)}</li>" for h, t in inv_old)}</ul></div>'
            f'<div><h3>Technical, optional</h3><ul>{"".join(f"<li>{Lx(h, t)}</li>" for h, t in inv_tech)}</ul></div></div>')

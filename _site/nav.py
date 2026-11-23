@@ -259,12 +259,14 @@ SECTIONS = [
             ("Why projects fail", "/how-we-work/data-essentials/why-fail/"),
             ("DDLC by seat", "/how-we-work/data-essentials/ddlc/"),
             ("Upstream: sources", "/how-we-work/data-essentials/layers/sources/"),
+            ("The ecosystem (big picture)", "/how-we-work/data-essentials/ecosystem/"),
             ("Gather information", "/how-we-work/data-essentials/gather/"),
             ("Extraction in depth", "/how-we-work/data-essentials/extraction/"),
             ("Landing to people use it", "/how-we-work/data-essentials/layers/landing/"),
             ("Across everything", "/how-we-work/data-essentials/layers/across/"),
             ("The corpus backlog", "/how-we-work/data-essentials/backlog/"),
             ("Plan and estimates", "/how-we-work/data-essentials/plan/"),
+            ("Reviews and sign-offs", "/how-we-work/data-essentials/reviews/"),
             ("Fail fast", "/how-we-work/data-essentials/fail-fast/"),
         ]),
         ("Thinking principles", "/how-we-work/#thinking", [
@@ -283,6 +285,7 @@ SECTIONS = [
             ("Discovery", "/learn/technical-anchor/discovery/"),
             ("Project review", "/learn/technical-anchor/project-review/"),
             ("Project review: the checks", "/learn/technical-anchor/project-review/checks/"),
+            ("Checks as code, and the Ops gate", "/learn/checks-as-code/"),
         ]),
     ]),
     ("Causes and deep tech", [
