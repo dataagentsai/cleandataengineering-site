@@ -742,7 +742,7 @@ def gather_page():
 <section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(qa)}</section>
 <section id="deeper"><p class="eyebrow">Go deeper</p><h2>Existing material</h2><ul>
 <li>{Lx('/learn/data-systems/upstreams/questionnaire/', 'Source system questionnaire: what to ask every source owner')}</li><li>{Lx('/learn/data-systems/upstreams/answers/', 'Where the answers go')}</li>
-<li>{Lx('/learn/data-systems/downstreams/', 'Downstreams: what to ask every consumer')}</li><li>{Lx('/learn/technical-anchor/discovery/', 'Discovery: the document these answers feed')}</li></ul></section>
+<li>{Lx('/learn/data-systems/downstreams/', 'Downstreams: what to ask every consumer')}</li><li>{L(BASE + 'extraction/', 'Extraction in depth: what to extract, from whom, how, with AI, access and precautions')}</li><li>{Lx('/learn/technical-anchor/discovery/', 'Discovery: the document these answers feed')}</li></ul></section>
 <div class="pn">{L(f'{BASE}layers/sources/', '← Sources')}{L(BASE, 'The roadmap')}{L(f'{BASE}layers/landing/', 'Next: landing →')}</div>
 </div>"""
     return url_path, page_shell("Gather information from people and existing systems", "How to collect what a data project needs to know: compare what people say, what documents say and what the data shows, with eight methods, six interview questions and a verdict table.", url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", BASE), ("Gather information", url_path)], qa)
@@ -1129,7 +1129,7 @@ SESSIONS = [
     (7, 3, "Upstream: understanding sources", "We depend on systems we don't own, and their meaning is not obvious.", "Run a source meeting and spot a missing owner.",
      [(BASE + "layers/sources/", "Layer: Sources", "new"), ("/learn/data-systems/upstreams/questionnaire/", "Source questionnaire", "old"), ("/learn/data-systems/upstreams/", "Upstreams, in depth", "tech")], "Pick a source. Answer the four questions. What is unknown, and who could tell you?"),
     (8, 3, "Gathering information from people and systems", "Compare what people say, what documents say and what the data shows.", "Plan an information-gathering round, and record it so it is not lost.",
-     [(BASE + "gather/", "Gather information", "new"), ("/learn/technical-anchor/discovery/", "Discovery", "old")], "Pick one number. Gather its three views. Where do they disagree?"),
+     [(BASE + "gather/", "Gather information", "new"), (BASE + "extraction/", "Extraction in depth (22 items, AI, access)", "new"), ("/learn/technical-anchor/discovery/", "Discovery", "old")], "Pick one number. Gather its three views. Where do they disagree?"),
     (9, 3, "Landing and cleaning", "Keep the raw copy untouched, then clean it with written rules.", "Ask for freshness, history, rerun safety and rules for bad rows.",
      [(BASE + "layers/landing/", "Layer: Landing", "new"), (BASE + "layers/clean/", "Layer: Clean", "new"), ("/learn/medallion-architecture/", "Medallion architecture", "tech")], "Write three cleaning rules for a customer list, and say who owns each."),
     (10, 3, "Shaping data and defining numbers", "Choose the grain, and give every number one definition and one owner.", "Write a metric definition with an owner and a reconciliation plan.",
@@ -1201,7 +1201,7 @@ def hub_page():
                ("/learn/data-systems/upstreams/questionnaire/", "Source system questionnaire"), ("/concepts/", "Key ideas A to Z")]
     inv_tech = [("/learn/data-systems/", "Data systems, end to end"), ("/learn/data-systems/upstreams/", "Upstreams, in depth"), ("/learn/data-systems/downstreams/", "Downstreams, in depth"), ("/learn/medallion-architecture/", "Medallion architecture")]
     new_pages = [("cast", "The cast"), ("seats", "The three seats"), ("stakeholders", "Stakeholders"), ("alignment", "Alignment"), ("picture", "One picture"), ("why-fail", "Why projects fail"), ("ddlc", "DDLC by seat")]
-    new_pages = [(BASE + a + "/", b) for a, b in new_pages] + [(BASE + "layers/" + l["slug"] + "/", f"Layer: {l['name']}") for l in LAYERS] + [(BASE + "gather/", "Gather information"), (BASE + "backlog/", "The corpus backlog"), (BASE + "plan/", "Plan and estimates"), (BASE + "fail-fast/", "Fail fast")]
+    new_pages = [(BASE + a + "/", b) for a, b in new_pages] + [(BASE + "layers/" + l["slug"] + "/", f"Layer: {l['name']}") for l in LAYERS] + [(BASE + "gather/", "Gather information"), (BASE + "extraction/", "Extraction in depth"), (BASE + "backlog/", "The corpus backlog"), (BASE + "plan/", "Plan and estimates"), (BASE + "fail-fast/", "Fail fast")]
     inv = (f'<div class="cards3"><div><h3>New, written for this programme</h3><ul>{"".join(f"<li>{Lx(h, t)}</li>" for h, t in new_pages)}</ul></div>'
            f'<div><h3>Existing, reused</h3><ul>{"".join(f"<li>{Lx(h, t)}</li>" for h, t in inv_old)}</ul></div>'
            f'<div><h3>Technical, optional</h3><ul>{"".join(f"<li>{Lx(h, t)}</li>" for h, t in inv_tech)}</ul></div></div>')

@@ -260,6 +260,7 @@ SECTIONS = [
             ("DDLC by seat", "/how-we-work/data-essentials/ddlc/"),
             ("Upstream: sources", "/how-we-work/data-essentials/layers/sources/"),
             ("Gather information", "/how-we-work/data-essentials/gather/"),
+            ("Extraction in depth", "/how-we-work/data-essentials/extraction/"),
             ("Landing to people use it", "/how-we-work/data-essentials/layers/landing/"),
             ("Across everything", "/how-we-work/data-essentials/layers/across/"),
             ("The corpus backlog", "/how-we-work/data-essentials/backlog/"),
