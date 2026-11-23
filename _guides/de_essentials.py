@@ -1000,7 +1000,7 @@ def whyfail_page():
             if th != t:
                 continue
             ids = prevented.get(n, [])
-            links = " ".join(f'<a href="{BASE}backlog/#{i}">{i}</a>' for i in ids)
+            links = " ".join(f'<a href="{BASE}backlog/#{i}">{i}</a>' for i in ids[:8]) + (f' <a href="{BASE}backlog/">+{len(ids) - 8} more</a>' if len(ids) > 8 else "")
             lay = f'<a href="{BASE}layers/{layer}/">{E(LAYER_LABEL[layer])}</a>' if layer != "start" else E("Whole project")
             rows.append([f'<span id="c{n}"></span><b>{n}. {E(cause)}</b><br><i>{E(punch)}</i>', E(sign), lay, E(stage_word(stage)), links or "-"])
         themes += (f'<section id="theme-{t}"><p class="eyebrow">Theme {t}</p><h2>{E(tname)}</h2>'
@@ -1028,87 +1028,8 @@ def whyfail_page():
 
 # ----------------------------------------------------------------------------- the corpus backlog page
 def corpus_page():
-    url_path = f"{BASE}backlog/"
-    sections = ""
-    for a, nm, _ in D.AREAS:
-        its = items_for(a)
-        det = ""
-        for (iid, title, seat, typ, prev, stage, applies, size, ac, evid, dep) in its:
-            acl = "<ul>" + "".join(f"<li>{E(x)}</li>" for x in ac.split("|")) + "</ul>"
-            stg = "decide" if stage <= 4 else ("deliver" if stage <= 9 else "close")
-            seats = " ".join(s.strip() for s in seat.split("+"))
-            det += (f'<details class="itm" id="{iid}" data-area="{a}" data-seat="{seats}" data-type="{typ}" data-stage="{stg}" data-app="{"always" if applies == "Always" else "cond"}">'
-                    f'<summary><span class="cid">{iid}</span><span class="ctitle">{E(title)}</span><span class="pill">{E(seat_text(seat))}</span><span class="pill">{typ}</span>'
-                    f'<span class="pill">stage {stage}</span><span class="pill">{size}</span></summary>'
-                    f'<div class="ibody"><p><b>Done when</b></p>{acl}<p><b>Evidence:</b> {E(evid)}</p><p><b>Depends on:</b> {E(dep)}</p><p><b>Stage:</b> {E(stage_word(stage))} · <b>Applies when:</b> {E(applies)}</p>'
-                    f'<p><b>Prevents causes:</b> {cause_links(prev)}</p></div></details>')
-        link = f' · <a href="{BASE}layers/{a}/">layer page</a>' if a in LAYER_LABEL and a != "start" else ""
-        sections += f'<section id="area-{a}" class="area"><h2>{E(nm)} <span class="note">({len(its)} items{link})</span></h2>{det}</section>'
-    js_items = [dict(id=i[0], title=i[1], owner=seat_text(i[2]), type=i[3], prevents=", ".join(map(str, i[4])), stage=i[5], applies=i[6], size=i[7],
-                     acceptance="; ".join(i[8].split("|")), evidence=i[9], depends=i[10], area=area_of(i[0])[1]) for i in ITEMS]
-    opts = lambda xs: "".join(f'<option value="{v}">{E(t)}</option>' for v, t in xs)
-    f_area = opts([("", "All layers")] + [(a, nm) for a, nm, _ in D.AREAS])
-    f_seat = opts([("", "Any owner"), ("BA", "BA"), ("TA", "Tech Anchor"), ("PM", "PM")])
-    f_stage = opts([("", "Any stage"), ("decide", "Decide (stages 1 to 4)"), ("deliver", "Deliver (5 to 9)"), ("close", "Close (10)")])
-    f_type = opts([("", "Any type")] + [(t, t) for t in ("Document", "Decision", "Spike", "Slice", "Run")])
-    f_app = opts([("", "Always and conditional"), ("always", "Always"), ("cond", "Only when it applies")])
-    css = """<style>
-  .tf .filters { position:sticky; top:0; z-index:5; background:#fff; border:var(--line); border-radius:var(--wob); padding:10px 14px; margin:18px 0; display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; font-size:14.5px; }
-  .tf .filters select, .tf .filters input { font:inherit; font-size:14px; border:1.5px solid var(--ink); border-radius:10px; padding:4px 8px; background:#fff; color:var(--ink); }
-  .tf .filters input { flex:1; min-width:160px; } .tf .filters button { font:inherit; font-size:14px; border:1.5px solid var(--ink); border-radius:10px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; }
-  .tf .filters .count { color:var(--muted); font-size:13.5px; margin-left:auto; }
-  .tf details.itm { border:var(--line); border-radius:12px; margin:8px 0; background:#fff; } .tf details.itm[open] { background:#FDFCF8; }
-  .tf details.itm > summary { list-style:none; cursor:pointer; padding:9px 14px; display:flex; flex-wrap:wrap; gap:6px 10px; align-items:baseline; }
-  .tf details.itm > summary::-webkit-details-marker { display:none; } .tf details.itm > summary::before { content:"›"; color:var(--faint); display:inline-block; }
-  .tf details.itm[open] > summary::before { transform:rotate(90deg); }
-  .tf .cid { font-family:var(--mono, monospace); font-size:13px; font-weight:700; } .tf .ctitle { font-weight:700; flex:1; min-width:220px; }
-  .tf .pill { font-size:12px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:0 8px; background:#fff; white-space:nowrap; }
-  .tf .ibody { padding:0 18px 10px; font-size:15px; } .tf .ibody ul { margin:4px 0 8px; }
-  .tf section.area h2 .note { font-size:14px; font-family:inherit; }
-</style>"""
-    js = """<script>
-const ITEMS = %s;
-function q(id){return document.getElementById(id)}
-function apply(){
-  const f = {area:q('f-area').value, seat:q('f-seat').value, stage:q('f-stage').value, type:q('f-type').value, app:q('f-app').value, text:q('f-text').value.toLowerCase()};
-  let shown = 0;
-  document.querySelectorAll('details.itm').forEach(d => {
-    const ok = (!f.area || d.dataset.area===f.area) && (!f.seat || d.dataset.seat.split(' ').includes(f.seat)) && (!f.stage || d.dataset.stage===f.stage)
-      && (!f.type || d.dataset.type===f.type) && (!f.app || d.dataset.app===f.app) && (!f.text || d.textContent.toLowerCase().includes(f.text));
-    d.style.display = ok ? '' : 'none'; if (ok) shown++;
-  });
-  document.querySelectorAll('section.area').forEach(s => { s.style.display = [...s.querySelectorAll('details.itm')].some(d => d.style.display !== 'none') ? '' : 'none'; });
-  q('count').textContent = shown + ' of ' + ITEMS.length + ' items';
-}
-function csv(){
-  const cols = ['id','area','title','owner','type','stage','size','applies','acceptance','evidence','depends','prevents'];
-  const esc = v => '"' + String(v).replace(/"/g,'""') + '"';
-  const rows = [cols.join(',')].concat(ITEMS.map(i => cols.map(c => esc(i[c])).join(',')));
-  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows.join('\\n')], {type:'text/csv'})); a.download = 'data-project-backlog.csv'; a.click();
-}
-['f-area','f-seat','f-stage','f-type','f-app'].forEach(i => q(i).addEventListener('change', apply)); q('f-text').addEventListener('input', apply); q('f-csv').addEventListener('click', csv);
-if (location.hash && q(location.hash.slice(1)) && q(location.hash.slice(1)).tagName === 'DETAILS') q(location.hash.slice(1)).open = true;
-apply();
-</script>""" % json.dumps(js_items, ensure_ascii=False)
-    n_by = {s: sum(1 for i in ITEMS if s in [x.strip() for x in i[2].split("+")]) for s in ("BA", "TA", "PM")}
-    qa = [("Is this a Jira backlog?", "No. It is a reusable starting list at the level of scope, between an epic and a task. Download the CSV, keep the items that apply, and split them into tasks in your own tool."),
-          ("Why do business analysts and managers own items?", "Because most of what makes a data project succeed is not engineering: owners named, definitions agreed, access raised, numbers reconciled. Those are real work and belong in the backlog.")]
-    body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › Corpus backlog</p>
-<p class="eyebrow" style="margin-top:22px">Topic 13 · The reusable backlog</p>
-<h1>The corpus backlog for a data project</h1>
-<p class="lede">{len(ITEMS)} backlog items covering a data project from first brief to hand-over, by layer. Not tasks, not epics: things a BA, Tech Anchor or PM can say done about. Each has acceptance criteria, evidence, the causes it prevents, and when it applies. Filter it, download it, and trim it for your project.</p>
-<div class="tf">{css}
-<section id="how"><p class="eyebrow">How to use it</p><h2>Start with all, remove what does not apply</h2>
-<p>Copy the whole list into your tool at the start, then remove what does not apply (the 'Applies when' note says which). Items owned by BA: {n_by['BA']}, Tech Anchor: {n_by['TA']}, PM: {n_by['PM']}. Types: <b>Document</b> (write it down), <b>Decision</b> (someone decides), <b>Spike</b> (learn something risky, timeboxed), <b>Slice</b> (a thin working piece), <b>Run</b> (a repeated activity).</p>
-<div class="box"><b>Do not skip the stage 1 to 4 items.</b> They are cheap, and they prevent the causes that are most expensive later.</div></section>
-<div class="filters"><select id="f-area">{f_area}</select><select id="f-seat">{f_seat}</select><select id="f-stage">{f_stage}</select><select id="f-type">{f_type}</select><select id="f-app">{f_app}</select>
-<input id="f-text" type="search" placeholder="Search"><button id="f-csv" type="button">Download CSV</button><span class="count" id="count"></span></div>
-{sections}
-<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(qa)}</section>
-<div class="pn">{L(BASE + 'layers/across/', '← Across everything')}{L(BASE, 'The roadmap')}{L(BASE + 'plan/', 'Next: plan and estimates →')}</div>
-{js}
-</div>"""
-    return url_path, page_shell("The corpus backlog for a data project", f"{len(ITEMS)} reusable backlog items for a data project by layer, owned by the BA, Tech Anchor or PM, each with acceptance criteria, evidence and the failure causes it prevents. Filter and download as CSV.", url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", BASE), ("Corpus backlog", url_path)], qa)
+    import de_corpus
+    return de_corpus.page()
 
 
 # ----------------------------------------------------------------------------- the hub
@@ -1138,7 +1059,7 @@ SESSIONS = [
      [(BASE + "layers/consumers/", "Layer: People use it", "new"), ("/learn/data-systems/downstreams/", "Downstreams, in depth", "tech")], "List five consumers of a sales report and the freshness each needs."),
     (12, 3, "What runs across everything", "Quality, security, cost and running each need an owner and a place in the backlog.", "Check a plan has items for all four, and a rehearsed failure drill.",
      [(BASE + "layers/across/", "Across everything", "new"), ("/learn/data-systems/platform/", "The data platform, in depth", "tech")], "Who gets the 2 a.m. call on your project? Have they seen the runbook?"),
-    (13, 4, "The corpus backlog", "A reusable list of about 100 items, by layer, owned by BA, Tech Anchor and PM.", "Pull a first backlog for a new project in an afternoon.",
+    (13, 4, "The corpus backlog", "A reusable list of about 285 items by hop, tagged common or per dataset or per data product, owned by BA, Tech Anchor and PM.", "Pull a first backlog for a KPI group and its dashboard in an afternoon, using the planner.",
      [(BASE + "backlog/", "The corpus backlog", "new")], "Filter to your seat and stage 1 to 4. Which items are missing on your project?"),
     (14, 4, "Plan: slices, Ready and Done, estimates", "Cut in thin slices, order by risk, estimate in ranges.", "Reshape a layer-by-layer plan into slices.",
      [(BASE + "plan/", "Plan: slices and estimates", "new"), ("/how-we-work/estimation/", "Estimation mistakes", "old")], "Take a six-month plan and cut it into three slices. What does slice 1 prove?"),

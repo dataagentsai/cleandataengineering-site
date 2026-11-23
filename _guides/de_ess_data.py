@@ -236,3 +236,9 @@ BACKLOG = [
     ("GLV-07", "Benefits measured against the success measures", "BA", "Slice", [12, 27], 10, "Always", "S", "Each measure from PRJ-02 measured|Result reported to the sponsor", "Benefits report", "Sponsor"),
     ("GLV-08", "Lessons learned, risk register closed", "PM", "Document", [], 10, "Always", "S", "Lessons written and shared|Open risks handed to an owner", "Closure note", "Sponsor"),
 ]
+
+
+# ---- second batch and the full area list (added 23 Nov 2026)
+from de_ess_data2 import BACKLOG2, NEW_AREAS, DISC_MAP  # noqa: E402
+BACKLOG = BACKLOG + BACKLOG2
+AREAS = NEW_AREAS
