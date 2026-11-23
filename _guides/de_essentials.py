@@ -1143,7 +1143,8 @@ def hub_page():
 <section id="matters"><p class="eyebrow">What matters most</p><h2>Ten sentences to remember</h2><ol class="rules">{rules}</ol></section>
 <section id="fails"><p class="eyebrow">What makes a data project fail</p><h2>Six ways of not knowing</h2>
 <ul>{themes}</ul><p>The full list, with early signs and what prevents each, is on {L(BASE + 'why-fail/', 'Why data projects fail')}.</p></section>
-<section id="formats"><p class="eyebrow">How to run it</p><h2>Three formats</h2>{fmts}</section>
+<section id="formats"><p class="eyebrow">How to run it</p><h2>Three formats</h2>{fmts}
+<div class="box"><b>The full programme:</b> {L(BASE + 'programme/', 'thirteen weeks, 26 sessions in seven parts')}, with speaker and duration, Agile and spec-driven development, everything in git, use of AI for BA, PMO and delivery, skills for each role and templates for a data project.</div></section>
 <section id="words"><p class="eyebrow">Words you will hear</p><h2>Short ideas, one page each</h2><div class="chips">{chips}</div></section>
 <section id="material"><p class="eyebrow">All the material</p><h2>What is new, what exists, what is technical</h2>{inv}</section>
 <section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(HUB_QA)}</section>

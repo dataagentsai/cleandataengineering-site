@@ -251,6 +251,7 @@ SECTIONS = [
     ("How we work", [
         ("Data project essentials", "/how-we-work/data-essentials/", [
             ("The roadmap: 15 topics", "/how-we-work/data-essentials/"),
+            ("The programme: 13 weeks", "/how-we-work/data-essentials/programme/"),
             ("The cast", "/how-we-work/data-essentials/cast/"),
             ("The three seats", "/how-we-work/data-essentials/seats/"),
             ("Stakeholders", "/how-we-work/data-essentials/stakeholders/"),
