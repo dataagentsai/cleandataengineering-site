@@ -18,6 +18,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(ROOT / "_paths"))
 import components as C  # noqa: E402
 import de_time as DT  # noqa: E402
+import de_ess_data as D  # noqa: E402
 from concepts import CARDS  # noqa: E402
 
 wb = C.wb
@@ -32,7 +33,7 @@ CSS = DT.CSS + """<style>
   .tf .steps { display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:10px; margin:14px 0; }
   .tf .steps a { text-decoration:none; color:inherit; border:var(--line); border-radius:var(--wob); padding:8px 12px; background:#fff; display:block; }
   .tf .steps a b { font-family:var(--hand); font-size:22px; display:block; line-height:1.1; } .tf .steps a span { font-size:13.5px; color:var(--muted); }
-  .tf .steps a.p1 { background:var(--peri-wash, #eef3fb); } .tf .steps a.p2 { background:var(--butter-wash); } .tf .steps a.p3 { background:var(--mint-wash); }
+  .tf .steps a.p1 { background:var(--peri-wash, #eef3fb); } .tf .steps a.p2 { background:var(--butter-wash); } .tf .steps a.p3 { background:var(--mint-wash); } .tf .steps a.p4 { background:var(--rose-wash, #fbeef3); }
   .tf .part { font-family:var(--hand); font-size:22px; margin:22px 0 4px; }
   .tf .sess { border:var(--line); border-radius:var(--wob); padding:10px 16px 6px; margin:12px 0; background:#fff; }
   .tf .sess h3 { margin:4px 0; } .tf .sess .n { font-family:var(--hand); font-size:26px; margin-right:8px; }
@@ -123,7 +124,7 @@ def table(head, rows, widths=None):
 LAYER_NAMES = ["Sources", "Landing", "Clean", "Model", "Meaning", "People use it"]
 
 LAYERS = [
-    dict(slug="sources", n=1, name="Sources", session=4, tech="upstreams, source systems",
+    dict(slug="sources", n=1, name="Sources", session=7, tech="upstreams, source systems",
          lede="The apps, files and services where data is born. Other teams own them, and almost every production problem starts here.",
          water="The rivers and wells. A treatment plant can only do its job if the engineers know how each river behaves: when it floods, when it runs low, what it carries.",
          job="Data is created by systems we don't run: a sales app, an HR tool, partner files, a payments service. We don't change them. We learn how they behave, agree how the data will leave them, and then depend on them for years.",
@@ -139,7 +140,7 @@ LAYERS = [
          deeper=[("/learn/data-systems/upstreams/", "Upstreams: the 70 questions to chase, and why"), ("/learn/data-systems/upstreams/questionnaire/", "The source system questionnaire (printable)"),
                  ("/learn/data-systems/upstreams/answers/", "Where the answers go"), ("/learn/where-data-engineering-time-goes/", "Where data engineering time really goes")],
          techlinks=[("/learn/data-systems/upstreams/apis/", "How APIs hand over data"), ("/learn/data-systems/upstreams/files/", "How files hand over data")]),
-    dict(slug="landing", n=2, name="Landing", session=5, tech="ingestion, bronze",
+    dict(slug="landing", n=2, name="Landing", session=9, tech="ingestion, bronze",
          lede="Getting the data in, exactly as it arrived, and keeping a copy we never change.",
          water="The intake pumps and the holding reservoir. The water is not clean yet. The point is to catch all of it, safely, and keep it so we can always start again.",
          job="A scheduled job (or a stream of events) copies data from each source into our platform. We keep the raw copy untouched, stamped with when it arrived. If anything later goes wrong, we fix the rules and replay from here instead of asking the source again.",
@@ -154,7 +155,7 @@ LAYERS = [
          done="Counts match the source for a sample period. Running the load twice gives the same result. A failure alerts a named person.",
          deeper=[("/learn/data-systems/upstreams/", "Upstreams: how data leaves a source"), ("/learn/medallion-architecture/", "Medallion architecture, in pictures")],
          techlinks=[("/learn/data-platform-architecture/ingestion/", "Hop 1: how ingestion is built"), ("/learn/real-time-analytics/", "Real-time analytics"), ("/learn/shift-left/", "Shift left: catch it before it runs")]),
-    dict(slug="clean", n=3, name="Clean", session=5, tech="silver",
+    dict(slug="clean", n=3, name="Clean", session=9, tech="silver",
          lede="One clean, trusted row for every real thing: one customer, one order, one product.",
          water="The treatment plant. Dirt is taken out by steps that were agreed and written down, so you can say what was removed and why.",
          job="Raw data has duplicates, wrong types, odd spellings and missing values. This layer applies written rules: what counts as the same customer, what counts as invalid, what to do with a bad record. It also keeps history, so we can say what a value was last March.",
@@ -169,7 +170,7 @@ LAYERS = [
          done="The rules are written and each has an owner. Rejected rows are counted and reviewed. Spot checks agree with the source expert.",
          deeper=[("/concepts/data-quality/", "Key idea: data quality"), ("/concepts/scd/", "Key idea: keeping history (SCD)"), ("/learn/medallion-architecture/", "Medallion architecture, in pictures")],
          techlinks=[("/learn/data-platform-architecture/bronze-to-silver/", "Hop 2: how cleaning is built"), ("/learn/time-travel-vs-scd2/", "Time travel or SCD2 for history")]),
-    dict(slug="model", n=4, name="Model", session=6, tech="gold",
+    dict(slug="model", n=4, name="Model", session=10, tech="gold",
          lede="Clean data arranged the way the business thinks: sales, customers, products, days.",
          water="The pipes laid to each neighbourhood. Same clean water, but shaped for the people it serves.",
          job="Here the data becomes tables that answer business questions: a table of sales, and tables describing the date, the product, the store and the customer. Calculations such as net revenue are done once, here, and every report reuses them.",
@@ -184,7 +185,7 @@ LAYERS = [
          done="Each metric has a name, a formula and an owner. Totals reconcile with a known report within the agreed tolerance. The sign-off is recorded.",
          deeper=[("/concepts/dimensional/", "Key idea: facts and dimensions"), ("/learn/gold-data-modelling/", "Gold data modelling")],
          techlinks=[("/learn/silver-to-gold/", "Silver to gold: the harness"), ("/learn/data-platform-architecture/gold/", "Hop 3: how the model is built")]),
-    dict(slug="meaning", n=5, name="Meaning", session=6, tech="semantic layer, metric definitions",
+    dict(slug="meaning", n=5, name="Meaning", session=10, tech="semantic layer, metric definitions",
          lede="Each number is defined once, in one place, so every report and every AI assistant gives the same answer.",
          water="The meter and the tariff. A litre means the same litre to everyone, and the bill follows one published rule.",
          job="The meaning layer holds the official definition of each metric and the ways it may be sliced (by region, by month). Dashboards, spreadsheets and AI assistants all ask it, instead of each one calculating revenue its own way. It also holds who may see which rows.",
@@ -199,7 +200,7 @@ LAYERS = [
          done="A metric catalogue with an owner for each metric. Access rules tested with real user roles. A change process everyone knows.",
          deeper=[("/concepts/semantic-layer/", "Key idea: the semantic layer"), ("/learn/data-systems/downstreams/", "Downstreams: know your consumers")],
          techlinks=[("/learn/metric-views/", "Metric views, taught from zero"), ("/learn/power-bi-vs-databricks-ai-bi/", "Power BI and Databricks AI/BI")]),
-    dict(slug="consumers", n=6, name="People use it", session=7, tech="BI, reports, apps, AI",
+    dict(slug="consumers", n=6, name="People use it", session=11, tech="BI, reports, apps, AI",
          lede="The dashboards, spreadsheets, apps and assistants where people actually use the numbers.",
          water="The taps. A hospital, a factory and a garden want different water at different pressure. A good company knows each customer before it lays the pipe.",
          job="This is where the project proves its worth, or doesn't. Each consumer is named, with what they need: how fresh, how detailed, who may see it. Their old reports are switched off on an agreed date, so there is one truth.",
@@ -214,7 +215,7 @@ LAYERS = [
          done="Each report has an owner and real users. Acceptance testing used numbers the business recognises. The old report has a retirement date.",
          deeper=[("/learn/data-systems/downstreams/", "Downstreams: know your consumers"), ("/learn/power-bi-vs-databricks-ai-bi/", "Power BI or Databricks AI/BI"), ("/concepts/freshness/", "Key idea: freshness")],
          techlinks=[]),
-    dict(slug="across", n=7, name="Across everything", session=8, tech="quality, security, cost, operations",
+    dict(slug="across", n=7, name="Across everything", session=12, tech="quality, security, cost, operations",
          lede="Four jobs that sit across every layer: quality, security, cost, and running the thing every day.",
          water="The lab that tests the water, the guards at the plant, the budget, and the night crew. None of them appear on the map of pipes, and the supply fails without them.",
          job="Quality is checking the data every day, not once. Security is who may see what, and protecting personal data. Cost is the cloud bill, which grows quietly. Running is the schedule, the alerts, and the person who answers at 2 a.m. These are planned from the first week, not added before go-live.",
@@ -320,12 +321,22 @@ def layer_page(i):
     next_l = LAYERS[i + 1] if i + 1 < len(LAYERS) else None
     svg, cap = d_layer(ly["slug"])
     url_path = f"{BASE}layers/{ly['slug']}/"
-    eyebrow = f"Session {ly['session']} · Layer {ly['n']} of 6" if ly["n"] <= 6 else f"Session {ly['session']} · Across all layers"
+    eyebrow = f"Topic {ly['session']} · Layer {ly['n']} of 6" if ly["n"] <= 6 else f"Topic {ly['session']} · Across all layers"
     matters = "".join(f'<div><h3><span class="n">{k + 1}</span>{E(a)}</h3><p>{E(b)}</p></div>' for k, (a, b) in enumerate(ly["matters"]))
     fails = table(["What goes wrong", "What it looks like", "Early warning sign", "What it costs"], [[f"<b>{E(a)}</b>", E(b), E(c), E(d)] for a, b, c, d in ly["fails"]])
+    cs = [c for c in D.CAUSES if c[5] == ly["slug"]]
+    causes = ("<ul>" + "".join(f'<li><a href="{BASE}why-fail/#c{c[0]}"><b>{c[0]}. {E(c[2])}</b></a>: <i>{E(c[3])}</i></li>' for c in cs) + "</ul>") if cs else ""
     deeper = "".join(f"<li>{Lx(h, t)}</li>" for h, t in ly["deeper"])
-    tech = ("<p class='note'>Optional, for the curious or for a technical colleague:</p><ul>" + "".join(f"<li>{Lx(h, t)}</li>" for h, t in ly["techlinks"]) + "</ul>") if ly["techlinks"] else ""
-    pn = '<div class="pn">' + (L(f"{BASE}layers/{prev_l['slug']}/", f"← {prev_l['name']}") if prev_l else L(BASE, "← The roadmap")) + L(BASE, "The roadmap") + (L(f"{BASE}layers/{next_l['slug']}/", f"{next_l['name']} →") if next_l else L(f"{BASE}stakeholders/", "Next: stakeholders →")) + "</div>"
+    tech = ("<p class='note'>For your engineer (optional):</p><ul>" + "".join(f"<li>{Lx(h, t)}</li>" for h, t in ly["techlinks"]) + "</ul>") if ly["techlinks"] else ""
+    if ly["slug"] == "sources":
+        prev_html, next_html = L(BASE + "ddlc/", "← The lifecycle"), L(BASE + "gather/", "Next: gather information →")
+    elif ly["slug"] == "landing":
+        prev_html, next_html = L(BASE + "gather/", "← Gather information"), L(f"{BASE}layers/clean/", "Clean →")
+    elif ly["slug"] == "across":
+        prev_html, next_html = L(f"{BASE}layers/consumers/", f"← {prev_l['name']}"), L(BASE + "backlog/", "Next: the corpus backlog →")
+    else:
+        prev_html, next_html = L(f"{BASE}layers/{prev_l['slug']}/", f"← {prev_l['name']}"), L(f"{BASE}layers/{next_l['slug']}/", f"{next_l['name']} →")
+    pn = f'<div class="pn">{prev_html}{L(BASE, "The roadmap")}{next_html}</div>'
     strip = fig(d_strip(ly["n"]), "Where this layer sits.") if ly["n"] <= 6 else ""
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › {E(ly['name'])}</p>
 <p class="eyebrow" style="margin-top:22px">{E(eyebrow)}</p>
@@ -338,15 +349,17 @@ def layer_page(i):
 {fig(svg, cap)}
 <p class="note">Technical names you may hear for this layer: {E(ly['tech'])}.</p></section>
 <section id="matters"><p class="eyebrow">What matters most</p><h2>Three things</h2><div class="cards3">{matters}</div></section>
-<section id="fails"><p class="eyebrow">What makes it fail</p><h2>How this layer goes wrong</h2>{fails}</section>
+<section id="fails"><p class="eyebrow">Where it goes wrong</p><h2>How this layer fails</h2>{fails}
+{('<h3 style="margin-top:18px">Causes from the failure list</h3>' + causes) if causes else ''}</section>
 <section id="depends"><p class="eyebrow">Dependencies</p><h2>What and who you depend on</h2><ul>{''.join(f'<li>{E(x)}</li>' for x in ly['depends'])}</ul></section>
 <section id="ask"><p class="eyebrow">In the room</p><h2>Four questions to ask</h2><ol>{''.join(f'<li>{E(x)}</li>' for x in ly['ask'])}</ol>
 <div class="box"><b>Done means:</b> {E(ly['done'])}</div></section>
+{layer_backlog(ly['slug'])}
 <section id="deeper"><p class="eyebrow">Go deeper</p><h2>Existing material</h2><ul>{deeper}</ul>{tech}</section>
 {pn}
 </div>"""
     title = f"{ly['name']}: data project essentials"
-    desc = f"{ly['lede']} What matters most, how it fails, who you depend on and the questions to ask, for business analysts, project managers and delivery leads."
+    desc = f"{ly['lede']} What matters most, how it fails, who you depend on, the questions to ask, and the reusable backlog for this layer."
     crumbs = [("How we work", "/how-we-work/"), ("Data essentials", BASE), (ly["name"], url_path)]
     return url_path, page_shell(title, desc, url_path, body, crumbs)
 
@@ -402,7 +415,7 @@ def stakeholders_page():
     qa = [("Who is the most forgotten stakeholder?", "The source system owner. They have the most influence on your plan, the least interest in your project, and they are first asked too late."),
           ("How often should I update the sponsor?", "Weekly in writing, in five lines, plus a short call when a decision is needed. Fewer surprises matter more than longer reports.")]
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › Stakeholders</p>
-<p class="eyebrow" style="margin-top:22px">Session 9 · People</p>
+<p class="eyebrow" style="margin-top:22px">Topic 3 · People</p>
 <h1>Stakeholders in a data project</h1>
 <p class="lede">A data project depends on more people outside the team than most projects. This page shows who they are, what each needs from you, and how to keep them with you without long meetings.</p>
 <div class="tf">
@@ -423,7 +436,7 @@ def stakeholders_page():
 <li>{Lx('/learn/technical-anchor/', 'The technical anchor: the map of everyone around the project')}</li>
 <li>{Lx('/how-we-work/project-management-mistakes/', 'Top project management mistakes in data projects')}</li>
 <li>{Lx('/learn/where-data-engineering-time-goes/', 'Where data engineering time goes (the chasing nobody sees)')}</li></ul></section>
-<div class="pn">{L(f'{BASE}layers/across/', '← Across everything')}{L(BASE, 'The roadmap')}{L(f'{BASE}alignment/', 'Next: alignment →')}</div>
+<div class="pn">{L(f'{BASE}seats/', '← The three seats')}{L(BASE, 'The roadmap')}{L(f'{BASE}alignment/', 'Next: alignment →')}</div>
 </div>"""
     title = "Stakeholders in a data project"
     desc = "Who matters in a data project and how much, what each stakeholder needs, who decides what, and a five-line weekly status that tells the truth."
@@ -477,8 +490,8 @@ AGILE_VERDICT = [("Cut the backlog in slices that run through every layer", "Val
                  ("Let scope changes in without removing anything", "The date does not move, the quality does.", "Drop")]
 
 
-def backlog_page():
-    url_path = f"{BASE}backlog/"
+def plan_page():
+    url_path = f"{BASE}plan/"
     kinds = table(["Kind of item", "What it is", "Example"], [[f"<b>{E(a)}</b>", E(b), E(c)] for a, b, c in ITEM_KINDS])
     ready = "".join(f"<li>{E(x)}</li>" for x in READY)
     done = "".join(f"<li>{E(x)}</li>" for x in DONE)
@@ -486,9 +499,9 @@ def backlog_page():
     qa = [("Does agile work for data projects?", "Yes, with two changes: slice through all the layers instead of building layer by layer, and treat learning about the source as work in the backlog, not as something that happens before it."),
           ("Should we estimate in story points?", "Use whatever your team uses, but also size by source complexity and give ranges. Waiting time is not effort, so track calendar time separately. See the estimation page.")]
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › Backlog and agile</p>
-<p class="eyebrow" style="margin-top:22px">Session 10 · Plan</p>
-<h1>Backlog and agile for data projects</h1>
-<p class="lede">Agile fits data projects, with one habit changed: cut the work into thin slices that go through every layer, instead of building the layers one by one. This page shows how to shape the backlog, when an item is ready, and when it is done.</p>
+<p class="eyebrow" style="margin-top:22px">Topic 14 · Plan</p>
+<h1>Plan: slices, Ready and Done, estimates</h1>
+<p class="lede">Whatever method you use (Scrum, Kanban or another, a separate choice), data projects need one habit: cut the work into thin slices that go through every layer, instead of building the layers one by one. This page shows how to shape the plan, when an item is ready, and when it is done.</p>
 <div class="tf">
 <section id="slices"><p class="eyebrow">Teach first</p><h2>Cut the work the right way</h2>
 <p>The natural plan for a data platform is to build the landing layer for all sources, then the clean layer, then the model, then the reports. It looks tidy, and it hides the risk until the end. The better plan takes one source, all the way to one number a person checks, and then widens.</p>
@@ -510,11 +523,11 @@ def backlog_page():
 <li>{Lx('/how-we-work/estimation/', 'Estimation mistakes in data projects')}</li>
 <li>{Lx('/how-we-work/project-management-mistakes/', 'Top project management mistakes in data projects')}</li>
 <li>{Lx('/learn/technical-anchor/', 'The data project lifecycle, stage by stage')}</li></ul></section>
-<div class="pn">{L(f'{BASE}alignment/', '← Alignment')}{L(BASE, 'The roadmap')}{L(f'{BASE}fail-fast/', 'Next: fail fast →')}</div>
+<div class="pn">{L(f'{BASE}backlog/', '← The corpus backlog')}{L(BASE, 'The roadmap')}{L(f'{BASE}fail-fast/', 'Next: fail fast →')}</div>
 </div>"""
-    title = "Backlog and agile for data projects"
+    title = "Plan: slices, Ready and Done, estimates"
     desc = "How to cut a data project into thin slices, order the backlog by risk, write a Definition of Ready and Done for data, and keep estimates honest."
-    return url_path, page_shell(title, desc, url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", BASE), ("Backlog and agile", url_path)], qa)
+    return url_path, page_shell(title, desc, url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", BASE), ("Plan and estimates", url_path)], qa)
 
 
 # ----------------------------------------------------------------------------- fail fast
@@ -556,7 +569,7 @@ def fail_fast_page():
     qa = [("Is failing fast the same as giving up?", "No. It means finding out cheaply, in week two, whether a belief is true, so you can change the plan while changing is cheap. Stopping a project in discovery is a good result."),
           ("Who owns the fail-fast tests?", "Each test has a named person. The business analyst owns tests about meaning and change, the delivery manager owns tests about access and running, and the technical anchor owns tests about volume and timing.")]
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › Fail fast</p>
-<p class="eyebrow" style="margin-top:22px">Session 11 · Protect</p>
+<p class="eyebrow" style="margin-top:22px">Topic 15 · Protect</p>
 <h1>Fail fast, in a data project</h1>
 <p class="lede">Failing fast does not mean failing often. It means finding out in week two, and not in month six, whether something you are counting on is true. This page lists eight cheap tests, who runs them, and how to decide go, change or stop.</p>
 <div class="tf">
@@ -576,7 +589,7 @@ def fail_fast_page():
 <li>{Lx('/learn/technical-anchor/discovery/', 'Discovery: fail fast for the whole project')}</li>
 <li>{Lx('/how-we-work/critical-thinking/', 'Critical thinking in data projects')}</li>
 <li>{Lx('/how-we-work/project-management-mistakes/', 'Top project management mistakes in data projects')}</li></ul></section>
-<div class="pn">{L(f'{BASE}backlog/', '← Backlog and agile')}{L(BASE, 'The roadmap')}</div>
+<div class="pn">{L(f'{BASE}plan/', '← Plan and estimates')}{L(BASE, 'The roadmap')}</div>
 </div>"""
     title = "Fail fast in a data project"
     desc = "Eight cheap tests that find out in week two whether a data project's key beliefs are true, who runs each, the go, change or stop rule, and a one-page risk register."
@@ -608,6 +621,13 @@ DDLC = [
 ]
 
 
+TA_DDLC = {1: "Read the need for what could make it impossible or three times bigger.", 2: "Count what can be counted and give a range with its assumptions.",
+           3: "Profile real data, build spikes for the riskiest beliefs, shape the design.", 4: "Walk reviewers through the risks honestly, including the bad news.",
+           5: "Environments, release pipeline and standards working in the first days.", 6: "Review designs, track effort against the estimate, unblock people.",
+           7: "Check reconciliation, quality rules, performance at volume and safe reruns.", 8: "Rehearse cut-over and rollback; monitoring on; runbook finished.",
+           9: "Watch the first runs; confirm operations can run it alone.", 10: "Hand over; support makes one real change while you watch."}
+
+
 def d_ddlc():
     b = ""
     w, gap, h = 170, 28, 70
@@ -630,14 +650,14 @@ def d_ddlc():
 
 def ddlc_page():
     url_path = f"{BASE}ddlc/"
-    rows = [[f"<b>{n} · {E(nm)}</b>" + (' <span class="tag">gate</span>' if g else ""), E(ba), E(pm), E(bad), f"<i>{E(q)}</i>"] for n, nm, g, ba, pm, bad, q in DDLC]
-    t = table(["Stage", "Business analyst", "Project / delivery manager", "What goes wrong here", "Fail-fast question"], rows)
+    rows = [[f"<b>{n} · {E(nm)}</b>" + (' <span class="tag">gate</span>' if g else ""), E(ba), E(TA_DDLC[n]), E(pm), E(bad), f"<i>{E(q)}</i>"] for n, nm, g, ba, pm, bad, q in DDLC]
+    t = table(["Stage", "BA", "Tech Anchor", "PM", "What goes wrong here", "Fail-fast question"], rows)
     qa = [("What is the DDLC?", "The data development lifecycle: the ten stages a data project goes through, from a business need arriving to the project closing. It looks like a software lifecycle, but discovery and proving the numbers carry much more weight."),
           ("What is the difference from the software lifecycle?", "In software the unknown is mostly what to build. In data the unknown is mostly what the sources really mean and whether the numbers can be trusted, so learning and proving are stages of their own.")]
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › DDLC</p>
-<p class="eyebrow" style="margin-top:22px">Session 2 · The lifecycle</p>
-<h1>The data development lifecycle, by role</h1>
-<p class="lede">Every data project goes through the same ten stages. This page shows them in one picture, what a business analyst and a project or delivery manager each does at every stage, and what usually goes wrong there.</p>
+<p class="eyebrow" style="margin-top:22px">Topic 6 · The lifecycle</p>
+<h1>The data development lifecycle, by seat</h1>
+<p class="lede">Every data project goes through the same ten stages. This page shows them in one picture, what the BA, the Tech Anchor and the PM each do at every stage, and what usually goes wrong there.</p>
 <div class="tf">
 <section id="picture"><p class="eyebrow">Teach first</p><h2>Ten stages, three gates</h2>
 <p>The first four stages decide whether the project is worth doing and how. The rest deliver one small working piece at a time, called an MVP, and repeat for each. At a sign-off gate, a named person says go, go with changes, or stop.</p>
@@ -653,64 +673,9 @@ def ddlc_page():
 <section id="deeper"><p class="eyebrow">Go deeper</p><h2>Existing material</h2><ul>
 <li>{Lx('/learn/technical-anchor/', 'The data project lifecycle, in full')}</li><li>{Lx('/learn/technical-anchor/discovery/', 'Discovery, step by step')}</li>
 <li>{Lx('/how-we-work/project-management-mistakes/', 'Project management mistakes')}</li></ul></section>
-<div class="pn">{L(BASE, '← The roadmap')}{L(f'{BASE}challenges/', 'Next: the hardest challenges →')}</div>
+<div class="pn">{L(f'{BASE}why-fail/', '← Why projects fail')}{L(BASE, 'The roadmap')}{L(f'{BASE}layers/sources/', 'Next: sources →')}</div>
 </div>"""
     return url_path, page_shell("The data development lifecycle (DDLC) by role", "The ten stages of a data project with three sign-off gates, what a business analyst and a project manager each do at every stage, and what goes wrong there.", url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", BASE), ("DDLC", url_path)], qa)
-
-
-# ----------------------------------------------------------------------------- hardest challenges
-CHALLENGES = [
-    ("Knowledge", "Nobody knows what the source means", "The knowledge is in a few heads, or in nobody's.", "Fields nobody can explain; 'ask Ravi, but he left'.", "Meaning test in week 1 to 2; a named owner per source; write answers down.", "sources"),
-    ("Knowledge", "Old reports hide the rules", "The current report is a spreadsheet with years of manual fixes nobody documented.", "'The number is right, don't touch it', but nobody can say how it is made.", "Reverse-engineer the report with its owner before designing anything.", "gather"),
-    ("Knowledge", "The data is worse than expected", "Real data has duplicates, gaps and odd codes that samples don't show.", "Profiling in week 2 shows 15 percent of rows break a rule.", "Profile real data in discovery, and agree what to do with bad rows.", "clean"),
-    ("People", "Other teams own the sources", "They have their own priorities and no reason to help you quickly.", "Requests wait; answers come in weeks.", "Sponsor-backed requests, small and early, with dates. Treat source owners as stakeholders.", "stakeholders"),
-    ("People", "Departments define things differently", "Revenue, customer and active mean different things to sales and finance.", "Two reports, two numbers, one argument.", "One owner per metric; show both numbers on real data; the owner decides; write it down.", "alignment"),
-    ("People", "Requirements change when people see data", "Nobody knows what they want until they see their own numbers.", "'This isn't what I meant' at acceptance.", "Show real numbers in week two and every two weeks after. Slice thin.", "consumers"),
-    ("Time", "Access and approvals take weeks", "Security, privacy and network changes follow their own calendar.", "The team has nothing to work on in week one.", "Send requests on day one, with dates; track waiting separately from effort.", "across"),
-    ("Time", "The unknown is hard to estimate", "Estimates count code, and the real work is learning and waiting.", "The first number is two to three times too low.", "Ranges, effort and calendar apart, estimate discovery, re-estimate after the first slice.", "backlog"),
-    ("Time", "Proving the numbers is slow", "Reconciling to finance finds differences that need a person to explain.", "Last week of the project: totals differ by 3 percent.", "Plan reconciliation as a stage from slice one, not a final week.", "model"),
-    ("People", "Nobody owns it after go-live", "The team leaves; operations and the business are not ready.", "A job fails on Sunday and no one is alerted.", "Operations at demos from MVP 1; a rehearsed failure drill; named owners.", "across"),
-]
-
-
-def d_challenges():
-    groups = [("Knowledge", BLUE), ("People", BUTTER), ("Time", MINT)]
-    b = ""
-    for gi, (g, f) in enumerate(groups):
-        x = 20 + gi * 325
-        b += R(x, 20, 300, 44, f, [g], 20, sw=2.5)
-        items = [c[1] for c in CHALLENGES if c[0] == g]
-        for k, t in enumerate(items):
-            b += R(x, 80 + k * 50, 300, 42, "#fff", [t], 14)
-    return S(1000, 280, b, "The ten hardest challenges in three groups. Knowledge: nobody knows what the source means, old reports hide the rules, the data is worse than expected. People: other teams own the sources, departments define things differently, requirements change, nobody owns it after go-live. Time: access takes weeks, the unknown is hard to estimate, proving numbers is slow.")
-
-
-def challenges_page():
-    url_path = f"{BASE}challenges/"
-    hrefs = {"sources": f"{BASE}layers/sources/", "gather": f"{BASE}gather/", "clean": f"{BASE}layers/clean/", "stakeholders": f"{BASE}stakeholders/", "alignment": f"{BASE}alignment/",
-             "consumers": f"{BASE}layers/consumers/", "across": f"{BASE}layers/across/", "backlog": f"{BASE}backlog/", "model": f"{BASE}layers/model/"}
-    cards = ""
-    for i, (g, t, why, sign, help_, ref) in enumerate(CHALLENGES):
-        cards += (f'<div class="sess"><h3><span class="n">{i + 1}</span>{E(t)} <span class="tag">{E(g)}</span></h3><dl><dt>Why it is hard</dt><dd>{E(why)}</dd>'
-                  f'<dt>Early sign</dt><dd>{E(sign)}</dd><dt>What helps</dt><dd>{E(help_)} <a href="{hrefs[ref]}">Read more →</a></dd></dl></div>')
-    qa = [("What is the hardest part of a data project?", "Usually not the code. It is learning what the source data means, and getting people in other teams to agree on definitions and spare time. Both are about people and knowledge, so they have to be planned for."),
-          ("How can I tell early that a project is in trouble?", "Three early signs: nobody can name the person who understands a source, no one has seen real data yet, and access has not been requested. Any one is worth raising the same day.")]
-    body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › Hardest challenges</p>
-<p class="eyebrow" style="margin-top:22px">Session 3 · What goes wrong</p>
-<h1>The hardest challenges in data projects</h1>
-<p class="lede">Data projects rarely fail because the code was hard. They fail on knowledge nobody wrote down, people who are not on your team, and time spent waiting. Ten challenges, each with its early sign and what helps.</p>
-<div class="tf">
-<section id="map"><p class="eyebrow">Teach first</p><h2>Three groups</h2>
-{fig(d_challenges(), "Knowledge, people and time. Only a small part of the work is the code.")}
-<div class="box"><b>In one line:</b> the hard parts are knowing, agreeing and waiting. Plan for them in the backlog, as work.</div></section>
-<section id="list"><p class="eyebrow">The ten</p><h2>Challenge by challenge</h2>{cards}</section>
-<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(qa)}</section>
-<section id="deeper"><p class="eyebrow">Go deeper</p><h2>Existing material</h2><ul>
-<li>{Lx('/how-we-work/project-management-mistakes/', 'Top project management mistakes in data projects')}</li><li>{Lx('/how-we-work/estimation/', 'Estimation mistakes in data projects')}</li>
-<li>{Lx('/learn/where-data-engineering-time-goes/', 'Where data engineering time really goes')}</li></ul></section>
-<div class="pn">{L(f'{BASE}ddlc/', '← DDLC')}{L(BASE, 'The roadmap')}{L(f'{BASE}layers/sources/', 'Next: upstream, sources →')}</div>
-</div>"""
-    return url_path, page_shell("The hardest challenges in data projects", "Ten challenges that make data projects fail, in three groups: knowledge, people and time, with the early sign of each and what helps.", url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", BASE), ("Hardest challenges", url_path)], qa)
 
 
 # ----------------------------------------------------------------------------- gather information
@@ -762,7 +727,7 @@ def gather_page():
     qa = [("Where should I start?", "With the output: the report or number people use today. Then trace backwards to the systems, and forwards to the decisions it drives."),
           ("What if two people tell me different things?", "Good: that is the finding. Put both answers side by side on a real sample of data, and ask the owner of the metric to decide. Write the decision down.")]
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › Gather information</p>
-<p class="eyebrow" style="margin-top:22px">Session 4 · Upstream understanding</p>
+<p class="eyebrow" style="margin-top:22px">Topic 8 · Gathering information</p>
 <h1>Gather information from people and existing systems</h1>
 <p class="lede">Most of what a data project needs to know is in people's heads, old reports and the data itself. This page shows how to collect it, how to tell which of it is true, and how to write it down so it is not lost.</p>
 <div class="tf">
@@ -821,7 +786,7 @@ def alignment_page():
     qa = [("What do I do when two stakeholders define a metric differently?", "Do not pick. Put both numbers on the same real sample, show the difference, and ask the owner of the metric to decide. Rename the other one so both can live with different names. Write the decision down."),
           ("How do I keep engineers and the business aligned?", "Have the three conversations before each slice, write requirements as checks on data, and demo with real numbers every two weeks.")]
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › Alignment</p>
-<p class="eyebrow" style="margin-top:22px">Session 9 · People</p>
+<p class="eyebrow" style="margin-top:22px">Topic 3 · People</p>
 <h1>Alignment between stakeholders, analysts and engineers</h1>
 <p class="lede">Most data projects have enough clever people. What they lack is the same understanding in all their heads. This page shows the five places people drift apart, and six small habits that keep them together.</p>
 <div class="tf">
@@ -835,88 +800,143 @@ def alignment_page():
 <section id="deeper"><p class="eyebrow">Go deeper</p><h2>Existing material</h2><ul>
 <li>{Lx('/learn/technical-anchor/', 'The technical anchor: a design that works from every side')}</li><li>{Lx('/how-we-work/critical-thinking/', 'Critical thinking in data projects')}</li>
 <li>{Lx('/concepts/data-contracts/', 'Key idea: data contracts')}</li></ul></section>
-<div class="pn">{L(f'{BASE}stakeholders/', '← Stakeholders')}{L(BASE, 'The roadmap')}{L(f'{BASE}backlog/', 'Next: backlog and agile →')}</div>
+<div class="pn">{L(f'{BASE}stakeholders/', '← Stakeholders')}{L(BASE, 'The roadmap')}{L(f'{BASE}picture/', 'Next: one picture →')}</div>
 </div>"""
     return url_path, page_shell("Alignment between stakeholders, analysts and engineers", "Five places people drift apart on a data project and six habits that keep them aligned: glossary, three conversations, acceptance as checks on data, real demos, decision log, one page.", url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", BASE), ("Alignment", url_path)], qa)
 
 
-# ----------------------------------------------------------------------------- the hub: the roadmap
-# (n, part, title, one idea, you will be able to, [(href, text, status)], format exercise)
-SESSIONS = [
-    (1, 1, "The whole picture", "A data system has three blocks: what we don't own, what we build, and who uses it.",
-     "Draw the six layers from memory and say what each is for in one sentence.",
-     [("/learn/data-systems/", "Data systems, end to end", "old"), (BASE + "#picture", "The big picture (on this page)", "new")],
-     "Take a data project you know. Mark which block each problem came from."),
-    (2, 1, "The data development lifecycle (DDLC)", "Discover first, then deliver one thin slice at a time, with three sign-off gates.",
-     "Name the ten stages and three gates, say what your role does at each, and why this is not a software project.",
-     [(BASE + "ddlc/", "DDLC, stage by stage, by role", "new"), ("/learn/technical-anchor/", "The lifecycle, in full (technical anchor)", "old"), ("/learn/where-data-engineering-time-goes/", "Where the time goes", "old")],
-     "Place your current project on the ten stages. Which gate is next, and who signs it?"),
-    (3, 1, "What goes wrong: the hardest challenges", "Most failures are about knowledge, people and time, not code.",
-     "Name the ten hardest challenges and the early sign of each.",
-     [(BASE + "challenges/", "The hardest challenges", "new"), ("/how-we-work/project-management-mistakes/", "Project management mistakes", "old"), ("/how-we-work/estimation/", "Estimation mistakes", "old")],
-     "Which three challenges is your project facing today? What is the evidence?"),
-    (4, 2, "Upstream understanding", "We depend on systems we don't own, and their meaning is not obvious. Find out early, from people and from the systems.",
-     "Run a source meeting, gather what is known from people and systems, and spot a missing owner.",
-     [(BASE + "layers/sources/", "Layer 1: Sources", "new"), (BASE + "gather/", "Gather information from people and systems", "new"), ("/learn/data-systems/upstreams/", "Upstreams: the questions", "old"), ("/learn/data-systems/upstreams/questionnaire/", "Source questionnaire", "old")],
-     "Pick a source. Answer the four questions from the layer page. What is unknown, and who could tell you?"),
-    (5, 2, "Getting data in, and cleaning it", "Keep the raw copy untouched, then clean it with written rules.",
-     "Ask for freshness, history, rerun safety and the rules for bad rows.",
-     [(BASE + "layers/landing/", "Layer 2: Landing", "new"), (BASE + "layers/clean/", "Layer 3: Clean", "new"), ("/learn/medallion-architecture/", "Medallion architecture", "old")],
-     "Write three cleaning rules for a customer list, and say who owns each."),
-    (6, 2, "Shaping data, and defining numbers", "Choose the grain, and give every number one definition and one owner.",
-     "Write a metric definition with an owner, and a reconciliation plan against a known report.",
-     [(BASE + "layers/model/", "Layer 4: Model", "new"), (BASE + "layers/meaning/", "Layer 5: Meaning", "new"), ("/concepts/semantic-layer/", "Key idea: semantic layer", "old")],
-     "Define 'active customer' in one sentence, with an owner. Do two people agree?"),
-    (7, 2, "Downstream understanding", "Name every consumer; give one door; switch off the old report.",
-     "Build a consumer register and agree a switch-off date.",
-     [(BASE + "layers/consumers/", "Layer 6: People use it", "new"), ("/learn/data-systems/downstreams/", "Downstreams: know your consumers", "old")],
-     "List five consumers for a sales report, and the freshness each needs."),
-    (8, 2, "What runs across everything", "Quality, security, cost and running each need an owner and a place in the backlog.",
-     "Check a plan has stories for all four, and a rehearsed failure drill.",
-     [(BASE + "layers/across/", "Across everything", "new"), ("/learn/data-systems/platform/", "The data platform: all concerns", "old"), ("/learn/data-systems/platform/cost/", "Cost and FinOps", "old")],
-     "Who gets the 2 a.m. call on your project? Have they seen the runbook?"),
-    (9, 3, "People: stakeholders and alignment", "Spend effort where influence is high and interest is low, and make sure everyone means the same thing.",
-     "Map stakeholders, name decision owners, write the five-line weekly note, and settle a definition dispute.",
-     [(BASE + "stakeholders/", "Stakeholders", "new"), (BASE + "alignment/", "Alignment", "new"), ("/learn/technical-anchor/", "The map of everyone around the project", "old")],
-     "Draw the grid for your project. Find one word that two people define differently."),
-    (10, 3, "Plan: backlog, agile, estimates", "Cut in thin slices, order by risk, estimate in ranges.",
-     "Reshape a layer-by-layer plan into slices, and write Ready and Done for data items.",
-     [(BASE + "backlog/", "Backlog and agile", "new"), ("/how-we-work/estimation/", "Estimation mistakes", "old")],
-     "Take a 6-month plan and cut it into three slices. What does slice 1 prove?"),
-    (11, 3, "Protect: fail fast and risks", "Test the most dangerous belief first, and agree the go, change, stop rule.",
-     "Run the eight tests, keep a one-page risk register, and review a project's documents.",
-     [(BASE + "fail-fast/", "Fail fast", "new"), ("/learn/technical-anchor/discovery/", "Discovery", "old"), ("/learn/technical-anchor/project-review/", "Project review", "old")],
-     "Review one real project document with the stage checks. Count the gaps."),
-]
-PARTS = {1: ("Part 1 · See the whole", "peri"), 2: ("Part 2 · Walk the layers", "butter"), 3: ("Part 3 · Run the project", "mint")}
-
-ROLES = [("Business analyst", "●●●●○●●○●○●"), ("Project manager", "●●●●○○○●●●●"), ("Delivery manager", "●●●○○–○●●●●"),
-         ("Product owner", "●●○○–●●○●●○"), ("Tester or QA", "●○○○●●●●–○○"), ("Sponsor or leader", "●●●––○●○○–●")]
-
-RULES = ["Data projects are discovery first and delivery second.",
-         "The source is the biggest unknown, and someone else owns it.",
-         "Slice thin: one source to one trusted number, then widen.",
-         "Every number has a name, a formula and an owner.",
-         "Done means the totals match a figure the business already trusts.",
-         "Raise every access and approval on day one, with a date.",
-         "Estimate in ranges, and keep effort apart from calendar time.",
-         "Say bad news early. It is the cheapest it will ever be.",
-         "Plan the running before go-live: who is alerted, who fixes it.",
-         "Switch off the old report, or you have two truths."]
-
-FAILS = [("The meaning of the source is guessed", "Sources", "sources"), ("Rows go missing or double", "Landing", "landing"), ("Duplicates and silent drops", "Clean", "clean"),
-         ("Wrong grain, two definitions", "Model", "model"), ("Metrics without owners", "Meaning", "meaning"), ("Built, but not used", "People use it", "consumers"),
-         ("Nobody runs it", "Across everything", "across"), ("The plan counts code, not waiting", "Whole project", None)]
-
-FORMATS = [("Weekly, 11 weeks", "One session a week, 60 minutes: 15 for the picture, 20 for the page, 15 for the exercise, 10 for 'what will you ask on Monday?'. Best for a team that works together."),
-           ("Two-day workshop", "Parts 1 and 2 on day one, Part 3 on day two, with the exercises done on your own project. Best for a new team starting a project."),
-           ("Express, 4 hours", "Sessions 1, 2, 3 and 11 only. Best for sponsors and senior leaders.")]
-
-HUB_QA = [("Do I need to know how to code?", "No. Nothing here needs code. Where a page links to technical material, it is marked optional."),
-          ("How long is the whole programme?", "Eleven sessions of about an hour. The pages can also be read alone, in any order, once you have seen the big picture."),
-          ("Which pages are new and which already existed?", "The roadmap marks each link: 'new' means written for this programme, 'existing' means already on the site and reused as it is.")]
+# ----------------------------------------------------------------------------- shared bits for the v2 pages
+LAYER_LABEL = {l["slug"]: l["name"] for l in LAYERS}
+LAYER_LABEL["start"] = "Whole project"
+STAGE_NAME = {n: nm for n, nm, *_ in DDLC}
+CAUSE = {c[0]: c for c in D.CAUSES}
+THEME = dict(D.THEMES)
+ITEMS = D.BACKLOG
+AREA_OF = {}
+for a, nm, pref in D.AREAS:
+    for p in pref.split():
+        AREA_OF[p] = (a, nm)
+SEAT_WORDS = {"BA": "BA", "TA": "Tech Anchor", "PM": "PM"}
 
 
+def area_of(item_id):
+    return AREA_OF[item_id.split("-")[0]]
+
+
+def items_for(area):
+    return [i for i in ITEMS if area_of(i[0])[0] == area]
+
+
+def cause_links(nums):
+    return " ".join(f'<a href="{BASE}why-fail/#c{n}" title="{E(CAUSE[n][2])}">{n}</a>' for n in nums) or "-"
+
+
+def seat_text(s):
+    return " + ".join(SEAT_WORDS.get(x.strip(), x.strip()) for x in s.split("+"))
+
+
+def item_rows(items):
+    rows = []
+    for (iid, title, seat, typ, prev, stage, applies, size, ac, evid, dep) in items:
+        acl = "<ul>" + "".join(f"<li>{E(x)}</li>" for x in ac.split("|")) + "</ul>"
+        rows.append([f'<a href="{BASE}backlog/#{iid}"><b>{iid}</b></a>', E(title) + (f'<br><span class="note">Applies when: {E(applies)}</span>' if applies != "Always" else ""),
+                     E(seat_text(seat)), acl, cause_links(prev)])
+    return rows
+
+
+def layer_backlog(area, heading="Backlog for this layer"):
+    items = items_for(area)
+    if not items:
+        return ""
+    t = table(["ID", "Item", "Owner", "Done when (acceptance criteria)", "Prevents causes"], item_rows(items))
+    return (f'<section id="backlog"><p class="eyebrow">The reusable backlog</p><h2>{E(heading)}</h2>'
+            f'<p>{len(items)} items, at the level a BA, Tech Anchor or PM can say done about. Copy the ones that apply; the full list, with filters and a download, is the {L(BASE + "backlog/", "corpus backlog")}.</p>{t}</section>')
+
+
+def stage_word(n):
+    return f"{n} · {STAGE_NAME[n]}"
+
+
+# ----------------------------------------------------------------------------- Part A: the cast, the three seats
+def d_cast():
+    b = ""
+    cols = D.CAST_GROUPS
+    fills = [BUTTER, GREY, BLUE, MINT]
+    for i, (g, people) in enumerate(cols):
+        x = 20 + i * 245
+        b += R(x, 14, 225, 40, fills[i], [g], 19, sw=2.5)
+        for k, p in enumerate(people):
+            b += R(x, 66 + k * 36, 225, 30, "#fff", [p], 13.5)
+    b += R(20, 306, 960, 54, LAV, ["The three seats: BA · Tech Anchor · PM", "each talks to people in all four groups"], 18, sw=2.5)
+    for i in range(4):
+        b += AR(132 + i * 245, 304, 132 + i * 245, 294, dash=True)
+    return S(1000, 376, b, "Four groups of people around a data project. Decide: sponsor, business owners, PMO and steering. Own the data: source system owners, data owners, finance, security and compliance, vendors. Build and run: data engineers, BI developers, platform team, architects, test team, operations. Use: end users, analysts, downstream app owners, regulators. Below them, the three seats, BA, Tech Anchor and PM, which talk to all four groups.")
+
+
+def cast_page():
+    url_path = f"{BASE}cast/"
+    groups = ""
+    for g, _ in D.CAST_GROUPS:
+        rows = [[f"<b>{E(w)}</b><br><span class='note'>{E(role)}</span>", E(ba), E(ta), E(pm)] for gg, w, role, ba, ta, pm in D.CAST if gg == g]
+        groups += f'<h3 style="margin-top:20px">{E(g)}</h3>' + table(["Who", "BA talks about", "Tech Anchor talks about", "PM talks about"], rows)
+    body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › The cast</p>
+<p class="eyebrow" style="margin-top:22px">Topic 1 · The people</p>
+<h1>The cast: who is in a data project</h1>
+<p class="lede">A data project has more people than a software project, and most of them are outside the team. This page names all of them, in four groups, and shows what a BA, a Tech Anchor and a PM each talk to them about.</p>
+<div class="tf">
+<section id="map"><p class="eyebrow">Teach first</p><h2>Four groups, three seats</h2>
+{fig(d_cast(), "Most of the cast sit outside the team. The three seats are how the project talks to all of them.")}
+<div class="box"><b>In one line:</b> if you cannot name the person in each box, that is a risk. Write the names in the stakeholder map.</div></section>
+<section id="who"><p class="eyebrow">Who talks to whom</p><h2>The cast, and what each seat discusses with them</h2>{groups}
+<p class="note">A dash means this seat rarely talks to this person directly.</p></section>
+<section id="deeper"><p class="eyebrow">Next</p><h2>Related pages</h2><ul>
+<li>{L(BASE + 'seats/', 'The three seats: what each owns and expects')}</li><li>{L(BASE + 'stakeholders/', 'Stakeholders: who matters and how much')}</li>
+<li>{L('/learn/data-systems/downstreams/', 'Know your consumers (technical, optional)')}</li></ul></section>
+<div class="pn">{L(BASE, '← The roadmap')}{L(BASE, 'The roadmap')}{L(BASE + 'seats/', 'Next: the three seats →')}</div>
+</div>"""
+    return url_path, page_shell("The cast: who is in a data project", "Eighteen people in four groups around a data project, and what a business analyst, a tech anchor and a project manager each talk to them about.", url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", BASE), ("The cast", url_path)])
+
+
+def d_seats():
+    b = R(390, 14, 220, 70, ROSE, ["PM", "the plan"], 19, sw=2.5) + R(40, 190, 220, 70, BLUE, ["BA", "the question"], 19, sw=2.5) + R(740, 190, 220, 70, MINT, ["Tech Anchor", "the technical shape"], 19, sw=2.5)
+    b += AR(262, 212, 738, 212) + T(500, 204, "testable requirements, real meaning of the source", 13.5)
+    b += AR(738, 240, 262, 240) + T(500, 262, "what the data really shows, what is feasible", 13.5)
+    b += AR(380, 86, 190, 188) + T(190, 130, "priorities, acceptance, dates", 13.5, "middle")
+    b += AR(210, 188, 400, 88, dash=True) + T(380, 160, "business risks", 13.5, "start")
+    b += AR(620, 86, 810, 188) + T(840, 130, "access, decisions, scope", 13.5, "middle")
+    b += AR(790, 188, 600, 88, dash=True) + T(600, 160, "estimates, risks", 13.5, "end")
+    return S(1000, 290, b, "Three seats and what passes between them. The BA gives the Tech Anchor testable requirements and the real meaning of the source; the Tech Anchor gives the BA what the data really shows and what is feasible. The PM gives both priorities, access, decisions and dates, and receives business risks from the BA and estimates and risks from the Tech Anchor.")
+
+
+def seats_page():
+    url_path = f"{BASE}seats/"
+    cards = ""
+    for key, name, one, owns, notown, good, fails, ask in D.SEATS:
+        lst = lambda xs: "<ul>" + "".join(f"<li>{E(x)}</li>" for x in xs) + "</ul>"
+        cards += (f'<section id="{key.lower()}"><p class="eyebrow">Seat</p><h2>{E(name)}</h2><p><b>{E(one)}</b></p>'
+                  f'<div class="cards3"><div><h3>Owns</h3>{lst(owns)}</div><div><h3>Does not own</h3>{lst(notown)}</div><div><h3>Good looks like</h3>{lst(good)}</div></div>'
+                  f'<div class="cards3"><div><h3>How this seat fails</h3>{lst(fails)}</div><div><h3>The weekly question</h3><p><i>{E(ask)}</i></p></div></div></section>')
+    exp = table(["From", "To", "What they expect"], [[f"<b>{E(a)}</b>", E(b), E(c)] for a, b, c in D.EXPECT])
+    fr = "<ul>" + "".join(f"<li>{E(x)}</li>" for x in D.FRICTION) + "</ul>"
+    body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › The three seats</p>
+<p class="eyebrow" style="margin-top:22px">Topic 2 · The roles</p>
+<h1>The three seats: BA, Tech Anchor and PM</h1>
+<p class="lede">Three seats hold a data project together. Each owns something different, and most friction happens at the hand-offs. This page says what each seat owns, what it does not, what good looks like, and what each expects from the other two.</p>
+<div class="tf">
+<section id="map"><p class="eyebrow">Teach first</p><h2>Three seats, six hand-offs</h2>
+{fig(d_seats(), "The BA owns the question, the Tech Anchor owns whether it can work, the PM owns the plan. Each hand-off is an arrow.")}
+<div class="box"><b>In one line:</b> the BA asks, the Tech Anchor tests, the PM makes room. Projects fail when one seat is empty or two seats own the same thing.</div></section>
+{cards}
+<section id="expect"><p class="eyebrow">Expectations</p><h2>What each seat expects from the other two</h2>{exp}
+<h3 style="margin-top:20px">Where friction usually starts</h3>{fr}</section>
+<section id="deeper"><p class="eyebrow">Go deeper</p><h2>Related pages</h2><ul>
+<li>{L(BASE + 'cast/', 'The cast: who each seat talks to')}</li><li>{Lx('/learn/technical-anchor/', 'The technical anchor, in full')}</li><li>{L(BASE + 'ddlc/', 'DDLC: what each seat does at each stage')}</li></ul></section>
+<div class="pn">{L(BASE + 'cast/', '← The cast')}{L(BASE, 'The roadmap')}{L(BASE + 'stakeholders/', 'Next: stakeholders →')}</div>
+</div>"""
+    return url_path, page_shell("The three seats: BA, Tech Anchor and PM", "What a business analyst, a tech anchor and a project manager each own on a data project, what they do not own, what good looks like, and what each expects from the other two.", url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", BASE), ("The three seats", url_path)])
+
+
+# ----------------------------------------------------------------------------- Part B: one picture, why projects fail
 def d_picture():
     b = ""
     bw, gap, x0 = 140, 22, 25
@@ -933,76 +953,288 @@ def d_picture():
     b += T(x0 + bw / 2, 30, "we don't own it", 15) + T(x0 + bw + gap + 2 * (bw + gap) + bw / 2 + 80, 30, "we build it", 15)
     b += T(x0 + 5 * (bw + gap) + bw / 2, 30, "they use it", 15) + T(500, 222, "how it usually fails", 14)
     b += R(25, 238, 950, 56, LAV, ["Across everything: quality · security · cost · running"], 17, href=f"{BASE}layers/across/")
-    return S(1000, 310, b, "The whole data project on one page: six layers in a row, sources, landing, clean, model, meaning, and people use it, with how each usually fails written underneath in red dashes, and a band across the bottom for quality, security, cost and running. Each box links to its page.")
+    return S(1000, 310, b, "The whole data project on one page: six layers in a row, sources, landing, clean, model, meaning, and people use it, with how each usually fails underneath in red dashes, and a band across the bottom for quality, security, cost and running. Each box links to its page.")
+
+
+def picture_page():
+    url_path = f"{BASE}picture/"
+    says = table(["The client says", "What is behind it"], [
+        ["'We want a dashboard.'", "Six layers, four jobs underneath, about eighteen people."],
+        ["'The data is in our system.'", "It is, but its meaning is in someone's head, and the system belongs to another team."],
+        ["'Just show last month's sales.'", "Which sales? Net or gross, with returns or without? Who decides?"],
+        ["'How long will it take?'", "Depends on what we find in the first three weeks."]])
+    rows = []
+    for l in LAYERS:
+        n = len(items_for(l["slug"]))
+        causes = sorted({c[0] for c in D.CAUSES if c[5] == l["slug"]})
+        rows.append([f'<a href="{BASE}layers/{l["slug"]}/"><b>{E(l["name"])}</b></a>', E(l["lede"]), cause_links(causes), f'<a href="{BASE}backlog/#area-{l["slug"]}">{n} items</a>'])
+    body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › One picture</p>
+<p class="eyebrow" style="margin-top:22px">Topic 4 · The whole picture</p>
+<h1>A data project in one picture</h1>
+<p class="lede">A client asks for a dashboard. Behind that sentence are six layers. The first belongs to other teams, the middle four are what the project builds, and the last is where people use the result. This is the non-technical map, with no tools named.</p>
+<div class="tf">
+<section id="says"><p class="eyebrow">Start here</p><h2>What the client says, and what is behind it</h2>{says}</section>
+<section id="picture"><p class="eyebrow">The map</p><h2>Six layers and four jobs underneath</h2>
+<p>Think of a city's water. The rivers belong to others. The plant treats and shapes the water. The taps are where people use it. A good water company learns how each river behaves before it lays a pipe.</p>
+{fig(d_picture(), "Click a box to open its page. In red, the way each layer usually fails.")}
+<div class="box"><b>For your role:</b> you do not build these layers. You make sure the questions are asked, the people are named and the dates are real, in every layer, early.</div></section>
+<section id="layers"><p class="eyebrow">One by one</p><h2>The layers, what fails, and what the backlog holds</h2>{table(["Layer", "In one line", "Failure causes", "Backlog"], rows)}
+<p class="note">Numbers in the failure column are the causes on {L(BASE + 'why-fail/', 'Why data projects fail')}.</p></section>
+<section id="tech"><p class="eyebrow">For your engineer</p><h2>The technical version</h2>
+<p>If you want the detail behind each layer, the technical pages are {Lx('/learn/data-systems/', 'Data systems, end to end')} and {Lx('/learn/medallion-architecture/', 'Medallion architecture')}. You do not need them for your role.</p></section>
+<div class="pn">{L(BASE + 'alignment/', '← Alignment')}{L(BASE, 'The roadmap')}{L(BASE + 'why-fail/', 'Next: why projects fail →')}</div>
+</div>"""
+    return url_path, page_shell("A data project in one picture", "The non-technical map of a data project: six layers from source systems to dashboards, four jobs underneath, who owns what, and where each layer usually fails.", url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", BASE), ("One picture", url_path)])
+
+
+def whyfail_page():
+    url_path = f"{BASE}why-fail/"
+    prevented = {}
+    for it in ITEMS:
+        for n in it[4]:
+            prevented.setdefault(n, []).append(it[0])
+    themes = ""
+    for t, tname in D.THEMES:
+        rows = []
+        for n, th, cause, punch, sign, layer, stage in D.CAUSES:
+            if th != t:
+                continue
+            ids = prevented.get(n, [])
+            links = " ".join(f'<a href="{BASE}backlog/#{i}">{i}</a>' for i in ids)
+            lay = f'<a href="{BASE}layers/{layer}/">{E(LAYER_LABEL[layer])}</a>' if layer != "start" else E("Whole project")
+            rows.append([f'<span id="c{n}"></span><b>{n}. {E(cause)}</b><br><i>{E(punch)}</i>', E(sign), lay, E(stage_word(stage)), links or "-"])
+        themes += (f'<section id="theme-{t}"><p class="eyebrow">Theme {t}</p><h2>{E(tname)}</h2>'
+                   + table(["Cause", "Early warning sign", "Where it bites", "Catch it at stage", "Prevented by (backlog items)"], rows) + "</section>")
+    jump = "".join(f'<li><a href="#theme-{t}">{t}. {E(n)}</a></li>' for t, n in D.THEMES)
+    qa = [("Is this the complete list?", "No list is complete. These twenty-eight come from the site's project pages and common project experience. Add the ones you have seen; each should get a sign, a stage and a backlog item that prevents it."),
+          ("Which causes should I watch first?", "Those in theme A and B, because they appear in the first weeks and are cheapest to find then. The fail-fast tests are built around them.")]
+    body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › Why projects fail</p>
+<p class="eyebrow" style="margin-top:22px">Topic 5 · What goes wrong</p>
+<h1>Why data projects fail</h1>
+<p class="lede">Data projects rarely fail on code. They fail on what nobody asked, who nobody named, and what nobody proved. Twenty-eight causes, in six themes. Each has an early sign, a lifecycle stage where it should be caught, and the backlog items that prevent it.</p>
+<div class="tf">
+<nav class="toc"><b>Six themes</b><ol>{jump}</ol></nav>
+<section id="spine"><p class="eyebrow">The idea</p><h2>Six ways of not knowing</h2>
+<p>Read the six themes as six questions every project must answer early: Do we know the data? Do we have the people? Do we agree? Can we prove it? Is the plan real? Can it run? A project that cannot answer one of them is already failing, even if the code is perfect.</p>
+<div class="box"><b>How to use this page:</b> each cause links to the backlog items that prevent it. Put those items in your first plan, and the cause cannot ambush you.</div></section>
+{themes}
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(qa)}</section>
+<section id="deeper"><p class="eyebrow">Go deeper</p><h2>Existing material</h2><ul>
+<li>{Lx('/how-we-work/project-management-mistakes/', 'Project management mistakes in data projects')}</li><li>{Lx('/how-we-work/estimation/', 'Estimation mistakes in data projects')}</li><li>{Lx('/learn/where-data-engineering-time-goes/', 'Where data engineering time goes')}</li></ul></section>
+<div class="pn">{L(BASE + 'picture/', '← One picture')}{L(BASE, 'The roadmap')}{L(BASE + 'ddlc/', 'Next: the lifecycle →')}</div>
+</div>"""
+    return url_path, page_shell("Why data projects fail: twenty-eight causes", "Twenty-eight causes of data project failure in six themes, each with an early warning sign, the lifecycle stage to catch it, and the backlog items that prevent it.", url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", BASE), ("Why projects fail", url_path)], qa)
+
+
+# ----------------------------------------------------------------------------- the corpus backlog page
+def corpus_page():
+    url_path = f"{BASE}backlog/"
+    sections = ""
+    for a, nm, _ in D.AREAS:
+        its = items_for(a)
+        det = ""
+        for (iid, title, seat, typ, prev, stage, applies, size, ac, evid, dep) in its:
+            acl = "<ul>" + "".join(f"<li>{E(x)}</li>" for x in ac.split("|")) + "</ul>"
+            stg = "decide" if stage <= 4 else ("deliver" if stage <= 9 else "close")
+            seats = " ".join(s.strip() for s in seat.split("+"))
+            det += (f'<details class="itm" id="{iid}" data-area="{a}" data-seat="{seats}" data-type="{typ}" data-stage="{stg}" data-app="{"always" if applies == "Always" else "cond"}">'
+                    f'<summary><span class="cid">{iid}</span><span class="ctitle">{E(title)}</span><span class="pill">{E(seat_text(seat))}</span><span class="pill">{typ}</span>'
+                    f'<span class="pill">stage {stage}</span><span class="pill">{size}</span></summary>'
+                    f'<div class="ibody"><p><b>Done when</b></p>{acl}<p><b>Evidence:</b> {E(evid)}</p><p><b>Depends on:</b> {E(dep)}</p><p><b>Stage:</b> {E(stage_word(stage))} · <b>Applies when:</b> {E(applies)}</p>'
+                    f'<p><b>Prevents causes:</b> {cause_links(prev)}</p></div></details>')
+        link = f' · <a href="{BASE}layers/{a}/">layer page</a>' if a in LAYER_LABEL and a != "start" else ""
+        sections += f'<section id="area-{a}" class="area"><h2>{E(nm)} <span class="note">({len(its)} items{link})</span></h2>{det}</section>'
+    js_items = [dict(id=i[0], title=i[1], owner=seat_text(i[2]), type=i[3], prevents=", ".join(map(str, i[4])), stage=i[5], applies=i[6], size=i[7],
+                     acceptance="; ".join(i[8].split("|")), evidence=i[9], depends=i[10], area=area_of(i[0])[1]) for i in ITEMS]
+    opts = lambda xs: "".join(f'<option value="{v}">{E(t)}</option>' for v, t in xs)
+    f_area = opts([("", "All layers")] + [(a, nm) for a, nm, _ in D.AREAS])
+    f_seat = opts([("", "Any owner"), ("BA", "BA"), ("TA", "Tech Anchor"), ("PM", "PM")])
+    f_stage = opts([("", "Any stage"), ("decide", "Decide (stages 1 to 4)"), ("deliver", "Deliver (5 to 9)"), ("close", "Close (10)")])
+    f_type = opts([("", "Any type")] + [(t, t) for t in ("Document", "Decision", "Spike", "Slice", "Run")])
+    f_app = opts([("", "Always and conditional"), ("always", "Always"), ("cond", "Only when it applies")])
+    css = """<style>
+  .tf .filters { position:sticky; top:0; z-index:5; background:#fff; border:var(--line); border-radius:var(--wob); padding:10px 14px; margin:18px 0; display:flex; flex-wrap:wrap; gap:8px 10px; align-items:center; font-size:14.5px; }
+  .tf .filters select, .tf .filters input { font:inherit; font-size:14px; border:1.5px solid var(--ink); border-radius:10px; padding:4px 8px; background:#fff; color:var(--ink); }
+  .tf .filters input { flex:1; min-width:160px; } .tf .filters button { font:inherit; font-size:14px; border:1.5px solid var(--ink); border-radius:10px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; }
+  .tf .filters .count { color:var(--muted); font-size:13.5px; margin-left:auto; }
+  .tf details.itm { border:var(--line); border-radius:12px; margin:8px 0; background:#fff; } .tf details.itm[open] { background:#FDFCF8; }
+  .tf details.itm > summary { list-style:none; cursor:pointer; padding:9px 14px; display:flex; flex-wrap:wrap; gap:6px 10px; align-items:baseline; }
+  .tf details.itm > summary::-webkit-details-marker { display:none; } .tf details.itm > summary::before { content:"›"; color:var(--faint); display:inline-block; }
+  .tf details.itm[open] > summary::before { transform:rotate(90deg); }
+  .tf .cid { font-family:var(--mono, monospace); font-size:13px; font-weight:700; } .tf .ctitle { font-weight:700; flex:1; min-width:220px; }
+  .tf .pill { font-size:12px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:0 8px; background:#fff; white-space:nowrap; }
+  .tf .ibody { padding:0 18px 10px; font-size:15px; } .tf .ibody ul { margin:4px 0 8px; }
+  .tf section.area h2 .note { font-size:14px; font-family:inherit; }
+</style>"""
+    js = """<script>
+const ITEMS = %s;
+function q(id){return document.getElementById(id)}
+function apply(){
+  const f = {area:q('f-area').value, seat:q('f-seat').value, stage:q('f-stage').value, type:q('f-type').value, app:q('f-app').value, text:q('f-text').value.toLowerCase()};
+  let shown = 0;
+  document.querySelectorAll('details.itm').forEach(d => {
+    const ok = (!f.area || d.dataset.area===f.area) && (!f.seat || d.dataset.seat.split(' ').includes(f.seat)) && (!f.stage || d.dataset.stage===f.stage)
+      && (!f.type || d.dataset.type===f.type) && (!f.app || d.dataset.app===f.app) && (!f.text || d.textContent.toLowerCase().includes(f.text));
+    d.style.display = ok ? '' : 'none'; if (ok) shown++;
+  });
+  document.querySelectorAll('section.area').forEach(s => { s.style.display = [...s.querySelectorAll('details.itm')].some(d => d.style.display !== 'none') ? '' : 'none'; });
+  q('count').textContent = shown + ' of ' + ITEMS.length + ' items';
+}
+function csv(){
+  const cols = ['id','area','title','owner','type','stage','size','applies','acceptance','evidence','depends','prevents'];
+  const esc = v => '"' + String(v).replace(/"/g,'""') + '"';
+  const rows = [cols.join(',')].concat(ITEMS.map(i => cols.map(c => esc(i[c])).join(',')));
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([rows.join('\\n')], {type:'text/csv'})); a.download = 'data-project-backlog.csv'; a.click();
+}
+['f-area','f-seat','f-stage','f-type','f-app'].forEach(i => q(i).addEventListener('change', apply)); q('f-text').addEventListener('input', apply); q('f-csv').addEventListener('click', csv);
+if (location.hash && q(location.hash.slice(1)) && q(location.hash.slice(1)).tagName === 'DETAILS') q(location.hash.slice(1)).open = true;
+apply();
+</script>""" % json.dumps(js_items, ensure_ascii=False)
+    n_by = {s: sum(1 for i in ITEMS if s in [x.strip() for x in i[2].split("+")]) for s in ("BA", "TA", "PM")}
+    qa = [("Is this a Jira backlog?", "No. It is a reusable starting list at the level of scope, between an epic and a task. Download the CSV, keep the items that apply, and split them into tasks in your own tool."),
+          ("Why do business analysts and managers own items?", "Because most of what makes a data project succeed is not engineering: owners named, definitions agreed, access raised, numbers reconciled. Those are real work and belong in the backlog.")]
+    body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › <a href="{BASE}">Data essentials</a> › Corpus backlog</p>
+<p class="eyebrow" style="margin-top:22px">Topic 13 · The reusable backlog</p>
+<h1>The corpus backlog for a data project</h1>
+<p class="lede">{len(ITEMS)} backlog items covering a data project from first brief to hand-over, by layer. Not tasks, not epics: things a BA, Tech Anchor or PM can say done about. Each has acceptance criteria, evidence, the causes it prevents, and when it applies. Filter it, download it, and trim it for your project.</p>
+<div class="tf">{css}
+<section id="how"><p class="eyebrow">How to use it</p><h2>Start with all, remove what does not apply</h2>
+<p>Copy the whole list into your tool at the start, then remove what does not apply (the 'Applies when' note says which). Items owned by BA: {n_by['BA']}, Tech Anchor: {n_by['TA']}, PM: {n_by['PM']}. Types: <b>Document</b> (write it down), <b>Decision</b> (someone decides), <b>Spike</b> (learn something risky, timeboxed), <b>Slice</b> (a thin working piece), <b>Run</b> (a repeated activity).</p>
+<div class="box"><b>Do not skip the stage 1 to 4 items.</b> They are cheap, and they prevent the causes that are most expensive later.</div></section>
+<div class="filters"><select id="f-area">{f_area}</select><select id="f-seat">{f_seat}</select><select id="f-stage">{f_stage}</select><select id="f-type">{f_type}</select><select id="f-app">{f_app}</select>
+<input id="f-text" type="search" placeholder="Search"><button id="f-csv" type="button">Download CSV</button><span class="count" id="count"></span></div>
+{sections}
+<section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(qa)}</section>
+<div class="pn">{L(BASE + 'layers/across/', '← Across everything')}{L(BASE, 'The roadmap')}{L(BASE + 'plan/', 'Next: plan and estimates →')}</div>
+{js}
+</div>"""
+    return url_path, page_shell("The corpus backlog for a data project", f"{len(ITEMS)} reusable backlog items for a data project by layer, owned by the BA, Tech Anchor or PM, each with acceptance criteria, evidence and the failure causes it prevents. Filter and download as CSV.", url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", BASE), ("Corpus backlog", url_path)], qa)
+
+
+# ----------------------------------------------------------------------------- the hub
+# (n, part, title, one idea, you will be able to, [(href, text, status)], exercise)   status: new | old | tech
+SESSIONS = [
+    (1, 1, "The cast: who is in a data project", "About eighteen people in four groups, and three seats that talk to all of them.", "Name who you must talk to, and about what.",
+     [(BASE + "cast/", "The cast and who talks to whom", "new")], "List the people on your project against the four groups. Who is missing?"),
+    (2, 1, "The three seats: BA, Tech Anchor, PM", "Each seat owns something different, and most friction is at the hand-offs.", "Say what your seat owns, what it does not, and what the other two expect of you.",
+     [(BASE + "seats/", "The three seats", "new"), ("/learn/technical-anchor/", "The technical anchor, in full", "old")], "Write what you expect from each of the other two seats. Compare with theirs."),
+    (3, 1, "Stakeholders and alignment", "Spend effort where influence is high and interest is low, and make sure everyone means the same thing.", "Map stakeholders, name decision owners, settle a definition dispute.",
+     [(BASE + "stakeholders/", "Stakeholders", "new"), (BASE + "alignment/", "Alignment", "new")], "Draw the grid for your project. Find one word two people define differently."),
+    (4, 2, "A data project in one picture", "Six layers: one we don't own, four we build, one where people use it.", "Draw the six layers from memory and say what each is for.",
+     [(BASE + "picture/", "A data project in one picture", "new"), ("/learn/data-systems/", "Data systems, end to end", "tech")], "Take a project you know. Mark which layer each problem came from."),
+    (5, 2, "Why data projects fail", "Six ways of not knowing, twenty-eight causes, each with an early sign.", "Name the six themes and spot the early sign of any cause.",
+     [(BASE + "why-fail/", "Why data projects fail", "new"), ("/how-we-work/project-management-mistakes/", "Project management mistakes", "old"), ("/how-we-work/estimation/", "Estimation mistakes", "old")], "Tick the causes you see on your project today. What is the evidence?"),
+    (6, 2, "The lifecycle (DDLC)", "Decide first, deliver in thin slices, three sign-off gates.", "Name the ten stages and say what each seat does at each.",
+     [(BASE + "ddlc/", "DDLC by seat", "new"), ("/learn/technical-anchor/", "The lifecycle in full", "tech")], "Place your project on the ten stages. Which gate is next, and who signs it?"),
+    (7, 3, "Upstream: understanding sources", "We depend on systems we don't own, and their meaning is not obvious.", "Run a source meeting and spot a missing owner.",
+     [(BASE + "layers/sources/", "Layer: Sources", "new"), ("/learn/data-systems/upstreams/questionnaire/", "Source questionnaire", "old"), ("/learn/data-systems/upstreams/", "Upstreams, in depth", "tech")], "Pick a source. Answer the four questions. What is unknown, and who could tell you?"),
+    (8, 3, "Gathering information from people and systems", "Compare what people say, what documents say and what the data shows.", "Plan an information-gathering round, and record it so it is not lost.",
+     [(BASE + "gather/", "Gather information", "new"), ("/learn/technical-anchor/discovery/", "Discovery", "old")], "Pick one number. Gather its three views. Where do they disagree?"),
+    (9, 3, "Landing and cleaning", "Keep the raw copy untouched, then clean it with written rules.", "Ask for freshness, history, rerun safety and rules for bad rows.",
+     [(BASE + "layers/landing/", "Layer: Landing", "new"), (BASE + "layers/clean/", "Layer: Clean", "new"), ("/learn/medallion-architecture/", "Medallion architecture", "tech")], "Write three cleaning rules for a customer list, and say who owns each."),
+    (10, 3, "Shaping data and defining numbers", "Choose the grain, and give every number one definition and one owner.", "Write a metric definition with an owner and a reconciliation plan.",
+     [(BASE + "layers/model/", "Layer: Model", "new"), (BASE + "layers/meaning/", "Layer: Meaning", "new"), ("/concepts/semantic-layer/", "Key idea: semantic layer", "old")], "Define 'active customer' with an owner. Do two people agree?"),
+    (11, 3, "Downstream: understanding consumers", "Name every consumer, give one door, switch off the old report.", "Build a consumer register and agree a switch-off date.",
+     [(BASE + "layers/consumers/", "Layer: People use it", "new"), ("/learn/data-systems/downstreams/", "Downstreams, in depth", "tech")], "List five consumers of a sales report and the freshness each needs."),
+    (12, 3, "What runs across everything", "Quality, security, cost and running each need an owner and a place in the backlog.", "Check a plan has items for all four, and a rehearsed failure drill.",
+     [(BASE + "layers/across/", "Across everything", "new"), ("/learn/data-systems/platform/", "The data platform, in depth", "tech")], "Who gets the 2 a.m. call on your project? Have they seen the runbook?"),
+    (13, 4, "The corpus backlog", "A reusable list of about 100 items, by layer, owned by BA, Tech Anchor and PM.", "Pull a first backlog for a new project in an afternoon.",
+     [(BASE + "backlog/", "The corpus backlog", "new")], "Filter to your seat and stage 1 to 4. Which items are missing on your project?"),
+    (14, 4, "Plan: slices, Ready and Done, estimates", "Cut in thin slices, order by risk, estimate in ranges.", "Reshape a layer-by-layer plan into slices.",
+     [(BASE + "plan/", "Plan: slices and estimates", "new"), ("/how-we-work/estimation/", "Estimation mistakes", "old")], "Take a six-month plan and cut it into three slices. What does slice 1 prove?"),
+    (15, 4, "Fail fast, risks and dependencies", "Test the most dangerous belief first, and agree the go, change or stop rule.", "Run the eight tests, keep a one-page register, review a project's documents.",
+     [(BASE + "fail-fast/", "Fail fast", "new"), ("/learn/technical-anchor/project-review/", "Project review", "old"), ("/learn/technical-anchor/project-review/checks/", "Project review: the checks", "old")], "Review one real project document with the stage checks. Count the gaps."),
+]
+PARTS = {1: ("Part A · The people and the three seats", "peri"), 2: ("Part B · Understand the project", "butter"), 3: ("Part C · Walk the layers", "mint"), 4: ("Part D · Run it with the backlog", "rose")}
+
+# marks per topic 1..15: m must, o useful, - skip
+ROLES = [("Business analyst", "mmmmmmmmommomom"), ("Tech Anchor", "mmommmmmmmmmmmm"), ("Project manager", "mmmmmmmmoooommm"), ("Delivery manager", "mmmommmoo-ommmm"),
+         ("Product owner", "oommmmooo-omomo"), ("Tester or QA", "o--mommoomm-o-o"), ("Sponsor or leader", "oommmm---omo--m")]
+MARK = {"m": ("●", "y"), "o": ("○", "p"), "-": ("", ""), "b": ("●", "y")}
+
+RULES = ["Data projects are discovery first and delivery second.",
+         "The source is the biggest unknown, and someone else owns it.",
+         "Slice thin: one source to one trusted number, then widen.",
+         "Every number has a name, a formula and an owner.",
+         "Done means the totals match a figure the business already trusts.",
+         "Raise every access and approval on day one, with a date.",
+         "Estimate in ranges, and keep effort apart from calendar time.",
+         "Say bad news early. It is the cheapest it will ever be.",
+         "Plan the running before go-live: who is alerted, who fixes it.",
+         "Switch off the old report, or you have two truths."]
+
+FORMATS = [("Weekly, 15 weeks", "One topic a week, 60 minutes: 15 for the picture, 20 for the page, 15 for the exercise, 10 for 'what will you ask on Monday?'."),
+           ("Three-day workshop", "Part A and B on day one, Part C on day two, Part D on day three, with the exercises done on your own project."),
+           ("Express, 4 hours", "Topics 4, 5, 6 and 15 only. Best for sponsors and senior leaders.")]
+
+HUB_QA = [("Do I need to know how to code?", "No. Nothing here needs code. Where a page links to technical material, it is marked optional."),
+          ("How long is the whole programme?", "Fifteen topics of about an hour. Pages can also be read alone once you have seen the big picture."),
+          ("What is the Tech Anchor?", "The person who holds the technical shape of the project together, end to end. Sometimes the title is tech lead or delivery architect. The seats page explains the role."),
+          ("Which pages are new and which already existed?", "The roadmap marks each link: 'new' was written for this programme, 'existing' is reused as it is, 'technical, optional' is for your engineers.")]
 
 
 def hub_page():
     url_path = BASE
     steps = "".join(f'<a class="p{p}" href="#s{n}"><b>{n}</b><span>{E(t)}</span></a>' for n, p, t, *_ in SESSIONS)
+    tagtxt = {"new": ("new", "new"), "old": ("existing", "old"), "tech": ("technical, optional", "old")}
     sess = ""
     cur = 0
     for n, p, t, idea, able, mats, ex in SESSIONS:
         if p != cur:
             cur = p
             sess += f'<p class="part">{PARTS[p][0]}</p>'
-        mlinks = " ".join(f'<span class="tag {"new" if s == "new" else "old"}">{"new" if s == "new" else "existing"}</span> {Lx(h, tx)}' if True else "" for h, tx, s in mats)
-        mlinks = "<br>".join(f'<span class="tag {"new" if s == "new" else "old"}">{"new" if s == "new" else "existing"}</span> {Lx(h, tx)}' for h, tx, s in mats)
+        mlinks = "<br>".join(f'<span class="tag {tagtxt[s][1]}">{tagtxt[s][0]}</span> {Lx(h, tx)}' for h, tx, s in mats)
         sess += (f'<div class="sess" id="s{n}"><h3><span class="n">{n}</span>{E(t)}</h3><dl><dt>One idea</dt><dd>{E(idea)}</dd>'
                  f'<dt>You can then</dt><dd>{E(able)}</dd><dt>Material</dt><dd>{mlinks}</dd><dt>Exercise</dt><dd>{E(ex)}</dd></dl></div>')
     role_rows = ""
     for r, marks in ROLES:
-        role_rows += f"<tr><td><b>{E(r)}</b></td>" + "".join(f'<td class="c {"y" if m == "●" else ("p" if m == "○" else "")}">{m}</td>' for m in marks) + "</tr>"
-    role_head = "<tr><th>Role</th>" + "".join(f"<th>{n}</th>" for n in range(1, 12)) + "</tr>"
+        assert len(marks) == 15, (r, marks)
+        role_rows += f"<tr><td><b>{E(r)}</b></td>" + "".join(f'<td class="c {MARK[m][1]}">{MARK[m][0]}</td>' for m in marks) + "</tr>"
+    role_head = "<tr><th>Role</th>" + "".join(f"<th>{n}</th>" for n in range(1, 16)) + "</tr>"
     rules = "".join(f"<li>{E(r)}</li>" for r in RULES)
-    fails = ""
-    for t, layer, slug in FAILS:
-        link = f'<a href="{BASE}layers/{slug}/">{E(layer)}</a>' if slug else E(layer)
-        fails += f"<tr><td><b>{E(t)}</b></td><td>{link}</td></tr>"
+    themes = "".join(f'<li><b>{t}. {E(n)}</b>: {", ".join(E(c[2]) for c in D.CAUSES if c[1] == t)[:150]}…</li>' for t, n in D.THEMES)
     fmts = table(["Format", "How it runs"], [[f"<b>{E(a)}</b>", E(b)] for a, b in FORMATS])
     gloss_ids = ["etl-elt", "medallion", "data-quality", "data-contracts", "lineage", "governance", "semantic-layer", "freshness", "backfill", "scd", "idempotency", "orchestration", "observability", "cost-drivers", "data-map", "discovery"]
     chips = "".join(f'<a href="/concepts/{c}/">{E(CARDS[c]["name"])}</a>' for c in gloss_ids if c in CARDS)
-    inv_old = [("/learn/data-systems/", "Data systems, end to end"), ("/learn/data-systems/upstreams/", "Upstreams: know your sources"), ("/learn/data-systems/upstreams/questionnaire/", "Source system questionnaire"),
-               ("/learn/data-systems/downstreams/", "Downstreams: know your consumers"), ("/learn/technical-anchor/", "The technical anchor and the project lifecycle"), ("/learn/technical-anchor/discovery/", "Discovery"),
-               ("/learn/technical-anchor/project-review/", "Project review"), ("/how-we-work/estimation/", "Estimation mistakes"), ("/how-we-work/project-management-mistakes/", "Project management mistakes"),
-               ("/how-we-work/critical-thinking/", "Critical thinking in data projects"), ("/learn/where-data-engineering-time-goes/", "Where the time goes"), ("/learn/medallion-architecture/", "Medallion architecture"),
-               ("/concepts/", "Key ideas A to Z")]
-    inv_new = [(BASE + "layers/" + l["slug"] + "/", f"Layer: {l['name']}") for l in LAYERS] + [(BASE + "ddlc/", "DDLC by role"), (BASE + "challenges/", "The hardest challenges"), (BASE + "gather/", "Gather information"), (BASE + "stakeholders/", "Stakeholders"), (BASE + "alignment/", "Alignment"), (BASE + "backlog/", "Backlog and agile"), (BASE + "fail-fast/", "Fail fast")]
-    inv = (f'<div class="cards3"><div><h3>Existing, reused as is</h3><ul>{"".join(f"<li>{Lx(h, t)}</li>" for h, t in inv_old)}</ul></div>'
-           f'<div><h3>New, written for this programme</h3><ul>{"".join(f"<li>{Lx(h, t)}</li>" for h, t in inv_new)}</ul></div></div>')
+    inv_old = [("/learn/technical-anchor/", "The technical anchor and the lifecycle"), ("/learn/technical-anchor/discovery/", "Discovery"), ("/learn/technical-anchor/project-review/", "Project review"),
+               ("/how-we-work/estimation/", "Estimation mistakes"), ("/how-we-work/project-management-mistakes/", "Project management mistakes"), ("/how-we-work/critical-thinking/", "Critical thinking"),
+               ("/learn/data-systems/upstreams/questionnaire/", "Source system questionnaire"), ("/concepts/", "Key ideas A to Z")]
+    inv_tech = [("/learn/data-systems/", "Data systems, end to end"), ("/learn/data-systems/upstreams/", "Upstreams, in depth"), ("/learn/data-systems/downstreams/", "Downstreams, in depth"), ("/learn/medallion-architecture/", "Medallion architecture")]
+    new_pages = [("cast", "The cast"), ("seats", "The three seats"), ("stakeholders", "Stakeholders"), ("alignment", "Alignment"), ("picture", "One picture"), ("why-fail", "Why projects fail"), ("ddlc", "DDLC by seat")]
+    new_pages = [(BASE + a + "/", b) for a, b in new_pages] + [(BASE + "layers/" + l["slug"] + "/", f"Layer: {l['name']}") for l in LAYERS] + [(BASE + "gather/", "Gather information"), (BASE + "backlog/", "The corpus backlog"), (BASE + "plan/", "Plan and estimates"), (BASE + "fail-fast/", "Fail fast")]
+    inv = (f'<div class="cards3"><div><h3>New, written for this programme</h3><ul>{"".join(f"<li>{Lx(h, t)}</li>" for h, t in new_pages)}</ul></div>'
+           f'<div><h3>Existing, reused</h3><ul>{"".join(f"<li>{Lx(h, t)}</li>" for h, t in inv_old)}</ul></div>'
+           f'<div><h3>Technical, optional</h3><ul>{"".join(f"<li>{Lx(h, t)}</li>" for h, t in inv_tech)}</ul></div></div>')
     body = f"""<p class="crumbs"><a href="/">Home</a> › <a href="/how-we-work/">How we work</a> › Data essentials</p>
-<p class="eyebrow" style="margin-top:22px">Roadmap · for business analysts, project and delivery managers, product owners, testers and sponsors</p>
+<p class="eyebrow" style="margin-top:22px">Roadmap · for business analysts, tech anchors, project and delivery managers, product owners, testers and sponsors</p>
 <h1>Data project essentials, for non-technical roles</h1>
-<p class="lede">How a data project is run from the first source system to the last dashboard, what matters in each layer, what makes it fail, and how to plan, staff and steer it. No code. Eleven sessions, one idea each, with a picture for every idea.</p>
+<p class="lede">How a data project is run, from a client's first request to the last dashboard: who does what, what goes wrong, what to ask in each layer, and a reusable backlog. No code. Fifteen topics, one idea each, with a picture for every idea.</p>
 <div class="tf">
-<nav class="toc"><b>On this page</b><ol><li><a href="#picture">The whole picture</a></li><li><a href="#roadmap">The roadmap: 11 sessions</a></li><li><a href="#roles">Which sessions for which role</a></li><li><a href="#matters">What matters most: ten sentences</a></li><li><a href="#fails">Why data projects fail</a></li><li><a href="#formats">How to run it</a></li><li><a href="#words">Words you will hear</a></li><li><a href="#material">All the material</a></li></ol></nav>
-<section id="picture"><p class="eyebrow">Start here</p><h2>The whole data project on one page</h2>
-<p>A client says: 'We want to see our numbers in a dashboard.' Behind that sentence are six layers. The first belongs to other teams, the middle four are what the project builds, and the last is where people use the result. Under all of them run four jobs that nobody sees until they fail. Each box opens its own page.</p>
-{fig(d_picture(), "Six layers, four jobs underneath, and in red the way each one usually fails. Click a box.")}
-<div class="box"><b>For your role:</b> you do not build these layers. You make sure the questions are asked, the people are named, and the dates are real, in every layer, early.</div></section>
-<section id="roadmap"><p class="eyebrow">The roadmap</p><h2>Eleven sessions in three parts</h2>
-<p>Each session is about an hour and teaches one idea with one picture. Part 1 gives the whole picture, the project lifecycle and the hardest challenges. Part 2 walks the layers, one at a time, upstream first and downstream last. Part 3 is about running the project: people and alignment, plan, and risk.</p>
+<div class="box"><b>The idea in one line:</b> data projects rarely fail on code. They fail on what nobody asked, who nobody named, and what nobody proved.</div>
+<nav class="toc"><b>On this page</b><ol><li><a href="#roadmap">The roadmap: 15 topics in 4 parts</a></li><li><a href="#roles">Which topics for which role</a></li><li><a href="#matters">Ten sentences to remember</a></li><li><a href="#fails">Why projects fail, in six themes</a></li><li><a href="#formats">How to run it</a></li><li><a href="#words">Words you will hear</a></li><li><a href="#material">All the material</a></li></ol></nav>
+<section id="roadmap"><p class="eyebrow">The roadmap</p><h2>Fifteen topics in four parts</h2>
+<p>Part A is about people: who is in a data project, and what the BA, Tech Anchor and PM seats own. Part B gives the picture, why projects fail and the lifecycle. Part C walks the layers, upstream first and downstream last. Part D is the reusable backlog, the plan and fail fast.</p>
 <div class="steps">{steps}</div>
 {sess}</section>
-<section id="roles"><p class="eyebrow">Which sessions for which role</p><h2>Everyone starts with 1 and 2</h2>
+<section id="roles"><p class="eyebrow">Which topics for which role</p><h2>Everyone starts with 1, 2 and 4</h2>
 <div class="tw"><table class="t">{role_head}{role_rows}</table></div>
-<p class="note">● the session is for your role, ○ useful, a dash means you can skip it. Green is must, yellow is useful.</p></section>
+<p class="note">● the topic is for your role (green), ○ useful (yellow), blank: you can skip it.</p></section>
 <section id="matters"><p class="eyebrow">What matters most</p><h2>Ten sentences to remember</h2><ol class="rules">{rules}</ol></section>
-<section id="fails"><p class="eyebrow">What makes a data project fail</p><h2>Eight ways, and where each lives</h2>
-<div class="tw"><table class="t"><tr><th>How it fails</th><th>Where to read about it</th></tr>{fails}</table></div>
-<p>The full list of the ten hardest challenges is on {Lx(BASE + 'challenges/', 'its own page')}. The two ways that belong to the whole project are covered in {Lx('/how-we-work/project-management-mistakes/', 'Project management mistakes')} and {Lx('/how-we-work/estimation/', 'Estimation mistakes')}.</p></section>
+<section id="fails"><p class="eyebrow">What makes a data project fail</p><h2>Six ways of not knowing</h2>
+<ul>{themes}</ul><p>The full list, with early signs and what prevents each, is on {L(BASE + 'why-fail/', 'Why data projects fail')}.</p></section>
 <section id="formats"><p class="eyebrow">How to run it</p><h2>Three formats</h2>{fmts}</section>
-<section id="words"><p class="eyebrow">Words you will hear</p><h2>Short ideas, one page each</h2><p>Each is a one-page card with an example and the usual mistake.</p><div class="chips">{chips}</div></section>
-<section id="material"><p class="eyebrow">All the material</p><h2>What exists, and what is new</h2>{inv}</section>
+<section id="words"><p class="eyebrow">Words you will hear</p><h2>Short ideas, one page each</h2><div class="chips">{chips}</div></section>
+<section id="material"><p class="eyebrow">All the material</p><h2>What is new, what exists, what is technical</h2>{inv}</section>
 <section id="faq"><p class="eyebrow">FAQ</p><h2>Questions people ask</h2>{C.faq(HUB_QA)}</section>
 </div>"""
     title = "Data project essentials for non-technical roles"
-    desc = ("An eleven-session roadmap for business analysts, project and delivery managers and product owners: how a data project runs from source systems to dashboards, "
-            "what matters in each layer, what makes it fail, stakeholders, backlog, estimates and fail fast.")
+    desc = ("A fifteen-topic roadmap for business analysts, tech anchors and project managers: who does what in a data project, why projects fail, what to ask in each layer, "
+            "and a reusable backlog from first request to hand-over.")
     return url_path, page_shell(title, desc, url_path, body, [("How we work", "/how-we-work/"), ("Data essentials", url_path)], HUB_QA)
 
 
 def main():
-    pages = [hub_page(), ddlc_page(), challenges_page(), gather_page(), alignment_page(), stakeholders_page(), backlog_page(), fail_fast_page()] + [layer_page(i) for i in range(len(LAYERS))]
+    pages = [hub_page(), cast_page(), seats_page(), stakeholders_page(), alignment_page(), picture_page(), whyfail_page(), ddlc_page(), gather_page(), corpus_page(), plan_page(), fail_fast_page()] + [layer_page(i) for i in range(len(LAYERS))]
     for rel, html in pages:
         write(rel, html)
 
