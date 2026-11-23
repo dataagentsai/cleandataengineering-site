@@ -204,6 +204,8 @@ SECTIONS = [
             ("Frontier AI roadmaps: four roles", "/learn/frontier-ai-roadmaps/"),
             ("Eval Harness", "/learn/eval-harness/"),
             ("Agent guardrails", "/learn/agent-guardrails/"),
+            ("Responsible AI, explained", "/learn/responsible-ai/"),
+            ("AI ops dashboard: seven sample views", "/learn/ai-ops-dashboard/"),
             ("AI governance: running AI you can trust", "/learn/ai-governance/"),
             ("AI gateways: which one to use", "/learn/ai-gateways/"),
             ("Open spec: AI Assurance Catalog", "https://dataagentsai.github.io/ai-assurance-catalog/"),
