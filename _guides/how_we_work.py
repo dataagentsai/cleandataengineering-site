@@ -23,6 +23,16 @@ URL = f"{SITE}/how-we-work/"
 
 # (id, title, one line, [(name, href, text)], [concept ids], what is coming)
 SECTIONS = [
+    ("essentials", "Data project essentials", "The roadmap for business analysts, project and delivery managers and product owners: eleven sessions, one idea each, all in pictures.", [
+        ("The roadmap: 11 sessions", "/how-we-work/data-essentials/", "The whole data project on one page, the sessions, who needs which, and every page behind them."),
+        ("The data development lifecycle by role", "/how-we-work/data-essentials/ddlc/", "Ten stages, three gates, what each role does and what goes wrong."),
+        ("The hardest challenges", "/how-we-work/data-essentials/challenges/", "Ten things that make data projects fail, with early signs."),
+        ("Gather information from people and systems", "/how-we-work/data-essentials/gather/", "Compare what people say, what documents say and what the data shows."),
+        ("Stakeholders", "/how-we-work/data-essentials/stakeholders/", "Who matters, who decides, and a weekly note that tells the truth."),
+        ("Alignment", "/how-we-work/data-essentials/alignment/", "Five places people drift apart, and six habits that keep them together."),
+        ("Backlog and agile", "/how-we-work/data-essentials/backlog/", "Thin slices, risk first, ready and done for data."),
+        ("Fail fast", "/how-we-work/data-essentials/fail-fast/", "Eight cheap tests and the go, change or stop rule."),
+    ], [], ""),
     ("thinking", "Thinking principles", "How we decide: the habits behind every design on this site.", [
         ("Questions first, then design", "/learn/data-systems/", "Every page here starts from the questions to chase, then the decisions; the Data systems pages show the pattern."),
         ("Critical thinking in data projects", "/how-we-work/critical-thinking/", "Five habits for claims, numbers and designs: what exactly is claimed, what is the evidence, what else explains it, what would prove it wrong, what does it cost to be wrong."),

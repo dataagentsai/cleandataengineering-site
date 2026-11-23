@@ -247,6 +247,19 @@ SECTIONS = [
         ("All projects to join", "/projects/", []),
     ]),
     ("How we work", [
+        ("Data project essentials", "/how-we-work/data-essentials/", [
+            ("The roadmap: 11 sessions", "/how-we-work/data-essentials/"),
+            ("DDLC by role", "/how-we-work/data-essentials/ddlc/"),
+            ("The hardest challenges", "/how-we-work/data-essentials/challenges/"),
+            ("Upstream: sources", "/how-we-work/data-essentials/layers/sources/"),
+            ("Gather information", "/how-we-work/data-essentials/gather/"),
+            ("The layers: landing to people use it", "/how-we-work/data-essentials/layers/landing/"),
+            ("Across everything", "/how-we-work/data-essentials/layers/across/"),
+            ("Stakeholders", "/how-we-work/data-essentials/stakeholders/"),
+            ("Alignment", "/how-we-work/data-essentials/alignment/"),
+            ("Backlog and agile", "/how-we-work/data-essentials/backlog/"),
+            ("Fail fast", "/how-we-work/data-essentials/fail-fast/"),
+        ]),
         ("Thinking principles", "/how-we-work/#thinking", [
             ("All thinking principles", "/how-we-work/#thinking"),
             ("Critical thinking in data projects", "/how-we-work/critical-thinking/"),
