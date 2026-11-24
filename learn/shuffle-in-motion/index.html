@@ -1,0 +1,505 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Shuffle in Motion: Watch a Spark Join Hit Data Skew</title>
+<meta name="description" content="A live animation of a Spark join. Watch rows shuffle to executors by key, see one hot key stall the whole stage, then compare salting, broadcast and adaptive skew handling."><link rel="canonical" href="https://cleandataengineering.ai/learn/shuffle-in-motion/">
+<meta property="og:title" content="Shuffle in Motion: Watch a Spark Join Hit Data Skew"><meta property="og:description" content="A live animation of a Spark join. Watch rows shuffle to executors by key, see one hot key stall the whole stage, then compare salting, broadcast and adaptive skew handling."><meta property="og:url" content="https://cleandataengineering.ai/learn/shuffle-in-motion/">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,600;9..40,700&family=Patrick+Hand&family=JetBrains+Mono:wght@500&display=swap">
+<link rel="alternate" type="application/rss+xml" title="Clean Data Engineering · Writing" href="/writing/feed.xml">
+<style>
+  /* Clean Data Engineering: white, soothing, hand-drawn. Light only, on purpose. */
+  :root {
+    color-scheme: light;
+    --paper:#FFFFFF; --surface:#FFFFFF; --surface-2:#F7F6F2;
+    --ink:#1F1F1F; --ink-soft:#3D3D3D; --muted:#555555; --faint:#8A8A8A;
+    --rule:#ECE9E2; --rule-firm:#CFCAC0;
+    --accent:#3B4F8F; --accent-wash:#F1F4FB;
+    --peri:#A3B5DF; --peri-wash:#F1F4FB; --butter:#FFD98A; --butter-wash:#FFF8E8;
+    --rose:#E6BFD2; --rose-wash:#FCF2F7; --mint:#B9DFC8; --mint-wash:#F0F8F3;
+    --lilac:#CDBFE6; --lilac-wash:#F6F2FC; --sky:#AED9E8; --sky-wash:#EFF8FB;
+    --hand:"Patrick Hand","Comic Sans MS",cursive;
+    --sans:"DM Sans",ui-sans-serif,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;
+    --serif:var(--sans);
+    --mono:"JetBrains Mono",ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    --line:1.5px solid var(--ink);
+    --wob:255px 18px 225px 18px/18px 225px 18px 255px;
+  }
+  * { box-sizing:border-box; }
+  html { color-scheme:light; background:#FFFFFF; }
+  body { margin:0; background:#FFFFFF; color:var(--ink); font-family:var(--sans); font-size:17px; line-height:1.65; -webkit-font-smoothing:antialiased; }
+  .wrap { max-width:860px; margin:0 auto; padding:0 20px; }
+  a { color:var(--accent); text-underline-offset:3px; }
+
+  header { padding:26px 0 0; }
+  nav { display:flex; align-items:baseline; gap:6px 18px; flex-wrap:wrap; }
+  .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; }
+  nav a.n { font-size:14.5px; color:var(--muted); text-decoration:none; }
+  nav a.n:hover { color:var(--ink); text-decoration:underline; text-decoration-style:wavy; }
+
+  h1, h2, h3 { font-family:var(--hand); font-weight:400; letter-spacing:0; }
+  .hero { padding:52px 0 8px; }
+  .hero.art-hero { display:grid; grid-template-columns:1fr 1fr; gap:36px; align-items:center; }
+  h1 { font-size:clamp(40px,6vw,58px); line-height:1.05; margin:0 0 18px; }
+  .thesis { font-size:19px; line-height:1.6; color:var(--ink-soft); }
+  .thesis em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .art svg { width:100%; height:auto; display:block; }
+
+  section { padding:48px 0 0; margin-top:48px; border-top:1.5px dashed var(--rule-firm); }
+  h2 { font-size:34px; line-height:1.15; margin:0 0 10px; }
+  .eyebrow { font-family:var(--sans); font-size:12px; font-weight:700; letter-spacing:.14em; text-transform:uppercase; color:var(--faint); margin:0 0 6px; }
+  p { margin:0 0 16px; }
+
+  .questions { display:grid; grid-template-columns:repeat(auto-fit,minmax(180px,1fr)); gap:12px; margin:22px 0 0; }
+  .q { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .q b { display:block; font-family:var(--hand); font-size:22px; font-weight:400; color:var(--ink); margin-bottom:2px; }
+  .q span { font-size:14.5px; color:var(--muted); line-height:1.5; }
+  a.q { text-decoration:none; color:inherit; }
+
+  .standards { display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:18px; margin-top:22px; }
+  .std { background:var(--peri-wash); border:var(--line); border-radius:var(--wob); padding:18px 22px; display:flex; flex-direction:column; }
+  #learn .std { background:var(--mint-wash); }
+  .std h3 { font-size:25px; margin:0 0 2px; color:var(--ink); }
+  .std .v { font-family:var(--mono); font-size:11.5px; color:var(--faint); margin-bottom:8px; }
+  .std p { font-size:15px; color:var(--ink-soft); margin:0 0 12px; line-height:1.55; }
+  .std .links { font-size:14.5px; margin-top:auto; display:flex; gap:14px; flex-wrap:wrap; }
+  .std .doi { font-family:var(--mono); font-size:11.5px; color:var(--faint); }
+
+  .research { background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:22px 26px; margin-top:22px; }
+  .research h3 { font-size:25px; margin:0 0 8px; }
+  .research p, .research li { font-size:15.5px; color:var(--ink-soft); line-height:1.6; }
+  .research ol { margin:0 0 14px; padding-left:20px; } .research li { margin:4px 0; }
+  .status { display:inline-block; font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; color:var(--ink); background:var(--butter); border:1.5px solid var(--ink); padding:1px 10px; border-radius:999px; vertical-align:middle; }
+
+  ul.posts { list-style:none; margin:20px 0 0; padding:0; }
+  ul.posts li { padding:14px 0; border-bottom:1.5px dashed var(--rule); }
+  ul.posts li:first-child { border-top:1.5px dashed var(--rule); }
+  ul.posts .t { font-size:18px; font-weight:600; color:var(--ink); display:block; text-decoration:none; }
+  ul.posts a.t:hover { text-decoration:underline; text-decoration-style:wavy; }
+  ul.posts .d { font-family:var(--sans); font-size:13px; color:var(--faint); display:block; margin-top:3px; }
+
+  .picker { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; margin:18px 0 0; font-size:16px; background:var(--butter-wash); border:var(--line); border-radius:var(--wob); padding:14px 18px; }
+  .picker label { display:flex; gap:8px; align-items:center; }
+  .picker select { font:inherit; font-size:15.5px; border:1.5px solid var(--ink); border-radius:10px; padding:5px 8px; background:#fff; color:var(--ink); max-width:100%; }
+  .picker button { font:inherit; font-weight:700; font-size:15.5px; border:1.5px solid var(--ink); border-radius:var(--wob); padding:6px 16px; background:var(--ink); color:#fff; cursor:pointer; }
+  .roles { display:grid; grid-template-columns:repeat(auto-fit,minmax(250px,1fr)); gap:14px; margin-top:22px; }
+  .role { border:var(--line); border-radius:var(--wob); padding:16px 20px; background:var(--wash); display:flex; flex-direction:column; }
+  .role h3 { font-size:25px; margin:0 0 4px; } .role h3 a { color:var(--ink); text-decoration:none; }
+  .role p { font-size:15px; color:var(--ink-soft); margin:0 0 10px; line-height:1.5; }
+  .role .lv { display:flex; gap:8px; flex-wrap:wrap; margin-top:auto; }
+  .role .lv a { font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:1px 12px; background:#fff; color:var(--ink); text-decoration:none; }
+  .role .pl { font-size:13px; color:var(--faint); margin-top:10px; } .role .pl a { color:var(--muted); }
+
+  footer { border-top:1.5px dashed var(--rule-firm); margin-top:64px; padding:26px 0 56px; font-size:14px; color:var(--faint); }
+  footer a { color:var(--muted); }
+  .art img { width:100%; height:auto; display:block; }
+  .spot { float:right; width:min(270px,40%); height:auto; margin:-18px 0 12px 26px; }
+  .hub-hero { display:grid; grid-template-columns:1.2fr .8fr; gap:30px; align-items:center; }
+  .hub-hero img { width:100%; height:auto; }
+  section::after { content:""; display:block; clear:both; }
+  @media (max-width:760px) { .hero.art-hero, .hub-hero { grid-template-columns:1fr; } .art { max-width:440px; } .spot { width:42%; } }
+</style>
+</head><body>
+<header>
+  <div class="wrap">
+    <style>
+  .topbar { display:flex; align-items:center; gap:10px; padding:4px 0; }
+  .topbar .brand { font-family:var(--hand); font-size:25px; color:var(--ink); text-decoration:none; margin-right:auto; line-height:1.2; }
+  .topbar .lnk { font-size:14.5px; color:var(--ink-soft); text-decoration:none; padding:4px 6px; }
+  .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
+  .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
+  .topbar .act.dark { background:var(--ink); color:#fff; }
+  .sxbtn { font:inherit; font-size:14px; color:var(--ink-soft); border:1.5px solid var(--rule-firm); border-radius:999px; padding:4px 12px; background:#fff; cursor:pointer; white-space:nowrap; }
+  .sxbtn:hover { border-color:var(--ink); } .sxbtn kbd { font:inherit; font-size:12px; color:var(--faint); margin-left:6px; }
+  .sx-modal { display:none; position:fixed; inset:0; z-index:100; } .sx-modal.open { display:block; }
+  .sx-bg { position:absolute; inset:0; background:rgba(0,0,0,.28); }
+  .sx-panel { position:relative; margin:7vh auto 0; width:min(720px,94vw); max-height:84vh; display:flex; flex-direction:column; background:#fff; border:1.5px solid var(--ink); border-radius:16px; box-shadow:5px 5px 0 var(--ink); padding:14px; font-family:var(--sans); }
+  #sx-page .sx-list { max-height:none; }
+  .sx-box { display:flex; gap:8px; } .sx-in { flex:1; font:inherit; font-size:17px; padding:10px 14px; border:1.5px solid var(--ink); border-radius:12px; outline:none; background:var(--butter-wash); }
+  .sx-x { font:inherit; font-size:12px; border:1.5px solid var(--rule-firm); background:#fff; border-radius:8px; padding:0 10px; cursor:pointer; color:var(--faint); }
+  .sx-chips { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 2px; } .sx-chips button { font:inherit; font-size:13px; border:1.5px solid var(--rule-firm); background:#fff; border-radius:999px; padding:2px 10px; cursor:pointer; color:var(--ink-soft); }
+  .sx-chips button.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .sx-list { overflow-y:auto; margin-top:6px; } .sx-hint { color:var(--muted); margin:14px 4px; font-size:15px; }
+  a.sx-r { display:block; padding:9px 12px; border-radius:10px; text-decoration:none; color:var(--ink); border:1.5px solid transparent; }
+  a.sx-r:hover, a.sx-r.on { background:var(--peri-wash); border-color:var(--rule-firm); }
+  .sx-t { font-weight:700; font-size:16px; } .sx-s { margin-left:8px; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); }
+  .sx-e { display:block; font-size:14px; color:var(--muted); line-height:1.5; margin-top:2px; } .sx-e mark { background:var(--butter); color:var(--ink); border-radius:3px; padding:0 1px; }
+  .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
+  .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
+    border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
+  .sidepanel .sbrand { font-family:var(--hand); font-size:22px; color:var(--ink); text-decoration:none; display:block; margin:0 0 6px 8px; }
+  .sidepanel h4 { font-family:var(--sans); font-size:11.5px; font-weight:700; letter-spacing:.13em; text-transform:uppercase; color:var(--faint); margin:18px 0 4px 8px; }
+  .sidepanel ul { list-style:none; margin:0; padding:0; } .sidepanel li { margin:0; }
+  .sidepanel a { display:block; padding:4px 8px; border-radius:9px; color:var(--ink); text-decoration:none; }
+  .sidepanel a:hover { background:var(--peri-wash); }
+  .sidepanel a.on { background:var(--ink); color:#fff; }
+  .sidepanel details > summary { list-style:none; display:flex; align-items:center; cursor:pointer; }
+  .sidepanel details > summary::-webkit-details-marker { display:none; }
+  .sidepanel details > summary a { flex:1; }
+  .sidepanel details > summary::after { content:"›"; font-size:17px; color:var(--faint); padding:0 6px; transition:transform .15s; }
+  .sidepanel details[open] > summary::after { transform:rotate(90deg); }
+  .sidepanel details ul { margin:0 0 4px 12px; border-left:1.5px dashed var(--rule-firm); padding-left:4px; font-size:13.5px; }
+  .sidepanel li.cap { margin-left:12px; border-left:1.5px dashed var(--rule-firm); padding-left:2px; }
+  .sidepanel li.sub { font-size:10.5px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); padding:9px 8px 2px; }
+  .sidepanel .close { display:none; }
+  .scrim { display:none; }
+  @media (min-width:900px) {
+    body { padding-left:248px; }
+    .menubtn { display:none; } .topbar .brand { visibility:hidden; }
+  }
+  @media (max-width:899px) {
+    .sidepanel { display:none; width:min(300px,86vw); box-shadow:4px 0 0 var(--ink); border-right:1.5px solid var(--ink); }
+    .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
+    .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
+  }
+  @media (max-width:640px) { .sxbtn kbd { display:none; } .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+</style>
+    <nav class="topbar" aria-label="Site"><button class="menubtn" id="menubtn" aria-label="Open menu">☰ Menu</button><a class="brand" href="/">Clean Data Engineering</a><button class="sxbtn" type="button" aria-label="Search the site">🔍 Search<kbd>/</kbd></button><a class="lnk" href="/certifications/">Certifications</a><a class="lnk" href="/writing/">Blog</a><a class="act" href="/paths/">Find my path</a><a class="act dark" href="/leaders/">For leaders</a></nav>
+    <aside class="sidepanel" id="sidepanel" aria-label="Site sections"><button class="close" aria-label="Close menu">×</button><a class="sbrand" href="/">Clean Data Engineering</a><h4>Concepts</h4><ul><li><details><summary><a href="/leaders/">For leaders</a></summary><ul><li><a href="/leaders/">The one-minute version</a></li><li><a href="/leaders/#questions">Questions leaders ask</a></li><li><a href="/leaders/spec-driven/">Spec-driven development: agents</a></li><li><a href="/leaders/spec-driven/data-platform/">Spec-driven development: data platforms</a></li><li><a href="/papers/">Technical papers</a></li></ul></details></li><li><details><summary><a href="/learn/fundamentals/">Fundamentals</a></summary><ul><li><a href="/learn/fundamentals/">All fundamentals</a></li><li><a href="/learn/fundamentals/performance/">Performance</a></li><li><a href="/learn/fundamentals/cost/">Cost</a></li><li><a href="/learn/fundamentals/processing/">Processing</a></li><li><a href="/learn/fundamentals/security/">Security</a></li><li><a href="/learn/fundamentals/storage/">Storage</a></li><li><a href="/learn/fundamentals/database-families/">Database families</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/">Data systems</a></summary><ul><li><a href="/learn/data-systems/">The whole system, end to end</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li><li class="sub">Upstreams</li><li><a href="/learn/data-systems/upstreams/">Know your sources</a></li><li><a href="/learn/data-systems/upstreams/big-picture/">Upstreams, the big picture</a></li><li><a href="/learn/data-systems/upstreams/apis/">API sources</a></li><li><a href="/learn/data-systems/upstreams/files/">File sources</a></li><li><a href="/learn/data-systems/upstreams/joins/">Learning the joins</a></li><li><a href="/learn/data-systems/upstreams/answers/">Where the answers go</a></li><li><a href="/learn/data-systems/upstreams/questionnaire/">Source system questionnaire</a></li><li class="sub">Downstreams</li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li><details><summary><a href="/learn/data-systems/platform/">Data and AI platform</a></summary><ul><li class="sub">Conceptual architecture</li><li><a href="/learn/data-systems/platform/">The platform, whole</a></li><li><a href="/learn/data-platform-architecture/">Data platform architecture</a></li><li><a href="/learn/medallion-architecture/">Medallion architecture</a></li><li><a href="/learn/real-time-analytics/">Real-time analytics</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#hops">Data engineering</a></summary><ul><li><a href="/learn/data-platform-suite/">Our platform, picture to code</a></li><li class="sub">The hops</li><li><a href="/learn/data-platform-architecture/ingestion/">Hop 1: sources to bronze</a></li><li><a href="/learn/data-platform-architecture/bronze-to-silver/">Hop 2: bronze to silver</a></li><li><a href="/learn/data-platform-architecture/gold/">Hop 3: silver to gold</a></li><li><a href="/learn/data-platform-architecture/metadata-store/">The metadata store</a></li><li class="sub">Tables and formats</li><li><a href="/learn/delta-vs-iceberg/">Delta vs Iceberg</a></li><li><a href="/learn/row-vs-column-storage/">Row vs column storage</a></li><li><a href="/learn/how-delta-works/">How reads and writes work: Delta and Spark</a></li><li><a href="/learn/table-maintenance/">Who maintains your tables</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse: who owns the catalog?</a></li><li><a href="/learn/databricks-vs-aws-lakehouse/">AWS-native vs Databricks lakehouse</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/databricks-permissions/">Databricks permissions</a></li><li><a href="/learn/table-view-materialized-view-metric-view/">Table, view, materialized view or metric view</a></li><li><a href="/learn/materialized-views/">Databricks materialized views</a></li><li class="sub">Databricks compute and cost</li><li><a href="/learn/databricks-compute/">All compute and cost pages</a></li><li><a href="/learn/databricks-compute/cluster-architecture/">Cluster architecture, memory, machine types</a></li><li><a href="/learn/databricks-compute/warehouses-and-serverless/">SQL warehouses and serverless</a></li><li><a href="/learn/databricks-compute/choosing-compute/">Choosing compute: serverless, classic, warehouses</a></li><li><a href="/learn/databricks-compute/compute-settings/">Compute settings: warehouses, jobs, node types</a></li><li><a href="/learn/databricks-compute/cost-by-workload/">Cost map: workloads, compute and DBU rates</a></li><li><a href="/learn/databricks-compute/photon-and-caches/">Photon and every cache</a></li><li><a href="/learn/databricks-compute/how-billing-works/">How billing works: DBUs, SKUs, autoscaling</a></li><li><a href="/learn/databricks-compute/dividing-the-bill/">Dividing the bill (chargeback)</a></li><li><a href="/learn/databricks-compute/system-tables/">System tables and what reading them costs</a></li><li><a href="/learn/databricks-compute/logs-and-visibility/">Serverless visibility and logs</a></li><li><a href="/learn/databricks-compute/delta-sharing-and-regions/">Delta Sharing and cross-region cost</a></li><li><a href="/learn/databricks-compute/sharing-data-out/">Sharing data in and out (all ways)</a></li><li><a href="/learn/databricks-compute/backup-and-recovery-architecture/">Backup and recovery architecture</a></li><li><a href="/learn/databricks-compute/cost-saving-hacks/">Cost-saving hacks</a></li><li class="sub">Databricks interview prep</li><li><a href="/learn/databricks-interview/">All interview topics</a></li><li><a href="/learn/databricks-interview/delta-maintenance/">OPTIMIZE, VACUUM, compaction</a></li><li><a href="/learn/databricks-interview/table-maintenance-pictures/">Table maintenance in pictures (real runs)</a></li><li><a href="/learn/databricks-interview/clustering-and-compaction/">Compaction, partitioning, Z-order, liquid</a></li><li><a href="/learn/databricks-interview/maintenance-strategy/">Maintenance strategy: auto or scheduled</a></li><li><a href="/learn/databricks-interview/slow-writes/">Why writes are slow</a></li><li><a href="/learn/databricks-interview/backup-and-recovery-azure/">Backup and recovery on Azure</a></li><li><a href="/learn/databricks-interview/tagging-best-practices/">Tagging best practices</a></li><li><a href="/learn/databricks-interview/row-level-security/">Row-level security and masking</a></li><li><a href="/learn/databricks-interview/compute-choice/">Which compute for which job</a></li><li><a href="/learn/databricks-interview/joins/">Join types</a></li><li><a href="/learn/databricks-interview/skew-and-shuffle/">Skew, salting and shuffle</a></li><li><a href="/learn/databricks-interview/aqe-photon-po/">AQE, Photon, Predictive Optimization</a></li><li><a href="/learn/databricks-interview/cost-and-performance/">Biggest cost and performance levers</a></li><li><a href="/learn/databricks-interview/declarative-and-semantic/">What declarative means + semantic example</a></li><li><a href="/learn/databricks-interview/asset-bundles/">Asset Bundles</a></li><li><a href="/learn/databricks-interview/lakeflow-connect/">Lakeflow Connect</a></li><li><a href="/learn/databricks-interview/uniform/">UniForm</a></li><li><a href="/learn/databricks-interview/vector-search/">Vector Search</a></li><li><a href="/learn/databricks-interview/dbt-and-odcs/">dbt and ODCS</a></li><li><a href="/learn/databricks-interview/egress-and-ingress/">Egress and ingress cost</a></li><li><a href="/learn/databricks-interview/hard-problems-and-questions/">Hard problems and question bank</a></li><li class="sub">History, SCD and facts</li><li><a href="/learn/gold-data-modelling/">Gold data modelling</a></li><li><a href="/learn/silver-to-gold/">Silver to gold: the harness</a></li><li><a href="/learn/silver-to-gold/worked-example/">› Worked example (start here)</a></li><li><a href="/learn/silver-to-gold/kinds-of-fact/">› Six kinds of fact</a></li><li><a href="/learn/silver-to-gold/fact-examples/">› Fact examples in SQL</a></li><li><a href="/learn/silver-to-gold/dimension-examples/">› Dimension examples in SQL</a></li><li><a href="/learn/silver-to-gold/rulebook-harness/">› Rulebook: the harness</a></li><li><a href="/learn/spark-declarative-pipelines/">Declarative pipelines: open source vs Lakeflow</a></li><li><a href="/learn/scd2-auto-cdc-vs-pyspark/">SCD2: AUTO CDC or own PySpark?</a></li><li><a href="/learn/gold-harness-spec/">Gold harness spec: facts and SCD2</a></li><li><a href="/learn/time-travel-vs-scd2/">Time travel as SCD Type 2?</a></li><li class="sub">Streaming and real time</li><li><a href="/learn/streaming/">Streaming on AWS and Databricks</a></li><li><a href="/learn/streaming/options/">Streaming: all options</a></li><li><a href="/learn/streaming/sim/">Streaming simulator</a></li><li><a href="/learn/streaming/real-time-mode/">Databricks real time: RTM and Lakehouse//RT</a></li><li class="sub">Quality and testing</li><li><a href="/learn/shift-left/">Shift left: fail fast on data code</a></li><li><a href="/learn/data-platform-sim/data-quality/">Data quality, metadata-driven</a></li><li class="sub">Hands-on simulators</li><li><a href="/learn/data-platform-sim/">One batch through Spark and Delta</a></li><li><a href="/learn/data-platform-sim/spark/">Spark internals</a></li><li><a href="/learn/data-platform-sim/delta/">Delta Lake internals</a></li><li><a href="/learn/data-platform-sim/performance/">Spark performance: 12 problems</a></li><li><a href="/learn/data-platform-sim/problems/">Problems solved: SCD2, late data, duplicates</a></li><li class="sub">On AWS</li><li><a href="/learn/data-platform-architecture/aws-databricks/">AWS + Databricks, ETL end to end</a></li><li><a href="/learn/iceberg-lakehouse-aws-databricks/">Iceberg lakehouse on AWS: A vs B</a></li><li><a href="/learn/databricks-vs-aws-lakehouse/">AWS-native vs Databricks, all concerns</a></li><li><a href="/learn/aws-data-services/">AWS data services catalog</a></li><li class="sub">Open specs</li><li><a href="/learn/datatwin/">DataTwin</a></li><li><a href="/projects/data-eng-specs/">Clean Data Engineering specs</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/semantic-layer/">BI and analytics</a></summary><ul><li><a href="/concepts/semantic-layer/">Hop 4: the semantic layer</a></li><li><a href="/writing/genie-metric-views/">Genie and metric views</a></li><li><a href="/learn/metric-views/">Metric views, taught from zero</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/">Power BI vs Databricks AI/BI</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/power-bi/">Power BI and Fabric, in depth</a></li><li><a href="/learn/power-bi-vs-databricks-ai-bi/ai-bi/">Databricks AI/BI, in depth</a></li><li><a href="/learn/data-systems/downstreams/">Know your consumers</a></li></ul></details></li><li class="cap"><details><summary><a href="/concepts/#ml-engineering">ML</a></summary><ul><li><a href="/concepts/#ml-engineering">Key ML ideas (pages coming)</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/ai-universe/">AI</a></summary><ul><li><a href="/learn/ai-universe/">The AI Universe</a></li><li><a href="/learn/agent-harness-intro/">Agent Harness, the big picture</a></li><li><a href="/learn/agent-harness/">Agent Harness</a></li><li><a href="/learn/agent-harness-stack-map/">Agent Harness: architecture map</a></li><li><a href="/learn/drug-safety-agent-databricks/">Drug-safety agent on Databricks: the tour</a></li><li><a href="/learn/agent-frameworks/">Agent frameworks: when to use which</a></li><li><a href="/learn/which-model/">Which AI model for which job</a></li><li><a href="/learn/frontier-ai-roadmaps/">Frontier AI roadmaps: four roles</a></li><li><a href="/learn/eval-harness/">Eval Harness</a></li><li><a href="/learn/agent-guardrails/">Agent guardrails</a></li><li><a href="/learn/responsible-ai/">Responsible AI, explained</a></li><li><a href="/learn/ai-ops-dashboard/">AI ops dashboard: seven sample views</a></li><li><a href="/learn/ai-governance/">AI governance: running AI you can trust</a></li><li><a href="/learn/ai-gateways/">AI gateways: which one to use</a></li><li><a href="https://dataagentsai.github.io/ai-assurance-catalog/">Open spec: AI Assurance Catalog</a></li><li><a href="https://dataagentsai.github.io/ai-harness-catalog/">Open spec: AI Harness Catalog</a></li><li><a href="/learn/agenttwin/">Open spec: AgentTwin</a></li><li><a href="/lab/">The AgentTwin Lab</a></li><li><a href="https://github.com/dataagentsai/reference-agent">Code: Reference Agent</a></li><li><a href="https://github.com/dataagentsai/agenttwin">Code: AgentTwin library</a></li><li><a href="https://github.com/dataagentsai/eval-harness-framework">Code: Eval Harness Framework</a></li></ul></details></li><li class="cap"><details><summary><a href="/learn/data-systems/platform/#concerns">Across all of them</a></summary><ul><li><a href="/learn/data-systems/platform/#concerns">All 24 concerns</a></li><li><a href="/learn/data-platform-mind-map/">Mind map: every concern, every cloud</a></li><li><a href="/learn/data-systems/platform/layout/">Layout: catalogs and schemas</a></li><li><a href="/learn/data-systems/platform/environments/">Environments and CI/CD</a></li><li><a href="/learn/data-systems/platform/cost/">Cost and FinOps</a></li><li><a href="/learn/data-platform-architecture/testing/">Test architecture for data</a></li><li><a href="/learn/data-platform-architecture/test-strategy/">Test strategy in practice</a></li></ul></details></li><li><a href="/concepts/#a-z">Key concepts, A to Z</a></li></ul><h4>On your cloud</h4><ul><li><details><summary><a href="/platforms/databricks/">Databricks</a></summary><ul><li><a href="/platforms/databricks/#systems">Data systems</a></li><li><a href="/platforms/databricks/#de">Data engineering</a></li><li><a href="/platforms/databricks/#bi">BI and analytics</a></li><li><a href="/platforms/databricks/#ml">ML</a></li><li><a href="/platforms/databricks/#ai">AI</a></li><li><a href="/platforms/databricks/#across">Across all of them</a></li><li><a href="/platforms/databricks/#paths">Learning paths</a></li><li><a href="/platforms/databricks/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/aws/">AWS</a></summary><ul><li><a href="/platforms/aws/#systems">Data systems</a></li><li><a href="/platforms/aws/#de">Data engineering</a></li><li><a href="/platforms/aws/#bi">BI and analytics</a></li><li><a href="/platforms/aws/#ml">ML</a></li><li><a href="/platforms/aws/#ai">AI</a></li><li><a href="/platforms/aws/#across">Across all of them</a></li><li><a href="/platforms/aws/#paths">Learning paths</a></li><li><a href="/platforms/aws/#certs">Certifications</a></li><li><a href="/learn/aws-data-services/">AWS data services: all 66</a></li></ul></details></li><li><details><summary><a href="/platforms/azure/">Azure and Fabric</a></summary><ul><li><a href="/platforms/azure/#systems">Data systems</a></li><li><a href="/platforms/azure/#de">Data engineering</a></li><li><a href="/platforms/azure/#bi">BI and analytics</a></li><li><a href="/platforms/azure/#ml">ML</a></li><li><a href="/platforms/azure/#ai">AI</a></li><li><a href="/platforms/azure/#across">Across all of them</a></li><li><a href="/platforms/azure/#paths">Learning paths</a></li><li><a href="/platforms/azure/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/gcp/">Google Cloud</a></summary><ul><li><a href="/platforms/gcp/#systems">Data systems</a></li><li><a href="/platforms/gcp/#de">Data engineering</a></li><li><a href="/platforms/gcp/#bi">BI and analytics</a></li><li><a href="/platforms/gcp/#ml">ML</a></li><li><a href="/platforms/gcp/#ai">AI</a></li><li><a href="/platforms/gcp/#across">Across all of them</a></li><li><a href="/platforms/gcp/#paths">Learning paths</a></li><li><a href="/platforms/gcp/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/open/">Open source</a></summary><ul><li><a href="/platforms/open/#systems">Data systems</a></li><li><a href="/platforms/open/#de">Data engineering</a></li><li><a href="/platforms/open/#bi">BI and analytics</a></li><li><a href="/platforms/open/#ml">ML</a></li><li><a href="/platforms/open/#ai">AI</a></li><li><a href="/platforms/open/#across">Across all of them</a></li><li><a href="/platforms/open/#paths">Learning paths</a></li><li><a href="/platforms/open/#certs">Certifications</a></li></ul></details></li><li><details><summary><a href="/platforms/anthropic/">Claude (Anthropic)</a></summary><ul><li><a href="/platforms/anthropic/#ai">AI</a></li><li><a href="/platforms/anthropic/#certs">Certifications</a></li></ul></details></li><li class="cap"><details><summary><a href="/certifications/">Certifications</a></summary><ul><li><a href="/certifications/">All certifications</a></li><li><a href="/certifications/databricks-data-engineer-professional/">Databricks Data Engineer Professional prep</a></li><li><a href="/certifications/databricks-genai-engineer/">Databricks GenAI Engineer prep</a></li><li><a href="/certifications/claude-certified-architect/">Claude Certified Architect prep</a></li><li><a href="/certifications/azure-ai-engineer/">Azure AI Engineer (AI-103) prep</a></li></ul></details></li></ul><h4>Your role</h4><ul><li><a href="/paths/">Find your path</a></li><li><details><summary><a href="/data-engineering/">Data Engineering</a></summary><ul><li><a href="/data-engineering/">Start here</a></li><li><a href="/paths/data-engineering/">Learning path</a></li><li><a href="/data-engineering/#tools">Practice and simulators</a></li><li><a href="/projects/?subject=data">Projects to join</a></li><li><a href="/concepts/#data-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ai-engineering/">AI Engineering</a></summary><ul><li><a href="/paths/ai-engineering/">Learning path</a></li><li><a href="/learn/agent-harness-sim/">Simulator: Agent Harness</a></li><li><a href="/ai-engineering/vertical-agents/">Vertical agents</a></li><li><a href="/projects/?subject=ai">Projects to join</a></li><li><a href="/concepts/#ai-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/llm-engineering/">LLM Engineering</a></summary><ul><li><a href="/paths/llm-engineering/">Learning path</a></li><li><a href="/learn/frontier-ai-roadmaps/">Frontier AI roadmaps</a></li><li><a href="/learn/llm-api-sim/">Simulator: Claude API</a></li><li><a href="/projects/?subject=llm">Projects to join</a></li><li><a href="/concepts/#llm-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/ml-engineering/">ML Engineering</a></summary><ul><li><a href="/paths/ml-engineering/">Learning path</a></li><li><a href="/concepts/#ml-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/paths/software-engineering/">Software Engineering</a></summary><ul><li><a href="/paths/software-engineering/">Learning path</a></li><li><a href="/concepts/#software-engineering">Key concepts</a></li></ul></details></li><li><details><summary><a href="/forward-deployed/">Forward Deployed Engineering</a></summary><ul><li><a href="/forward-deployed/">Start here: the roadmap</a></li><li><a href="/paths/forward-deployed/">Learning path</a></li><li><a href="/concepts/#forward-deployed">Key concepts</a></li></ul></details></li><li><a href="/mindset/">Worried about AI?</a></li><li><a href="/projects/">All projects to join</a></li></ul><h4>How we work</h4><ul><li><details><summary><a href="/how-we-work/data-essentials/">Data project essentials</a></summary><ul><li><a href="/how-we-work/data-essentials/">The roadmap: 15 topics</a></li><li><a href="/how-we-work/data-essentials/programme/">The programme: 6 weeks</a></li><li><a href="/how-we-work/data-essentials/starter-kit/">The starter kit</a></li><li><a href="/how-we-work/data-essentials/cast/">The cast</a></li><li><a href="/how-we-work/data-essentials/seats/">The three seats</a></li><li><a href="/how-we-work/data-essentials/stakeholders/">Stakeholders</a></li><li><a href="/how-we-work/data-essentials/alignment/">Alignment</a></li><li><a href="/how-we-work/data-essentials/picture/">A project in one picture</a></li><li><a href="/how-we-work/data-essentials/why-fail/">Why projects fail</a></li><li><a href="/how-we-work/data-essentials/ddlc/">DDLC by seat</a></li><li><a href="/how-we-work/data-essentials/layers/sources/">Upstream: sources</a></li><li><a href="/how-we-work/data-essentials/ecosystem/">The ecosystem (big picture)</a></li><li><a href="/how-we-work/data-essentials/gather/">Gather information</a></li><li><a href="/how-we-work/data-essentials/extraction/">Extraction in depth</a></li><li><a href="/how-we-work/data-essentials/layers/landing/">Landing to people use it</a></li><li><a href="/how-we-work/data-essentials/layers/across/">Across everything</a></li><li><a href="/how-we-work/data-essentials/backlog/">The corpus backlog</a></li><li><a href="/how-we-work/data-essentials/plan/">Plan and estimates</a></li><li><a href="/how-we-work/data-essentials/reviews/">Reviews and sign-offs</a></li><li><a href="/how-we-work/data-essentials/fail-fast/">Fail fast</a></li></ul></details></li><li><details><summary><a href="/how-we-work/#thinking">Thinking principles</a></summary><ul><li><a href="/how-we-work/#thinking">All thinking principles</a></li><li><a href="/how-we-work/critical-thinking/">Critical thinking in data projects</a></li></ul></details></li><li><a href="/how-we-work/#ba">Business analysis</a></li><li><details><summary><a href="/how-we-work/#pm">Project management</a></summary><ul><li><a href="/how-we-work/#pm">All project management</a></li><li><a href="/how-we-work/estimation/">Estimation mistakes in data projects</a></li><li><a href="/how-we-work/project-management-mistakes/">Top project management mistakes</a></li><li><a href="/learn/where-data-engineering-time-goes/">Where data engineering time goes</a></li></ul></details></li><li><details><summary><a href="/learn/technical-anchor/">The technical anchor</a></summary><ul><li><a href="/learn/technical-anchor/">The role</a></li><li><a href="/learn/technical-anchor/discovery/">Discovery</a></li><li><a href="/learn/technical-anchor/project-review/">Project review</a></li><li><a href="/learn/technical-anchor/project-review/checks/">Project review: the checks</a></li><li><a href="/learn/checks-as-code/">Checks as code, and the Ops gate</a></li></ul></details></li></ul><h4>Causes and deep tech</h4><ul><li><details><summary><a href="/ai-for-cause/">AI for a cause</a></summary><ul><li><a href="/projects/babu-companion/">Babu, companion for elders</a></li><li><a href="/road-safety/">AI for road safety</a></li><li><a href="/ai-for-cause/raah/">Raah, guide for blind people</a></li></ul></details></li><li><details><summary><a href="/deep-tech/">Deep tech</a></summary><ul><li><a href="/problems/">Hard problems</a></li><li><a href="/learn/hard-problems/">Hard problems by layer</a></li><li><a href="/projects/hinglish-pretraining-data/">Hinglish pre-training data</a></li><li><a href="/projects/robotics-data-benchmark/">Robot data benchmark</a></li></ul></details></li></ul><h4>About</h4><ul><li><a href="/about/">About this site</a></li><li><a href="/about/#join">Write or teach</a></li><li><a href="/writing/">Blog</a></li><li><a href="/research/">All open specifications</a></li><li><a href="/assets/">All open-source code</a></li></ul></aside><div class="scrim" id="scrim"></div>
+    <script>
+(function(){
+  (function(){ var loaded = false;
+    function go(){ if (window.cdeSearch) return window.cdeSearch.open(); if (loaded) return; loaded = true; window.__sxOpen = true;
+      var sc = document.createElement('script'); sc.src = '/search/search.js'; document.head.appendChild(sc); }
+    document.querySelectorAll('.sxbtn').forEach(function(b){ b.onclick = function(){ if (location.pathname.indexOf('/search/') === 0) { var i = document.querySelector('.sx-in'); if (i) i.focus(); } else go(); }; });
+    if (location.pathname.indexOf('/search/') !== 0) document.addEventListener('keydown', function h(e){ var a = document.activeElement || {};
+      if (/INPUT|TEXTAREA|SELECT/.test(a.tagName) || a.isContentEditable) return;
+      if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || e.key === '/') { e.preventDefault(); document.removeEventListener('keydown', h); go(); } });
+  })();
+  var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
+  function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
+  document.getElementById('menubtn').onclick = function(){ t(true); };
+  p.querySelector('.close').onclick = s.onclick = function(){ t(false); };
+  var here = location.pathname.replace(/index\.html$/, '') + location.hash, best = null, len = 0;
+  p.querySelectorAll('a[href^="/"]').forEach(function(a){
+    var h = a.getAttribute('href');
+    if (h !== '/' && here.indexOf(h) === 0 && h.length > len) { best = a; len = h.length; }
+  });
+  if (best) { best.classList.add('on'); for (var e = best.parentElement; e && e !== p; e = e.parentElement) if (e.tagName === 'DETAILS') e.open = true;
+    if (best.getBoundingClientRect().bottom > innerHeight) best.scrollIntoView({block:'center'}); }
+})();
+</script>
+  </div>
+</header>
+<main>
+<style>
+  .dim-wide { max-width:1240px; margin:0 auto; padding:0 20px; }
+  .dim-top, .dim-body { max-width:860px; margin:0 auto; padding:0 20px; }
+  .crumbs { font-size:14px; color:var(--muted); margin:22px 0 0; }
+  .dim-h1 { font-size:clamp(38px,5.6vw,58px); line-height:1.05; margin:14px 0 14px; }
+  .dim-lede { font-size:19px; color:var(--ink-soft); line-height:1.6; max-width:760px; }
+  .dim-lede em { font-style:normal; background:linear-gradient(transparent 62%, var(--butter) 62%); }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin:26px 0 12px; }
+  .stat { border:1.5px solid var(--ink); border-radius:14px; padding:9px 12px 8px; background:#fff; box-shadow:3px 3px 0 var(--rule); }
+  .stat b { display:block; font-family:var(--hand); font-weight:400; font-size:30px; line-height:1.1; font-variant-numeric:tabular-nums; }
+  .stat span { font-size:12px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); font-weight:700; }
+  .stat.warn b { color:#C23B3B; } .stat.good b { color:#2A8A5C; }
+  .stage { position:relative; border:1.5px solid var(--ink); border-radius:20px; background:#fff; box-shadow:5px 5px 0 var(--rule); overflow:hidden; }
+  .stage:fullscreen { border-radius:0; display:flex; flex-direction:column; justify-content:center; }
+  .scroller { overflow-x:auto; }
+  #cv { display:block; width:100%; min-width:900px; aspect-ratio:1200/700; }
+  .bar { display:flex; flex-wrap:wrap; gap:10px 12px; align-items:center; padding:12px 14px; border-top:1.5px dashed var(--rule-firm); background:var(--surface-2); }
+  .bar .sp { flex:1; }
+  .lbl { font-size:12px; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); font-weight:700; }
+  .tg, .ct { font:inherit; font-size:14.5px; font-weight:700; color:var(--ink); background:#fff; border:1.5px solid var(--ink); border-radius:999px; padding:6px 14px; cursor:pointer; box-shadow:2px 2px 0 var(--rule-firm); transition:transform .12s; }
+  .tg:hover, .ct:hover { transform:translateY(-1px); }
+  .tg[aria-pressed="true"] { background:var(--butter); box-shadow:2px 2px 0 var(--ink); }
+  .skew { display:flex; align-items:center; gap:8px; }
+  .skew input { width:170px; accent-color:#C23B3B; }
+  .skew output { font-family:var(--hand); font-size:22px; min-width:48px; }
+  .hint { font-size:14px; color:var(--muted); margin:10px 2px 0; }
+  .below { display:grid; grid-template-columns:1fr 1fr; gap:18px; margin:18px 0 0; }
+  .card { border:1.5px solid var(--ink); border-radius:16px; padding:14px 16px; background:#fff; }
+  .card h3 { font-size:24px; margin:0 0 6px; line-height:1.1; }
+  #verdict { font-size:15.5px; color:var(--ink-soft); min-height:90px; }
+  table.t { width:100%; border-collapse:collapse; font-size:14.5px; margin:8px 0 4px; }
+  table.t th, table.t td { text-align:left; vertical-align:top; padding:8px 9px; border-bottom:1.5px solid var(--rule); }
+  table.t th { font-size:11.5px; letter-spacing:.08em; text-transform:uppercase; color:var(--faint); }
+  table.t td:first-child { font-weight:700; white-space:nowrap; }
+  table.t tr.cur td { background:#FFF8E3; }
+  .dim-body h2 { font-size:32px; margin:0 0 10px; }
+  .dim-body section { padding-top:40px; margin-top:44px; }
+  @media (max-width:900px) { .stats { grid-template-columns:repeat(2,1fr); } .below { grid-template-columns:1fr; } }
+</style>
+
+<div class="dim-top">
+  <p class="crumbs"><a href="/">Home</a> › <a href="/learn/">Learn</a> › Shuffle in motion</p>
+  <h1 class="dim-h1">Shuffle in motion: watch one hot key stall a whole join</h1>
+  <p class="dim-lede">To join two tables, Spark sends every row with the same key to the same executor. That is the shuffle. When one key owns most of the rows, one executor gets buried while the rest <em>sit idle</em>. Drag the skew slider, then try the four ways to fix it and compare the job times.</p>
+</div>
+
+<div class="dim-wide">
+  <div class="stats">
+    <div class="stat good"><b id="s-time">0.0s</b><span>Job time</span></div>
+    <div class="stat"><b id="s-ratio">1.0×</b><span>Slowest task vs typical</span></div>
+    <div class="stat"><b id="s-idle">0%</b><span>Executor time wasted idle</span></div>
+    <div class="stat"><b id="s-net">0</b><span>Rows sent over the network</span></div>
+  </div>
+
+  <div class="stage" id="stage">
+    <div class="scroller"><canvas id="cv" role="img" aria-label="Animated Spark join. Rows from four input partitions are sent by key to four executors. With skewed data one executor receives most rows and finishes long after the others."></canvas></div>
+    <div class="bar">
+      <span class="lbl">Skew</span>
+      <label class="skew"><input type="range" id="skew" min="0" max="90" step="5" value="70" aria-label="Share of rows with the hot key"><output id="skewout">70%</output></label>
+      <span class="lbl" style="margin-left:8px">Join strategy</span>
+      <button class="tg" data-m="plain" aria-pressed="true">Plain shuffle join</button>
+      <button class="tg" data-m="salt" aria-pressed="false">Salting</button>
+      <button class="tg" data-m="bcast" aria-pressed="false">Broadcast join</button>
+      <button class="tg" data-m="aqe" aria-pressed="false">Adaptive split</button>
+      <span class="sp"></span>
+      <button class="ct" id="b-speed">Speed 1×</button>
+      <button class="ct" id="b-run">Replay</button>
+      <button class="ct" id="b-full">Full screen</button>
+    </div>
+  </div>
+  <p class="hint">Skew is the share of rows that carry the one hot key, such as a single huge customer or a null key. Changing anything restarts the run.</p>
+
+  <div class="below">
+    <div class="card"><h3>What happened</h3><div id="verdict">Running...</div></div>
+    <div class="card"><h3>Same data, four strategies</h3>
+      <table class="t" id="res"><thead><tr><th>Strategy</th><th>Job time</th><th>Slowest vs typical</th><th>Network rows</th></tr></thead><tbody></tbody></table>
+      <p class="hint" style="margin-top:6px" id="rescap"></p>
+    </div>
+  </div>
+</div>
+
+<div class="dim-body">
+  <section>
+    <h2>The four strategies, and when to pick each</h2>
+    <table class="t">
+      <thead><tr><th>Strategy</th><th>How it works</th><th>In Spark</th><th>Verdict</th></tr></thead>
+      <tbody>
+        <tr><td>Plain shuffle join</td><td>Hash the key, send each key to one executor.</td><td>Sort-merge join, the default for two big tables.</td><td>Fine when keys are even. Breaks on one hot key, and you only find out when the stage will not finish.</td></tr>
+        <tr><td>Salting</td><td>Add a random suffix to the hot key so its rows spread over many executors. The small side is copied once per suffix.</td><td>Hand-written: add a salt column to both sides, join on key plus salt.</td><td>Works anywhere, including old Spark. Costs extra code and extra copies of the small side. Pursue only if adaptive split is not available.</td></tr>
+        <tr><td>Broadcast join</td><td>Copy the small table to every executor. The big table never moves.</td><td><code>broadcast(df)</code> hint, or automatic below <code>spark.sql.autoBroadcastJoinThreshold</code> (10 MB by default).</td><td>The best fix when the small side really is small. Skew disappears because there is no shuffle. Drop it if the small side will not fit in memory.</td></tr>
+        <tr><td>Adaptive split</td><td>After the shuffle, Spark sees one partition is far bigger than the median and splits it into smaller tasks that other executors can take.</td><td>Adaptive query execution with <code>spark.sql.adaptive.skewJoin.enabled</code> (on by default in current Spark).</td><td>Pursue first. No code change. The rows still make the trip to the hot executor first, so it is not free.</td></tr>
+      </tbody>
+    </table>
+    <p style="margin-top:14px">Simplified on purpose: 240 rows, 4 executors, equal work per row, and the second table has one row per key. Real jobs have millions of rows, but the shape of the problem is exactly this.</p>
+  </section>
+  <section>
+    <h2>Keep going</h2>
+    <p>See where this fits in <a href="/learn/how-delta-works/">how Spark and Delta work</a>, watch the whole pipeline in <a href="/learn/data-in-motion/">data in motion</a>, or see what a commit writes in <a href="/learn/delta-in-motion/">Delta in motion</a>.</p>
+  </section>
+</div>
+
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const cv = $('cv'), ctx = cv.getContext('2d');
+const W = 1200, H = 700, E = 4, N = 240, NK = 8;
+const HAND = '"Patrick Hand","Comic Sans MS",cursive', SANS = '"DM Sans",system-ui,sans-serif';
+const INK = '#1F1F1F', MUTED = '#555', FAINT = '#8A8A8A', RULE = '#CFCAC0';
+const KEYCOL = ['#D64545','#4F6FD0','#2E9E6E','#D69A12','#CF5A91','#7B5FC4','#2A9DB5','#8A6A3B'];
+const EXCOL = ['#4F6FD0','#2E9E6E','#D69A12','#CF5A91'];
+const EY = [135, 258, 381, 504], BOXH = 108;           // lane centres
+const MX = [40, 190], XX = [640, 910], GX = [950, 1180];
+const RATE = 16, TMAX = 16, LAUNCH = 26;
+const NAMES = { plain:'Plain shuffle join', salt:'Salting', bcast:'Broadcast join', aqe:'Adaptive split' };
+const VERD = { plain:'Fine when keys are even; one hot key stalls it', salt:'Works anywhere; costs code and extra copies', bcast:'Best when the small side fits in memory', aqe:'Pursue first; no code change' };
+let mode = 'plain', skew = .7, speed = 1, S = null, results = {}, resSkew = null;
+
+function rnd(seed) { let s = seed; return () => (s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296; }
+const hashEx = k => (k + 2) % E;                     // hot key 0 lands on executor 3 (index 2)
+
+function build() {
+  const hot = Math.round(N * skew), r = rnd(7), rows = [];
+  for (let i = 0; i < N; i++) rows.push({ k: i < hot ? 0 : 1 + ((i - hot) % (NK - 1)) });
+  for (let i = N - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [rows[i], rows[j]] = [rows[j], rows[i]]; }
+  const per = [0, 0, 0, 0], hotSeen = [0];
+  rows.forEach((o, i) => { o.m = i % E; o.j = per[o.m]++; o.st = 'src'; o.p = 0; o.x = 0; o.y = 0; o.fx = 0; o.fy = 0; o.delay = 0.8 + o.j / LAUNCH + r() * .15; });
+  rows.forEach(o => {
+    if (mode === 'bcast') o.d = o.m;
+    else if (mode === 'salt' && o.k === 0) o.d = (hotSeen[0]++) % E;
+    else o.d = hashEx(o.k);
+  });
+  const small = [];
+  for (let k = 0; k < NK; k++) {
+    let dsts = [hashEx(k)];
+    if (mode === 'bcast' || (mode === 'salt' && k === 0) || (mode === 'aqe' && k === 0)) dsts = [0, 1, 2, 3];
+    dsts.forEach((d, n) => small.push({ k, d, n, p: 0, st: 'src', delay: 0.9 + k * .05 + n * .04 }));
+  }
+  S = { t: 0, phase: 'map', rows, small, q: [[], [], [], []], acc: [0, 0, 0, 0], fin: [null, null, null, null], rstart: null, done: false, pops: [], processed: 0, aqeDone: false, moved: 0, doneT: 0 };
+}
+function slot(d, i) { return { x: XX[0] + 14 + (i % 34) * 7.4, y: EY[d] - BOXH / 2 + 38 + Math.floor(i / 34) * 8 }; }
+function mslot(m, j) { return { x: MX[0] + 14 + (j % 10) * 12.2, y: EY[m] - BOXH / 2 + 34 + Math.floor(j / 10) * 11 }; }
+
+function step(dt) {
+  const s = S; if (s.done) { s.pops.forEach(p => p.t += dt); s.pops = s.pops.filter(p => p.t < .6); return; }
+  s.t += dt;
+  if (s.phase === 'map' && s.t > .8) { s.phase = 'shuffle'; }
+  let inflight = 0, pending = 0;
+  if (s.phase !== 'map') {
+    for (const o of s.rows) {
+      if (o.st === 'src' && s.t >= o.delay) { const m = mslot(o.m, o.j); o.fx = m.x; o.fy = m.y; o.st = 'fly'; o.p = 0; s.q[o.d].push(o); }
+      if (o.st === 'fly') { o.p += dt / (o.d === o.m ? .5 : .95); if (o.p >= 1) { o.p = 1; o.st = 'q'; } else inflight++; }
+      if (o.st === 'src') pending++;
+    }
+    for (const c of s.small) { if (c.st === 'src' && s.t >= c.delay) c.st = 'fly'; if (c.st === 'fly') { c.p += dt / .9; if (c.p >= 1) { c.p = 1; c.st = 'q'; } else inflight++; } else if (c.st === 'src') pending++; }
+  }
+  if (s.phase === 'shuffle' && !inflight && !pending) {
+    if (mode === 'aqe' && !s.aqeDone) { s.phase = 'split'; s.aqeDone = true; splitHot(); }
+    else startReduce();
+  } else if (s.phase === 'split') {
+    inflight = s.rows.some(o => o.st === 'fly');
+    if (!inflight) startReduce();
+  }
+  if (s.phase === 'reduce') {
+    for (let d = 0; d < E; d++) {
+      const q = s.q[d]; if (s.fin[d] !== null) continue;
+      s.acc[d] += RATE * dt;
+      while (s.acc[d] >= 1 && q.length && q[0].st === 'q') { s.acc[d] -= 1; const o = q.shift(); o.st = 'done'; s.processed++; s.pops.push({ d, t: 0, k: o.k }); }
+      if (!q.length) s.fin[d] = s.t - s.rstart;
+    }
+    if (s.fin.every(f => f !== null)) finish();
+  }
+  s.pops.forEach(p => p.t += dt); s.pops = s.pops.filter(p => p.t < .6);
+}
+function startReduce() { S.phase = 'reduce'; S.rstart = S.t; S.small.forEach(c => c.st = 'q'); }
+function splitHot() {
+  const s = S, lens = s.q.map(q => q.length), med = [...lens].sort((a, b) => a - b)[Math.floor(E / 2)];
+  const hd = lens.indexOf(Math.max(...lens)), thr = Math.max(med * 2, 24);
+  if (lens[hd] <= thr) return;
+  const target = Math.round((N) / E), excess = s.q[hd].splice(target); let n = 0;
+  excess.forEach(o => {
+    let best = 0, bl = 1e9; for (let d = 0; d < E; d++) if (d !== hd && s.q[d].length < bl) { bl = s.q[d].length; best = d; }
+    const idx = s.q[hd].length; const sl = slot(hd, idx + n); o.fx = sl.x + 0; o.fy = sl.y; o.d = best; o.st = 'fly'; o.p = 0; o.moved = true; s.q[best].push(o); n++; s.moved++;
+  });
+}
+function netRows() { return S.rows.filter(o => o.d !== o.m).length + S.small.length; }
+function finish() {
+  const s = S; s.done = true; s.doneT = s.t;
+  const fin = s.fin, srt = [...fin].sort((a, b) => a - b), med = Math.max(.1, (srt[1] + srt[2]) / 2), slow = Math.max(...fin);
+  const busy = fin.reduce((a, b) => a + b, 0), idle = 1 - busy / (E * slow);
+  const sizes = [0, 0, 0, 0]; s.rows.forEach(o => sizes[o.d]++);
+  const hd = sizes.indexOf(Math.max(...sizes)), share = Math.round(100 * sizes[hd] / N);
+  s.res = { time: s.t, ratio: slow / med, idle, net: netRows(), share, hd, slow, med };
+  results[mode] = s.res; resSkew = skew; renderRes(); verdict();
+}
+function verdict() {
+  const r = S.res, v = $('verdict');
+  const tail = { plain:'This is the skew problem: the stage is only as fast as its slowest task.', salt:'Salting spread the hot key across all four executors, at the price of copying the small side four times.', bcast:'Broadcasting the small table meant the big table never moved, so there was no shuffle to skew.', aqe:'Spark noticed the oversized partition after the shuffle and split its work across the idle executors.' }[mode];
+  const lead = r.ratio > 2 ? 'Executor ' + (r.hd + 1) + ' received ' + r.share + '% of the rows and finished at ' + r.slow.toFixed(1) + 's. A typical executor finished at ' + r.med.toFixed(1) + 's.' : 'Work was spread evenly. Every executor finished at about ' + r.med.toFixed(1) + 's.';
+  v.innerHTML = '<p style="margin:0 0 8px"><b>' + NAMES[mode] + ' at ' + Math.round(skew * 100) + '% skew.</b> ' + lead + ' ' + Math.round(r.idle * 100) + '% of all executor time was wasted waiting.</p><p style="margin:0">' + tail + '</p>';
+}
+function renderRes() {
+  const tb = document.querySelector('#res tbody'); tb.innerHTML = '';
+  for (const m of ['plain', 'salt', 'bcast', 'aqe']) {
+    const r = results[m], tr = document.createElement('tr'); if (m === mode) tr.className = 'cur';
+    tr.innerHTML = '<td>' + NAMES[m] + '</td><td>' + (r ? r.time.toFixed(1) + 's' : '–') + '</td><td>' + (r ? r.ratio.toFixed(1) + '×' : '–') + '</td><td>' + (r ? r.net : '–') + '</td>';
+    tb.appendChild(tr);
+  }
+  $('rescap').textContent = 'At ' + Math.round(skew * 100) + '% skew. Try each strategy to fill the table. ' + (Object.keys(results).length ? 'Verdict on each is in the guide below.' : '');
+}
+
+// ---------- drawing ----------
+function rr(x, y, w, h, r) { ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function txt(s, x, y, size, font, color, align) { ctx.font = size + 'px ' + font; ctx.fillStyle = color || INK; ctx.textAlign = align || 'left'; ctx.fillText(s, x, y); }
+function pos(o) {
+  if (o.st === 'src') return mslot(o.m, o.j);
+  const i = S.q[o.d].indexOf(o); const tg = slot(o.d, i < 0 ? 0 : i);
+  if (o.st === 'fly') { const e = o.p < .5 ? 2 * o.p * o.p : 1 - Math.pow(-2 * o.p + 2, 2) / 2; const arc = Math.sin(o.p * Math.PI) * (o.moved ? -40 : -34 + (o.m - o.d) * 8); return { x: o.fx + (tg.x - o.fx) * e, y: o.fy + (tg.y - o.fy) * e + arc }; }
+  return tg;
+}
+function draw(time) {
+  const s = S; ctx.setTransform(cv.width / W, 0, 0, cv.width / W, 0, 0);
+  ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#EFECE5'; for (let x = 20; x < W; x += 30) for (let y = 20; y < H; y += 30) ctx.fillRect(x, y, 1.5, 1.5);
+  // phase strip
+  const steps = [['map', '1  Read'], ['shuffle', '2  Shuffle by key'], ['reduce', '3  Join'], ['done', '4  Done']];
+  const cur = s.done ? 3 : s.phase === 'map' ? 0 : s.phase === 'reduce' ? 2 : 1;
+  steps.forEach((st, i) => { const x = 40 + i * 160; rr(x, 14, 150, 30, 15); ctx.fillStyle = i === cur ? '#FFD98A' : '#F7F6F2'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = i === cur ? INK : RULE; ctx.stroke(); txt(st[1], x + 75, 35, 17, HAND, i === cur ? INK : FAINT, 'center'); });
+  if (s.phase === 'split') txt('Spark splits the oversized partition', 740, 35, 18, HAND, '#9B2D2D');
+  // key legend
+  txt('Keys (red = hot):', 690, 35, 12.5, SANS, FAINT); if (s.phase !== 'split') KEYCOL.forEach((c, k) => { rr(800 + k * 22, 27, 15, 15, 4); ctx.fillStyle = c; ctx.fill(); });
+  // mappers
+  txt('Big table, 4 input partitions', MX[0] + 75, 72, 14, HAND, MUTED, 'center');
+  for (let m = 0; m < E; m++) { rr(MX[0], EY[m] - BOXH / 2, MX[1] - MX[0], BOXH, 14); ctx.fillStyle = '#FBFBF8'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.stroke(); txt('Partition ' + (m + 1), MX[0] + 12, EY[m] - BOXH / 2 + 22, 17, HAND, INK); }
+  // small table
+  rr(MX[0], 585, MX[1] - MX[0], 90, 14); ctx.fillStyle = '#F1F4FB'; ctx.fill(); ctx.lineWidth = 1.5; ctx.strokeStyle = INK; ctx.stroke();
+  txt('Small table', MX[0] + 12, 609, 17, HAND, INK); txt('one row per key', MX[0] + 12, 627, 12, SANS, MUTED);
+  KEYCOL.forEach((c, k) => { rr(MX[0] + 14 + k * 16, 641, 11, 11, 2); ctx.strokeStyle = c; ctx.lineWidth = 2; ctx.stroke(); });
+  // shuffle label
+  ctx.save(); ctx.setLineDash([6, 8]); ctx.strokeStyle = RULE; ctx.lineWidth = 2; ctx.lineDashOffset = -time * 20; for (let d = 0; d < E; d++) { ctx.beginPath(); ctx.moveTo(MX[1], EY[d]); ctx.lineTo(XX[0], EY[d]); ctx.stroke(); } ctx.restore();
+  txt(mode === 'bcast' ? 'no shuffle: big table stays put' : 'hash(key) picks the executor', 415, 330, 20, HAND, FAINT, 'center');
+  // executors
+  txt('Executors', (XX[0] + XX[1]) / 2, 72, 14, HAND, MUTED, 'center');
+  for (let d = 0; d < E; d++) {
+    const q = s.q[d], hot = q.length > N / E * 1.8, warn = s.phase === 'reduce' && hot;
+    ctx.save(); ctx.shadowColor = 'rgba(0,0,0,.08)'; ctx.shadowBlur = 10; ctx.shadowOffsetY = 3; rr(XX[0], EY[d] - BOXH / 2, XX[1] - XX[0], BOXH, 14); ctx.fillStyle = hot ? '#FFF4F2' : '#fff'; ctx.fill(); ctx.restore();
+    rr(XX[0], EY[d] - BOXH / 2, XX[1] - XX[0], BOXH, 14); ctx.lineWidth = 1.5; ctx.strokeStyle = hot ? '#C23B3B' : INK; ctx.stroke();
+    txt('Executor ' + (d + 1), XX[0] + 12, EY[d] - BOXH / 2 + 22, 17, HAND, INK);
+    txt(q.length + ' rows waiting', XX[1] - 12, EY[d] - BOXH / 2 + 22, 12.5, SANS, hot ? '#9B2D2D' : MUTED, 'right');
+    // small-table tray
+    s.small.forEach(c => { if (c.d === d && c.st === 'q') { rr(XX[0] + 100 + c.k * 9 + c.n * 0, EY[d] - BOXH / 2 + 8, 7, 7, 1.5); ctx.strokeStyle = KEYCOL[c.k]; ctx.lineWidth = 1.5; ctx.stroke(); } });
+  }
+  // rows
+  for (const o of s.rows) {
+    if (o.st === 'done') continue; const p = pos(o);
+    if (o.st === 'q' || o.st === 'src') { o.x = p.x; o.y = p.y; } else { o.x = p.x; o.y = p.y; }
+    ctx.fillStyle = KEYCOL[o.k]; if (o.st === 'fly') { ctx.shadowColor = KEYCOL[o.k]; ctx.shadowBlur = 7; }
+    rr(o.x - 3, o.y - 3, 6.4, 6.4, 1.8); ctx.fill(); ctx.shadowBlur = 0;
+  }
+  for (const c of s.small) {
+    if (c.st === 'q') continue; const sx = MX[0] + 14 + c.k * 16, sy = 646, tx = XX[0] + 104 + c.k * 9, ty = EY[c.d] - BOXH / 2 + 12;
+    if (c.st === 'src') continue; const e = c.p * c.p * (3 - 2 * c.p), x = sx + (tx - sx) * e, y = sy + (ty - sy) * e + Math.sin(c.p * Math.PI) * -20;
+    rr(x - 4, y - 4, 8, 8, 2); ctx.strokeStyle = KEYCOL[c.k]; ctx.lineWidth = 2; ctx.stroke();
+  }
+  // pops
+  for (const p of s.pops) { const e = p.t / .6; ctx.globalAlpha = 1 - e; ctx.fillStyle = KEYCOL[p.k]; rr(XX[1] - 14 + e * 30, EY[p.d] + 18 - e * 14, 6, 6, 1.5); ctx.fill(); ctx.globalAlpha = 1; }
+  // gantt
+  txt('Time each executor is busy', (GX[0] + GX[1]) / 2, 72, 14, HAND, MUTED, 'center');
+  const gw = GX[1] - GX[0] - 20, base = GX[0] + 10, now = s.phase === 'reduce' ? s.t - s.rstart : s.done ? s.doneT - s.rstart : 0;
+  const slow = s.done ? Math.max(...s.fin) : null;
+  for (let d = 0; d < E; d++) {
+    const y = EY[d] - 14; rr(base, y, gw, 28, 8); ctx.fillStyle = '#F7F6F2'; ctx.fill();
+    const f = s.fin[d], end = f !== null ? f : now;
+    if (s.rstart !== null || s.done) {
+      rr(base, y, Math.max(2, Math.min(gw, gw * end / TMAX)), 28, 8); ctx.fillStyle = EXCOL[d]; ctx.globalAlpha = .9; ctx.fill(); ctx.globalAlpha = 1;
+      if (f !== null) { const w1 = gw * f / TMAX, w2 = gw * (slow !== null ? slow : now) / TMAX; if (w2 > w1 + 2) { ctx.save(); rr(base + w1, y, w2 - w1, 28, 8); ctx.clip(); ctx.strokeStyle = '#B8B3A7'; ctx.lineWidth = 1.5; for (let x = base + w1 - 30; x < base + w2; x += 8) { ctx.beginPath(); ctx.moveTo(x, y + 28); ctx.lineTo(x + 28, y); ctx.stroke(); } ctx.restore(); if (w2 - w1 > 50) txt('idle', base + (w1 + w2) / 2, y + 19, 14, HAND, MUTED, 'center'); } }
+    }
+    txt('Executor ' + (d + 1), base, y - 6, 12, SANS, FAINT);
+  }
+  if (s.phase === 'reduce' || s.done) { const lx = base + gw * (s.done ? slow : now) / TMAX; ctx.save(); ctx.setLineDash([4, 4]); ctx.strokeStyle = '#C23B3B'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(lx, EY[0] - 40); ctx.lineTo(lx, EY[3] + 40); ctx.stroke(); ctx.restore(); if (s.done) txt('stage ends when the slowest task ends', base + gw, EY[3] + 62, 13, HAND, '#9B2D2D', 'right'); }
+  txt('0s', base, EY[3] + 62, 12, SANS, FAINT); txt(TMAX + 's', base + gw, EY[3] + 80, 12, SANS, FAINT, 'right');
+}
+function updateUI() {
+  const s = S, el = s.done ? s.doneT : s.t;
+  $('s-time').textContent = el.toFixed(1) + 's';
+  if (s.done) { $('s-ratio').textContent = s.res.ratio.toFixed(1) + '×'; $('s-idle').textContent = Math.round(s.res.idle * 100) + '%'; $('s-ratio').parentNode.className = 'stat' + (s.res.ratio > 2 ? ' warn' : ' good'); $('s-idle').parentNode.className = 'stat' + (s.res.idle > .4 ? ' warn' : ' good'); }
+  else { $('s-ratio').textContent = '–'; $('s-idle').textContent = '–'; $('s-ratio').parentNode.className = $('s-idle').parentNode.className = 'stat'; }
+  $('s-net').textContent = s.phase === 'map' ? 0 : netRows();
+}
+
+// ---------- controls ----------
+function restart() { build(); $('verdict').textContent = 'Running...'; renderRes(); }
+document.querySelectorAll('.tg').forEach(b => b.addEventListener('click', () => { mode = b.dataset.m; document.querySelectorAll('.tg').forEach(x => x.setAttribute('aria-pressed', x === b)); restart(); }));
+$('skew').addEventListener('input', e => { skew = e.target.value / 100; $('skewout').textContent = e.target.value + '%'; results = {}; restart(); });
+$('b-run').addEventListener('click', restart);
+$('b-speed').addEventListener('click', e => { speed = speed === 1 ? 2 : speed === 2 ? 4 : 1; e.currentTarget.textContent = 'Speed ' + speed + '×'; });
+$('b-full').addEventListener('click', () => { document.fullscreenElement ? document.exitFullscreen() : $('stage').requestFullscreen && $('stage').requestFullscreen(); });
+function resize() { const r = cv.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2); cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.width * dpr * H / W); }
+window.addEventListener('resize', resize); document.addEventListener('fullscreenchange', () => setTimeout(resize, 60));
+let last = 0, ui = 0, visible = true;
+new IntersectionObserver(es => { visible = es[0].isIntersecting; }).observe(cv);
+function frame(ts) { const dt = Math.min(.05, (ts - last) / 1000 || 0); last = ts; if (visible) { const n = Math.ceil(speed); for (let i = 0; i < n; i++) step(dt * speed / n); draw(ts / 1000); ui += dt; if (ui > .15) { ui = 0; updateUI(); } } requestAnimationFrame(frame); }
+build(); resize(); renderRes();
+if (window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches) { speed = 4; $('b-speed').textContent = 'Speed 4×'; }
+if (location.hash === '#t') window.__sh = { step, build: () => build(), get S() { return S; }, set mode(m) { mode = m; }, set skew(v) { skew = v; } };
+(document.fonts && document.fonts.load ? Promise.all([document.fonts.load('17px "Patrick Hand"')]) : Promise.resolve()).catch(() => {}).then(() => requestAnimationFrame(frame));
+})();
+</script>
+
+</main>
+<footer>
+  <div class="wrap">
+    <style>.fcols{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px 20px;margin-bottom:18px}.fcols div{display:flex;flex-direction:column;gap:3px;font-size:13.5px}.fcols b{color:var(--ink)}</style>
+    <div class="fcols"><div><b>Concepts</b><a href="/leaders/">For leaders</a><a href="/learn/fundamentals/">Fundamentals</a><a href="/learn/data-systems/">Data systems</a><a href="/learn/data-systems/platform/">Data and AI platform</a><a href="/learn/data-systems/platform/#hops">Data engineering</a><a href="/concepts/semantic-layer/">BI and analytics</a><a href="/concepts/#ml-engineering">ML</a><a href="/learn/ai-universe/">AI</a><a href="/learn/data-systems/platform/#concerns">Across all of them</a><a href="/concepts/#a-z">Key concepts, A to Z</a></div><div><b>On your cloud</b><a href="/platforms/databricks/">Databricks</a><a href="/platforms/aws/">AWS</a><a href="/platforms/azure/">Azure and Fabric</a><a href="/platforms/gcp/">Google Cloud</a><a href="/platforms/open/">Open source</a><a href="/platforms/anthropic/">Claude (Anthropic)</a><a href="/certifications/">Certifications</a></div><div><b>Your role</b><a href="/paths/">Find your path</a><a href="/data-engineering/">Data Engineering</a><a href="/paths/ai-engineering/">AI Engineering</a><a href="/paths/llm-engineering/">LLM Engineering</a><a href="/paths/ml-engineering/">ML Engineering</a><a href="/paths/software-engineering/">Software Engineering</a><a href="/forward-deployed/">Forward Deployed Engineering</a><a href="/mindset/">Worried about AI?</a><a href="/projects/">All projects to join</a></div><div><b>How we work</b><a href="/how-we-work/data-essentials/">Data project essentials</a><a href="/how-we-work/#thinking">Thinking principles</a><a href="/how-we-work/#ba">Business analysis</a><a href="/how-we-work/#pm">Project management</a><a href="/learn/technical-anchor/">The technical anchor</a></div><div><b>Causes and deep tech</b><a href="/ai-for-cause/">AI for a cause</a><a href="/deep-tech/">Deep tech</a></div><div><b>About</b><a href="/about/">About this site</a><a href="/about/#join">Write or teach</a><a href="/writing/">Blog</a><a href="/research/">All open specifications</a><a href="/assets/">All open-source code</a></div></div>
+    &copy; 2026 Clean Data Engineering &middot; Everything here is free &middot;
+    <a href="https://github.com/dataagentsai">GitHub</a> &middot;
+    <a href="/writing/feed.xml">RSS</a> &middot;
+    <a href="mailto:basant@cleandataengineering.ai">basant@cleandataengineering.ai</a>
+  </div>
+</footer>
+</body></html>
