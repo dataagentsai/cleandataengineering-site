@@ -233,6 +233,8 @@ QA = [
     ("Does AWS run VACUUM on Unity Catalog tables?", "No. AWS has no say over tables Unity Catalog owns. For managed tables Databricks' Predictive Optimization does it; for external tables you schedule it yourself. AWS maintains only tables its own catalog owns: Glue Iceberg tables with optimizers on, and S3 Tables."),
     ("Is Databricks like a Snowflake virtual warehouse?", "Yes, for compute. A Databricks SQL warehouse starts, queries and stops like a Snowflake warehouse, and storage is already separate. The difference is that the storage is your own S3 bucket in open formats, not Snowflake-managed storage."),
     ("Do I need Iceberg managed by AWS to keep storage and compute separate?", "No. Unity Catalog managed tables already keep data in your bucket, separate from compute. Who maintains a table is a separate question from where it is stored."),
+    ("How do deletion vectors solve the rewrite problem?", "Instead of rewriting a whole Parquet file to remove a few rows, Delta writes a small side file marking the deleted row positions. Readers skip those rows. The physical rewrite is postponed and batched, by OPTIMIZE or a purge."),
+    ("Should I always keep deletion vectors on?", "Usually yes, with regular OPTIMIZE. Turn them off for tables read by engines that do not support them, and purge them (REORG APPLY PURGE, then VACUUM) when a delete must physically remove personal data."),
     ("Does Predictive Optimization work on external tables?", "No. It runs only on Unity Catalog managed tables, Delta and managed Iceberg. External tables need your own OPTIMIZE and VACUUM jobs."),
     ("Can Databricks write to S3 Tables or Glue Iceberg tables?", "It can read them in place through catalog federation. Writing to foreign Iceberg tables is limited, and support is changing; check the current Databricks docs. Writing with the open-source Iceberg library on a classic cluster works but skips Unity Catalog governance."),
     ("How do other engines read Unity Catalog managed tables?", "Through Unity Catalog's Iceberg REST catalog. Delta tables need Iceberg reads (UniForm) switched on; managed Iceberg tables are readable, and writable, by Iceberg engines directly."),
@@ -280,6 +282,18 @@ def page():
 <section id="chores"><p class="eyebrow">Question two</p><h2>Every table has chores</h2>
 <p>An open table gets messier with every write. Small writes leave many small files. Updates and deletes never edit a file; they write new files and mark the old ones as removed, and the old files stay on disk so you can read the table as it was last week. Someone has to tidy up. The two formats name the chores differently, but they are the same four jobs.</p>
 {fig(drawing_chores(), "Skip the chores and queries slow down while storage grows. Do them too eagerly and time travel breaks.")}</section>
+
+<section id="dv"><p class="eyebrow">A chore you can postpone</p><h2>Deletion vectors: the rewrite problem, and when to turn them off</h2>
+<p>Parquet files cannot be edited in place. Without deletion vectors, deleting or updating one row in a 1 GB file means reading the whole file and writing a new 1 GB file without that row. That is slow and costly when changes are small and scattered. With deletion vectors, Delta writes a tiny side file that records which row positions in the data file are deleted, and leaves the big file alone. Readers apply the side file and skip those rows. A delete then costs kilobytes of writing instead of a gigabyte.</p>
+<p><b>The cost is postponed, not removed.</b> The deleted rows are still physically in the old file until a later rewrite (<code>OPTIMIZE</code>, or <code>REORG TABLE ... APPLY (PURGE)</code>) removes them. By then many small changes have been batched into one rewrite.</p>
+<div class="tw"><table class="t"><tr><th>Situation</th><th>Keep deletion vectors?</th><th>Why</th></tr>
+<tr><td>Frequent small deletes, updates or merges</td><td class="v pursue">Keep (the default)</td><td>Avoids rewriting whole files on every change</td></tr>
+<tr><td>Mostly append-only table</td><td class="v">Little benefit, harmless</td><td>Nothing is deleted, so there is nothing to mark</td></tr>
+<tr><td>Read by an engine that does not support them (check Iceberg and UniForm readers)</td><td class="v drop">Turn off for that table</td><td>A reader that ignores them would show deleted rows</td></tr>
+<tr><td>Very read-heavy table with many accumulated vectors</td><td class="v">Keep, but run OPTIMIZE often</td><td>Each read must apply the vectors until the files are compacted</td></tr>
+<tr><td>Privacy deletes (erasure requests)</td><td class="v">Keep, then purge</td><td>The delete is only logical. Run <code>REORG ... APPLY (PURGE)</code>, then <code>VACUUM</code> past the retention period, to remove the data from storage.</td></tr>
+</table></div>
+<p>The practical rule: leave them on, run <code>OPTIMIZE</code> regularly (Predictive Optimization does this for managed tables), and purge when a delete must be physical. See the <a href="/learn/how-delta-works/">how Delta works</a> pages for the measured rewrite versus deletion-vector runs.</p></section>
 
 <section id="who"><p class="eyebrow">The answer</p><h2>Who does the chores depends on who owns the table</h2>
 {fig(drawing_who_cleans(), "Three kinds of table you meet on AWS with Databricks, and who holds the broom for each.")}

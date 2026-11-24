@@ -320,6 +320,21 @@ CSS = """<style>
   .topbar .lnk:hover { text-decoration:underline; text-decoration-style:wavy; }
   .topbar .act { font-size:14px; font-weight:700; text-decoration:none; border:1.5px solid var(--ink); border-radius:999px; padding:4px 13px; color:var(--ink); background:#fff; white-space:nowrap; }
   .topbar .act.dark { background:var(--ink); color:#fff; }
+  .sxbtn { font:inherit; font-size:14px; color:var(--ink-soft); border:1.5px solid var(--rule-firm); border-radius:999px; padding:4px 12px; background:#fff; cursor:pointer; white-space:nowrap; }
+  .sxbtn:hover { border-color:var(--ink); } .sxbtn kbd { font:inherit; font-size:12px; color:var(--faint); margin-left:6px; }
+  .sx-modal { display:none; position:fixed; inset:0; z-index:100; } .sx-modal.open { display:block; }
+  .sx-bg { position:absolute; inset:0; background:rgba(0,0,0,.28); }
+  .sx-panel { position:relative; margin:7vh auto 0; width:min(720px,94vw); max-height:84vh; display:flex; flex-direction:column; background:#fff; border:1.5px solid var(--ink); border-radius:16px; box-shadow:5px 5px 0 var(--ink); padding:14px; font-family:var(--sans); }
+  #sx-page .sx-list { max-height:none; }
+  .sx-box { display:flex; gap:8px; } .sx-in { flex:1; font:inherit; font-size:17px; padding:10px 14px; border:1.5px solid var(--ink); border-radius:12px; outline:none; background:var(--butter-wash); }
+  .sx-x { font:inherit; font-size:12px; border:1.5px solid var(--rule-firm); background:#fff; border-radius:8px; padding:0 10px; cursor:pointer; color:var(--faint); }
+  .sx-chips { display:flex; flex-wrap:wrap; gap:6px; margin:10px 0 2px; } .sx-chips button { font:inherit; font-size:13px; border:1.5px solid var(--rule-firm); background:#fff; border-radius:999px; padding:2px 10px; cursor:pointer; color:var(--ink-soft); }
+  .sx-chips button.on { background:var(--ink); color:#fff; border-color:var(--ink); }
+  .sx-list { overflow-y:auto; margin-top:6px; } .sx-hint { color:var(--muted); margin:14px 4px; font-size:15px; }
+  a.sx-r { display:block; padding:9px 12px; border-radius:10px; text-decoration:none; color:var(--ink); border:1.5px solid transparent; }
+  a.sx-r:hover, a.sx-r.on { background:var(--peri-wash); border-color:var(--rule-firm); }
+  .sx-t { font-weight:700; font-size:16px; } .sx-s { margin-left:8px; font-size:11px; font-weight:700; letter-spacing:.1em; text-transform:uppercase; color:var(--faint); }
+  .sx-e { display:block; font-size:14px; color:var(--muted); line-height:1.5; margin-top:2px; } .sx-e mark { background:var(--butter); color:var(--ink); border-radius:3px; padding:0 1px; }
   .menubtn { font:inherit; font-size:14px; font-weight:700; border:1.5px solid var(--ink); border-radius:999px; padding:4px 12px; background:var(--butter-wash); cursor:pointer; color:var(--ink); }
   .sidepanel { position:fixed; top:0; left:0; bottom:0; width:248px; overflow-y:auto; overscroll-behavior:contain; background:#fff;
     border-right:1.5px dashed var(--rule-firm); padding:22px 12px 40px 16px; z-index:60; font-family:var(--sans); font-size:14.5px; line-height:1.4; }
@@ -348,11 +363,19 @@ CSS = """<style>
     .sidepanel.open { display:block; } .sidepanel .close { display:block; float:right; font:inherit; border:0; background:none; font-size:24px; line-height:1; cursor:pointer; }
     .scrim.open { display:block; position:fixed; inset:0; background:rgba(0,0,0,.18); z-index:55; }
   }
-  @media (max-width:640px) { .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
+  @media (max-width:640px) { .sxbtn kbd { display:none; } .topbar .lnk, .topbar .act:not(.dark) { display:none; } .topbar .brand { font-size:17px; } .topbar .act.dark { padding:3px 10px; font-size:13px; } .menubtn { padding:3px 9px; font-size:13px; } }
 </style>"""
 
 JS = """<script>
 (function(){
+  (function(){ var loaded = false;
+    function go(){ if (window.cdeSearch) return window.cdeSearch.open(); if (loaded) return; loaded = true; window.__sxOpen = true;
+      var sc = document.createElement('script'); sc.src = '/search/search.js'; document.head.appendChild(sc); }
+    document.querySelectorAll('.sxbtn').forEach(function(b){ b.onclick = function(){ if (location.pathname.indexOf('/search/') === 0) { var i = document.querySelector('.sx-in'); if (i) i.focus(); } else go(); }; });
+    if (location.pathname.indexOf('/search/') !== 0) document.addEventListener('keydown', function h(e){ var a = document.activeElement || {};
+      if (/INPUT|TEXTAREA|SELECT/.test(a.tagName) || a.isContentEditable) return;
+      if ((e.key === 'k' && (e.metaKey || e.ctrlKey)) || e.key === '/') { e.preventDefault(); document.removeEventListener('keydown', h); go(); } });
+  })();
   var p = document.getElementById('sidepanel'), s = document.getElementById('scrim');
   function t(o){ p.classList.toggle('open', o); s.classList.toggle('open', o); }
   document.getElementById('menubtn').onclick = function(){ t(true); };
@@ -391,7 +414,7 @@ def header():
     return ("<header>\n  <div class=\"wrap\">\n    " + CSS + "\n"
             "    <nav class=\"topbar\" aria-label=\"Site\"><button class=\"menubtn\" id=\"menubtn\" aria-label=\"Open menu\">☰ Menu</button>"
             "<a class=\"brand\" href=\"/\">Clean Data Engineering</a>"
-            "<a class=\"lnk\" href=\"/certifications/\">Certifications</a><a class=\"lnk\" href=\"/writing/\">Blog</a><a class=\"act\" href=\"/paths/\">Find my path</a>"
+            "<button class=\"sxbtn\" type=\"button\" aria-label=\"Search the site\">🔍 Search<kbd>/</kbd></button><a class=\"lnk\" href=\"/certifications/\">Certifications</a><a class=\"lnk\" href=\"/writing/\">Blog</a><a class=\"act\" href=\"/paths/\">Find my path</a>"
             "<a class=\"act dark\" href=\"/leaders/\">For leaders</a></nav>\n"
             "    " + panel() + "<div class=\"scrim\" id=\"scrim\"></div>\n    " + JS + "\n  </div>\n</header>")
 

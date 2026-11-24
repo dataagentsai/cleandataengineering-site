@@ -88,3 +88,11 @@ One theme, light only: white background, soft pastels (periwinkle = AI, mint = L
 1.5px hand-drawn outlines, DM Sans for reading and Patrick Hand for headings, sketch-style diagrams.
 It lives in `_site/theme.py` (`python3 _site/theme.py` re-applies it to the home page, /learn/ and the
 certifications hub and redraws the home cartoon). /writing/ and /projects/ copy the home page's style when they build.
+
+## Search
+
+Search box in every page's top bar (button, `/` or Ctrl/Cmd+K) plus `/search/`. Built on Pagefind: the index lives in `/pagefind/`
+(generated, committed, since Pages has no build step). UI: `search/search.js`; button and styles: `_site/nav.py`.
+After any page rebuild, refresh the index and commit it:
+
+    python3 _site/search_index.py
