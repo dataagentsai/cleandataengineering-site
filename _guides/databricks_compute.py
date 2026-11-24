@@ -1,4 +1,4 @@
-"""Databricks compute and cost: a hub and thirteen pages at /learn/databricks-compute/.
+"""Databricks compute and cost: a hub and fourteen pages at /learn/databricks-compute/.
 
     python3 _guides/databricks_compute.py      (then python3 _site/nav.py and python3 _site/seo.py)
 
@@ -130,6 +130,14 @@ PAGES = [
          related=["backup-az", "egress"],
          qa=[("Is Delta time travel a backup?", "No. It lives in the same storage and VACUUM deletes old files by design. It is a fast undo."),
              ("Is copying the bucket to another region safe for Delta tables?", "Not by itself. Files can arrive out of order, so a table's log may point at files that have not arrived. Use deep clone or validate after replication.")]),
+    dict(slug="sharing-data-out", title="Sharing data in and out of Databricks: Delta Sharing, clean rooms, UniForm, federation and every other way, with pictures",
+         short="Sharing data in and out",
+         desc="Two directions drawn method by method: how others read data Databricks owns (Delta Sharing, clean rooms, Marketplace, Iceberg REST catalog, SQL warehouse, push, export) and how Databricks reads data others own (federation, external locations, connectors, Auto Loader, streams), each with how it works inside, when to use it, when not to, cost, performance and security.",
+         related=["egress", "uniform", "cost"],
+         qa=[("Is a clean room the same as Delta Sharing?", "No. Delta Sharing gives the other side rows to read. A clean room lets both sides run one approved piece of code over combined data, and only the approved results come out. Databricks clean rooms use Delta Sharing underneath."),
+             ("Is UniForm a way of sharing data?", "No. UniForm writes Iceberg metadata next to the Delta log so other engines can read the same files. Sharing needs a catalog and permissions as well, such as the Iceberg REST catalog or Delta Sharing."),
+             ("Why not use Delta Sharing for Athena and Redshift?", "Delta Sharing needs a client on the reading side, and to my knowledge Athena and Redshift do not have one. For your own AWS engines, use the Iceberg REST catalog or Glue federation. Use Delta Sharing for a different organisation or for Spark and pandas clients."),
+             ("When should I ingest instead of federate?", "When the same remote table is read again and again. Federation reads the source on every query, so a routine query is better served by a copy kept current.")]),
     dict(slug="cost-saving-hacks", title="Databricks cost-saving hacks: the biggest levers, hidden tricks and checked settings", short="Cost-saving hacks",
          desc="Find where the money goes, then the compute, warehouse, pipeline, data and cloud-side changes that cut a Databricks bill, each with a Pursue or Drop verdict and the limits that were checked against current documentation.",
          related=["levers", "tags", "compute-choice", "cost"],

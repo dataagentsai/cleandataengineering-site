@@ -121,6 +121,7 @@ SECTIONS = [
             ("System tables and what reading them costs", "/learn/databricks-compute/system-tables/"),
             ("Serverless visibility and logs", "/learn/databricks-compute/logs-and-visibility/"),
             ("Delta Sharing and cross-region cost", "/learn/databricks-compute/delta-sharing-and-regions/"),
+            ("Sharing data in and out (all ways)", "/learn/databricks-compute/sharing-data-out/"),
             ("Backup and recovery architecture", "/learn/databricks-compute/backup-and-recovery-architecture/"),
             ("Cost-saving hacks", "/learn/databricks-compute/cost-saving-hacks/"),
             ("Databricks interview prep", None),
